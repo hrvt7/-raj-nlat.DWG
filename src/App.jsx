@@ -139,137 +139,193 @@ function StepBar({ current }) {
 
 // ─── Step 1: Upload ───────────────────────────────────────────────────────────
 
+// Convert file bytes to base64
+async function fileToBase64(f) {
+  const arrayBuffer = await f.arrayBuffer()
+  const uint8 = new Uint8Array(arrayBuffer)
+  let binary = ''
+  const chunkSize = 8192
+  for (let i = 0; i < uint8.length; i += chunkSize) {
+    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
+
+// Convert DWG → DXF via CloudConvert API (free tier: 25/day)
+async function convertDwgToDxf(file, apiBase) {
+  const b64 = await fileToBase64(file)
+  const res = await fetch(`${apiBase}/api/convert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: file.name, data: b64 })
+  })
+  const data = await res.json()
+  if (!data.success) throw new Error(data.error || 'DWG konverzió sikertelen')
+  return data // returns { data: base64_dxf, filename: '...' }
+}
+
+// Parse a single DXF file (as base64)
+async function parseDxfBase64(b64, filename, apiBase) {
+  const res = await fetch(`${apiBase}/api/parse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, data: b64 })
+  })
+  const data = await res.json()
+  if (!data.success) throw new Error(data.error)
+  return data
+}
+
 function UploadStep({ onParsed, apiBase }) {
   const [dragging, setDragging] = useState(false)
-  const [file, setFile] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [unitFactor, setUnitFactor] = useState('0.001')
+  const [files, setFiles] = useState([]) // { name, status, result, error }
+  const [processing, setProcessing] = useState(false)
+  const [globalError, setGlobalError] = useState(null)
   const inputRef = useRef()
 
-  const processFile = async (f) => {
-    if (!f.name.endsWith('.dxf')) {
-      setError('Csak .dxf fájl tölthető fel. DWG-t előbb konvertáld DXF-re az ODA File Converter-rel (ingyenes).')
+  const processFiles = async (fileList) => {
+    const validFiles = Array.from(fileList).filter(f => {
+      const ext = f.name.split('.').pop().toLowerCase()
+      return ['dxf', 'dwg'].includes(ext)
+    })
+    if (validFiles.length === 0) {
+      setGlobalError('Csak .dxf vagy .dwg fájlok tölthetők fel.')
       return
     }
-    setFile(f)
-    setError(null)
-    setLoading(true)
-    try {
-      // base64 JSON upload - more reliable than multipart across all browsers
-      const arrayBuffer = await f.arrayBuffer()
-      const uint8 = new Uint8Array(arrayBuffer)
-      let binary = ''
-      const chunkSize = 8192
-      for (let i = 0; i < uint8.length; i += chunkSize) {
-        binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize))
+    setGlobalError(null)
+    setProcessing(true)
+    // Initialize status for all files
+    setFiles(validFiles.map(f => ({ name: f.name, status: 'waiting', result: null, error: null })))
+
+    const results = []
+    for (let i = 0; i < validFiles.length; i++) {
+      const f = validFiles[i]
+      const isDwg = f.name.toLowerCase().endsWith('.dwg')
+      setFiles(prev => prev.map((x, idx) => idx === i ? { ...x, status: isDwg ? 'converting' : 'parsing' } : x))
+      try {
+        let b64, fname
+        if (isDwg) {
+          const converted = await convertDwgToDxf(f, apiBase)
+          b64 = converted.data
+          fname = f.name.replace(/\.dwg$/i, '.dxf')
+        } else {
+          b64 = await fileToBase64(f)
+          fname = f.name
+        }
+        setFiles(prev => prev.map((x, idx) => idx === i ? { ...x, status: 'parsing' } : x))
+        const parsed = await parseDxfBase64(b64, fname, apiBase)
+        results.push({ name: f.name, label: f.name.replace(/\.(dxf|dwg)$/i, '').replace(/_/g, ' '), data: parsed })
+        setFiles(prev => prev.map((x, idx) => idx === i ? { ...x, status: 'done', result: parsed } : x))
+      } catch (e) {
+        setFiles(prev => prev.map((x, idx) => idx === i ? { ...x, status: 'error', error: e.message } : x))
       }
-      const b64 = btoa(binary)
-      const res = await fetch(`${apiBase}/api/parse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: f.name, data: b64 })
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.error)
-      onParsed(data, f.name, parseFloat(unitFactor))
-    } catch (e) {
-      setError('Hiba a feldolgozás során: ' + e.message)
-    } finally {
-      setLoading(false)
+    }
+
+    setProcessing(false)
+    const successful = results.filter(r => r.data)
+    if (successful.length > 0) {
+      onParsed(successful)
     }
   }
 
   const onDrop = useCallback((e) => {
     e.preventDefault()
     setDragging(false)
-    const f = e.dataTransfer.files[0]
-    if (f) processFile(f)
-  }, [unitFactor])
+    if (e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files)
+  }, [])
+
+  const statusIcon = (s) => {
+    if (s === 'done') return <span style={{ color: '#00E5A0' }}>✓</span>
+    if (s === 'error') return <span style={{ color: '#FF6B6B' }}>✗</span>
+    if (s === 'converting') return <span style={{ color: '#FFD966' }}>⟳ DWG→DXF...</span>
+    if (s === 'parsing') return <span style={{ color: '#00E5A0' }}>⟳ Olvasás...</span>
+    return <span style={{ color: '#555' }}>○ várakozik</span>
+  }
+
+  const allDone = files.length > 0 && files.every(f => f.status === 'done' || f.status === 'error')
+  const successCount = files.filter(f => f.status === 'done').length
 
   return (
     <div>
       <h2 style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 800, color: '#F0F0F0', marginBottom: 8 }}>
-        Töltsd fel a tervet
+        Töltsd fel a terveket
       </h2>
-      <p style={{ color: '#666', fontSize: 14, marginBottom: 32, fontFamily: 'DM Mono' }}>
-        DXF formátumban. DWG → DXF: ODA File Converter (ingyenes letöltés)
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 28, fontFamily: 'DM Mono' }}>
+        DXF és DWG fájlok egyaránt — több fájl egyszerre is húzható (pl. emeletenként)
       </p>
 
+      {/* Drop zone */}
       <div
-        onClick={() => inputRef.current?.click()}
+        onClick={() => !processing && inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         style={{
-          border: `2px dashed ${dragging ? '#00E5A0' : file ? '#00E5A0' : '#2A2A2A'}`,
-          borderRadius: 12,
-          padding: '60px 40px',
-          textAlign: 'center',
-          cursor: 'pointer',
-          background: dragging ? 'rgba(0,229,160,0.04)' : file ? 'rgba(0,229,160,0.02)' : 'transparent',
+          border: `2px dashed ${dragging ? '#00E5A0' : files.length > 0 ? '#2A4A3A' : '#2A2A2A'}`,
+          borderRadius: 12, padding: '48px 40px', textAlign: 'center',
+          cursor: processing ? 'default' : 'pointer',
+          background: dragging ? 'rgba(0,229,160,0.04)' : 'transparent',
           transition: 'all 0.2s'
         }}
       >
-        <input ref={inputRef} type="file" accept=".dxf" style={{ display: 'none' }}
-          onChange={e => e.target.files[0] && processFile(e.target.files[0])} />
-        
-        {loading ? (
-          <div>
-            <div style={{ color: '#00E5A0', marginBottom: 16, fontFamily: 'Syne', fontSize: 18, fontWeight: 700 }}>
-              Feldolgozás...
-            </div>
-            <div style={{ width: 200, height: 3, background: '#1A1A1A', borderRadius: 2, margin: '0 auto', overflow: 'hidden' }}>
-              <div style={{ height: '100%', background: '#00E5A0', animation: 'progress 1.5s ease infinite', borderRadius: 2 }} />
-            </div>
-          </div>
-        ) : file ? (
-          <div>
-            <div style={{ color: '#00E5A0', marginBottom: 8 }}><IconFile /></div>
-            <div style={{ fontFamily: 'DM Mono', color: '#00E5A0', fontSize: 14 }}>{file.name}</div>
-            <div style={{ color: '#444', fontSize: 12, marginTop: 4 }}>Kész – kattints a folytatáshoz</div>
-          </div>
-        ) : (
+        <input ref={inputRef} type="file" accept=".dxf,.dwg" multiple style={{ display: 'none' }}
+          onChange={e => e.target.files.length > 0 && processFiles(e.target.files)} />
+
+        {files.length === 0 ? (
           <div>
             <div style={{ color: '#444', marginBottom: 16 }}><IconUpload /></div>
-            <div style={{ fontFamily: 'Syne', fontSize: 18, color: '#888', fontWeight: 600 }}>
-              Húzd ide a DXF fájlt
+            <div style={{ fontFamily: 'Syne', fontSize: 20, color: '#888', fontWeight: 700 }}>
+              Húzd ide a fájlokat
             </div>
-            <div style={{ color: '#555', fontSize: 13, marginTop: 8, fontFamily: 'DM Mono' }}>
-              vagy kattints a tallózáshoz
+            <div style={{ color: '#444', fontSize: 13, marginTop: 10, fontFamily: 'DM Mono', lineHeight: 1.8 }}>
+              DXF · DWG &nbsp;·&nbsp; Több fájl egyszerre<br/>
+              <span style={{ color: '#333' }}>vagy kattints a tallózáshoz</span>
             </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'left' }}>
+            {files.map((f, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: i < files.length - 1 ? '1px solid #1A1A1A' : 'none' }}>
+                <IconFile />
+                <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{f.name}</span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 12 }}>{statusIcon(f.status)}</span>
+                {f.error && <span style={{ fontSize: 11, color: '#FF6B6B', fontFamily: 'DM Mono' }}>{f.error}</span>}
+              </div>
+            ))}
+            {!processing && (
+              <div style={{ marginTop: 16, textAlign: 'center', color: '#555', fontSize: 12, fontFamily: 'DM Mono' }}>
+                + Húzz ide további fájlokat
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {error && (
-        <div style={{ background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', borderRadius: 8, padding: 16, marginTop: 16, color: '#FF8080', fontSize: 13, fontFamily: 'DM Mono' }}>
-          {error}
+      {globalError && (
+        <div style={{ background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', borderRadius: 8, padding: 14, marginTop: 16, color: '#FF8080', fontSize: 13, fontFamily: 'DM Mono' }}>
+          {globalError}
         </div>
       )}
 
-      <div style={{ marginTop: 24, background: '#111', borderRadius: 10, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ color: '#555' }}><IconSettings /></div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 12, color: '#666', fontFamily: 'DM Mono', marginBottom: 6 }}>Rajz egysége (hossz konverzió)</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[['0.001', 'mm → m'], ['0.01', 'cm → m'], ['1', 'm → m']].map(([v, l]) => (
-              <button key={v} onClick={() => setUnitFactor(v)} style={{
-                padding: '6px 14px', borderRadius: 6, border: `1px solid ${unitFactor === v ? '#00E5A0' : '#2A2A2A'}`,
-                background: unitFactor === v ? 'rgba(0,229,160,0.08)' : 'transparent',
-                color: unitFactor === v ? '#00E5A0' : '#666', fontSize: 12, cursor: 'pointer', fontFamily: 'DM Mono'
-              }}>{l}</button>
-            ))}
+      {/* Info badges */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+        {[
+          { icon: '📐', text: 'DXF – natív' },
+          { icon: '🔄', text: 'DWG – auto konverzió' },
+          { icon: '📚', text: 'Több fájl = több szint' },
+        ].map(b => (
+          <div key={b.text} style={{ flex: 1, background: '#111', border: '1px solid #1E1E1E', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 16, marginBottom: 4 }}>{b.icon}</div>
+            <div style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono' }}>{b.text}</div>
           </div>
-        </div>
+        ))}
       </div>
 
-      <div style={{ marginTop: 20, padding: '14px 18px', background: '#0D1A14', border: '1px solid #1A3025', borderRadius: 8 }}>
-        <div style={{ fontSize: 11, color: '#4A8A6A', fontFamily: 'DM Mono', lineHeight: 1.7 }}>
-          <strong style={{ color: '#00E5A0' }}>DWG → DXF konverzió:</strong> Töltsd le az ODA File Converter-t (ingyenes): <span style={{ color: '#00B87A' }}>opendesign.com/guestfiles/oda_file_converter</span><br/>
-          Beállítás: Output format → R2013 DXF
+      {allDone && successCount > 0 && (
+        <div style={{ marginTop: 20, background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)', borderRadius: 8, padding: 14, fontFamily: 'DM Mono', fontSize: 13, color: '#00E5A0' }}>
+          ✓ {successCount} fájl feldolgozva – továbblépés automatikusan...
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -787,9 +843,8 @@ function QuoteStep({ result, projectName, onReset }) {
 
 export default function App() {
   const [step, setStep] = useState(0)
-  const [parseResult, setParseResult] = useState(null)
-  const [fileName, setFileName] = useState('')
-  const [unitFactor, setUnitFactor] = useState(0.001)
+  const [files, setFiles] = useState([]) // [{ name, label, data }]
+  const [activeFile, setActiveFile] = useState(0)
   const [mapping, setMapping] = useState(DEFAULT_MAPPING)
   const [prices, setPrices] = useState(DEFAULT_PRICES)
   const [norms, setNorms] = useState(DEFAULT_NORMS)
@@ -800,12 +855,30 @@ export default function App() {
 
   const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : ''
 
-  const handleParsed = (data, fname, uf) => {
-    setParseResult(data)
-    setFileName(fname)
-    setUnitFactor(uf)
-    setProjectName(fname.replace('.dxf', '').replace(/_/g, ' '))
-    setStep(1)
+  // Merged parse result across all files for pricing/calculation
+  const mergedParseResult = files.length === 0 ? null : {
+    blocks: files.flatMap(f => f.data.blocks),
+    lengths: files.flatMap(f => f.data.lengths),
+    units: files[0]?.data.units,
+    summary: {
+      total_block_types: new Set(files.flatMap(f => f.data.blocks.map(b => b.name))).size,
+      total_blocks: files.reduce((s, f) => s + (f.data.summary?.total_blocks || 0), 0),
+      layers_with_lines: files.reduce((s, f) => s + (f.data.summary?.layers_with_lines || 0), 0),
+    }
+  }
+
+  const parseResult = files[activeFile]?.data || mergedParseResult
+
+  const handleParsed = (results) => {
+    // results: [{ name, label, data }]
+    setFiles(results)
+    setActiveFile(0)
+    setProjectName(results.length === 1
+      ? results[0].label
+      : results[0].label.replace(/ \d+$/, '') || 'Projekt'
+    )
+    // Auto-advance after short delay so user sees "done" state
+    setTimeout(() => setStep(1), 600)
   }
 
   const handleCalculate = async () => {
@@ -814,14 +887,14 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          blocks: parseResult.blocks,
-          lengths: parseResult.lengths,
+          blocks: mergedParseResult.blocks,
+          lengths: mergedParseResult.lengths,
           mapping,
           priceList: prices,
           norms,
           hourlyRate: parseFloat(settings.hourlyRate),
           margin: parseFloat(settings.margin),
-          lengthUnitFactor: unitFactor
+          lengthUnitFactor: 1.0  // lengths already in meters from parser
         })
       })
       const data = await res.json()
@@ -834,7 +907,7 @@ export default function App() {
   }
 
   const reset = () => {
-    setStep(0); setParseResult(null); setCalcResult(null); setFileName('')
+    setStep(0); setFiles([]); setCalcResult(null); setActiveFile(0)
   }
 
   return (
@@ -875,19 +948,44 @@ export default function App() {
         <StepBar current={step} />
 
         {step === 0 && <UploadStep onParsed={handleParsed} apiBase={API_BASE} />}
-        {step === 1 && parseResult && (
-          <ReviewStep
-            parseResult={parseResult}
-            mapping={mapping}
-            setMapping={setMapping}
-            onContinue={() => setStep(2)}
-          />
+        {step === 1 && mergedParseResult && (
+          <div>
+            {/* File tabs - only shown if multiple files */}
+            {files.length > 1 && (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
+                {files.map((f, i) => (
+                  <button key={i} onClick={() => setActiveFile(i)} style={{
+                    padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                    background: activeFile === i ? '#00E5A0' : '#1A1A1A',
+                    color: activeFile === i ? '#0A0A0A' : '#666',
+                    fontFamily: 'DM Mono', fontSize: 12, fontWeight: activeFile === i ? 700 : 400,
+                  }}>
+                    {f.label}
+                  </button>
+                ))}
+                <button onClick={() => setActiveFile(-1)} style={{
+                  padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                  background: activeFile === -1 ? '#FFD966' : '#1A1A1A',
+                  color: activeFile === -1 ? '#0A0A0A' : '#666',
+                  fontFamily: 'DM Mono', fontSize: 12, fontWeight: activeFile === -1 ? 700 : 400,
+                }}>
+                  ∑ Összesített
+                </button>
+              </div>
+            )}
+            <ReviewStep
+              parseResult={activeFile === -1 ? mergedParseResult : (files[activeFile]?.data || mergedParseResult)}
+              mapping={mapping}
+              setMapping={setMapping}
+              onContinue={() => setStep(2)}
+            />
+          </div>
         )}
-        {step === 2 && parseResult && (
+        {step === 2 && mergedParseResult && (
           <PricingStep
-            parseResult={parseResult}
+            parseResult={mergedParseResult}
             mapping={mapping}
-            unitFactor={unitFactor}
+            unitFactor={1.0}
             prices={prices} setPrices={setPrices}
             norms={norms} setNorms={setNorms}
             settings={settings} setSettings={setSettings}
