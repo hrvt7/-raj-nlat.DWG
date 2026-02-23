@@ -151,9 +151,20 @@ function UploadStep({ onParsed, apiBase }) {
     setError(null)
     setLoading(true)
     try {
-      const form = new FormData()
-      form.append('file', f)
-      const res = await fetch(`${apiBase}/api/parse`, { method: 'POST', body: form })
+      // base64 JSON upload - more reliable than multipart across all browsers
+      const arrayBuffer = await f.arrayBuffer()
+      const uint8 = new Uint8Array(arrayBuffer)
+      let binary = ''
+      const chunkSize = 8192
+      for (let i = 0; i < uint8.length; i += chunkSize) {
+        binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize))
+      }
+      const b64 = btoa(binary)
+      const res = await fetch(`${apiBase}/api/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: f.name, data: b64 })
+      })
       const data = await res.json()
       if (!data.success) throw new Error(data.error)
       onParsed(data, f.name, parseFloat(unitFactor))
@@ -265,10 +276,11 @@ function ReviewStep({ parseResult, mapping, setMapping, unitFactor, onContinue }
   const [customMapping, setCustomMapping] = useState(JSON.stringify(mapping, null, 2))
 
   const applyMapping = (blockName) => {
-    for (const [pattern, mapped] of Object.entries(mapping.blocks)) {
-      if (pattern.toLowerCase() in blockName.toLowerCase() || blockName.toLowerCase().includes(pattern.toLowerCase())) {
-        return mapped
-      }
+    if (!blockName) return null
+    const bn = blockName.toLowerCase()
+    for (const [pattern, mapped] of Object.entries(mapping.blocks || {})) {
+      const p = pattern.toLowerCase()
+      if (bn.includes(p) || p.includes(bn)) return mapped
     }
     return null
   }
