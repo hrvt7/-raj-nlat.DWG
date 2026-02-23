@@ -34,14 +34,19 @@ const DEFAULT_PRICES = {
   "Kábel NYY-J": 980,
 }
 
+// Normák: KÜLÖN módszer (szerelvény szerelés NÉLKÜL kábelhúzás – azt a kábel/tálca méter fedi)
+// Dugalj: doboz+szerelvény rögzítés+bekötés (kábel NEM benne)
+// Lámpatest: rögzítés+bekötés (kábel NEM benne)  
+// Kábeltálca: méterenkénti szerelési idő (tartó+tálca+fedél)
+// Kábel NYY-J: méterenkénti húzási+rögzítési idő
 const DEFAULT_NORMS = {
-  "Dugalj 2P+F": 45,
-  "Kapcsoló 1G": 30,
-  "Lámpatest": 60,
+  "Dugalj 2P+F": 25,
+  "Kapcsoló 1G": 20,
+  "Lámpatest": 30,
   "Elosztó tábla": 240,
-  "Kábeltálca 300×60": 18,
-  "Kábeltálca 500×60": 22,
-  "Kábel NYY-J": 8,
+  "Kábeltálca 300×60": 15,
+  "Kábeltálca 500×60": 20,
+  "Kábel NYY-J": 6,
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
@@ -271,112 +276,120 @@ function UploadStep({ onParsed, apiBase }) {
 
 // ─── Step 2: Review ───────────────────────────────────────────────────────────
 
-function ReviewStep({ parseResult, mapping, setMapping, unitFactor, onContinue }) {
-  const [editMapping, setEditMapping] = useState(false)
-  const [customMapping, setCustomMapping] = useState(JSON.stringify(mapping, null, 2))
+// Common item names for the dropdown suggestions
+const ITEM_SUGGESTIONS = [
+  'Dugalj 2P+F', 'Dugalj 2P+F IP44', 'Dugalj 3P+F+N', 'Kapcsoló 1G', 'Kapcsoló 2G',
+  'Kapcsoló 3G', 'Váltókapcsoló', 'Lámpatest', 'Lámpatest mennyezeti', 'Lámpatest fali',
+  'Reflektor LED', 'Elosztó tábla', 'Kábeltálca 100×60', 'Kábeltálca 200×60',
+  'Kábeltálca 300×60', 'Kábeltálca 400×60', 'Kábeltálca 500×60', 'Kábeltálca 600×60',
+  'Kábel NYY-J 3×1.5', 'Kábel NYY-J 3×2.5', 'Kábel NYY-J 5×2.5', 'Kábel NYY-J 5×4',
+  'Kábel NYY-J 5×6', 'Kábel NYY-J 5×10', 'Kábel CYKY 3×1.5', 'Kábel CYKY 3×2.5',
+  'Vészvilágítás', 'Mozgásérzékelő', 'Termosztát', 'Csengő', 'Diszpécser panel',
+]
 
-  const applyMapping = (blockName) => {
-    if (!blockName) return null
-    const bn = blockName.toLowerCase()
-    for (const [pattern, mapped] of Object.entries(mapping.blocks || {})) {
-      const p = pattern.toLowerCase()
-      if (bn.includes(p) || p.includes(bn)) return mapped
-    }
-    return null
+function ReviewStep({ parseResult, mapping, setMapping, onContinue }) {
+  // Inline mapping: blockName/layerName → item name
+  const [blockMap, setBlockMap] = useState(() => {
+    const m = {}
+    parseResult.blocks.forEach(b => {
+      const found = findMapping(b.name, mapping.blocks)
+      if (found) m[b.name] = found
+    })
+    return m
+  })
+  const [layerMap, setLayerMap] = useState(() => {
+    const m = {}
+    parseResult.lengths.forEach(l => {
+      const found = findMapping(l.layer, mapping.layers)
+      if (found) m[l.layer] = found
+    })
+    return m
+  })
+  const [showSuggest, setShowSuggest] = useState(null) // key of open suggest
+
+  // Save inline changes back to mapping
+  const applyInlineMapping = () => {
+    const newBlocks = { ...mapping.blocks }
+    Object.entries(blockMap).forEach(([name, item]) => {
+      if (item) newBlocks[name] = item
+    })
+    const newLayers = { ...mapping.layers }
+    Object.entries(layerMap).forEach(([layer, item]) => {
+      if (item) newLayers[layer] = item
+    })
+    setMapping({ blocks: newBlocks, layers: newLayers })
   }
 
-  const applyLayerMapping = (layerName) => {
-    for (const [pattern, mapped] of Object.entries(mapping.layers)) {
-      if (layerName.toLowerCase().includes(pattern.toLowerCase())) return mapped
-      if (pattern.toLowerCase().includes(layerName.toLowerCase())) return mapped
-    }
-    return null
-  }
+  const unmapped = [
+    ...parseResult.blocks.filter(b => !blockMap[b.name]),
+    ...parseResult.lengths.filter(l => !layerMap[l.layer])
+  ].length
 
-  const saveMapping = () => {
-    try {
-      const parsed = JSON.parse(customMapping)
-      setMapping(parsed)
-      setEditMapping(false)
-    } catch (e) {
-      alert('Érvénytelen JSON')
-    }
-  }
-
-  const mappedBlocks = parseResult.blocks.map(b => ({
-    ...b,
-    mapped: applyMapping(b.name)
-  }))
-
-  const mappedLengths = parseResult.lengths.map(l => ({
-    ...l,
-    length_m: (l.length * unitFactor).toFixed(2),
-    mapped: applyLayerMapping(l.layer)
-  }))
-
-  const unmappedBlocks = mappedBlocks.filter(b => !b.mapped)
-  const unmappedLayers = mappedLengths.filter(l => !l.mapped)
+  // Auto-detect unit info from parseResult
+  const unitInfo = parseResult.units
+  const unitLabel = unitInfo ? `${unitInfo.name} (auto)` : 'mm (alapért.)'
 
   return (
     <div>
       <h2 style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 800, color: '#F0F0F0', marginBottom: 8 }}>
         Mennyiségek ellenőrzése
       </h2>
-      <p style={{ color: '#666', fontSize: 14, marginBottom: 24, fontFamily: 'DM Mono' }}>
-        A parser által talált elemek. Ellenőrizd és állítsd be a mapping-et.
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 20, fontFamily: 'DM Mono' }}>
+        A parser megtalálta az alábbi elemeket. Minden sorhoz rendeld hozzá a megfelelő anyagot/tételt.
       </p>
 
-      {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
+      {/* Unit + summary info */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
         {[
           { label: 'Block típus', value: parseResult.summary.total_block_types },
           { label: 'Összes db', value: parseResult.summary.total_blocks },
-          { label: 'Layer (hossz)', value: parseResult.summary.layers_with_lines },
+          { label: 'Mért layer', value: parseResult.summary.layers_with_lines },
+          { label: 'Rajz egység', value: unitLabel, small: true },
         ].map(c => (
-          <div key={c.label} style={{ background: '#111', borderRadius: 10, padding: 18, border: '1px solid #1E1E1E' }}>
-            <div style={{ fontSize: 28, fontFamily: 'Syne', fontWeight: 800, color: '#00E5A0' }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: '#555', fontFamily: 'DM Mono', marginTop: 4 }}>{c.label}</div>
+          <div key={c.label} style={{ background: '#111', borderRadius: 10, padding: '14px 16px', border: '1px solid #1E1E1E' }}>
+            <div style={{ fontSize: c.small ? 14 : 26, fontFamily: 'Syne', fontWeight: 800, color: c.small ? '#FFD966' : '#00E5A0' }}>{c.value}</div>
+            <div style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono', marginTop: 4 }}>{c.label}</div>
           </div>
         ))}
       </div>
 
-      {(unmappedBlocks.length > 0 || unmappedLayers.length > 0) && (
-        <div style={{ background: 'rgba(255,200,0,0.06)', border: '1px solid rgba(255,200,0,0.2)', borderRadius: 8, padding: 14, marginBottom: 20, fontSize: 13, color: '#FFD966', fontFamily: 'DM Mono' }}>
-          ⚠️ {unmappedBlocks.length + unmappedLayers.length} elem nincs mapping-elve → nem kerül az ajánlatba.
-          <button onClick={() => setEditMapping(true)} style={{ marginLeft: 12, background: 'rgba(255,200,0,0.1)', border: '1px solid rgba(255,200,0,0.3)', color: '#FFD966', padding: '3px 10px', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>
-            Mapping szerkesztése
-          </button>
+      {unmapped > 0 && (
+        <div style={{ background: 'rgba(255,200,0,0.06)', border: '1px solid rgba(255,200,0,0.2)', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#FFD966', fontFamily: 'DM Mono' }}>
+          ⚠️ {unmapped} elemhez még nincs tétel rendelve – töltsd ki az alábbi táblázatban.
         </div>
       )}
 
-      {/* Blocks table */}
+      {/* BLOCKS TABLE with inline editing */}
       {parseResult.blocks.length > 0 && (
         <div style={{ marginBottom: 28 }}>
-          <h3 style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 700, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            Blokkok (szerelvények)
+          <h3 style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>
+            Szerelvények (blokkok a rajzon)
           </h3>
-          <div style={{ border: '1px solid #1E1E1E', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ border: '1px solid #1E1E1E', borderRadius: 10, overflow: 'visible' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#111' }}>
-                  {['Block neve', 'Layer', 'Darab', 'Tétel'].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, color: '#555', fontFamily: 'DM Mono', fontWeight: 400, borderBottom: '1px solid #1E1E1E' }}>{h}</th>
-                  ))}
+                  <th style={thStyle}>Block neve (rajzon)</th>
+                  <th style={thStyle}>Darab</th>
+                  <th style={thStyle}>Anyag / Tétel neve <span style={{ color: '#444', fontWeight: 400 }}>(szerkeszthető)</span></th>
                 </tr>
               </thead>
               <tbody>
-                {mappedBlocks.slice(0, 50).map((b, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #141414', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{b.name}</td>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 12, color: '#555' }}>{b.layer}</td>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#00E5A0', fontWeight: 500 }}>{b.count}</td>
-                    <td style={{ padding: '10px 16px' }}>
-                      {b.mapped
-                        ? <span style={{ background: 'rgba(0,229,160,0.08)', color: '#00E5A0', padding: '3px 8px', borderRadius: 5, fontSize: 12, fontFamily: 'DM Mono', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                            <IconCheck /> {b.mapped}
-                          </span>
-                        : <span style={{ color: '#444', fontSize: 12, fontFamily: 'DM Mono' }}>— nincs mapping</span>
-                      }
+                {parseResult.blocks.slice(0, 50).map((b, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #141414' }}>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#888' }}>
+                      {b.name}
+                      <div style={{ fontSize: 10, color: '#444', marginTop: 2 }}>{b.layer}</div>
+                    </td>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 14, color: '#00E5A0', fontWeight: 700, textAlign: 'center' }}>{b.count} db</td>
+                    <td style={{ padding: '8px 12px', position: 'relative' }}>
+                      <InlineItemInput
+                        value={blockMap[b.name] || ''}
+                        onChange={v => setBlockMap(m => ({ ...m, [b.name]: v }))}
+                        onBlur={applyInlineMapping}
+                        suggestions={ITEM_SUGGESTIONS}
+                        placeholder="Pl. Dugalj 2P+F  — kezdj el gépelni..."
+                      />
                     </td>
                   </tr>
                 ))}
@@ -386,33 +399,42 @@ function ReviewStep({ parseResult, mapping, setMapping, unitFactor, onContinue }
         </div>
       )}
 
-      {/* Lengths table */}
+      {/* LENGTHS TABLE with inline editing */}
       {parseResult.lengths.length > 0 && (
         <div style={{ marginBottom: 28 }}>
-          <h3 style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 700, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
+          <h3 style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>
             Vonalak / hosszak (tálca, kábel)
           </h3>
-          <div style={{ border: '1px solid #1E1E1E', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ border: '1px solid #1E1E1E', borderRadius: 10, overflow: 'visible' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#111' }}>
-                  {['Layer neve', 'Hossz (m)', 'Tétel'].map(h => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, color: '#555', fontFamily: 'DM Mono', fontWeight: 400, borderBottom: '1px solid #1E1E1E' }}>{h}</th>
-                  ))}
+                  <th style={thStyle}>Layer neve (rajzon)</th>
+                  <th style={thStyle}>Hossz (m)</th>
+                  <th style={thStyle}>Anyag / Tétel neve <span style={{ color: '#444', fontWeight: 400 }}>(szerkeszthető)</span></th>
                 </tr>
               </thead>
               <tbody>
-                {mappedLengths.slice(0, 30).map((l, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #141414', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{l.layer}</td>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#00E5A0', fontWeight: 500 }}>{l.length_m}</td>
-                    <td style={{ padding: '10px 16px' }}>
-                      {l.mapped
-                        ? <span style={{ background: 'rgba(0,229,160,0.08)', color: '#00E5A0', padding: '3px 8px', borderRadius: 5, fontSize: 12, fontFamily: 'DM Mono', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                            <IconCheck /> {l.mapped}
-                          </span>
-                        : <span style={{ color: '#444', fontSize: 12, fontFamily: 'DM Mono' }}>— nincs mapping</span>
-                      }
+                {parseResult.lengths.slice(0, 30).map((l, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #141414' }}>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#888' }}>
+                      {l.layer}
+                      {l.info && (
+                        <div style={{ fontSize: 10, color: '#4A7A6A', marginTop: 2 }}>
+                          {l.info.type === 'tray' && l.info.tray_width ? `Tálca ${l.info.tray_width}×${l.info.tray_height}mm` : ''}
+                          {l.info.type === 'cable' ? `${l.info.cable_type || 'Kábel'} ${l.info.cores ? l.info.cores+'×'+l.info.cross_section+'mm²' : ''}` : ''}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 14, color: '#00E5A0', fontWeight: 700, textAlign: 'center' }}>{l.length} m</td>
+                    <td style={{ padding: '8px 12px', position: 'relative' }}>
+                      <InlineItemInput
+                        value={layerMap[l.layer] || ''}
+                        onChange={v => setLayerMap(m => ({ ...m, [l.layer]: v }))}
+                        onBlur={applyInlineMapping}
+                        suggestions={ITEM_SUGGESTIONS}
+                        placeholder="Pl. Kábeltálca 300×60  — kezdj el gépelni..."
+                      />
                     </td>
                   </tr>
                 ))}
@@ -422,30 +444,7 @@ function ReviewStep({ parseResult, mapping, setMapping, unitFactor, onContinue }
         </div>
       )}
 
-      {/* Mapping editor modal */}
-      {editMapping && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: '#111', border: '1px solid #222', borderRadius: 14, padding: 32, width: '90%', maxWidth: 600 }}>
-            <h3 style={{ fontFamily: 'Syne', fontWeight: 800, color: '#F0F0F0', marginBottom: 16 }}>Mapping szerkesztése</h3>
-            <p style={{ fontSize: 12, color: '#666', fontFamily: 'DM Mono', marginBottom: 16, lineHeight: 1.6 }}>
-              blocks: block neve tartalmazza a kulcsot → tétel neve<br/>
-              layers: layer neve tartalmazza a kulcsot → tétel neve
-            </p>
-            <textarea value={customMapping} onChange={e => setCustomMapping(e.target.value)}
-              style={{ width: '100%', height: 300, background: '#0A0A0A', border: '1px solid #2A2A2A', borderRadius: 8, color: '#CCC', fontFamily: 'DM Mono', fontSize: 12, padding: 16, resize: 'vertical', boxSizing: 'border-box' }} />
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button onClick={saveMapping} style={{ flex: 1, padding: 12, background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700 }}>
-                Mentés
-              </button>
-              <button onClick={() => setEditMapping(false)} style={{ padding: '12px 20px', background: 'transparent', border: '1px solid #2A2A2A', color: '#666', borderRadius: 8, cursor: 'pointer' }}>
-                Mégse
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <button onClick={onContinue} style={{
+      <button onClick={() => { applyInlineMapping(); onContinue() }} style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '14px 28px', background: '#00E5A0', color: '#0A0A0A',
         border: 'none', borderRadius: 8, cursor: 'pointer',
@@ -457,7 +456,63 @@ function ReviewStep({ parseResult, mapping, setMapping, unitFactor, onContinue }
   )
 }
 
+const thStyle = { padding: '10px 16px', textAlign: 'left', fontSize: 11, color: '#555', fontFamily: 'DM Mono', fontWeight: 400, borderBottom: '1px solid #1E1E1E' }
+
+function findMapping(name, map) {
+  if (!name || !map) return null
+  const n = name.toLowerCase()
+  for (const [pattern, mapped] of Object.entries(map)) {
+    const p = pattern.toLowerCase()
+    if (n.includes(p) || p.includes(n)) return mapped
+  }
+  return null
+}
+
+// Inline input with autocomplete suggestions
+function InlineItemInput({ value, onChange, onBlur, suggestions, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const filtered = value.length > 0
+    ? suggestions.filter(s => s.toLowerCase().includes(value.toLowerCase()) && s !== value)
+    : []
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { setTimeout(() => { setOpen(false); onBlur() }, 150) }}
+        placeholder={placeholder}
+        style={{
+          width: '100%', background: value ? '#0D1A14' : '#111',
+          border: value ? '1px solid #2A5A3A' : '1px solid #222',
+          borderRadius: 6, padding: '8px 12px',
+          color: value ? '#00E5A0' : '#555',
+          fontFamily: 'DM Mono', fontSize: 13, outline: 'none',
+          boxSizing: 'border-box'
+        }}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
+          background: '#161616', border: '1px solid #2A2A2A', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)', marginTop: 2, maxHeight: 200, overflowY: 'auto'
+        }}>
+          {filtered.slice(0, 8).map((s, i) => (
+            <div key={i}
+              onMouseDown={() => { onChange(s); setOpen(false) }}
+              style={{ padding: '8px 14px', fontFamily: 'DM Mono', fontSize: 12, color: '#CCC', cursor: 'pointer', borderBottom: '1px solid #1E1E1E' }}
+              onMouseEnter={e => e.target.style.background = '#1A2A1A'}
+              onMouseLeave={e => e.target.style.background = 'transparent'}
+            >{s}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Step 3: Pricing ──────────────────────────────────────────────────────────
+
 
 function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norms, setNorms, settings, setSettings, onCalculate }) {
   const allItems = new Set()
@@ -481,9 +536,18 @@ function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norm
       <h2 style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 800, color: '#F0F0F0', marginBottom: 8 }}>
         Árazás és normák
       </h2>
-      <p style={{ color: '#666', fontSize: 14, marginBottom: 28, fontFamily: 'DM Mono' }}>
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 16, fontFamily: 'DM Mono' }}>
         Állítsd be az egységárakat és a normaidőket. Ez egyszer kell – utána profil szerint tölti be.
       </p>
+      <div style={{ background: '#0D1A14', border: '1px solid #1A3025', borderRadius: 8, padding: '14px 18px', marginBottom: 24 }}>
+        <div style={{ fontSize: 12, color: '#4A8A6A', fontFamily: 'DM Mono', lineHeight: 1.8 }}>
+          <strong style={{ color: '#00E5A0' }}>KÜLÖN módszer</strong> – a normaidők NEM tartalmazzák a kábelhúzást:<br/>
+          <span style={{ color: '#5A9A7A' }}>• Szerelvény (dugalj, lámpa, kapcsoló):</span> csak a doboz+szerelvény rögzítés+bekötés ideje<br/>
+          <span style={{ color: '#5A9A7A' }}>• Kábel NYY-J (m):</span> húzás+rögzítés ideje méterenként<br/>
+          <span style={{ color: '#5A9A7A' }}>• Kábeltálca (m):</span> tartó+tálca+fedél szerelési ideje méterenként<br/>
+          <span style={{ color: '#888' }}>Ha a tervben nincs kábelnyomvonal, adj hozzá becslést: dugaljonként ~6m kábel átlagosan.</span>
+        </div>
+      </div>
 
       {/* Global settings */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 28 }}>
@@ -521,7 +585,15 @@ function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norm
             <tbody>
               {items.map((item, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #141414' }}>
-                  <td style={{ padding: '12px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{item}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{item}</div>
+                    <div style={{ fontSize: 10, color: '#444', marginTop: 3 }}>
+                      {item.includes('Kábel') && !item.includes('tálca') ? 'húzás+rögzítés / méter' :
+                       item.includes('tálca') || item.includes('Tálca') ? 'tartó+tálca+fedél / méter' :
+                       item.includes('Elosztó') ? 'teljes bekötés, betáblázás' :
+                       'rögzítés+bekötés (kábel nélkül)'}
+                    </div>
+                  </td>
                   <td style={{ padding: '12px 16px' }}>
                     <input
                       value={prices[item] || ''}
@@ -808,7 +880,6 @@ export default function App() {
             parseResult={parseResult}
             mapping={mapping}
             setMapping={setMapping}
-            unitFactor={unitFactor}
             onContinue={() => setStep(2)}
           />
         )}
