@@ -13,14 +13,26 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1.py"
+      "source": "/api/parse",
+      "destination": "/api/parse.py"
     },
     {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/api/calculate",
+      "destination": "/api/calculate.py"
+    },
+    {
+      "source": "/api/convert",
+      "destination": "/api/convert.py"
+    },
+    {
+      "source": "/api/ai",
+      "destination": "/api/ai.py"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }

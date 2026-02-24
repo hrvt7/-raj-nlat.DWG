@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
+import Landing from './Landing.jsx'
 
 // ─── Default data ────────────────────────────────────────────────────────────
 
@@ -96,46 +97,6 @@ const IconZap = () => (
     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
   </svg>
 )
-
-// ─── Step indicator ───────────────────────────────────────────────────────────
-
-const STEPS = ['Feltöltés', 'Ellenőrzés', 'Árazás', 'Ajánlat']
-
-function StepBar({ current }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 40 }}>
-      {STEPS.map((s, i) => {
-        const done = i < current
-        const active = i === current
-        return (
-          <React.Fragment key={s}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: done ? '#00E5A0' : active ? '#0A0A0A' : 'transparent',
-                border: `2px solid ${done ? '#00E5A0' : active ? '#00E5A0' : '#2A2A2A'}`,
-                color: done ? '#0A0A0A' : active ? '#00E5A0' : '#444',
-                fontSize: 12, fontFamily: 'DM Mono', fontWeight: 500,
-                transition: 'all 0.3s'
-              }}>
-                {done ? <IconCheck /> : i + 1}
-              </div>
-              <span style={{ fontSize: 11, color: active ? '#00E5A0' : done ? '#888' : '#444', fontFamily: 'DM Mono', whiteSpace: 'nowrap' }}>
-                {s}
-              </span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <div style={{
-                flex: 1, height: 2, background: done ? '#00E5A0' : '#1A1A1A',
-                margin: '0 8px', marginBottom: 22, transition: 'background 0.3s'
-              }} />
-            )}
-          </React.Fragment>
-        )
-      })}
-    </div>
-  )
-}
 
 // ─── Step 1: Upload ───────────────────────────────────────────────────────────
 
@@ -244,14 +205,24 @@ function UploadStep({ onParsed, apiBase }) {
 
   const allDone = files.length > 0 && files.every(f => f.status === 'done' || f.status === 'error')
   const successCount = files.filter(f => f.status === 'done').length
+  const activeProcessing = files.some(f => f.status === 'parsing' || f.status === 'converting')
+
+  const statusLabel = (status) => {
+    if (status === 'waiting') return { text: 'Várakozás...', color: '#444' }
+    if (status === 'converting') return { text: 'DWG → DXF konverzió...', color: '#FFD966' }
+    if (status === 'parsing') return { text: 'Elemzés...', color: '#00E5A0' }
+    if (status === 'done') return { text: 'Kész', color: '#00E5A0' }
+    if (status === 'error') return { text: 'Hiba', color: '#FF6B6B' }
+    return { text: '', color: '#555' }
+  }
 
   return (
-    <div>
+    <div style={{ animation: 'fadeUp 0.4s ease' }}>
       <h2 style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 800, color: '#F0F0F0', marginBottom: 8 }}>
         Töltsd fel a terveket
       </h2>
-      <p style={{ color: '#666', fontSize: 14, marginBottom: 28, fontFamily: 'DM Mono' }}>
-        DXF és DWG fájlok egyaránt — több fájl egyszerre is húzható (pl. emeletenként)
+      <p style={{ color: '#555', fontSize: 14, marginBottom: 28, fontFamily: 'DM Mono' }}>
+        DXF és DWG fájlok egyaránt — több fájl egyszerre (pl. emeletenként)
       </p>
 
       {/* Drop zone */}
@@ -261,40 +232,91 @@ function UploadStep({ onParsed, apiBase }) {
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         style={{
-          border: `2px dashed ${dragging ? '#00E5A0' : files.length > 0 ? '#2A4A3A' : '#2A2A2A'}`,
-          borderRadius: 12, padding: '48px 40px', textAlign: 'center',
-          cursor: processing ? 'default' : 'pointer',
-          background: dragging ? 'rgba(0,229,160,0.04)' : 'transparent',
-          transition: 'all 0.2s'
+          border: `2px dashed ${dragging ? '#00E5A0' : files.length > 0 ? '#1A3A2A' : '#1E1E1E'}`,
+          borderRadius: 16, padding: files.length > 0 ? '28px 32px' : '56px 40px',
+          textAlign: 'center', cursor: processing ? 'default' : 'pointer',
+          background: dragging ? 'rgba(0,229,160,0.03)' : files.length > 0 ? '#0A0F0C' : '#0D0D0D',
+          transition: 'all 0.2s', position: 'relative', overflow: 'hidden',
+          boxShadow: dragging ? '0 0 40px rgba(0,229,160,0.08) inset' : 'none'
         }}
       >
+        {/* Shimmer overlay when processing */}
+        {activeProcessing && (
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(0,229,160,0.04) 50%, transparent 100%)',
+            animation: 'shimmer 2s infinite'
+          }} />
+        )}
+
         <input ref={inputRef} type="file" accept=".dxf,.dwg" multiple style={{ display: 'none' }}
           onChange={e => e.target.files.length > 0 && processFiles(e.target.files)} />
 
         {files.length === 0 ? (
           <div>
-            <div style={{ color: '#444', marginBottom: 16 }}><IconUpload /></div>
-            <div style={{ fontFamily: 'Syne', fontSize: 20, color: '#888', fontWeight: 700 }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 14, background: '#111',
+              border: '1px solid #1E1E1E', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', margin: '0 auto 20px', color: '#444'
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
+            <div style={{ fontFamily: 'Syne', fontSize: 20, color: '#666', fontWeight: 700, marginBottom: 10 }}>
               Húzd ide a fájlokat
             </div>
-            <div style={{ color: '#444', fontSize: 13, marginTop: 10, fontFamily: 'DM Mono', lineHeight: 1.8 }}>
-              DXF · DWG &nbsp;·&nbsp; Több fájl egyszerre<br/>
-              <span style={{ color: '#333' }}>vagy kattints a tallózáshoz</span>
+            <div style={{ color: '#333', fontSize: 13, fontFamily: 'DM Mono', lineHeight: 2 }}>
+              <span style={{ color: '#3A6A5A', background: 'rgba(0,229,160,0.06)', padding: '2px 8px', borderRadius: 4, marginRight: 6 }}>DXF</span>
+              <span style={{ color: '#3A6A5A', background: 'rgba(0,229,160,0.06)', padding: '2px 8px', borderRadius: 4, marginRight: 6 }}>DWG</span>
+              <span style={{ color: '#3A6A5A', background: 'rgba(0,229,160,0.06)', padding: '2px 8px', borderRadius: 4 }}>Több fájl</span>
+              <br/>
+              <span style={{ color: '#2A2A2A' }}>vagy kattints a tallózáshoz</span>
             </div>
           </div>
         ) : (
           <div style={{ textAlign: 'left' }}>
-            {files.map((f, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: i < files.length - 1 ? '1px solid #1A1A1A' : 'none' }}>
-                <IconFile />
-                <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{f.name}</span>
-                <span style={{ fontFamily: 'DM Mono', fontSize: 12 }}>{statusIcon(f.status)}</span>
-                {f.error && <span style={{ fontSize: 11, color: '#FF6B6B', fontFamily: 'DM Mono' }}>{f.error}</span>}
-              </div>
-            ))}
+            {files.map((f, i) => {
+              const sl = statusLabel(f.status)
+              const isActive = f.status === 'parsing' || f.status === 'converting'
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', borderBottom: i < files.length - 1 ? '1px solid #111' : 'none' }}>
+                  {/* File icon */}
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                    background: f.status === 'done' ? 'rgba(0,229,160,0.1)' : f.status === 'error' ? 'rgba(255,80,80,0.08)' : '#111',
+                    border: `1px solid ${f.status === 'done' ? '#1A4A3A' : f.status === 'error' ? 'rgba(255,80,80,0.2)' : '#1E1E1E'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14
+                  }}>
+                    {f.status === 'done' ? '✓' : f.status === 'error' ? '✗' : isActive ? (
+                      <div style={{ width: 14, height: 14, border: '2px solid #00E5A015', borderTopColor: '#00E5A0', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    ) : '⏳'}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: f.status === 'error' ? '#FF8080' : '#CCC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {f.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: sl.color, fontFamily: 'DM Mono', marginTop: 2 }}>
+                      {f.error || sl.text}
+                    </div>
+                  </div>
+
+                  {/* Progress bar for active */}
+                  {isActive && (
+                    <div style={{ width: 80, height: 3, background: '#1A1A1A', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+                      <div style={{ height: '100%', background: '#00E5A0', borderRadius: 2, animation: 'shimmer 1.5s infinite', width: '40%', position: 'relative', left: '-100%' }} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             {!processing && (
-              <div style={{ marginTop: 16, textAlign: 'center', color: '#555', fontSize: 12, fontFamily: 'DM Mono' }}>
-                + Húzz ide további fájlokat
+              <div style={{ marginTop: 14, textAlign: 'center', color: '#333', fontSize: 11, fontFamily: 'DM Mono', paddingTop: 12, borderTop: '1px solid #111' }}>
+                + További fájlok húzása vagy kattintás
               </div>
             )}
           </div>
@@ -302,28 +324,15 @@ function UploadStep({ onParsed, apiBase }) {
       </div>
 
       {globalError && (
-        <div style={{ background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', borderRadius: 8, padding: 14, marginTop: 16, color: '#FF8080', fontSize: 13, fontFamily: 'DM Mono' }}>
+        <div style={{ background: 'rgba(255,80,80,0.06)', border: '1px solid rgba(255,80,80,0.15)', borderRadius: 8, padding: '12px 16px', marginTop: 14, color: '#FF8080', fontSize: 12, fontFamily: 'DM Mono' }}>
           {globalError}
         </div>
       )}
 
-      {/* Info badges */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-        {[
-          { icon: '📐', text: 'DXF – natív' },
-          { icon: '🔄', text: 'DWG – auto konverzió' },
-          { icon: '📚', text: 'Több fájl = több szint' },
-        ].map(b => (
-          <div key={b.text} style={{ flex: 1, background: '#111', border: '1px solid #1E1E1E', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 16, marginBottom: 4 }}>{b.icon}</div>
-            <div style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono' }}>{b.text}</div>
-          </div>
-        ))}
-      </div>
-
       {allDone && successCount > 0 && (
-        <div style={{ marginTop: 20, background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)', borderRadius: 8, padding: 14, fontFamily: 'DM Mono', fontSize: 13, color: '#00E5A0' }}>
-          ✓ {successCount} fájl feldolgozva – továbblépés automatikusan...
+        <div style={{ marginTop: 16, background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.15)', borderRadius: 10, padding: '14px 18px', fontFamily: 'DM Mono', fontSize: 13, color: '#00E5A0', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(0,229,160,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>✓</div>
+          {successCount} fájl feldolgozva – továbblépés...
         </div>
       )}
     </div>
@@ -425,19 +434,14 @@ function ReviewStep({ parseResult, mapping, setMapping, onContinue }) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#111' }}>
-                  <th style={thStyle}>Block neve (rajzon)</th>
-                  <th style={thStyle}>Darab</th>
-                  <th style={thStyle}>Anyag / Tétel neve <span style={{ color: '#444', fontWeight: 400 }}>(szerkeszthető)</span></th>
+                  <th style={thStyle}>Anyag / Tétel neve</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Darab</th>
+                  <th style={{ ...thStyle, color: '#333' }}>Azonosító (rajzon)</th>
                 </tr>
               </thead>
               <tbody>
                 {parseResult.blocks.slice(0, 50).map((b, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid #141414' }}>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#888' }}>
-                      {b.name}
-                      <div style={{ fontSize: 10, color: '#444', marginTop: 2 }}>{b.layer}</div>
-                    </td>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 14, color: '#00E5A0', fontWeight: 700, textAlign: 'center' }}>{b.count} db</td>
                     <td style={{ padding: '8px 12px', position: 'relative' }}>
                       <InlineItemInput
                         value={blockMap[b.name] || ''}
@@ -446,6 +450,11 @@ function ReviewStep({ parseResult, mapping, setMapping, onContinue }) {
                         suggestions={ITEM_SUGGESTIONS}
                         placeholder="Pl. Dugalj 2P+F  — kezdj el gépelni..."
                       />
+                    </td>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 14, color: '#00E5A0', fontWeight: 700, textAlign: 'center' }}>{b.count} db</td>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 11, color: '#333' }}>
+                      {b.name}
+                      {b.layer && b.layer !== b.name && <div style={{ fontSize: 10, color: '#2A2A2A', marginTop: 1 }}>{b.layer}</div>}
                     </td>
                   </tr>
                 ))}
@@ -465,24 +474,14 @@ function ReviewStep({ parseResult, mapping, setMapping, onContinue }) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#111' }}>
-                  <th style={thStyle}>Layer neve (rajzon)</th>
-                  <th style={thStyle}>Hossz (m)</th>
-                  <th style={thStyle}>Anyag / Tétel neve <span style={{ color: '#444', fontWeight: 400 }}>(szerkeszthető)</span></th>
+                  <th style={thStyle}>Anyag / Tétel neve</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Hossz (m)</th>
+                  <th style={{ ...thStyle, color: '#333' }}>Layer (rajzon)</th>
                 </tr>
               </thead>
               <tbody>
                 {parseResult.lengths.slice(0, 30).map((l, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid #141414' }}>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 13, color: '#888' }}>
-                      {l.layer}
-                      {l.info && (
-                        <div style={{ fontSize: 10, color: '#4A7A6A', marginTop: 2 }}>
-                          {l.info.type === 'tray' && l.info.tray_width ? `Tálca ${l.info.tray_width}×${l.info.tray_height}mm` : ''}
-                          {l.info.type === 'cable' ? `${l.info.cable_type || 'Kábel'} ${l.info.cores ? l.info.cores+'×'+l.info.cross_section+'mm²' : ''}` : ''}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 14, color: '#00E5A0', fontWeight: 700, textAlign: 'center' }}>{l.length} m</td>
                     <td style={{ padding: '8px 12px', position: 'relative' }}>
                       <InlineItemInput
                         value={layerMap[l.layer] || ''}
@@ -491,6 +490,16 @@ function ReviewStep({ parseResult, mapping, setMapping, onContinue }) {
                         suggestions={ITEM_SUGGESTIONS}
                         placeholder="Pl. Kábeltálca 300×60  — kezdj el gépelni..."
                       />
+                    </td>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 14, color: '#00E5A0', fontWeight: 700, textAlign: 'center' }}>{l.length} m</td>
+                    <td style={{ padding: '10px 16px', fontFamily: 'DM Mono', fontSize: 11, color: '#333' }}>
+                      {l.layer}
+                      {l.info && (l.info.type === 'tray' && l.info.tray_width
+                        ? <div style={{ fontSize: 10, color: '#2A4A3A', marginTop: 1 }}>Tálca {l.info.tray_width}×{l.info.tray_height}mm</div>
+                        : l.info.type === 'cable'
+                        ? <div style={{ fontSize: 10, color: '#2A4A3A', marginTop: 1 }}>{l.info.cable_type || 'Kábel'}{l.info.cores ? ` ${l.info.cores}×${l.info.cross_section}mm²` : ''}</div>
+                        : null
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -569,58 +578,66 @@ function InlineItemInput({ value, onChange, onBlur, suggestions, placeholder }) 
 
 // ─── Step 3: Pricing ──────────────────────────────────────────────────────────
 
-
 function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norms, setNorms, settings, setSettings, onCalculate }) {
+  const [laborMode, setLaborMode] = useState('hourly') // 'hourly' | 'peritem'
+
   const allItems = new Set()
-  
   parseResult.blocks.forEach(b => {
     for (const [pattern, mapped] of Object.entries(mapping.blocks)) {
       if (b.name.toLowerCase().includes(pattern.toLowerCase())) { allItems.add(mapped); break }
     }
   })
-  
   parseResult.lengths.forEach(l => {
     for (const [pattern, mapped] of Object.entries(mapping.layers)) {
       if (l.layer.toLowerCase().includes(pattern.toLowerCase())) { allItems.add(mapped); break }
     }
   })
-
   const items = [...allItems]
 
   return (
     <div>
       <h2 style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 800, color: '#F0F0F0', marginBottom: 8 }}>
-        Árazás és normák
+        Árazás és munkadíj
       </h2>
-      <p style={{ color: '#666', fontSize: 14, marginBottom: 16, fontFamily: 'DM Mono' }}>
-        Állítsd be az egységárakat és a normaidőket. Ez egyszer kell – utána profil szerint tölti be.
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 24, fontFamily: 'DM Mono' }}>
+        Állítsd be az egységárakat és válaszd a munkadíj kalkuláció módját.
       </p>
-      <div style={{ background: '#0D1A14', border: '1px solid #1A3025', borderRadius: 8, padding: '14px 18px', marginBottom: 24 }}>
-        <div style={{ fontSize: 12, color: '#4A8A6A', fontFamily: 'DM Mono', lineHeight: 1.8 }}>
-          <strong style={{ color: '#00E5A0' }}>KÜLÖN módszer</strong> – a normaidők NEM tartalmazzák a kábelhúzást:<br/>
-          <span style={{ color: '#5A9A7A' }}>• Szerelvény (dugalj, lámpa, kapcsoló):</span> csak a doboz+szerelvény rögzítés+bekötés ideje<br/>
-          <span style={{ color: '#5A9A7A' }}>• Kábel NYY-J (m):</span> húzás+rögzítés ideje méterenként<br/>
-          <span style={{ color: '#5A9A7A' }}>• Kábeltálca (m):</span> tartó+tálca+fedél szerelési ideje méterenként<br/>
-          <span style={{ color: '#888' }}>Ha a tervben nincs kábelnyomvonal, adj hozzá becslést: dugaljonként ~6m kábel átlagosan.</span>
+
+      {/* Labor mode selector */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 12, color: '#555', fontFamily: 'DM Mono', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Munkadíj kalkuláció módja</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {[
+            { key: 'hourly', icon: '⏱', title: 'Órabéres', desc: 'Megadod az óradíjat és normaidőket. Az app kiszámolja a teljes munkadíjat.' },
+            { key: 'peritem', icon: '📋', title: 'Tételes', desc: 'Minden tételhez külön munkadíjat adsz meg (Ft/db vagy Ft/m).' }
+          ].map(m => (
+            <div key={m.key} onClick={() => setLaborMode(m.key)} style={{
+              padding: '18px 20px', borderRadius: 12, cursor: 'pointer', transition: 'all 0.2s',
+              border: `2px solid ${laborMode === m.key ? '#00E5A0' : '#1E1E1E'}`,
+              background: laborMode === m.key ? 'rgba(0,229,160,0.05)' : '#0D0D0D',
+            }}>
+              <div style={{ fontSize: 22, marginBottom: 8 }}>{m.icon}</div>
+              <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: laborMode === m.key ? '#00E5A0' : '#CCC', marginBottom: 6 }}>{m.title}</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#555', lineHeight: 1.6 }}>{m.desc}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Global settings */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 28 }}>
-        {[
-          { key: 'hourlyRate', label: 'Óradíj (Ft)', placeholder: '8000' },
-          { key: 'margin', label: 'Árrés szorzó', placeholder: '1.15' },
-        ].map(f => (
-          <div key={f.key} style={{ background: '#111', borderRadius: 10, padding: 18, border: '1px solid #1E1E1E' }}>
-            <label style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono', display: 'block', marginBottom: 8 }}>{f.label}</label>
-            <input
-              value={settings[f.key]}
-              onChange={e => setSettings(s => ({ ...s, [f.key]: e.target.value }))}
-              placeholder={f.placeholder}
-              style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Syne', fontSize: 22, fontWeight: 800, color: '#00E5A0', boxSizing: 'border-box' }}
-            />
+      <div style={{ display: 'grid', gridTemplateColumns: laborMode === 'hourly' ? '1fr 1fr 1fr' : '1fr 1fr', gap: 16, marginBottom: 28 }}>
+        {laborMode === 'hourly' && (
+          <div style={{ background: '#111', borderRadius: 10, padding: 18, border: '1px solid #1E1E1E' }}>
+            <label style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono', display: 'block', marginBottom: 8 }}>Óradíj (Ft/ó)</label>
+            <input value={settings.hourlyRate} onChange={e => setSettings(s => ({ ...s, hourlyRate: e.target.value }))} placeholder="8000"
+              style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Syne', fontSize: 22, fontWeight: 800, color: '#00E5A0' }} />
           </div>
-        ))}
+        )}
+        <div style={{ background: '#111', borderRadius: 10, padding: 18, border: '1px solid #1E1E1E' }}>
+          <label style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono', display: 'block', marginBottom: 8 }}>Árrés szorzó</label>
+          <input value={settings.margin} onChange={e => setSettings(s => ({ ...s, margin: e.target.value }))} placeholder="1.15"
+            style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Syne', fontSize: 22, fontWeight: 800, color: '#00E5A0' }} />
+        </div>
         <div style={{ background: '#111', borderRadius: 10, padding: 18, border: '1px solid #1E1E1E' }}>
           <label style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono', display: 'block', marginBottom: 8 }}>ÁFA</label>
           <div style={{ fontFamily: 'Syne', fontSize: 22, fontWeight: 800, color: '#666' }}>27%</div>
@@ -633,9 +650,12 @@ function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norm
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#111' }}>
-                {['Tétel', 'Egységár (Ft)', 'Norma (perc/egység)', ''].map(h => (
-                  <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11, color: '#555', fontFamily: 'DM Mono', fontWeight: 400, borderBottom: '1px solid #1E1E1E' }}>{h}</th>
-                ))}
+                <th style={thStyle}>Tétel</th>
+                <th style={thStyle}>Egységár (Ft)</th>
+                {laborMode === 'hourly'
+                  ? <th style={thStyle}>Norma (perc)</th>
+                  : <th style={thStyle}>Munkadíj (Ft/egység)</th>}
+                <th style={thStyle}></th>
               </tr>
             </thead>
             <tbody>
@@ -644,30 +664,28 @@ function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norm
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{item}</div>
                     <div style={{ fontSize: 10, color: '#444', marginTop: 3 }}>
-                      {item.includes('Kábel') && !item.includes('tálca') ? 'húzás+rögzítés / méter' :
-                       item.includes('tálca') || item.includes('Tálca') ? 'tartó+tálca+fedél / méter' :
-                       item.includes('Elosztó') ? 'teljes bekötés, betáblázás' :
-                       'rögzítés+bekötés (kábel nélkül)'}
+                      {item.includes('Kábel') && !item.toLowerCase().includes('tálca') ? 'húzás / méter' :
+                       item.toLowerCase().includes('tálca') ? 'szerelés / méter' :
+                       item.includes('Elosztó') ? 'bekötés, betáblázás' : 'rögzítés + bekötés'}
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <input
-                      value={prices[item] || ''}
-                      onChange={e => setPrices(p => ({ ...p, [item]: parseFloat(e.target.value) || 0 }))}
-                      placeholder="0"
-                      style={{ width: 120, background: '#151515', border: '1px solid #222', borderRadius: 6, padding: '6px 10px', color: '#00E5A0', fontFamily: 'DM Mono', fontSize: 13, outline: 'none' }}
-                    />
+                    <input value={prices[item] || ''} onChange={e => setPrices(p => ({ ...p, [item]: parseFloat(e.target.value) || 0 }))} placeholder="0"
+                      style={{ width: 110, background: '#151515', border: '1px solid #222', borderRadius: 6, padding: '6px 10px', color: '#00E5A0', fontFamily: 'DM Mono', fontSize: 13, outline: 'none' }} />
                   </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <input
-                      value={norms[item] || ''}
-                      onChange={e => setNorms(n => ({ ...n, [item]: parseFloat(e.target.value) || 0 }))}
-                      placeholder="0"
-                      style={{ width: 100, background: '#151515', border: '1px solid #222', borderRadius: 6, padding: '6px 10px', color: '#FFD966', fontFamily: 'DM Mono', fontSize: 13, outline: 'none' }}
-                    />
-                  </td>
+                  {laborMode === 'hourly' ? (
+                    <td style={{ padding: '12px 16px' }}>
+                      <input value={norms[item] || ''} onChange={e => setNorms(n => ({ ...n, [item]: parseFloat(e.target.value) || 0 }))} placeholder="0"
+                        style={{ width: 90, background: '#151515', border: '1px solid #222', borderRadius: 6, padding: '6px 10px', color: '#FFD966', fontFamily: 'DM Mono', fontSize: 13, outline: 'none' }} />
+                    </td>
+                  ) : (
+                    <td style={{ padding: '12px 16px' }}>
+                      <input value={settings.perItemLabor?.[item] || ''} onChange={e => setSettings(s => ({ ...s, perItemLabor: { ...s.perItemLabor, [item]: parseFloat(e.target.value) || 0 } }))} placeholder="0"
+                        style={{ width: 110, background: '#151515', border: '1px solid rgba(255,217,102,0.3)', borderRadius: 6, padding: '6px 10px', color: '#FFD966', fontFamily: 'DM Mono', fontSize: 13, outline: 'none' }} />
+                    </td>
+                  )}
                   <td style={{ padding: '12px 16px', fontSize: 11, color: '#444', fontFamily: 'DM Mono' }}>
-                    {norms[item] ? `${(norms[item]/60).toFixed(2)} ó` : ''}
+                    {laborMode === 'hourly' && norms[item] ? `${(norms[item]/60).toFixed(2)} ó` : ''}
                   </td>
                 </tr>
               ))}
@@ -676,11 +694,11 @@ function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norm
         </div>
       ) : (
         <div style={{ background: 'rgba(255,80,80,0.05)', border: '1px solid rgba(255,80,80,0.15)', borderRadius: 8, padding: 20, marginBottom: 28, color: '#FF8080', fontFamily: 'DM Mono', fontSize: 13 }}>
-          Nincs mapping-elt elem. Menj vissza és állítsd be a mapping-et.
+          Nincs mapping-elt elem. Menj vissza és állítsd be a tételeket.
         </div>
       )}
 
-      <button onClick={onCalculate} style={{
+      <button onClick={() => onCalculate(laborMode)} style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '14px 28px', background: '#00E5A0', color: '#0A0A0A',
         border: 'none', borderRadius: 8, cursor: 'pointer',
@@ -692,7 +710,259 @@ function PricingStep({ parseResult, mapping, unitFactor, prices, setPrices, norm
   )
 }
 
-// ─── Step 4: Quote ────────────────────────────────────────────────────────────
+// ─── Step 4: AI Assistant ─────────────────────────────────────────────────────
+
+function AIStep({ parseResult, mapping, onContinue, apiBase }) {
+  const [specText, setSpecText] = useState('')
+  const [specFile, setSpecFile] = useState(null)
+  const [analysisResult, setAnalysisResult] = useState(null)
+  const [suggestions, setSuggestions] = useState({}) // item → suggestion
+  const [loading, setLoading] = useState(false)
+  const [loadingItem, setLoadingItem] = useState(null)
+  const [error, setError] = useState(null)
+  const specRef = useRef()
+
+  // Collect mapped items for suggestions
+  const mappedItems = []
+  parseResult.blocks.forEach(b => {
+    for (const [pattern, mapped] of Object.entries(mapping.blocks)) {
+      if (b.name.toLowerCase().includes(pattern.toLowerCase())) {
+        if (!mappedItems.find(x => x.name === mapped)) mappedItems.push({ name: mapped, qty: b.count, unit: 'db' })
+        break
+      }
+    }
+  })
+  parseResult.lengths.forEach(l => {
+    for (const [pattern, mapped] of Object.entries(mapping.layers)) {
+      if (l.layer.toLowerCase().includes(pattern.toLowerCase())) {
+        if (!mappedItems.find(x => x.name === mapped)) mappedItems.push({ name: mapped, qty: l.length, unit: 'm' })
+        break
+      }
+    }
+  })
+
+  const readFileAsText = (file) => new Promise((res, rej) => {
+    const reader = new FileReader()
+    reader.onload = e => res(e.target.result)
+    reader.onerror = rej
+    reader.readAsText(file)
+  })
+
+  const handleSpecUpload = async (file) => {
+    setSpecFile(file)
+    try {
+      if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        const text = await readFileAsText(file)
+        setSpecText(text)
+      } else {
+        // For PDF/docx signal to user we'll send filename only for now
+        setSpecText(`[Feltöltött fájl: ${file.name} – szöveg kinyerés folyamatban...]`)
+      }
+    } catch(e) {
+      setError('Fájl olvasási hiba: ' + e.message)
+    }
+  }
+
+  const runAnalysis = async () => {
+    if (!specText.trim()) { setError('Először töltsd fel a műszaki leírást, vagy írj szöveget.'); return }
+    setLoading(true); setError(null); setAnalysisResult(null)
+    try {
+      const res = await fetch(`${apiBase}/api/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'analyze_spec', spec_text: specText, takeoff_items: mappedItems })
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setAnalysisResult(data.result)
+    } catch(e) {
+      setError('AI elemzés hiba: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const suggestForItem = async (item) => {
+    setLoadingItem(item.name)
+    try {
+      const res = await fetch(`${apiBase}/api/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'suggest_materials', item_name: item.name, quantity: item.qty, unit: item.unit })
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setSuggestions(s => ({ ...s, [item.name]: data.result }))
+    } catch(e) {
+      setError('Anyagajánlás hiba: ' + e.message)
+    } finally {
+      setLoadingItem(null)
+    }
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 800, color: '#F0F0F0', marginBottom: 8 }}>
+        AI Asszisztens
+      </h2>
+      <p style={{ color: '#666', fontSize: 14, marginBottom: 28, fontFamily: 'DM Mono' }}>
+        Töltsd fel a műszaki leírást – az AI elemzi a követelményeket és anyagokat javasol. Ez a lépés opcionális.
+      </p>
+
+      {/* Spec upload */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 12, color: '#555', fontFamily: 'DM Mono', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Műszaki Leírás</div>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+          <button onClick={() => specRef.current?.click()} style={{
+            padding: '8px 16px', background: '#111', border: '1px solid #2A2A2A', borderRadius: 8,
+            color: '#888', fontFamily: 'DM Mono', fontSize: 12, cursor: 'pointer'
+          }}>
+            📎 Fájl feltöltése (TXT, PDF)
+          </button>
+          {specFile && <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#555', display: 'flex', alignItems: 'center' }}>{specFile.name}</span>}
+          <input ref={specRef} type="file" accept=".txt,.md,.pdf,.docx" style={{ display: 'none' }}
+            onChange={e => e.target.files[0] && handleSpecUpload(e.target.files[0])} />
+        </div>
+        <textarea
+          value={specText}
+          onChange={e => setSpecText(e.target.value)}
+          placeholder="Vagy illeszd be ide a műszaki leírás szövegét...&#10;&#10;Pl: 'A nedves helyiségekben IP44 védettségű szerelvényeket kell alkalmazni. A kábeltálcák 300×60mm méretűek, MSZ HD 60364-7-701 szabvány szerint...'"
+          style={{
+            width: '100%', minHeight: 140, background: '#0D0D0D', border: '1px solid #1E1E1E',
+            borderRadius: 10, padding: '14px 16px', color: '#888', fontFamily: 'DM Mono', fontSize: 12,
+            outline: 'none', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box'
+          }}
+        />
+        <button onClick={runAnalysis} disabled={loading || !specText.trim()} style={{
+          marginTop: 12, padding: '10px 24px', background: loading ? '#1A1A1A' : 'rgba(0,229,160,0.1)',
+          border: '1px solid rgba(0,229,160,0.3)', borderRadius: 8, color: loading ? '#555' : '#00E5A0',
+          fontFamily: 'Syne', fontWeight: 700, fontSize: 14, cursor: loading ? 'default' : 'pointer'
+        }}>
+          {loading ? '⟳ AI elemzés folyamatban...' : '✦ AI Elemzés indítása'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', borderRadius: 8, padding: 14, marginBottom: 20, color: '#FF8080', fontSize: 12, fontFamily: 'DM Mono' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Analysis result */}
+      {analysisResult && (
+        <div style={{ background: '#0D0D0D', border: '1px solid #1A3025', borderRadius: 12, padding: 24, marginBottom: 28 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: '#00E5A0', marginBottom: 16 }}>✦ AI Elemzés eredménye</div>
+          
+          {analysisResult.summary && (
+            <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#777', lineHeight: 1.7, marginBottom: 16, padding: '12px 14px', background: 'rgba(0,229,160,0.04)', borderRadius: 8, borderLeft: '3px solid #00E5A0' }}>
+              {analysisResult.summary}
+            </p>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+            {[
+              { label: 'IP védettség', value: analysisResult.ip_requirement },
+              { label: 'Kábel típus', value: analysisResult.cable_type },
+              { label: 'Szabvány', value: analysisResult.standard },
+              { label: 'Szerelési mód', value: analysisResult.installation_method },
+            ].filter(x => x.value).map((row, i) => (
+              <div key={i} style={{ background: '#111', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, color: '#444', fontFamily: 'DM Mono', marginBottom: 4 }}>{row.label}</div>
+                <div style={{ fontSize: 13, color: '#00E5A0', fontFamily: 'DM Mono' }}>{row.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {analysisResult.warnings?.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {analysisResult.warnings.map((w, i) => (
+                <div key={i} style={{ padding: '8px 12px', background: 'rgba(255,217,102,0.06)', border: '1px solid rgba(255,217,102,0.15)', borderRadius: 6, marginBottom: 6, fontSize: 12, color: '#FFD966', fontFamily: 'DM Mono' }}>
+                  ⚠️ {w}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {analysisResult.missing_items?.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, color: '#555', fontFamily: 'DM Mono', marginBottom: 6 }}>Hiányzó tételek a DXF-ből:</div>
+              {analysisResult.missing_items.map((m, i) => (
+                <div key={i} style={{ padding: '6px 12px', background: 'rgba(255,80,80,0.06)', borderRadius: 6, marginBottom: 4, fontSize: 12, color: '#FF8080', fontFamily: 'DM Mono' }}>
+                  ✗ {m}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Material suggestions per item */}
+      {mappedItems.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 12, color: '#555', fontFamily: 'DM Mono', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Anyagajánlások tételenként</div>
+          {mappedItems.map((item, i) => (
+            <div key={i} style={{ border: '1px solid #1A1A1A', borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#0D0D0D' }}>
+                <div>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#CCC' }}>{item.name}</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444', marginLeft: 10 }}>{item.qty} {item.unit}</span>
+                </div>
+                {!suggestions[item.name] && (
+                  <button onClick={() => suggestForItem(item)} disabled={loadingItem === item.name} style={{
+                    padding: '6px 14px', background: 'transparent', border: '1px solid #2A4A3A',
+                    borderRadius: 6, color: '#4A8A6A', fontFamily: 'DM Mono', fontSize: 11, cursor: 'pointer'
+                  }}>
+                    {loadingItem === item.name ? '⟳ Keresés...' : '✦ AI Javaslat'}
+                  </button>
+                )}
+              </div>
+              {suggestions[item.name] && (
+                <div style={{ padding: '14px 16px', background: '#080808' }}>
+                  {suggestions[item.name].products?.slice(0, 3).map((p, j) => (
+                    <div key={j} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: j < 2 ? '1px solid #111' : 'none', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#CCC', marginBottom: 2 }}>{p.brand} – {p.name}</div>
+                        {p.type && <div style={{ fontSize: 10, color: '#444', fontFamily: 'DM Mono' }}>{p.type}</div>}
+                        {p.pros && <div style={{ fontSize: 10, color: '#3A6A5A', fontFamily: 'DM Mono', marginTop: 2 }}>{p.pros}</div>}
+                      </div>
+                      <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#FFD966', flexShrink: 0, textAlign: 'right' }}>
+                        {p.price_range}
+                      </div>
+                    </div>
+                  ))}
+                  {suggestions[item.name].recommendation && (
+                    <div style={{ marginTop: 10, padding: '10px 12px', background: 'rgba(0,229,160,0.04)', borderRadius: 6, fontSize: 11, color: '#4A8A6A', fontFamily: 'DM Mono', lineHeight: 1.6, borderLeft: '2px solid #1A4A3A' }}>
+                      {suggestions[item.name].recommendation}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onContinue} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '14px 28px', background: '#00E5A0', color: '#0A0A0A',
+          border: 'none', borderRadius: 8, cursor: 'pointer',
+          fontFamily: 'Syne', fontWeight: 800, fontSize: 16
+        }}>
+          Tovább az árazáshoz <IconArrow />
+        </button>
+        <button onClick={onContinue} style={{
+          padding: '14px 20px', background: 'transparent', border: '1px solid #2A2A2A',
+          borderRadius: 8, color: '#555', cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 13
+        }}>
+          Kihagyom
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Step 5: Quote ────────────────────────────────────────────────────────────
 
 function QuoteStep({ result, projectName, onReset }) {
   const s = result.summary
@@ -839,23 +1109,81 @@ function QuoteStep({ result, projectName, onReset }) {
   )
 }
 
+// ─── StepBar ──────────────────────────────────────────────────────────────────
+
+const STEP_LABELS = ['Feltöltés', 'Ellenőrzés', 'AI Elemzés', 'Árazás', 'Ajánlat']
+
+function StepBar({ current }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 40, gap: 0 }}>
+      {STEP_LABELS.map((label, i) => {
+        const done = i < current
+        const active = i === current
+        return (
+          <React.Fragment key={i}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: done ? '#00E5A0' : active ? 'rgba(0,229,160,0.15)' : '#111',
+                border: done ? '2px solid #00E5A0' : active ? '2px solid #00E5A0' : '2px solid #222',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'DM Mono', fontSize: 11, color: done ? '#0A0A0A' : active ? '#00E5A0' : '#333',
+                fontWeight: done ? 700 : 400,
+                transition: 'all 0.3s'
+              }}>
+                {done ? '✓' : i + 1}
+              </div>
+              <div style={{
+                fontFamily: 'DM Mono', fontSize: 10, marginTop: 6, color: active ? '#00E5A0' : done ? '#4A8A6A' : '#333',
+                transition: 'color 0.3s', whiteSpace: 'nowrap'
+              }}>{label}</div>
+            </div>
+            {i < STEP_LABELS.length - 1 && (
+              <div style={{ flex: 2, height: 1, background: i < current ? '#1A4A3A' : '#1A1A1A', marginBottom: 20, transition: 'background 0.3s' }} />
+            )}
+          </React.Fragment>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  // Simple hash-based routing: '' or '#' = landing, '#app' = app
+  const [route, setRoute] = useState(() => window.location.hash)
+
+  useEffect(() => {
+    const fn = () => setRoute(window.location.hash)
+    window.addEventListener('hashchange', fn)
+    return () => window.removeEventListener('hashchange', fn)
+  }, [])
+
+  const goToApp = () => { window.location.hash = '#app' }
+
+  // Show landing on '' or '#'
+  if (!route || route === '#' || route === '#landing') {
+    return <Landing onStart={goToApp} />
+  }
+
+  return <AppShell />
+}
+
+function AppShell() {
   const [step, setStep] = useState(0)
-  const [files, setFiles] = useState([]) // [{ name, label, data }]
+  const [files, setFiles] = useState([])
   const [activeFile, setActiveFile] = useState(0)
   const [mapping, setMapping] = useState(DEFAULT_MAPPING)
   const [prices, setPrices] = useState(DEFAULT_PRICES)
   const [norms, setNorms] = useState(DEFAULT_NORMS)
-  const [settings, setSettings] = useState({ hourlyRate: 8000, margin: 1.15 })
+  const [settings, setSettings] = useState({ hourlyRate: 8000, margin: 1.15, perItemLabor: {} })
   const [calcResult, setCalcResult] = useState(null)
   const [projectName, setProjectName] = useState('')
   const [editingName, setEditingName] = useState(false)
 
   const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : ''
 
-  // Merged parse result across all files for pricing/calculation
   const mergedParseResult = files.length === 0 ? null : {
     blocks: files.flatMap(f => f.data.blocks),
     lengths: files.flatMap(f => f.data.lengths),
@@ -867,40 +1195,38 @@ export default function App() {
     }
   }
 
-  const parseResult = files[activeFile]?.data || mergedParseResult
-
   const handleParsed = (results) => {
-    // results: [{ name, label, data }]
     setFiles(results)
     setActiveFile(0)
     setProjectName(results.length === 1
       ? results[0].label
       : results[0].label.replace(/ \d+$/, '') || 'Projekt'
     )
-    // Auto-advance after short delay so user sees "done" state
     setTimeout(() => setStep(1), 600)
   }
 
-  const handleCalculate = async () => {
+  const handleCalculate = async (laborMode) => {
     try {
+      const body = {
+        blocks: mergedParseResult.blocks,
+        lengths: mergedParseResult.lengths,
+        mapping,
+        priceList: prices,
+        norms,
+        hourlyRate: laborMode === 'hourly' ? parseFloat(settings.hourlyRate) : 0,
+        margin: parseFloat(settings.margin),
+        lengthUnitFactor: 1.0,
+        laborMode: laborMode,
+        perItemLabor: settings.perItemLabor || {}
+      }
       const res = await fetch(`${API_BASE}/api/calculate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          blocks: mergedParseResult.blocks,
-          lengths: mergedParseResult.lengths,
-          mapping,
-          priceList: prices,
-          norms,
-          hourlyRate: parseFloat(settings.hourlyRate),
-          margin: parseFloat(settings.margin),
-          lengthUnitFactor: 1.0  // lengths already in meters from parser
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
       })
       const data = await res.json()
       if (!data.success) throw new Error(data.error)
       setCalcResult(data)
-      setStep(3)
+      setStep(4) // step 4 = quote (0-indexed: upload=0, review=1, ai=2, pricing=3, quote=4)
     } catch (e) {
       alert('Hiba a kalkuláció során: ' + e.message)
     }
@@ -914,43 +1240,52 @@ export default function App() {
     <div style={{ minHeight: '100vh', background: '#0A0A0A', color: '#F0F0F0' }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        @keyframes progress { 0% { width: 0%; transform: translateX(-100%) } 50% { width: 60% } 100% { width: 0%; transform: translateX(200%) } }
-        button:hover { opacity: 0.85; }
+        @keyframes shimmer { 0% { transform: translateX(-100%) } 100% { transform: translateX(200%) } }
+        @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:none } }
+        button:focus { outline: none; }
         input:focus { border-color: #00E5A0 !important; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
       `}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: '1px solid #141414', padding: '18px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 28, height: 28, background: '#00E5A0', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <IconZap />
+      <div style={{ borderBottom: '1px solid #141414', padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 50, background: 'rgba(10,10,10,0.9)' }}>
+        <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <div style={{ width: 28, height: 28, background: '#00E5A0', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 12px rgba(0,229,160,0.3)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           </div>
-          <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, letterSpacing: '-0.02em' }}>
+          <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, letterSpacing: '-0.02em', color: '#F0F0F0' }}>
             Takeoff<span style={{ color: '#00E5A0' }}>Pro</span>
           </span>
-        </div>
+        </a>
+
         {projectName && step > 0 && (
-          <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#555', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#333' }}>●</span>
             {editingName ? (
               <input value={projectName} onChange={e => setProjectName(e.target.value)}
                 onBlur={() => setEditingName(false)} autoFocus
-                style={{ background: 'transparent', border: '1px solid #2A2A2A', borderRadius: 6, padding: '4px 10px', color: '#888', fontFamily: 'DM Mono', fontSize: 13, outline: 'none' }} />
+                style={{ background: 'transparent', border: '1px solid #2A2A2A', borderRadius: 6, padding: '4px 10px', color: '#888', fontFamily: 'DM Mono', fontSize: 12, outline: 'none' }} />
             ) : (
-              <span onClick={() => setEditingName(true)} style={{ cursor: 'pointer', color: '#666' }}>{projectName}</span>
+              <span onClick={() => setEditingName(true)} style={{ cursor: 'pointer', color: '#666' }} title="Kattints a névváltoztatáshoz">{projectName}</span>
             )}
           </div>
         )}
-        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#333' }}>v1.0 beta</div>
+        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#2A2A2A', letterSpacing: '0.05em' }}>v1.0 BETA</div>
       </div>
 
-      {/* Main */}
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '48px 24px' }}>
+      {/* Main content */}
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: '40px 24px 80px' }}>
         <StepBar current={step} />
 
+        {/* Step 0: Upload */}
         {step === 0 && <UploadStep onParsed={handleParsed} apiBase={API_BASE} />}
+
+        {/* Step 1: Review */}
         {step === 1 && mergedParseResult && (
-          <div>
-            {/* File tabs - only shown if multiple files */}
+          <div style={{ animation: 'fadeUp 0.4s ease' }}>
             {files.length > 1 && (
               <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
                 {files.map((f, i) => (
@@ -959,6 +1294,7 @@ export default function App() {
                     background: activeFile === i ? '#00E5A0' : '#1A1A1A',
                     color: activeFile === i ? '#0A0A0A' : '#666',
                     fontFamily: 'DM Mono', fontSize: 12, fontWeight: activeFile === i ? 700 : 400,
+                    transition: 'all 0.15s'
                   }}>
                     {f.label}
                   </button>
@@ -968,6 +1304,7 @@ export default function App() {
                   background: activeFile === -1 ? '#FFD966' : '#1A1A1A',
                   color: activeFile === -1 ? '#0A0A0A' : '#666',
                   fontFamily: 'DM Mono', fontSize: 12, fontWeight: activeFile === -1 ? 700 : 400,
+                  transition: 'all 0.15s'
                 }}>
                   ∑ Összesített
                 </button>
@@ -975,25 +1312,44 @@ export default function App() {
             )}
             <ReviewStep
               parseResult={activeFile === -1 ? mergedParseResult : (files[activeFile]?.data || mergedParseResult)}
-              mapping={mapping}
-              setMapping={setMapping}
+              mapping={mapping} setMapping={setMapping}
               onContinue={() => setStep(2)}
             />
           </div>
         )}
+
+        {/* Step 2: AI */}
         {step === 2 && mergedParseResult && (
-          <PricingStep
-            parseResult={mergedParseResult}
-            mapping={mapping}
-            unitFactor={1.0}
-            prices={prices} setPrices={setPrices}
-            norms={norms} setNorms={setNorms}
-            settings={settings} setSettings={setSettings}
-            onCalculate={handleCalculate}
-          />
+          <div style={{ animation: 'fadeUp 0.4s ease' }}>
+            <AIStep
+              parseResult={mergedParseResult}
+              mapping={mapping}
+              onContinue={() => setStep(3)}
+              apiBase={API_BASE}
+            />
+          </div>
         )}
-        {step === 3 && calcResult && (
-          <QuoteStep result={calcResult} projectName={projectName} onReset={reset} />
+
+        {/* Step 3: Pricing */}
+        {step === 3 && mergedParseResult && (
+          <div style={{ animation: 'fadeUp 0.4s ease' }}>
+            <PricingStep
+              parseResult={mergedParseResult}
+              mapping={mapping}
+              unitFactor={1.0}
+              prices={prices} setPrices={setPrices}
+              norms={norms} setNorms={setNorms}
+              settings={settings} setSettings={setSettings}
+              onCalculate={handleCalculate}
+            />
+          </div>
+        )}
+
+        {/* Step 4: Quote */}
+        {step === 4 && calcResult && (
+          <div style={{ animation: 'fadeUp 0.4s ease' }}>
+            <QuoteStep result={calcResult} projectName={projectName} onReset={reset} />
+          </div>
         )}
       </div>
     </div>
