@@ -98,6 +98,196 @@ function InlineItemInput({ value, onChange, placeholder = 'Tétel neve...' }) {
   )
 }
 
+// ─── File Processing Animation ────────────────────────────────────────────────
+function FileProcessingAnimation({ status, filename }) {
+  // status: 'converting' | 'parsing' | 'done'
+  const isDone = status === 'done'
+  const label = status === 'converting' ? 'DWG → DXF konvertálás...' :
+                status === 'parsing'    ? 'DXF elemzés folyamatban...' :
+                                          'Kész!'
+  return (
+    <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden',
+      border: `1px solid ${isDone ? '#00E5A020' : '#00E5A015'}`,
+      background: '#060E0A', transition: 'all 0.4s' }}>
+
+      {/* Top accent strip */}
+      <div style={{ height: 2, background: isDone
+        ? 'linear-gradient(90deg, #00E5A0, #4CC9F0)'
+        : 'linear-gradient(90deg, transparent, #00E5A0, transparent)',
+        backgroundSize: isDone ? '100%' : '200% 100%',
+        animation: isDone ? 'none' : 'shimmer 2s linear infinite',
+      }} />
+
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 200 }}>
+        <defs>
+          <style>{`
+            .fu-neutral  { stroke: #1E4030; fill: none; stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; }
+            .fu-primary  { stroke: #00E5A0; fill: none; stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; }
+            .fu-pulse    { stroke: #00E5A0; fill: none; stroke-width: 4px; stroke-linecap: round; }
+            .fu-success  { stroke: #00E5A0; fill: none; stroke-width: 4px; stroke-linecap: round; stroke-linejoin: round; }
+            .fu-cable-out { stroke: #0A2018; stroke-width: 16px; fill: none; stroke-linecap: round; opacity: 0.9; }
+            .fu-cable-in  { stroke: #00E5A0; stroke-width: 2px; fill: none; stroke-linecap: round; stroke-dasharray: 8 8; }
+            .fu-textline  { stroke: #1E4030; stroke-width: 4px; stroke-linecap: round; }
+            @keyframes fuFlow { to { stroke-dashoffset: -16; } }
+            .fu-flow { animation: fuFlow 1s linear infinite; }
+            @keyframes fuPulse { 0%,100%{ transform:scale(1); opacity:0.4; } 50%{ transform:scale(1.35); opacity:1; } }
+            .fu-np1 { animation: fuPulse 2s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+            .fu-np2 { animation: fuPulse 2s ease-in-out infinite; animation-delay:0.5s; transform-origin: center; transform-box: fill-box; }
+            @keyframes fuBob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-6px); } }
+            .fu-bob { animation: fuBob 2s ease-in-out infinite; }
+            @keyframes shimmer { 0%{ background-position:200% 0; } 100%{ background-position:-200% 0; } }
+          `}</style>
+
+          <filter id="fuGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+          </filter>
+
+          <pattern id="fuDots" width="40" height="40" patternUnits="userSpaceOnUse">
+            <circle cx="20" cy="20" r="1.5" fill="#00E5A0" opacity="0.05"/>
+          </pattern>
+
+          <path id="fuCablePath" d="M 260 200 L 400 200 C 460 200 460 280 520 280 L 680 280 C 740 280 740 200 800 200 L 940 200"/>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#fuDots)"/>
+
+        {/* Corner brackets */}
+        <path d="M 40,80 L 40,40 L 80,40"  stroke="#1E4030" fill="none" strokeWidth="2" opacity="0.5"/>
+        <path d="M 1160,320 L 1160,360 L 1120,360" stroke="#1E4030" fill="none" strokeWidth="2" opacity="0.5"/>
+        <path d="M 1160,80 L 1160,40 L 1120,40" stroke="#1E4030" fill="none" strokeWidth="2" opacity="0.2"/>
+        <path d="M 40,320 L 40,360 L 80,360" stroke="#1E4030" fill="none" strokeWidth="2" opacity="0.2"/>
+
+        {/* Cable */}
+        <path d="M 260 200 L 400 200 C 460 200 460 280 520 280 L 680 280 C 740 280 740 200 800 200 L 940 200"
+          className="fu-cable-out"/>
+        <path d="M 260 200 L 400 200 C 460 200 460 280 520 280 L 680 280 C 740 280 740 200 800 200 L 940 200"
+          className="fu-cable-in fu-flow"/>
+
+        {/* Cable endpoints */}
+        <circle cx="260" cy="200" r="8" stroke="#1E4030" strokeWidth="2" fill="none"/>
+        <circle cx="260" cy="200" r="3" fill="#00E5A0"/>
+        <circle cx="940" cy="200" r="8" stroke="#1E4030" strokeWidth="2" fill="none"/>
+        <circle cx="940" cy="200" r="3" fill="#00E5A0"/>
+
+        {/* Travelling pulses */}
+        <g>
+          <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.05;0.25;0.3;1" dur="4s" repeatCount="indefinite"/>
+          <line x1="-20" y1="0" x2="20" y2="0" className="fu-pulse" filter="url(#fuGlow)">
+            <animateMotion dur="4s" repeatCount="indefinite" keyTimes="0;0.3;1" keyPoints="0;1;1" calcMode="linear" rotate="auto">
+              <mpath href="#fuCablePath"/>
+            </animateMotion>
+          </line>
+        </g>
+        <g>
+          <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.15;0.2;0.4;0.45;1" dur="4s" repeatCount="indefinite"/>
+          <line x1="-20" y1="0" x2="20" y2="0" className="fu-pulse" filter="url(#fuGlow)">
+            <animateMotion dur="4s" repeatCount="indefinite" keyTimes="0;0.15;0.45;1" keyPoints="0;0;1;1" calcMode="linear" rotate="auto">
+              <mpath href="#fuCablePath"/>
+            </animateMotion>
+          </line>
+        </g>
+        <g>
+          <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.3;0.35;0.55;0.6;1" dur="4s" repeatCount="indefinite"/>
+          <line x1="-20" y1="0" x2="20" y2="0" className="fu-pulse" filter="url(#fuGlow)">
+            <animateMotion dur="4s" repeatCount="indefinite" keyTimes="0;0.3;0.6;1" keyPoints="0;0;1;1" calcMode="linear" rotate="auto">
+              <mpath href="#fuCablePath"/>
+            </animateMotion>
+          </line>
+        </g>
+
+        {/* Left: upload cloud icon */}
+        <g transform="translate(140, 200)">
+          <circle cx="0" cy="0" r="45" stroke="#1E4030" strokeWidth="2" fill="none"
+            strokeDasharray="4 4" opacity="0.3">
+            <animateTransform attributeName="transform" type="rotate" values="0;360" dur="20s" repeatCount="indefinite"/>
+          </circle>
+          <g className="fu-bob">
+            <path stroke="#1E4030" fill="none" strokeWidth="2" strokeLinecap="round"
+              d="M -15,10 L -25,10 C -35,10 -35,-5 -25,-10 C -25,-25 -5,-30 5,-15 C 15,-30 35,-25 35,-5 C 45,-5 45,10 35,10 L 15,10"/>
+          </g>
+          <g className="fu-bob">
+            <path stroke="#00E5A0" fill="none" strokeWidth="2.5" strokeLinecap="round"
+              d="M 5,20 L 5,-8 M -5,2 L 5,-8 L 15,2"/>
+          </g>
+          <g transform="translate(0,70)">
+            <line x1="-25" y1="0" x2="25" y2="0" className="fu-textline">
+              <animate attributeName="stroke" values="#1E4030;#00E5A0;#1E4030" dur="2s" repeatCount="indefinite"/>
+            </line>
+            <line x1="-25" y1="12" x2="10" y2="12" className="fu-textline"/>
+          </g>
+        </g>
+
+        {/* Right: progress circle → checkmark */}
+        <g transform="translate(1060, 200)">
+          {/* Background circle */}
+          <circle cx="0" cy="0" r="50" stroke="#1E4030" strokeWidth="2" fill="none" opacity="0.4"/>
+
+          {/* Progress ring – loops when processing, stays full when done */}
+          {!isDone ? (
+            <circle cx="0" cy="0" r="50" strokeWidth="6" strokeLinecap="round" fill="none"
+              stroke="#00E5A0" strokeDasharray="314.16" strokeDashoffset="314.16"
+              transform="rotate(-90)">
+              <animate attributeName="stroke-dashoffset"
+                values="314.16;314.16;209.44;209.44;104.72;104.72;0;0;314.16;314.16"
+                keyTimes="0;0.3;0.35;0.45;0.5;0.6;0.65;0.85;0.9;1"
+                dur="4s" repeatCount="indefinite" calcMode="ease-in-out"/>
+            </circle>
+          ) : (
+            <circle cx="0" cy="0" r="50" strokeWidth="6" strokeLinecap="round" fill="none"
+              stroke="#00E5A0" strokeDasharray="314.16" strokeDashoffset="0"
+              transform="rotate(-90)"/>
+          )}
+
+          {/* File icon (hide when done) */}
+          {!isDone && (
+            <g>
+              <path stroke="#1E4030" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                d="M -16,-22 L 4,-22 L 16,-10 L 16,22 L -16,22 Z"/>
+              <path stroke="#1E4030" fill="none" strokeWidth="2"
+                d="M 4,-22 L 4,-10 L 16,-10"/>
+              <line x1="-8" y1="2" x2="8" y2="2" stroke="#1E4030" strokeWidth="2" opacity="0.5"/>
+              <line x1="-8" y1="10" x2="4" y2="10" stroke="#1E4030" strokeWidth="2" opacity="0.5"/>
+            </g>
+          )}
+
+          {/* Checkmark (show when done) */}
+          {isDone && (
+            <g>
+              <circle cx="0" cy="0" r="28" fill="#00E5A0" opacity="0.12">
+                <animate attributeName="r" values="24;30;24" keyTimes="0;0.5;1" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <path stroke="#00E5A0" fill="none" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
+                strokeDasharray="32" strokeDashoffset="0"
+                d="M -10,-1 L -3,6 L 12,-7" transform="translate(0,2)"/>
+            </g>
+          )}
+        </g>
+      </svg>
+
+      {/* Filename + status overlay */}
+      <div style={{ padding: '8px 20px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 12,
+          color: isDone ? '#00E5A0' : '#4A8A6A', letterSpacing: '0.05em' }}>
+          {filename}
+        </span>
+        <span style={{ color: '#1E4030' }}>·</span>
+        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11,
+          color: isDone ? '#00E5A0' : '#2A6A4A', letterSpacing: '0.08em' }}>
+          {label}
+        </span>
+        {!isDone && (
+          <div style={{ width: 10, height: 10, borderRadius: '50%',
+            border: '1.5px solid #1E4030', borderTopColor: '#00E5A0',
+            animation: 'spin 0.8s linear infinite', flexShrink: 0 }}/>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Step 0: Upload ────────────────────────────────────────────────────────────
 function UploadStep({ onParsed }) {
   const [files, setFiles] = useState([])
@@ -165,35 +355,50 @@ function UploadStep({ onParsed }) {
           onChange={e => processFiles(e.target.files)} />
       </div>
 
-      {files.length > 0 && (
-        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {files.map(f => (
-            <div key={f.name} style={{
-              background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8,
-              padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12,
-            }}>
-              <span style={{ fontSize: 18 }}>
-                {f.status === 'done' ? '✓' : f.status === 'error' ? '✕' : '…'}
-              </span>
-              <span style={{ flex: 1, color: C.text, fontSize: 13 }}>{f.name}</span>
-              <span style={{ fontSize: 12, color: f.status === 'error' ? C.red : f.status === 'done' ? C.accent : C.yellow }}>
-                {f.status === 'waiting' ? 'Várakozás...' :
-                  f.status === 'converting' ? 'DWG → DXF konvertálás...' :
-                    f.status === 'parsing' ? 'Elemzés...' :
-                      f.status === 'done' ? `${(f.result?.blocks?.length || 0) + (f.result?.lengths?.length || 0)} elem` :
-                        f.error || 'Hiba'}
-              </span>
-              {f.status === 'parsing' || f.status === 'converting' ? (
-                <div style={{
-                  width: 16, height: 16, borderRadius: '50%',
-                  border: `2px solid ${C.border}`, borderTopColor: C.accent,
-                  animation: 'spin 0.8s linear infinite',
-                }} />
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
+      {files.length > 0 && (() => {
+        // Find the currently active (processing) file
+        const activeFile = files.find(f => f.status === 'converting' || f.status === 'parsing')
+        // Find last finished file to show done state briefly
+        const lastDone = !activeFile && files.find(f => f.status === 'done')
+
+        return (
+          <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Show big animation when a file is processing or just finished */}
+            {(activeFile || (files.some(f => f.status === 'done') && files.some(f => f.status !== 'error'))) && (
+              <div style={{ marginBottom: 4 }}>
+                <FileProcessingAnimation
+                  status={activeFile ? activeFile.status : 'done'}
+                  filename={activeFile ? activeFile.name : (files.find(f => f.status === 'done')?.name || '')}
+                />
+              </div>
+            )}
+
+            {/* File list rows – always shown */}
+            {files.map(f => (
+              <div key={f.name} style={{
+                background: C.bgCard,
+                border: `1px solid ${f.status === 'done' ? '#00E5A020' : f.status === 'error' ? '#FF6B6B20' : C.border}`,
+                borderRadius: 8, padding: '10px 16px',
+                display: 'flex', alignItems: 'center', gap: 12,
+                transition: 'border-color 0.3s',
+              }}>
+                <span style={{ fontSize: 14, color: f.status === 'done' ? C.accent : f.status === 'error' ? C.red : C.muted }}>
+                  {f.status === 'done' ? '✓' : f.status === 'error' ? '✕' : '…'}
+                </span>
+                <span style={{ flex: 1, color: C.text, fontSize: 13, fontFamily: 'DM Mono, monospace' }}>{f.name}</span>
+                <span style={{ fontSize: 11, fontFamily: 'DM Mono, monospace',
+                  color: f.status === 'error' ? C.red : f.status === 'done' ? C.accent : C.muted }}>
+                  {f.status === 'waiting'    ? 'Várakozás...' :
+                   f.status === 'converting' ? 'DWG → DXF...' :
+                   f.status === 'parsing'    ? 'Elemzés...' :
+                   f.status === 'done'       ? `${(f.result?.blocks?.length || 0) + (f.result?.lengths?.length || 0)} elem` :
+                   f.error || 'Hiba'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
         {anyDone && (
