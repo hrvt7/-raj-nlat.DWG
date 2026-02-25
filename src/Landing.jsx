@@ -81,25 +81,54 @@ const FAQ = [
 
 const PLANS = [
   {
-    name: 'Indulás', price: 4990, color: '#888',
-    desc: 'Egyszemélyes vállalkozásoknak, akik most váltanak digitálisra.',
-    features: ['15 ajánlat / hónap', 'DXF & DWG feltöltés', 'PDF ajánlat generálás', 'Normaidő-adatbázis (olvasás)', 'Email támogatás'],
-    missing: ['Saját normaidők szerkesztése', 'Assembly szerkesztő', 'Több felhasználó'],
-    cta: 'Kipróbálom', highlight: false,
+    name: 'Alapcsomag', price: 9990, color: '#888',
+    desc: 'Kisebb vállalkozásoknak. 1–3 szerelő, rendszeres ajánlatkészítés.',
+    trial: '14 napos ingyenes próba',
+    features: [
+      '3 felhasználói fiók',
+      'Korlátlan ajánlat',
+      'DXF & DWG feltöltés',
+      'PDF ajánlat generálás',
+      'Normaidő-adatbázis (olvasás)',
+      'Email támogatás',
+    ],
+    missing: ['Normaidő szerkesztés', 'Assembly szerkesztő', 'API hozzáférés'],
+    cta: '14 nap ingyen kipróbálom', highlight: false,
   },
   {
-    name: 'Pro', price: 9990, color: '#00E5A0',
-    desc: '1–5 fős vállalkozásoknak, akik rendszeresen adnak árajánlatot.',
-    features: ['Korlátlan ajánlat', 'DXF & DWG feltöltés', 'PDF ajánlat generálás', 'Normaidő-adatbázis (szerkeszthető)', 'Assembly szerkesztő (v2.1)', 'Anyagárlista kezelés', 'Priority email támogatás'],
-    missing: ['Több felhasználó'],
-    cta: 'Kipróbálom – 14 nap ingyen', highlight: true,
+    name: 'Pro', price: 24990, color: '#00E5A0',
+    desc: '5–15 fős kivitelező cégeknek. Teljes workflow, saját adatbázis.',
+    trial: '14 napos ingyenes próba',
+    features: [
+      '8 felhasználói fiók',
+      'Korlátlan ajánlat',
+      'DXF & DWG feltöltés',
+      'PDF ajánlat generálás',
+      'Normaidő-adatbázis (szerkeszthető)',
+      'Assembly szerkesztő (v2.1)',
+      'Anyagárlista + kedvezmény kezelés',
+      'Szerepkörök (szerelő / irodai)',
+      'Priority email támogatás',
+    ],
+    missing: ['API hozzáférés'],
+    cta: '14 nap ingyen kipróbálom', highlight: true,
   },
   {
-    name: 'Csapat', price: 22990, color: '#4CC9F0',
-    desc: '5–20 fős cégeknek, ahol több szerelő is árajánlatot készít.',
-    features: ['Minden a Pro-ból', '5 felhasználói fiók', 'Közös normaidő-adatbázis', 'Szerepkörök (szerelő / irodai)', 'Ajánlat sablon könyvtár', 'API hozzáférés', 'Dedikált onboarding'],
+    name: 'Vállalati', price: 49990, color: '#4CC9F0',
+    desc: '15+ fős cégeknek, több telephellyel vagy alvállalkozói hálóval.',
+    trial: 'Személyes onboarding',
+    features: [
+      'Korlátlan felhasználó',
+      'Minden a Pro-ból',
+      'Több telephely kezelése',
+      'Közös sablon könyvtár',
+      'API hozzáférés + webhook',
+      'SSO / SAML bejelentkezés',
+      'SLA garancia (99.9%)',
+      'Dedikált account manager',
+    ],
     missing: [],
-    cta: 'Kapcsolatfelvétel', highlight: false,
+    cta: 'Ajánlatot kérek', highlight: false,
   },
 ]
 
@@ -161,7 +190,7 @@ function HeroSection({ onStart }) {
             <button onClick={onStart} style={{ padding: '16px 36px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 17, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
               onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.5)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
               onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
-              Ingyenes próba →
+              Próbáld ki 14 napig →
             </button>
             <a href="#how" style={{ padding: '16px 36px', background: 'transparent', border: '1px solid #2A2A2A', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 14, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: 8 }}
               onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
@@ -336,7 +365,11 @@ function PricingSection({ onStart }) {
                     <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#777' }}>Ft/hó</span>
                   </div>
                   {annual && <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', marginBottom: 6 }}>Éves számlázással – {Math.round(price * 12).toLocaleString('hu')} Ft/év</div>}
-                  <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#888', lineHeight: 1.7, marginBottom: 24 }}>{plan.desc}</p>
+                  <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#888', lineHeight: 1.7, marginBottom: 12 }}>{plan.desc}</p>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.12)', borderRadius: 6, padding: '5px 10px', marginBottom: 20 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0' }}>{plan.trial}</span>
+                  </div>
                   <button onClick={onStart} style={{ padding: '13px 20px', borderRadius: 10, border: plan.highlight ? 'none' : `1px solid ${plan.color}33`, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 14, background: plan.highlight ? '#00E5A0' : 'transparent', color: plan.highlight ? '#0A0A0A' : plan.color, marginBottom: 24, transition: 'all 0.2s', boxShadow: plan.highlight ? '0 0 30px rgba(0,229,160,0.25)' : 'none' }}
                     onMouseEnter={e => { if (plan.highlight) { e.target.style.boxShadow='0 0 50px rgba(0,229,160,0.45)'; e.target.style.transform='translateY(-1px)' } else e.target.style.background=`${plan.color}18` }}
                     onMouseLeave={e => { if (plan.highlight) { e.target.style.boxShadow='0 0 30px rgba(0,229,160,0.25)'; e.target.style.transform='none' } else e.target.style.background='transparent' }}>
@@ -361,11 +394,9 @@ function PricingSection({ onStart }) {
             )
           })}
         </div>
-        <FadeIn delay={0.3}>
           <p style={{ textAlign: 'center', fontFamily: 'DM Mono', fontSize: 12, color: '#555', marginTop: 32 }}>
-            Minden csomag tartalmaz 14 napos ingyenes próbát. Nem szükséges bankkártya a regisztrációhoz.
+            Minden csomag tartalmaz 14 napos ingyenes próbát. Hitelkártya nem szükséges a regisztrációhoz. Éves előfizetéssel –20%.
           </p>
-        </FadeIn>
       </div>
     </section>
   )
@@ -405,15 +436,15 @@ function CTASection({ onStart }) {
         <div style={{ maxWidth: 600, margin: '0 auto' }}>
           <div style={{ width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,229,160,0.1) 0%, transparent 70%)', margin: '-80px auto 0', pointerEvents: 'none' }} />
           <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(28px, 5vw, 48px)', color: '#F0F0F0', letterSpacing: '-0.03em', marginBottom: 20 }}>
-            Kezdd el ma,<br /><span style={{ color: '#00E5A0' }}>ingyen</span>
+            Kezdd el ma,<br /><span style={{ color: '#00E5A0' }}>14 napig ingyen</span>
           </h2>
           <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', marginBottom: 40, lineHeight: 1.8 }}>
-            Nincs regisztráció, nincs hitelkártya.<br />Töltsd fel az első tervedet most.
+            Nincs regisztráció bonyolultsága, nincs elköteleződés.<br />Töltsd fel az első tervedet és lásd az eredményt.
           </p>
           <button onClick={onStart} style={{ padding: '18px 48px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 18, boxShadow: '0 0 60px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
             onMouseEnter={e => { e.target.style.transform='translateY(-3px) scale(1.02)'; e.target.style.boxShadow='0 0 80px rgba(0,229,160,0.5)' }}
             onMouseLeave={e => { e.target.style.transform='none'; e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.3)' }}>
-            Kipróbálom ingyen →
+            14 napos próba indítása →
           </button>
         </div>
       </FadeIn>
