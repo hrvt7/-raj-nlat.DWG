@@ -6,9 +6,11 @@ import Quotes from './pages/Quotes.jsx'
 import WorkItems from './pages/WorkItems.jsx'
 import Settings from './pages/Settings.jsx'
 import AssembliesPage from './pages/Assemblies.jsx'
+import PlansPage from './pages/Plans.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuote, generateQuoteId, loadAssemblies } from './data/store.js'
 import { WORK_ITEMS_DEFAULT as WORK_ITEMS_DB, CONTEXT_FACTORS } from './data/workItemsDb.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
+import DxfViewerPanel from './components/DxfViewer/index.jsx'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -372,7 +374,7 @@ function UploadStep({ onParsed }) {
   const anyDone = files.some(f => f.status === 'done')
 
   const handleNext = () => {
-    const results = files.filter(f => f.status === 'done').map(f => ({ name: f.name, ...f.result }))
+    const results = files.filter(f => f.status === 'done').map(f => ({ name: f.name, rawFile: f.file, ...f.result }))
     onParsed(results)
   }
 
@@ -455,12 +457,13 @@ function UploadStep({ onParsed }) {
   )
 }
 
-// ─── Step 1: Review ────────────────────────────────────────────────────────────
+// ─── Step 1: Review (Split Panel — Viewer left, Data right) ────────────────
 function ReviewStep({ parsedFiles, onNext, onBack }) {
   const [activeFile, setActiveFile] = useState(0)
   const [merged, setMerged] = useState(false)
   const [blockMappings, setBlockMappings] = useState({})
   const [lengthMappings, setLengthMappings] = useState({})
+  const [showViewer, setShowViewer] = useState(true)
 
   const file = parsedFiles[activeFile] || parsedFiles[0]
   const blocks = file?.blocks || []
@@ -489,14 +492,20 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
     onNext({ blocks: allBlocks, lengths: allLengths, blockMappings, lengthMappings })
   }
 
-  return (
-    <div>
+  // Get raw file for the active (non-merged) selection
+  const rawFile = !merged && file?.rawFile ? file.rawFile : null
+  const unitFactor = file?.units?.factor || null
+
+  // Data panel content (shared between both layouts)
+  const dataPanel = (
+    <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+      {/* File selector tabs */}
       {parsedFiles.length > 1 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           {parsedFiles.map((f, i) => (
             <button key={i} onClick={() => { setMerged(false); setActiveFile(i) }}
               style={{
-                padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
                 background: !merged && activeFile === i ? C.accent + '20' : C.bgCard,
                 border: `1px solid ${!merged && activeFile === i ? C.accent : C.border}`,
                 color: !merged && activeFile === i ? C.accent : C.text,
@@ -504,33 +513,33 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
           ))}
           <button onClick={() => setMerged(true)}
             style={{
-              padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+              padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
               background: merged ? C.accent + '20' : C.bgCard,
               border: `1px solid ${merged ? C.accent : C.border}`,
               color: merged ? C.accent : C.text,
-            }}>🔀 Összesített nézet</button>
+            }}>🔀 Összesített</button>
         </div>
       )}
 
       {allBlocks.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ color: C.text, fontWeight: 600, marginBottom: 10, fontSize: 14 }}>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: C.text, fontWeight: 600, marginBottom: 8, fontSize: 13 }}>
             Blokkok ({allBlocks.length})
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                <th style={{ textAlign: 'left', padding: '8px 12px', color: C.muted }}>Rajz azonosító</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px', color: C.muted }}>Db</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px', color: C.muted }}>Anyag / Tétel</th>
+                <th style={{ textAlign: 'left', padding: '6px 10px', color: C.muted }}>Rajz azonosító</th>
+                <th style={{ textAlign: 'left', padding: '6px 10px', color: C.muted }}>Db</th>
+                <th style={{ textAlign: 'left', padding: '6px 10px', color: C.muted }}>Anyag / Tétel</th>
               </tr>
             </thead>
             <tbody>
               {allBlocks.map((b, i) => (
                 <tr key={i} style={{ borderBottom: `1px solid ${C.border}30` }}>
-                  <td style={{ padding: '8px 12px', color: C.muted, fontFamily: 'monospace' }}>{b.name}</td>
-                  <td style={{ padding: '8px 12px', color: C.accent, fontWeight: 600 }}>{b.count}</td>
-                  <td style={{ padding: '8px 12px', minWidth: 200 }}>
+                  <td style={{ padding: '6px 10px', color: C.muted, fontFamily: 'monospace', fontSize: 11 }}>{b.name}</td>
+                  <td style={{ padding: '6px 10px', color: C.accent, fontWeight: 600 }}>{b.count}</td>
+                  <td style={{ padding: '6px 10px', minWidth: 160 }}>
                     <InlineItemInput
                       value={blockMappings[b.name] || ''}
                       onChange={v => setBlockMappings(prev => ({ ...prev, [b.name]: v }))}
@@ -545,24 +554,24 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
       )}
 
       {allLengths.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ color: C.text, fontWeight: 600, marginBottom: 10, fontSize: 14 }}>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: C.text, fontWeight: 600, marginBottom: 8, fontSize: 13 }}>
             📏 Hosszak ({allLengths.length} layer)
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                <th style={{ textAlign: 'left', padding: '8px 12px', color: C.muted }}>Layer</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px', color: C.muted }}>Hossz (m)</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px', color: C.muted }}>Anyag / Tétel</th>
+                <th style={{ textAlign: 'left', padding: '6px 10px', color: C.muted }}>Layer</th>
+                <th style={{ textAlign: 'left', padding: '6px 10px', color: C.muted }}>Hossz (m)</th>
+                <th style={{ textAlign: 'left', padding: '6px 10px', color: C.muted }}>Anyag / Tétel</th>
               </tr>
             </thead>
             <tbody>
               {allLengths.map((l, i) => (
                 <tr key={i} style={{ borderBottom: `1px solid ${C.border}30` }}>
-                  <td style={{ padding: '8px 12px', color: C.muted, fontFamily: 'monospace' }}>{l.layer}</td>
-                  <td style={{ padding: '8px 12px', color: C.blue, fontWeight: 600 }}>{fmtM(l.length)}</td>
-                  <td style={{ padding: '8px 12px', minWidth: 200 }}>
+                  <td style={{ padding: '6px 10px', color: C.muted, fontFamily: 'monospace', fontSize: 11 }}>{l.layer}</td>
+                  <td style={{ padding: '6px 10px', color: C.blue, fontWeight: 600 }}>{fmtM(l.length)}</td>
+                  <td style={{ padding: '6px 10px', minWidth: 160 }}>
                     <InlineItemInput
                       value={lengthMappings[l.layer] || ''}
                       onChange={v => setLengthMappings(prev => ({ ...prev, [l.layer]: v }))}
@@ -577,13 +586,63 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
       )}
 
       {allBlocks.length === 0 && allLengths.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 48, color: C.muted }}>
-          <div style={{ fontSize: 40 }}>📭</div>
-          <div style={{ marginTop: 12 }}>Nem találtunk elemzendő adatot a fájlban</div>
+        <div style={{ textAlign: 'center', padding: 32, color: C.muted }}>
+          <div style={{ fontSize: 36 }}>📭</div>
+          <div style={{ marginTop: 8, fontSize: 13 }}>Nem találtunk elemzendő adatot</div>
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Viewer toggle */}
+      {rawFile && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button
+            onClick={() => setShowViewer(v => !v)}
+            style={{
+              padding: '4px 12px', borderRadius: 5, cursor: 'pointer',
+              fontSize: 11, fontFamily: 'DM Mono',
+              background: showViewer ? C.accent + '10' : 'transparent',
+              border: `1px solid ${showViewer ? C.accent + '40' : C.border}`,
+              color: showViewer ? C.accent : C.muted,
+            }}
+          >
+            {showViewer ? '📐 Tervrajz elrejtése' : '📐 Tervrajz megjelenítése'}
+          </button>
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+      {/* Split panel (viewer + data) or just data */}
+      <div style={{
+        display: 'flex', gap: 16, flex: 1, minHeight: 0,
+        flexDirection: showViewer && rawFile ? 'row' : 'column',
+      }}>
+        {/* Left: DXF Viewer */}
+        {showViewer && rawFile && (
+          <div style={{ flex: 1, minWidth: 0, minHeight: 400 }}>
+            <DxfViewerPanel
+              file={rawFile}
+              unitFactor={unitFactor}
+              compact={true}
+              style={{ height: '100%' }}
+            />
+          </div>
+        )}
+
+        {/* Right: Data tables */}
+        <div style={{
+          flex: showViewer && rawFile ? '0 0 420px' : 1,
+          display: 'flex', flexDirection: 'column', minHeight: 0,
+          maxWidth: showViewer && rawFile ? 420 : '100%',
+        }}>
+          {dataPanel}
+        </div>
+      </div>
+
+      {/* Bottom nav */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16, flexShrink: 0 }}>
         <Button variant="secondary" onClick={onBack}>← Vissza</Button>
         <Button variant="primary" onClick={handleNext}>Körülmények →</Button>
       </div>
@@ -1229,7 +1288,7 @@ function SaaSShell() {
 
   const pageTitles = {
     dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
-    'work-items': 'Munkatételek', assemblies: 'Assemblyk', settings: 'Beállítások',
+    plans: 'Tervek', 'work-items': 'Munkatételek', assemblies: 'Assemblyk', settings: 'Beállítások',
   }
 
   const [workItems, setWorkItems] = useState(loadWorkItems)
@@ -1319,6 +1378,8 @@ function SaaSShell() {
               onSaved={handleQuoteSaved} onCancel={() => setPage('quotes')} />
           ) : page === 'work-items' ? (
             <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} />
+          ) : page === 'plans' ? (
+            <PlansPage />
           ) : page === 'assemblies' ? (
             <AssembliesPage />
           ) : page === 'settings' ? (
