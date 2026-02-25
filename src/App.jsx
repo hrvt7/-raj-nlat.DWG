@@ -349,6 +349,7 @@ function UploadStep({ onParsed }) {
     for (let i = 0; i < newFiles.length; i++) {
       const f = newFiles[i]
       const isDwg = f.name.toLowerCase().endsWith('.dwg')
+      const isPdf = f.name.toLowerCase().endsWith('.pdf')
 
       setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: isDwg ? 'converting' : 'parsing' } : x))
 
@@ -360,7 +361,9 @@ function UploadStep({ onParsed }) {
         } else {
           base64 = await fileToBase64(f.file)
         }
-        const result = await parseDxfBase64(base64, apiBase)
+        const result = isPdf
+          ? await parsePdfBase64(base64, apiBase)
+          : await parseDxfBase64(base64, apiBase)
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'done', result } : x))
       } catch (err) {
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'error', error: err.message } : x))
@@ -397,7 +400,7 @@ function UploadStep({ onParsed }) {
           Húzd ide a DXF/DWG fájlokat
         </div>
         <div style={{ color: C.muted, fontSize: 13 }}>vagy kattints a böngészéshez</div>
-        <input ref={inputRef} type="file" multiple accept=".dxf,.dwg" style={{ display: 'none' }}
+        <input ref={inputRef} type="file" multiple accept=".dxf,.dwg,.pdf" style={{ display: 'none' }}
           onChange={e => processFiles(e.target.files)} />
       </div>
 
@@ -468,6 +471,7 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
   const file = parsedFiles[activeFile] || parsedFiles[0]
   const blocks = file?.blocks || []
   const lengths = file?.lengths || []
+  const isDwgOrDxf = file?.name?.toLowerCase().endsWith('.dwg') || file?.name?.toLowerCase().endsWith('.dxf')
 
   // Merge all files
   const allBlocks = merged
@@ -493,7 +497,7 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
   }
 
   // Get raw file for the active (non-merged) selection
-  const rawFile = !merged && file?.rawFile ? file.rawFile : null
+  const rawFile = !merged && file?.rawFile && isDwgOrDxf ? file.rawFile : null
   const unitFactor = file?.units?.factor || null
 
   // Data panel content (shared between both layouts)
@@ -1419,6 +1423,16 @@ async function parseDxfBase64(base64, apiBase) {
     body: JSON.stringify({ dxf_base64: base64 }),
   })
   if (!res.ok) throw new Error('DXF elemzés sikertelen')
+  return await res.json()
+}
+
+async function parsePdfBase64(base64, apiBase) {
+  const res = await fetch(`${apiBase}/api/parse-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdf_base64: base64 }),
+  })
+  if (!res.ok) throw new Error('PDF elemzés sikertelen')
   return await res.json()
 }
 
