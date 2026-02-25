@@ -15,6 +15,9 @@ const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
   accent: '#00E5A0', yellow: '#FFD166', red: '#FF6B6B', blue: '#4CC9F0',
   text: '#E4E4E7', muted: '#71717A', sidebar: '#0D0D0F',
+  textSub: '#A1A1AA', textMuted: '#71717A',
+  accentDim: 'rgba(0,229,160,0.08)', accentBorder: 'rgba(0,229,160,0.2)',
+  bgHover: 'rgba(255,255,255,0.03)', redDim: 'rgba(255,107,107,0.08)',
 }
 
 // ─── Item suggestions for inline mapping ──────────────────────────────────────
@@ -786,15 +789,15 @@ function PricingStep({ reviewData, context, settings, materials, onNext, onBack 
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 150 }}>
           <Input label="Óradíj (Ft/ó)" type="number" value={hourlyRate}
-            onChange={e => setHourlyRate(parseFloat(e.target.value) || 0)} suffix="Ft/ó" />
+            onChange={v => setHourlyRate(parseFloat(v) || 0)} suffix="Ft/ó" />
         </div>
         <div style={{ flex: 1, minWidth: 120 }}>
           <Input label="Árrés szorzó" type="number" value={margin} step="0.01"
-            onChange={e => setMargin(parseFloat(e.target.value) || 1)} />
+            onChange={v => setMargin(parseFloat(v) || 1)} />
         </div>
         <div style={{ flex: 1, minWidth: 100 }}>
           <Input label="ÁFA (%)" type="number" value={vat}
-            onChange={e => setVat(parseFloat(e.target.value) || 27)} suffix="%" />
+            onChange={v => setVat(parseFloat(v) || 27)} suffix="%" />
         </div>
       </div>
 
@@ -996,11 +999,11 @@ ${settings.quote?.footer_text ? `<p style="margin-top:40px;font-size:12px;color:
     <div>
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <Input label="Projekt neve" value={projectName} onChange={e => setProjectName(e.target.value)}
+          <Input label="Projekt neve" value={projectName} onChange={v => setProjectName(v)}
             placeholder="pl. Belvárosi iroda felújítás" />
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <Input label="Megrendelő neve" value={clientName} onChange={e => setClientName(e.target.value)}
+          <Input label="Megrendelő neve" value={clientName} onChange={v => setClientName(v)}
             placeholder="pl. Horváth Kft." />
         </div>
       </div>
