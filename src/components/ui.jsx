@@ -15,8 +15,8 @@ export const C = {
   redDim:    'rgba(255,107,107,0.10)',
   blue:      '#4CC9F0',
   text:      '#E8E8EC',
-  textSub:   '#71717A',
-  textMuted: '#3F3F46',
+  textSub:   '#9CA3AF',
+  textMuted: '#6B7280',
   sidebar:   '#0D0D0F',
   sidebarW:  220,
 }
@@ -83,7 +83,7 @@ export function StatCard({ label, value, sub, color = C.accent, icon }) {
         <div>
           <div style={{ fontSize: 11, color: C.textSub, fontFamily: 'DM Mono', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
           <div style={{ fontSize: 28, fontFamily: 'Syne', fontWeight: 800, color }}>{value}</div>
-          {sub && <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'DM Mono', marginTop: 6 }}>{sub}</div>}
+          {sub && <div style={{ fontSize: 11, color: C.textSub, fontFamily: 'DM Mono', marginTop: 6 }}>{sub}</div>}
         </div>
         {icon && <div style={{ fontSize: 20, opacity: 0.5 }}>{icon}</div>}
       </div>

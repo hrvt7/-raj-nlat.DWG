@@ -5,16 +5,16 @@
 // Overhead KÜLÖN → settings-ben
 
 export const WORK_ITEM_CATEGORIES = [
-  { key: 'bontas',       label: 'Bontás',               icon: '🔨', color: '#FF6B6B' },
+  { key: 'bontas',       label: 'Bontás',               icon: 'BON', color: '#FF6B6B' },
   { key: 'nyomvonal',    label: 'Nyomvonalépítés',       icon: '⛏️',  color: '#FF9F43' },
-  { key: 'dobozolas',    label: 'Dobozolás',             icon: '📦', color: '#FFD166' },
+  { key: 'dobozolas',    label: 'Dobozolás',             icon: 'DOB', color: '#FFD166' },
   { key: 'kabelezes',    label: 'Kábelezés',             icon: '〰️',  color: '#06D6A0' },
   { key: 'kotesek',      label: 'Kötések / Csatlakozók', icon: '🔗', color: '#118AB2' },
   { key: 'szerelvenyek', label: 'Szerelvényezés',        icon: '🔌', color: '#8338EC' },
-  { key: 'vilagitas',    label: 'Világítás',             icon: '💡', color: '#FFD966' },
-  { key: 'kabeltalca',   label: 'Kábeltálca',            icon: '📐', color: '#00E5A0' },
-  { key: 'elosztok',     label: 'Elosztók / Védelem',    icon: '⚡', color: '#FF6B6B' },
-  { key: 'meres',        label: 'Mérési csomag',         icon: '📊', color: '#4CC9F0' },
+  { key: 'vilagitas',    label: 'Világítás',             icon: 'VIL', color: '#FFD966' },
+  { key: 'kabeltalca',   label: 'Kábeltálca',            icon: 'TAL', color: '#00E5A0' },
+  { key: 'elosztok',     label: 'Elosztók / Védelem',    icon: 'ELO', color: '#FF6B6B' },
+  { key: 'meres',        label: 'Mérési csomag',         icon: 'MER', color: '#4CC9F0' },
   { key: 'gyengaram',    label: 'Gyengeáram',            icon: '📡', color: '#A8DADC' },
 ]
 

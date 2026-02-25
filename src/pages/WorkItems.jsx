@@ -63,7 +63,7 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
       {/* Category filter */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
         <button onClick={() => setActiveCategory('all')} style={{
-          padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+          padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
           background: activeCategory === 'all' ? C.accent : C.bgCard,
           color: activeCategory === 'all' ? '#09090B' : C.textSub,
           fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
@@ -75,13 +75,13 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
           const isActive = activeCategory === cat.key
           return (
             <button key={cat.key} onClick={() => setActiveCategory(cat.key)} style={{
-              padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
+              padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
               background: isActive ? C.accentDim : C.bgCard,
               color: isActive ? C.accent : C.textSub,
               fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
               border: `1px solid ${isActive ? C.accentBorder : C.border}`
             }}>
-              {cat.icon} {cat.label} ({count})
+              {cat.label} ({count})
             </button>
           )
         })}
@@ -153,11 +153,11 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
                       <button onClick={() => setEditItem({ ...wi })} style={{
                         padding: '4px 10px', background: C.bgHover, border: `1px solid ${C.border}`,
                         borderRadius: 6, color: C.textSub, fontFamily: 'DM Mono', fontSize: 11, cursor: 'pointer'
-                      }}>✏️</button>
+                      }}>Szerkeszt</button>
                       <button onClick={() => deleteItem(wi.code)} style={{
                         padding: '4px 8px', background: C.redDim, border: '1px solid rgba(255,107,107,0.15)',
                         borderRadius: 6, color: C.red, fontFamily: 'DM Mono', fontSize: 11, cursor: 'pointer'
-                      }}>🗑️</button>
+                      }}>Törlés</button>
                     </div>
                   </td>
                 </tr>
@@ -170,7 +170,7 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
       {/* Info box */}
       <div style={{ marginTop: 16, padding: '12px 16px', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10 }}>
         <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, lineHeight: 1.8 }}>
-          💡 <strong style={{ color: C.textSub }}>P50</strong> = normál körülmények (tégla, üres szoba, normál magasság) ·{' '}
+          ⟶ <strong style={{ color: C.textSub }}>P50</strong> = normál körülmények (tégla, üres szoba, normál magasság) ·{' '}
           <strong style={{ color: C.yellow }}>P90</strong> = nehéz körülmények (beton, berendezett, létra/állvány) ·{' '}
           Kontextus szorzók az ajánlat varázslóban állíthatók · Overhead (kiszállás, felvonulás) a Beállításokban
         </div>

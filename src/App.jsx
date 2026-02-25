@@ -173,7 +173,7 @@ function UploadStep({ onParsed }) {
               padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12,
             }}>
               <span style={{ fontSize: 18 }}>
-                {f.status === 'done' ? '✅' : f.status === 'error' ? '❌' : '⏳'}
+                {f.status === 'done' ? '✓' : f.status === 'error' ? '✕' : '…'}
               </span>
               <span style={{ flex: 1, color: C.text, fontSize: 13 }}>{f.name}</span>
               <span style={{ fontSize: 12, color: f.status === 'error' ? C.red : f.status === 'done' ? C.accent : C.yellow }}>
@@ -266,7 +266,7 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
       {allBlocks.length > 0 && (
         <div style={{ marginBottom: 24 }}>
           <div style={{ color: C.text, fontWeight: 600, marginBottom: 10, fontSize: 14 }}>
-            📦 Blokkok ({allBlocks.length})
+            Blokkok ({allBlocks.length})
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -486,7 +486,7 @@ function PricingStep({ reviewData, context, settings, materials, onNext, onBack 
     <div>
       {/* Labor mode */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-        {[['hourly', '⏱ Órabéres', 'Össz munkaórák × óradíj'], ['per_item', '📦 Tételes', 'Minden tétel egyedi munkadíj']].map(([key, label, desc]) => (
+        {[['hourly', 'Órabéres', 'Össz munkaórák × óradíj'], ['per_item', 'Tételes', 'Minden tétel egyedi munkadíj']].map(([key, label, desc]) => (
           <button key={key} onClick={() => setLaborMode(key)} style={{
             flex: 1, padding: '14px 16px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
             background: laborMode === key ? C.accent + '15' : C.bgCard,
@@ -782,7 +782,7 @@ ${settings.quote?.footer_text ? `<p style="margin-top:40px;font-size:12px;color:
             <Button variant="primary" onClick={handleSave}>💾 Ajánlat mentése</Button>
           ) : (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ color: C.accent, fontSize: 13 }}>✅ Mentve: {quoteId}</span>
+              <span style={{ color: C.accent, fontSize: 13 }}>Mentve: {quoteId}</span>
               <Button variant="secondary" onClick={onNewProject}>+ Új projekt</Button>
             </div>
           )}
@@ -796,7 +796,7 @@ ${settings.quote?.footer_text ? `<p style="margin-top:40px;font-size:12px;color:
 function Assemblies() {
   return (
     <div style={{ textAlign: 'center', padding: '80px 40px' }}>
-      <div style={{ fontSize: 56 }}>🔧</div>
+      <div style={{ fontSize: 40, color: C.textMuted }}>⟳</div>
       <div style={{ color: C.text, fontSize: 22, fontWeight: 700, marginTop: 16 }}>Assembly szerkesztő</div>
       <div style={{ color: C.muted, fontSize: 14, marginTop: 8, maxWidth: 480, margin: '16px auto 0' }}>
         Egy DXF blokkból automatikusan generálódik az összes szükséges anyag: doboz, szerelvény, fedőlap, kábel ráhagyás, csavarok – és hozzá a normaidő.
@@ -811,7 +811,7 @@ function Assemblies() {
 // ─── Quote View ────────────────────────────────────────────────────────────────
 function QuoteView({ quote, onBack, onStatusChange }) {
   const statuses = ['draft', 'sent', 'won', 'lost']
-  const statusLabels = { draft: '📝 Piszkozat', sent: '📤 Elküldve', won: '🏆 Nyertes', lost: '❌ Elveszett' }
+  const statusLabels = { draft: 'Piszkozat', sent: 'Elküldve', won: 'Nyertes', lost: 'Elveszett' }
   const statusColors = { draft: C.muted, sent: C.blue, won: C.accent, lost: C.red }
 
   return (

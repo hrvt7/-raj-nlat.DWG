@@ -3,9 +3,9 @@ import { C, fmt, Card, Button, Input, SectionHeader } from '../components/ui.jsx
 import { saveSettings, saveMaterials, DEFAULT_MATERIALS } from '../data/store.js'
 
 const TABS = [
-  { key: 'company',   label: '🏢 Cégadatok' },
+  { key: 'company',   label: 'Cégadatok' },
   { key: 'labor',     label: '⏱ Óradíjak' },
-  { key: 'materials', label: '📦 Anyagárlista' },
+  { key: 'materials', label: 'Anyagárlista' },
   { key: 'overhead',  label: '🚗 Overhead' },
   { key: 'quote',     label: '📄 Ajánlat' },
 ]
@@ -161,11 +161,11 @@ function MaterialsTab({ materials, onMaterialsChange }) {
 
   const categories = [
     { key: 'all',         label: 'Összes' },
-    { key: 'doboz',       label: '📦 Dobozok' },
+    { key: 'doboz',       label: 'Dobozok' },
     { key: 'szerelvenyek',label: '🔌 Szerelvények' },
     { key: 'kabel',       label: '〰️ Kábelek' },
-    { key: 'talca',       label: '📐 Kábeltálca' },
-    { key: 'vedelem',     label: '⚡ Védelem' },
+    { key: 'talca',       label: 'Kábeltálca' },
+    { key: 'vedelem',     label: 'Védelem' },
     { key: 'egyeb',       label: 'Egyéb' },
   ]
 
@@ -225,7 +225,7 @@ function MaterialsTab({ materials, onMaterialsChange }) {
 
       {/* Info box */}
       <div style={{ padding: '12px 16px', background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 8, marginBottom: 20, fontFamily: 'DM Mono', fontSize: 11, color: C.accent }}>
-        💡 Adj meg a nagykereskedőnél szokásos listaárakat és a kedvezményed. A végső ár automatikusan számolódik.
+        Adj meg a nagykereskedőnél szokásos listaárakat és a kedvezményed. A végső ár automatikusan számolódik.
         Minden ajánlatban ebből az adatból dolgozik a rendszer – nem kell minden alkalommal beírni.
       </div>
 
@@ -292,8 +292,8 @@ function MaterialsTab({ materials, onMaterialsChange }) {
                   </td>
                   <td style={{ padding: '10px 14px' }}>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => setEditItem({ ...m })} style={{ padding: '4px 8px', background: C.bgHover, border: `1px solid ${C.border}`, borderRadius: 6, color: C.textSub, fontSize: 11, cursor: 'pointer' }}>✏️</button>
-                      <button onClick={() => deleteItem(m.code)} style={{ padding: '4px 8px', background: C.redDim, border: '1px solid rgba(255,107,107,0.15)', borderRadius: 6, color: C.red, fontSize: 11, cursor: 'pointer' }}>🗑️</button>
+                      <button onClick={() => setEditItem({ ...m })} style={{ padding: '4px 8px', background: C.bgHover, border: `1px solid ${C.border}`, borderRadius: 6, color: C.textSub, fontSize: 11, cursor: 'pointer' }}>Szerkeszt</button>
+                      <button onClick={() => deleteItem(m.code)} style={{ padding: '4px 8px', background: C.redDim, border: '1px solid rgba(255,107,107,0.15)', borderRadius: 6, color: C.red, fontSize: 11, cursor: 'pointer' }}>Törlés</button>
                     </div>
                   </td>
                 </tr>
@@ -376,7 +376,7 @@ function OverheadTab({ settings, update }) {
       <Card style={{ padding: 28, marginBottom: 18 }}>
         <SectionHeader title="Overhead – kiszállás, felvonulás, pakolás" />
         <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.8, marginBottom: 20, padding: '10px 14px', background: C.bg, borderRadius: 8, border: `1px solid ${C.border}` }}>
-          💡 Ez az idő a NORMAIDŐKÖN felüli, projekt szintű ráfordítás: odautazás, szerszámok ki/bepakolás, helyszíni felvonulás.
+          Ez az idő a NORMAIDŐKÖN felüli, projekt szintű ráfordítás: odautazás, szerszámok ki/bepakolás, helyszíni felvonulás.
           A normaidők <strong style={{ color: C.text }}>NEM</strong> tartalmazzák – ez a leggyakoribb kalkulációs hiba a piacon.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>

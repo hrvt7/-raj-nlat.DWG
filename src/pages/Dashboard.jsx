@@ -37,28 +37,28 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
           value={stats.all}
           sub={`${stats.thisMonth} db ez hónapban`}
           color={C.accent}
-          icon="📋"
+          
         />
         <StatCard
           label="Nyitott / várakozó"
           value={stats.open}
           sub="Elküldve, döntésre vár"
           color={C.yellow}
-          icon="⏳"
+          
         />
         <StatCard
           label="Nyertes ajánlat"
           value={`${stats.winRate}%`}
           sub={`${stats.won} db nyertes`}
           color={C.accent}
-          icon="✓"
+          
         />
         <StatCard
           label="Nyertes összérték"
           value={stats.wonTotal > 0 ? `${fmt(stats.wonTotal / 1000000)} M` : '–'}
           sub="Ft (bruttó)"
           color={C.blue}
-          icon="💰"
+          
         />
       </div>
 
@@ -72,10 +72,10 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
 
           {recentQuotes.length === 0 ? (
             <EmptyState
-              icon="📋"
+              
               title="Még nincs ajánlat"
               desc="Hozd létre az első ajánlatot DXF/DWG feltöltéssel."
-              action={<Button onClick={() => onNavigate('new-quote')} icon="＋">Új ajánlat</Button>}
+              action={<Button onClick={() => onNavigate('new-quote')} >Új ajánlat</Button>}
             />
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -129,10 +129,10 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
           {/* Quick action */}
           <Card style={{ padding: 20 }}>
             <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14 }}>Gyors indítás</div>
-            <Button onClick={() => onNavigate('new-quote')} style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }} icon="⚡">
+            <Button onClick={() => onNavigate('new-quote')} style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }} >
               Új ajánlat (DXF)
             </Button>
-            <Button variant="secondary" onClick={() => onNavigate('settings')} style={{ width: '100%', justifyContent: 'center' }} icon="⚙">
+            <Button variant="secondary" onClick={() => onNavigate('settings')} style={{ width: '100%', justifyContent: 'center' }} >
               Beállítások
             </Button>
           </Card>

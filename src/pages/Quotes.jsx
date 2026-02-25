@@ -46,7 +46,7 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
             {filtered.length} ajánlat · összesen {fmt(totalValue)} Ft bruttó
           </p>
         </div>
-        <Button onClick={() => onNavigate('new-quote')} icon="⚡">Új ajánlat</Button>
+        <Button onClick={() => onNavigate('new-quote')} >Új ajánlat</Button>
       </div>
 
       {/* Filter bar */}
@@ -81,10 +81,10 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
       {/* Table */}
       {filtered.length === 0 ? (
         <EmptyState
-          icon="📋"
+          
           title={search ? 'Nincs találat' : 'Még nincs ajánlat'}
           desc={search ? 'Próbálj más keresési feltételt.' : 'Hozd létre az első ajánlatot DXF/DWG feltöltéssel.'}
-          action={!search && <Button onClick={() => onNavigate('new-quote')} icon="⚡">Új ajánlat</Button>}
+          action={!search && <Button onClick={() => onNavigate('new-quote')} >Új ajánlat</Button>}
         />
       ) : (
         <Card style={{ overflow: 'hidden' }}>
