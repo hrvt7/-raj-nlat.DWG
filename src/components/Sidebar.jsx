@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { C } from './ui.jsx'
 
 const NAV_ITEMS = [
@@ -29,68 +29,122 @@ function NavIcon({ navKey, color, size = 15 }) {
   )
 }
 
-export default function Sidebar({ active, onNavigate }) {
+export default function Sidebar({ active, onNavigate, mobileOpen, onMobileClose }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+
   const groups = [
     { key: 'main', items: NAV_ITEMS.filter(n => n.group === 'main') },
     { key: 'db',   label: 'ADATBÁZIS', items: NAV_ITEMS.filter(n => n.group === 'db') },
     { key: 'settings', items: NAV_ITEMS.filter(n => n.group === 'settings') },
   ]
-  const w = collapsed ? 60 : C.sidebarW
+
+  // On mobile: always full-width drawer, ignore collapsed state
+  const w = isMobile ? 240 : (collapsed ? 60 : C.sidebarW)
+
+  const handleNav = (key) => {
+    onNavigate(key)
+    if (isMobile && onMobileClose) onMobileClose()
+  }
+
   return (
-    <div style={{ width: w, minHeight: '100vh', background: C.sidebar, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', position: 'fixed', left: 0, top: 0, bottom: 0, zIndex: 100, transition: 'width 0.2s ease', overflow: 'hidden' }}>
-      {/* Logo */}
-      <div style={{ padding: collapsed ? '20px 0' : '20px 20px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, minHeight: 64, justifyContent: collapsed ? 'center' : 'flex-start' }}>
-        <div style={{ width: 28, height: 28, background: C.accent, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 12px rgba(0,229,160,0.35)' }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    <>
+      {/* Mobile backdrop */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={onMobileClose}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+            zIndex: 99, backdropFilter: 'blur(2px)',
+          }}
+        />
+      )}
+
+      <div style={{
+        width: w,
+        minHeight: '100vh',
+        background: C.sidebar,
+        borderRight: `1px solid ${C.border}`,
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'fixed',
+        left: 0, top: 0, bottom: 0,
+        zIndex: 100,
+        transition: 'width 0.2s ease, transform 0.25s ease',
+        overflow: 'hidden',
+        // On mobile: slide in/out; on desktop: always visible
+        transform: isMobile ? (mobileOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
+      }}>
+        {/* Logo */}
+        <div style={{
+          padding: collapsed && !isMobile ? '20px 0' : '20px 20px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          borderBottom: `1px solid ${C.border}`, minHeight: 64,
+          justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+        }}>
+          <div style={{ width: 28, height: 28, background: C.accent, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 12px rgba(0,229,160,0.35)' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          {(!collapsed || isMobile) && (
+            <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, letterSpacing: '-0.02em', color: C.text, whiteSpace: 'nowrap' }}>
+              Takeoff<span style={{ color: C.accent }}>Pro</span>
+            </span>
+          )}
+          {/* Close button on mobile */}
+          {isMobile && (
+            <button onClick={onMobileClose} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: C.muted, fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>✕</button>
+          )}
         </div>
-        {!collapsed && (
-          <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, letterSpacing: '-0.02em', color: C.text, whiteSpace: 'nowrap' }}>
-            Takeoff<span style={{ color: C.accent }}>Pro</span>
-          </span>
+
+        {/* Nav */}
+        <div style={{ flex: 1, padding: collapsed && !isMobile ? '12px 0' : '12px 10px', overflowY: 'auto' }}>
+          {groups.map(group => (
+            <div key={group.key} style={{ marginBottom: 4 }}>
+              {group.label && (!collapsed || isMobile) && (
+                <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', padding: '12px 10px 6px', textTransform: 'uppercase' }}>{group.label}</div>
+              )}
+              {group.items.map(item => {
+                const isActive = active === item.key
+                const color = isActive ? C.accent : (item.highlight ? C.accent : C.textSub)
+                return (
+                  <button key={item.key} onClick={() => handleNav(item.key)} style={{
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    gap: collapsed && !isMobile ? 0 : 10,
+                    justifyContent: collapsed && !isMobile ? 'center' : 'flex-start',
+                    padding: collapsed && !isMobile ? '10px 0' : '10px 10px',
+                    background: isActive ? 'rgba(0,229,160,0.08)' : item.highlight && !isActive ? 'rgba(0,229,160,0.05)' : 'transparent',
+                    border: isActive ? `1px solid rgba(0,229,160,0.2)` : '1px solid transparent',
+                    borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s',
+                    marginBottom: 2,
+                  }}>
+                    <NavIcon navKey={item.key} color={color} size={16} />
+                    {(!collapsed || isMobile) && (
+                      <span style={{ fontFamily: 'Syne', fontWeight: isActive ? 700 : 500, fontSize: 13, color, whiteSpace: 'nowrap' }}>
+                        {item.highlight && !isActive ? `+ ${item.label}` : item.label}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Collapse toggle – desktop only */}
+        {!isMobile && (
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: collapsed ? '12px 0' : '12px 10px', display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end' }}>
+            <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', cursor: 'pointer', color: C.textMuted, fontSize: 11, fontFamily: 'DM Mono', display: 'flex', alignItems: 'center', gap: 4 }}>
+              {collapsed ? '→' : '← Összehúz'}
+            </button>
+          </div>
         )}
       </div>
-
-      {/* Nav */}
-      <div style={{ flex: 1, padding: collapsed ? '12px 0' : '12px 10px', overflowY: 'auto' }}>
-        {groups.map(group => (
-          <div key={group.key} style={{ marginBottom: 4 }}>
-            {group.label && !collapsed && (
-              <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, letterSpacing: '0.1em', padding: '12px 10px 6px', textTransform: 'uppercase' }}>{group.label}</div>
-            )}
-            {group.items.map(item => {
-              const isActive = active === item.key
-              const color = isActive ? C.accent : (item.highlight ? C.accent : C.textSub)
-              return (
-                <button key={item.key} onClick={() => onNavigate(item.key)} style={{
-                  width: '100%', display: 'flex', alignItems: 'center',
-                  gap: collapsed ? 0 : 10,
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  padding: collapsed ? '10px 0' : '9px 10px',
-                  background: isActive ? 'rgba(0,229,160,0.08)' : item.highlight && !isActive ? 'rgba(0,229,160,0.05)' : 'transparent',
-                  border: isActive ? `1px solid rgba(0,229,160,0.2)` : '1px solid transparent',
-                  borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s',
-                  marginBottom: 2,
-                }}>
-                  <NavIcon navKey={item.key} color={color} size={15} />
-                  {!collapsed && (
-                    <span style={{ fontFamily: 'Syne', fontWeight: isActive ? 700 : 500, fontSize: 13, color, whiteSpace: 'nowrap' }}>
-                      {item.highlight && !isActive ? `+ ${item.label}` : item.label}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        ))}
-      </div>
-
-      {/* Collapse toggle */}
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: collapsed ? '12px 0' : '12px 10px', display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end' }}>
-        <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', cursor: 'pointer', color: C.textMuted, fontSize: 11, fontFamily: 'DM Mono', display: 'flex', alignItems: 'center', gap: 4 }}>
-          {collapsed ? '→' : '← Összehúz'}
-        </button>
-      </div>
-    </div>
+    </>
   )
 }

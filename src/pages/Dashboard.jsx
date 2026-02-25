@@ -31,7 +31,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
       </div>
 
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 28 }}>
         <StatCard
           label="Összes ajánlat"
           value={stats.all}

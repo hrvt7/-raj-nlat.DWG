@@ -140,7 +140,7 @@ function NavBar({ onStart }) {
     return () => window.removeEventListener('scroll', fn)
   }, [])
   return (
-    <nav style={{
+    <nav className="nav-root" style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
       background: scrolled ? 'rgba(10,10,10,0.92)' : 'transparent',
       backdropFilter: scrolled ? 'blur(12px)' : 'none',
@@ -160,7 +160,7 @@ function NavBar({ onStart }) {
             onMouseEnter={e => e.target.style.color='#CCC'} onMouseLeave={e => e.target.style.color='#888'}>{l}</a>
         ))}
       </div>
-      <button onClick={onStart} style={{ padding: '10px 22px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 14, boxShadow: '0 0 20px rgba(0,229,160,0.25)', transition: 'all 0.2s' }}
+      <button className="nav-cta" onClick={onStart} style={{ padding: '10px 22px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 14, boxShadow: '0 0 20px rgba(0,229,160,0.25)', transition: 'all 0.2s' }}
         onMouseEnter={e => { e.target.style.boxShadow='0 0 30px rgba(0,229,160,0.5)'; e.target.style.transform='translateY(-1px)' }}
         onMouseLeave={e => { e.target.style.boxShadow='0 0 20px rgba(0,229,160,0.25)'; e.target.style.transform='none' }}>
         Kipróbálom →
@@ -404,12 +404,12 @@ function TakeoffAnimation() {
 
 function HeroSection({ onStart }) {
   return (
-    <section style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '100px 48px 60px' }}>
+    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '100px 48px 60px' }}>
 
       {/* Subtle grid bg */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.025, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
 
-      <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'center' }} className="hero-grid">
+      <div className="hero-grid" style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'center' }}>
 
         {/* ── Left: text content ── */}
         <div>
@@ -425,7 +425,7 @@ function HeroSection({ onStart }) {
             </p>
           </FadeIn>
           <FadeIn delay={0.2}>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 56 }}>
+            <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 56 }}>
               <button onClick={onStart} style={{ padding: '15px 32px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 16, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
                 onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.55)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
                 onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
@@ -453,7 +453,7 @@ function HeroSection({ onStart }) {
 
         {/* ── Right: animated SVG ── */}
         <FadeIn delay={0.15}>
-          <div style={{
+          <div className="anim-frame-169" style={{
             position: 'relative',
             borderRadius: 16,
             overflow: 'hidden',
@@ -477,19 +477,14 @@ function HeroSection({ onStart }) {
 
       </div>
 
-      {/* Responsive CSS */}
-      <style>{`
-        @media (max-width: 900px) {
-          .hero-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
+      {/* Responsive CSS handled by global style block */}
     </section>
   )
 }
 
 function FeaturesSection() {
   return (
-    <section id="features" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1 }}>
+    <section id="features" className="sec-100" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <FadeIn>
           <div style={{ textAlign: 'center', marginBottom: 64 }}>
@@ -500,7 +495,7 @@ function FeaturesSection() {
             </p>
           </div>
         </FadeIn>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
+        <div className="features-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20 }}>
           {FEATURES.map((f, i) => (
             <FadeIn key={i} delay={i * 0.07}>
               <div style={{ background: '#0D0D0D', border: '1px solid #1A1A1A', borderRadius: 16, padding: 28, transition: 'all 0.3s', cursor: 'default', height: '100%' }}
@@ -676,7 +671,7 @@ function NormTimeAnimation() {
 
 function NormTimeSection() {
   return (
-    <section style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+    <section className="sec-100" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
       {/* Background glow */}
       <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 400, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
@@ -719,7 +714,7 @@ function NormTimeSection() {
 
           {/* Right: animated SVG */}
           <FadeIn delay={0.15}>
-            <div style={{
+            <div className="anim-frame-32" style={{
               borderRadius: 16,
               overflow: 'hidden',
               border: '1px solid #0E2018',
@@ -743,16 +738,13 @@ function NormTimeSection() {
         </div>
       </div>
 
-      <style>{`
-        @media (max-width: 900px) { .normtime-grid { grid-template-columns: 1fr !important; } }
-      `}</style>
     </section>
   )
 }
 
 function HowSection() {
   return (
-    <section id="how" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
+    <section id="how" className="sec-100" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
         <FadeIn>
           <div style={{ textAlign: 'center', marginBottom: 64 }}>
@@ -761,11 +753,11 @@ function HowSection() {
           </div>
         </FadeIn>
         <div style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', left: 28, top: 0, bottom: 0, width: 1, background: 'linear-gradient(to bottom, transparent, #222 10%, #222 90%, transparent)' }} />
+          <div className="step-line" style={{ position: 'absolute', left: 28, top: 0, bottom: 0, width: 1, background: 'linear-gradient(to bottom, transparent, #222 10%, #222 90%, transparent)' }} />
           {STEPS.map((s, i) => (
             <FadeIn key={i} delay={i * 0.1}>
-              <div style={{ display: 'flex', gap: 28, marginBottom: 36, alignItems: 'flex-start' }}>
-                <div style={{ width: 56, height: 56, flexShrink: 0, background: '#0D0D0D', border: '1px solid #1E1E1E', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.05em', zIndex: 1, position: 'relative' }}>
+              <div className="step-row" style={{ display: 'flex', gap: 28, marginBottom: 36, alignItems: 'flex-start' }}>
+                <div className="step-num" style={{ width: 56, height: 56, flexShrink: 0, background: '#0D0D0D', border: '1px solid #1E1E1E', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.05em', zIndex: 1, position: 'relative' }}>
                   {s.n}
                 </div>
                 <div style={{ paddingTop: 12 }}>
@@ -783,7 +775,7 @@ function HowSection() {
 
 function AISection() {
   return (
-    <section style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1 }}>
+    <section className="sec-100" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div className="ai-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60, alignItems: 'center' }}>
           <FadeIn>
@@ -988,7 +980,7 @@ function PDFOutputAnimation() {
 
 function PDFOutputSection() {
   return (
-    <section style={{ padding: '100px 24px', background: '#060606', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+    <section className="sec-100" style={{ padding: '100px 24px', background: '#060606', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
       {/* Radial glow */}
       <div style={{ position: 'absolute', right: '15%', top: '50%', transform: 'translateY(-50%)', width: 500, height: 400, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
@@ -997,7 +989,7 @@ function PDFOutputSection() {
 
           {/* Left: animated SVG */}
           <FadeIn delay={0.1}>
-            <div style={{
+            <div className="anim-frame-32" style={{
               borderRadius: 16,
               overflow: 'hidden',
               border: '1px solid #0E2018',
@@ -1061,9 +1053,6 @@ function PDFOutputSection() {
         </div>
       </div>
 
-      <style>{`
-        @media (max-width: 900px) { .pdf-section-grid { grid-template-columns: 1fr !important; } }
-      `}</style>
     </section>
   )
 }
@@ -1071,7 +1060,7 @@ function PDFOutputSection() {
 function PricingSection({ onStart }) {
   const [annual, setAnnual] = useState(false)
   return (
-    <section id="pricing" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
+    <section id="pricing" className="sec-100" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <FadeIn>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
@@ -1080,7 +1069,7 @@ function PricingSection({ onStart }) {
             <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', maxWidth: 420, margin: '0 auto 28px', lineHeight: 1.7 }}>
               Nincs rejtett díj. 14 napos ingyenes próba, lemondható bármikor.
             </p>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#111', border: '1px solid #1E1E1E', borderRadius: 999, padding: 4 }}>
+            <div className="billing-toggle" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#111', border: '1px solid #1E1E1E', borderRadius: 999, padding: 4 }}>
               <button onClick={() => setAnnual(false)} style={{ padding: '7px 18px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 12, background: !annual ? '#00E5A0' : 'transparent', color: !annual ? '#0A0A0A' : '#777', transition: 'all 0.2s' }}>Havi</button>
               <button onClick={() => setAnnual(true)} style={{ padding: '7px 18px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 12, background: annual ? '#00E5A0' : 'transparent', color: annual ? '#0A0A0A' : '#777', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6 }}>
                 Éves <span style={{ background: annual ? 'rgba(0,0,0,0.15)' : 'rgba(0,229,160,0.15)', color: annual ? '#0A0A0A' : '#00E5A0', fontSize: 10, padding: '1px 6px', borderRadius: 999 }}>-20%</span>
@@ -1088,7 +1077,7 @@ function PricingSection({ onStart }) {
             </div>
           </div>
         </FadeIn>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 20, alignItems: 'stretch' }}>
+        <div className="pricing-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 20, alignItems: 'stretch' }}>
           {PLANS.map((plan, i) => {
             const price = annual ? Math.round(plan.price * 0.8) : plan.price
             return (
@@ -1147,7 +1136,7 @@ function PricingSection({ onStart }) {
 function FAQSection() {
   const [open, setOpen] = useState(null)
   return (
-    <section id="faq" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1 }}>
+    <section id="faq" className="sec-100" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1 }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
         <FadeIn>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
@@ -1159,7 +1148,7 @@ function FAQSection() {
           <FadeIn key={i} delay={i * 0.06}>
             <div style={{ borderBottom: '1px solid #181818', padding: '20px 0', cursor: 'pointer', userSelect: 'none' }} onClick={() => setOpen(open === i ? null : i)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 600, color: open === i ? '#00E5A0' : '#DDD', transition: 'color 0.2s' }}>{item.q}</span>
+                <span className="faq-question" style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 600, color: open === i ? '#00E5A0' : '#DDD', transition: 'color 0.2s' }}>{item.q}</span>
                 <span style={{ color: open === i ? '#00E5A0' : '#555', fontSize: 20, transition: 'transform 0.2s, color 0.2s', transform: open === i ? 'rotate(45deg)' : 'none', flexShrink: 0 }}>+</span>
               </div>
               {open === i && <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#888', lineHeight: 1.8, marginTop: 14 }}>{item.a}</p>}
@@ -1173,7 +1162,7 @@ function FAQSection() {
 
 function CTASection({ onStart }) {
   return (
-    <section style={{ padding: '120px 24px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+    <section className="cta-section" style={{ padding: '120px 24px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
       <FadeIn>
         <div style={{ maxWidth: 600, margin: '0 auto' }}>
           <div style={{ width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,229,160,0.1) 0%, transparent 70%)', margin: '-80px auto 0', pointerEvents: 'none' }} />
@@ -1183,7 +1172,7 @@ function CTASection({ onStart }) {
           <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', marginBottom: 40, lineHeight: 1.8 }}>
             Nincs regisztráció bonyolultsága, nincs elköteleződés.<br />Töltsd fel az első tervedet és lásd az eredményt.
           </p>
-          <button onClick={onStart} style={{ padding: '18px 48px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 18, boxShadow: '0 0 60px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
+          <button className="cta-btn" onClick={onStart} style={{ padding: '18px 48px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 18, boxShadow: '0 0 60px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
             onMouseEnter={e => { e.target.style.transform='translateY(-3px) scale(1.02)'; e.target.style.boxShadow='0 0 80px rgba(0,229,160,0.5)' }}
             onMouseLeave={e => { e.target.style.transform='none'; e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.3)' }}>
             14 napos próba indítása →
@@ -1196,7 +1185,7 @@ function CTASection({ onStart }) {
 
 function Footer() {
   return (
-    <footer style={{ borderTop: '1px solid #141414', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, position: 'relative', zIndex: 1 }}>
+    <footer className="footer-root" style={{ borderTop: '1px solid #141414', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, position: 'relative', zIndex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 24, height: 24, background: '#00E5A0', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -1212,10 +1201,93 @@ export default function Landing({ onStart }) {
   return (
     <div style={{ background: '#0A0A0A', color: '#F0F0F0', minHeight: '100vh', position: 'relative' }}>
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { scroll-behavior: smooth; }
-        @media (max-width: 640px) { .nav-links { display: none !important; } }
-        @media (max-width: 768px) { .ai-grid { grid-template-columns: 1fr !important; } }
+        *, *::before, *::after { box-sizing: border-box; }
+        html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+        body { overflow-x: hidden; }
+
+        /* ─ NAV mobile ─ */
+        @media (max-width: 640px) {
+          .nav-links { display: none !important; }
+          .nav-root  { padding: 10px 16px !important; }
+          .nav-cta   { padding: 8px 14px !important; font-size: 13px !important; }
+        }
+
+        /* ─ HERO ─ */
+        @media (max-width: 900px) {
+          .hero-grid    { grid-template-columns: 1fr !important; gap: 36px !important; }
+          .hero-section { padding: 90px 24px 56px !important; min-height: auto !important; }
+        }
+        @media (max-width: 640px) {
+          .hero-section { padding: 76px 16px 48px !important; }
+          .hero-ctas    { flex-direction: column !important; gap: 10px !important; }
+          .hero-ctas > * { width: 100% !important; justify-content: center !important; text-align: center !important; }
+        }
+
+        /* ─ SECTION padding ─ */
+        @media (max-width: 900px) {
+          .sec-100 { padding-top: 72px !important; padding-bottom: 72px !important; }
+        }
+        @media (max-width: 640px) {
+          .sec-100 { padding: 56px 16px !important; }
+        }
+
+        /* ─ TWO-COLUMN grids ─ */
+        @media (max-width: 900px) {
+          .hero-grid        { grid-template-columns: 1fr !important; gap: 36px !important; }
+          .two-col-grid     { grid-template-columns: 1fr !important; gap: 36px !important; }
+          .normtime-grid    { grid-template-columns: 1fr !important; gap: 36px !important; }
+          .pdf-section-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
+        }
+        @media (max-width: 768px) {
+          .ai-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
+        }
+
+        /* ─ FEATURES cards ─ */
+        @media (max-width: 580px) {
+          .features-grid { grid-template-columns: 1fr !important; }
+        }
+
+        /* ─ PRICING cards ─ */
+        @media (max-width: 720px) {
+          .pricing-cards { grid-template-columns: 1fr !important; }
+        }
+
+        /* ─ HOW steps ─ */
+        @media (max-width: 640px) {
+          .step-row { gap: 16px !important; margin-bottom: 24px !important; }
+          .step-num { width: 44px !important; height: 44px !important; border-radius: 10px !important; }
+          .step-line { left: 22px !important; }
+        }
+
+        /* ─ FAQ ─ */
+        @media (max-width: 640px) {
+          .faq-question { font-size: 14px !important; }
+        }
+
+        /* ─ CTA ─ */
+        @media (max-width: 640px) {
+          .cta-section { padding: 72px 16px !important; }
+          .cta-btn { width: 100% !important; padding: 16px 24px !important; font-size: 16px !important; }
+        }
+
+        /* ─ FOOTER ─ */
+        @media (max-width: 640px) {
+          .footer-root { padding: 24px 16px !important; flex-direction: column !important; align-items: flex-start !important; }
+        }
+
+        /* ─ ANIMATED frames ─ */
+        @media (max-width: 640px) {
+          .anim-frame-169 { aspect-ratio: 4/3 !important; }
+          .anim-frame-32  { aspect-ratio: 4/3 !important; }
+        }
+
+        /* ─ Mouse glow: hide on touch devices ─ */
+        @media (hover: none) { #mouse-glow { display: none !important; } }
+
+        /* ─ Pricing toggle ─ */
+        @media (max-width: 400px) {
+          .billing-toggle button { padding: 6px 12px !important; font-size: 11px !important; }
+        }
       `}</style>
       <GlobalMouseGlow />
       <NavBar onStart={onStart} />

@@ -776,7 +776,7 @@ function PricingStep({ reviewData, context, settings, materials, onNext, onBack 
       <div style={{
         background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20,
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16, marginBottom: 16 }}>
           {[
             ['Anyagköltség', fmt(Math.round(totalMaterials)) + ' Ft', C.text],
             ['Munkadíj', fmt(Math.round(totalLabor)) + ' Ft', C.blue],
@@ -933,7 +933,7 @@ ${settings.quote?.footer_text ? `<p style="margin-top:40px;font-size:12px;color:
       </div>
 
       {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 24 }}>
         {[
           ['Anyagköltség', fmt(Math.round(pricingData.totalMaterials)) + ' Ft', C.text],
           ['Munkadíj', fmt(Math.round(pricingData.totalLabor)) + ' Ft', C.blue],
@@ -1040,7 +1040,7 @@ function QuoteView({ quote, onBack, onStatusChange }) {
         <div style={{ color: C.accent, fontSize: 36, fontWeight: 800 }}>{fmt(Math.round(quote.gross || 0))} Ft</div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 24 }}>
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
           <div style={{ color: C.muted, fontSize: 12, marginBottom: 8 }}>Részletek</div>
           {[
@@ -1182,25 +1182,51 @@ function SaaSShell() {
     setSettings(newSettings)
   }
 
+  const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+  React.useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+
   const sidebarW = 220
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
-      <Sidebar activePage={page} onNavigate={p => { setViewingQuote(null); setPage(p) }} />
-      <div style={{ marginLeft: sidebarW, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <Sidebar
+        active={page}
+        onNavigate={p => { setViewingQuote(null); setPage(p) }}
+        mobileOpen={sidebarMobileOpen}
+        onMobileClose={() => setSidebarMobileOpen(false)}
+      />
+      <div style={{ marginLeft: isMobile ? 0 : sidebarW, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', minWidth: 0 }}>
         {/* Top bar */}
         <div style={{
           height: 52, background: C.bgCard, borderBottom: `1px solid ${C.border}`,
-          display: 'flex', alignItems: 'center', padding: '0 28px',
-          justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10,
+          display: 'flex', alignItems: 'center', padding: '0 16px',
+          justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, gap: 12,
         }}>
-          <div style={{ color: C.text, fontWeight: 600, fontSize: 16 }}>
-            {viewingQuote ? viewingQuote.projectName : pageTitles[page] || page}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {isMobile && (
+              <button onClick={() => setSidebarMobileOpen(true)} style={{
+                background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 7,
+                padding: '6px 8px', cursor: 'pointer', flexShrink: 0,
+                display: 'flex', flexDirection: 'column', gap: 3.5, alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ display: 'block', width: 15, height: 1.5, background: C.muted, borderRadius: 1 }} />
+                <span style={{ display: 'block', width: 15, height: 1.5, background: C.muted, borderRadius: 1 }} />
+                <span style={{ display: 'block', width: 15, height: 1.5, background: C.muted, borderRadius: 1 }} />
+              </button>
+            )}
+            <div style={{ color: C.text, fontWeight: 600, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {viewingQuote ? viewingQuote.projectName : pageTitles[page] || page}
+            </div>
           </div>
-          <div style={{ color: C.muted, fontSize: 12 }}>TakeoffPro v2.0</div>
+          <div style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>TakeoffPro v2.0</div>
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, padding: '32px 28px', maxWidth: 1200, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+        <div style={{ flex: 1, padding: isMobile ? '20px 14px' : '32px 28px', maxWidth: 1200, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           {viewingQuote && page === 'quotes' ? (
             <QuoteView quote={viewingQuote} onBack={() => setViewingQuote(null)}
               onStatusChange={handleStatusChange} />
