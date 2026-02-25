@@ -5,7 +5,8 @@ import Dashboard from './pages/Dashboard.jsx'
 import Quotes from './pages/Quotes.jsx'
 import WorkItems from './pages/WorkItems.jsx'
 import Settings from './pages/Settings.jsx'
-import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuote, generateQuoteId } from './data/store.js'
+import AssembliesPage from './pages/Assemblies.jsx'
+import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuote, generateQuoteId, loadAssemblies } from './data/store.js'
 import { WORK_ITEMS_DEFAULT as WORK_ITEMS_DB, CONTEXT_FACTORS } from './data/workItemsDb.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 
@@ -25,6 +26,14 @@ const ITEM_SUGGESTIONS = [
   'MCB 1P 16A', 'MCB 1P 20A', 'RCD 2P 25A/30mA', 'Elosztótábla 12M',
   'Kismegszakító', 'FI relé', 'Szekrény', 'Konduit cső', 'Flexibilis cső',
 ]
+
+// Build assembly suggestions (prefixed with 📦)
+function getAssemblySuggestions() {
+  try {
+    const assemblies = loadAssemblies()
+    return assemblies.map(a => ({ id: a.id, label: `📦 ${a.name}`, name: a.name }))
+  } catch { return [] }
+}
 
 // ─── WizardStepBar ─────────────────────────────────────────────────────────────
 function WizardStepBar({ step }) {
@@ -63,7 +72,13 @@ function WizardStepBar({ step }) {
 function InlineItemInput({ value, onChange, placeholder = 'Tétel neve...' }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value || '')
-  const filtered = ITEM_SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+
+  // Combine regular suggestions + assembly suggestions
+  const asmSuggestions = getAssemblySuggestions()
+  const regularFiltered = ITEM_SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
+  const asmFiltered = asmSuggestions.filter(a => a.label.toLowerCase().includes(query.toLowerCase()) || a.id.toLowerCase().includes(query.toLowerCase())).slice(0, 4)
+
+  const hasResults = regularFiltered.length > 0 || asmFiltered.length > 0
 
   return (
     <div style={{ position: 'relative' }}>
@@ -78,20 +93,46 @@ function InlineItemInput({ value, onChange, placeholder = 'Tétel neve...' }) {
           color: C.text, padding: '6px 10px', fontSize: 13, width: '100%', outline: 'none',
         }}
       />
-      {open && filtered.length > 0 && (
+      {open && hasResults && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
           background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 6,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.5)', maxHeight: 200, overflowY: 'auto',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)', maxHeight: 240, overflowY: 'auto',
         }}>
-          {filtered.map(s => (
-            <div key={s} onMouseDown={() => { setQuery(s); onChange(s); setOpen(false) }}
-              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: C.text,
-                borderBottom: `1px solid ${C.border}` }}
-              onMouseEnter={e => e.target.style.background = C.bg}
-              onMouseLeave={e => e.target.style.background = 'transparent'}
-            >{s}</div>
-          ))}
+          {/* Assembly suggestions first */}
+          {asmFiltered.length > 0 && (
+            <>
+              <div style={{ padding: '6px 12px', fontSize: 10, color: C.textMuted, fontFamily: 'DM Mono', textTransform: 'uppercase', letterSpacing: '0.06em', background: C.bg }}>
+                Assemblyk
+              </div>
+              {asmFiltered.map(a => (
+                <div key={a.id} onMouseDown={() => { setQuery(a.id); onChange(a.id); setOpen(false) }}
+                  style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: C.accent,
+                    borderBottom: `1px solid ${C.border}` }}
+                  onMouseEnter={e => e.target.style.background = C.bg}
+                  onMouseLeave={e => e.target.style.background = 'transparent'}
+                >{a.label} <span style={{ fontSize: 10, color: C.textMuted }}>{a.id}</span></div>
+              ))}
+            </>
+          )}
+          {/* Regular suggestions */}
+          {regularFiltered.length > 0 && (
+            <>
+              {asmFiltered.length > 0 && (
+                <div style={{ padding: '6px 12px', fontSize: 10, color: C.textMuted, fontFamily: 'DM Mono', textTransform: 'uppercase', letterSpacing: '0.06em', background: C.bg }}>
+                  Tételek
+                </div>
+              )}
+              {regularFiltered.map(s => (
+                <div key={s} onMouseDown={() => { setQuery(s); onChange(s); setOpen(false) }}
+                  style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: C.text,
+                    borderBottom: `1px solid ${C.border}` }}
+                  onMouseEnter={e => e.target.style.background = C.bg}
+                  onMouseLeave={e => e.target.style.background = 'transparent'}
+                >{s}</div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -629,6 +670,7 @@ function PricingStep({ reviewData, context, settings, materials, onNext, onBack 
   function buildInitialItems(rd, ctx, mats) {
     const result = []
     const allWI = loadWorkItems()
+    const allAssemblies = loadAssemblies()
 
     // Context factor
     const wallF = CONTEXT_FACTORS.wall_material.options.find(o => o.key === ctx.wall_material)?.factor || 1
@@ -636,34 +678,71 @@ function PricingStep({ reviewData, context, settings, materials, onNext, onBack 
     const projF = CONTEXT_FACTORS.project_type.options.find(o => o.key === ctx.project_type)?.factor || 1
     const heightF = CONTEXT_FACTORS.height.options.find(o => o.key === ctx.height)?.factor || 1
 
+    // Helper: expand a single item (or assembly) into result rows
+    const expandItem = (mappedName, qty, unit, sourceId, type) => {
+      // Check if mappedName is an assembly ID (ASM-xxx)
+      const assembly = allAssemblies.find(a => a.id === mappedName)
+      if (assembly) {
+        // Assembly group header (non-priced, just for visual grouping)
+        result.push({
+          id: `${sourceId}-asm-header`,
+          name: `📦 ${assembly.name}`,
+          qty: qty, unit: unit,
+          normMinutes: 0, hours: 0, unitPrice: 0,
+          type: 'assembly-header', isGroupHeader: true,
+        })
+        // Expand each component × block quantity
+        assembly.components.forEach((comp, ci) => {
+          const compQty = comp.qty * qty
+          if (comp.itemType === 'workitem') {
+            const wi = allWI.find(w => w.code === comp.itemCode) || allWI.find(w => w.name === comp.name) || WORK_ITEMS_DB.find(w => w.name === comp.name)
+            const normMinutes = wi ? wi.p50 * wallF * accessF * projF * (wi.heightFactor ? heightF : 1) : 0
+            result.push({
+              id: `${sourceId}-asm-${ci}`,
+              name: `  ↳ ${comp.name}`, qty: compQty, unit: comp.unit,
+              normMinutes, hours: (normMinutes * compQty) / 60,
+              unitPrice: 0, type: type, assemblyId: assembly.id,
+            })
+          } else {
+            // material
+            const mat = mats.find(m => m.code === comp.itemCode) || mats.find(m => m.name === comp.name)
+            const wi = allWI.find(w => w.name === comp.name)
+            const normMinutes = wi ? wi.p50 * wallF * accessF * projF * (wi.heightFactor ? heightF : 1) : 0
+            result.push({
+              id: `${sourceId}-asm-${ci}`,
+              name: `  ↳ ${comp.name}`, qty: compQty, unit: comp.unit,
+              normMinutes, hours: (normMinutes * compQty) / 60,
+              unitPrice: mat?.price * (1 - (mat?.discount || 0) / 100) || 0,
+              type: type, assemblyId: assembly.id,
+            })
+          }
+        })
+        return
+      }
+
+      // Regular item (not assembly)
+      const wi = allWI.find(w => w.name === mappedName) || WORK_ITEMS_DB.find(w => w.name === mappedName)
+      const normMinutes = wi ? wi.p50 * wallF * accessF * projF * (wi.heightFactor ? heightF : 1) : 0
+      const mat = mats.find(m => m.name === mappedName)
+      result.push({
+        id: sourceId,
+        name: mappedName, qty, unit,
+        normMinutes, hours: (normMinutes * qty) / 60,
+        unitPrice: mat?.price * (1 - (mat?.discount || 0) / 100) || 0,
+        type,
+      })
+    }
+
     // Blocks
     ;(rd?.blocks || []).forEach(b => {
       const name = rd?.blockMappings?.[b.name] || b.name
-      const wi = allWI.find(w => w.name === name) || WORK_ITEMS_DB.find(w => w.name === name)
-      const normMinutes = wi ? wi.p50 * wallF * accessF * projF * (wi.heightFactor ? heightF : 1) : 0
-      const mat = mats.find(m => m.name === name)
-      result.push({
-        id: `b-${b.name}`,
-        name, qty: b.count, unit: 'db',
-        normMinutes, hours: (normMinutes * b.count) / 60,
-        unitPrice: mat?.price * (1 - (mat?.discount || 0) / 100) || 0,
-        type: 'block',
-      })
+      expandItem(name, b.count, 'db', `b-${b.name}`, 'block')
     })
 
     // Lengths
     ;(rd?.lengths || []).forEach(l => {
       const name = rd?.lengthMappings?.[l.layer] || l.layer
-      const wi = allWI.find(w => w.name === name) || WORK_ITEMS_DB.find(w => w.name === name)
-      const normMinutes = wi ? wi.p50 * wallF * accessF * projF * (wi.heightFactor ? heightF : 1) : 0
-      const mat = mats.find(m => m.name === name)
-      result.push({
-        id: `l-${l.layer}`,
-        name, qty: l.length, unit: 'm',
-        normMinutes, hours: (normMinutes * l.length) / 60,
-        unitPrice: mat?.price * (1 - (mat?.discount || 0) / 100) || 0,
-        type: 'length',
-      })
+      expandItem(name, l.length, 'm', `l-${l.layer}`, 'length')
     })
 
     return result
@@ -734,10 +813,19 @@ function PricingStep({ reviewData, context, settings, materials, onNext, onBack 
             </thead>
             <tbody>
               {items.map(item => {
+                if (item.isGroupHeader) {
+                  return (
+                    <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20`, background: 'rgba(0,229,160,0.04)' }}>
+                      <td colSpan={5} style={{ padding: '8px 10px', color: C.accent, fontWeight: 700, fontSize: 12 }}>
+                        {item.name} <span style={{ color: C.textMuted, fontWeight: 400 }}>× {item.qty}</span>
+                      </td>
+                    </tr>
+                  )
+                }
                 const laborCost = (item.hours || 0) * hourlyRate
                 return (
                   <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
-                    <td style={{ padding: '8px 10px', color: C.text }}>{item.name}</td>
+                    <td style={{ padding: '8px 10px', color: item.assemblyId ? C.textSub : C.text, fontSize: item.assemblyId ? 11 : 12 }}>{item.name}</td>
                     <td style={{ padding: '8px 10px', color: C.text, textAlign: 'right' }}>
                       {item.qty} {item.unit}
                     </td>
@@ -997,21 +1085,7 @@ ${settings.quote?.footer_text ? `<p style="margin-top:40px;font-size:12px;color:
   )
 }
 
-// ─── Assemblies Placeholder ────────────────────────────────────────────────────
-function Assemblies() {
-  return (
-    <div style={{ textAlign: 'center', padding: '80px 40px' }}>
-      <div style={{ fontSize: 40, color: C.textMuted }}>⟳</div>
-      <div style={{ color: C.text, fontSize: 22, fontWeight: 700, marginTop: 16 }}>Assembly szerkesztő</div>
-      <div style={{ color: C.muted, fontSize: 14, marginTop: 8, maxWidth: 480, margin: '16px auto 0' }}>
-        Egy DXF blokkból automatikusan generálódik az összes szükséges anyag: doboz, szerelvény, fedőlap, kábel ráhagyás, csavarok – és hozzá a normaidő.
-      </div>
-      <div style={{ marginTop: 20 }}>
-        <Badge variant="yellow">v2.1-ben érkezik</Badge>
-      </div>
-    </div>
-  )
-}
+// ─── Assemblies: moved to pages/Assemblies.jsx ────────────────────────────────
 
 // ─── Quote View ────────────────────────────────────────────────────────────────
 function QuoteView({ quote, onBack, onStatusChange }) {
@@ -1243,7 +1317,7 @@ function SaaSShell() {
           ) : page === 'work-items' ? (
             <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} />
           ) : page === 'assemblies' ? (
-            <Assemblies />
+            <AssembliesPage />
           ) : page === 'settings' ? (
             <Settings settings={settings} materials={materials}
               onSettingsChange={handleSettingsChange}

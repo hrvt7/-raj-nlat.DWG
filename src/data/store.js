@@ -2,7 +2,7 @@
 // localStorage-alapú beállítás kezelés
 // Minden céges adat itt tárolódik
 
-import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT } from './workItemsDb.js'
+import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT, generateAssemblyId } from './workItemsDb.js'
 
 const LS_KEYS = {
   SETTINGS:   'takeoffpro_settings',

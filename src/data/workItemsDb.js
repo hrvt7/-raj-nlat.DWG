@@ -113,39 +113,63 @@ export const WORK_ITEMS_DEFAULT = [
   { code: 'GYE-006', category: 'gyengaram',    name: 'Füstérzékelő',               unit: 'db',  p50: 15,  p90: 25,  heightFactor: true,  desc: 'Füstérzékelő rögzítés, bekötés' },
 ]
 
-// ─── Assembly definíciók ────────────────────────────────────────────────────
-// Egy szerelvény = egy DXF blokkból generálódó teljes anyaglista
-// qty_formula: 'fixed' = megadott szám, 'per_unit' = qty*szorzó
-export const ASSEMBLIES_DEFAULT = {
-  'SZE-001': {
-    name: 'Dugalj assembly (teljes)',
+// ─── Assembly definíciók v2.1 ──────────────────────────────────────────────
+// Önálló entitások saját azonosítóval
+// itemType: 'material' (anyag) | 'workitem' (munkatétel)
+export const ASSEMBLIES_DEFAULT = [
+  {
+    id: 'ASM-001',
+    name: 'Dugalj teljes bekötés',
+    category: 'szerelvenyek',
+    description: 'Dugalj 2P+F komplett: doboz, szerelvény, fedőlap, kábel ráhagyás',
     components: [
-      { name: 'Szerelvénydoboz 65mm', unit: 'db', qty: 1, category: 'doboz' },
-      { name: 'Gipszdugó/vakolókeretes keret', unit: 'db', qty: 1, category: 'anyag' },
-      { name: 'Dugalj 2P+F', unit: 'db', qty: 1, category: 'szerelvenyek' },
-      { name: 'Fedőlap', unit: 'db', qty: 1, category: 'anyag' },
-      { name: 'NYM-J 3×2.5 kábel (ráhagyás)', unit: 'm', qty: 0.3, category: 'kabel' },
-    ]
+      { itemCode: 'MAT-001', itemType: 'material', name: 'Szerelvénydoboz 65mm (mélyített)', unit: 'db', qty: 1, sortOrder: 0 },
+      { itemCode: 'SZE-001', itemType: 'workitem', name: 'Dugalj 2P+F (alap)', unit: 'db', qty: 1, sortOrder: 1 },
+      { itemCode: 'MAT-010', itemType: 'material', name: 'Dugalj 2P+F (fehér, alap)', unit: 'db', qty: 1, sortOrder: 2 },
+      { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 3 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5 (ráhagyás)', unit: 'm', qty: 0.3, sortOrder: 4 },
+    ],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
   },
-  'SZE-004': {
-    name: 'Kapcsoló assembly (teljes)',
+  {
+    id: 'ASM-002',
+    name: 'Kapcsoló teljes bekötés',
+    category: 'szerelvenyek',
+    description: 'Kapcsoló 1G komplett: doboz, szerelvény, fedőlap, kábel ráhagyás',
     components: [
-      { name: 'Szerelvénydoboz 65mm', unit: 'db', qty: 1, category: 'doboz' },
-      { name: 'Gipszdugó/vakolókeretes keret', unit: 'db', qty: 1, category: 'anyag' },
-      { name: 'Kapcsoló 1G', unit: 'db', qty: 1, category: 'szerelvenyek' },
-      { name: 'Fedőlap', unit: 'db', qty: 1, category: 'anyag' },
-      { name: 'NYM-J 3×1.5 kábel (ráhagyás)', unit: 'm', qty: 0.3, category: 'kabel' },
-    ]
+      { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 1, sortOrder: 0 },
+      { itemCode: 'SZE-004', itemType: 'workitem', name: 'Kapcsoló 1G', unit: 'db', qty: 1, sortOrder: 1 },
+      { itemCode: 'MAT-012', itemType: 'material', name: 'Kapcsoló 1G (fehér)', unit: 'db', qty: 1, sortOrder: 2 },
+      { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 3 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5 (ráhagyás)', unit: 'm', qty: 0.3, sortOrder: 4 },
+    ],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
   },
-  'VIL-001': {
-    name: 'Lámpatest assembly (mennyezeti)',
+  {
+    id: 'ASM-003',
+    name: 'Lámpatest mennyezeti bekötés',
+    category: 'vilagitas',
+    description: 'Mennyezeti lámpatest komplett: tartódoboz, konzol, kábel, WAGO',
     components: [
-      { name: 'Lámpatartó doboz', unit: 'db', qty: 1, category: 'doboz' },
-      { name: 'Lámpatest rögzítő konzol', unit: 'db', qty: 1, category: 'anyag' },
-      { name: 'NYM-J 3×1.5 kábel (ráhagyás)', unit: 'm', qty: 0.5, category: 'kabel' },
-      { name: 'Csavarkötő (WAGO)', unit: 'db', qty: 4, category: 'anyag' },
-    ]
+      { itemCode: 'MAT-003', itemType: 'material', name: 'Kötődoboz 80×80mm', unit: 'db', qty: 1, sortOrder: 0 },
+      { itemCode: 'VIL-001', itemType: 'workitem', name: 'Lámpatest mennyezeti (alap)', unit: 'db', qty: 1, sortOrder: 1 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5 (ráhagyás)', unit: 'm', qty: 0.5, sortOrder: 2 },
+    ],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
   },
+]
+
+// Assembly ID generátor
+export function generateAssemblyId(assemblies) {
+  const nums = assemblies.map(a => {
+    const m = a.id?.match(/ASM-(\d+)/)
+    return m ? parseInt(m[1]) : 0
+  })
+  const next = Math.max(0, ...nums) + 1
+  return `ASM-${String(next).padStart(3, '0')}`
 }
 
 // ─── Kontextus szorzók ───────────────────────────────────────────────────────
