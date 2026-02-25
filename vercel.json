@@ -1,35 +1,6 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/*.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
   "rewrites": [
-    {
-      "source": "/api/parse",
-      "destination": "/api/parse.py"
-    },
-    {
-      "source": "/api/calculate",
-      "destination": "/api/calculate.py"
-    },
-    {
-      "source": "/api/convert",
-      "destination": "/api/convert.py"
-    },
-    {
-      "source": "/api/ai",
-      "destination": "/api/ai.py"
-    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
