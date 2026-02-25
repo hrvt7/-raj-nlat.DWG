@@ -829,6 +829,245 @@ function AISection() {
   )
 }
 
+function PDFOutputAnimation() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice"
+      style={{ width: '100%', height: '100%', display: 'block' }}>
+      <defs>
+        <style>{`
+          .po-stroke  { fill: none; stroke: #1E4030; stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; }
+          .po-pipe    { fill: none; stroke: #00E5A0; stroke-width: 2.5px; stroke-dasharray: 10,5; opacity: 0.5; }
+          .po-node    { fill: #00E5A0; }
+          .po-pdf-ln  { fill: none; stroke: #1E4030; stroke-width: 4px; stroke-linecap: round; opacity: 0.6; }
+          .po-pdf-acc { fill: none; stroke: #00E5A0; stroke-width: 5px; stroke-linecap: round; }
+          .po-dl      { fill: none; stroke: #00E5A0; stroke-width: 2.5px; stroke-linecap: round; stroke-linejoin: round; }
+          .po-check   { fill: none; stroke: #00E5A0; stroke-width: 3.5px; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 50; stroke-dashoffset: 50; }
+          @keyframes poFlow   { to { stroke-dashoffset: -30; } }
+          .po-flow { animation: poFlow 1.2s linear infinite; }
+          @keyframes poNode   { 0%,100%{ transform:scale(1); opacity:0.5; } 50%{ transform:scale(1.35); opacity:1; } }
+          .po-pulse   { animation: poNode 2s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+          .po-pulse2  { animation: poNode 2s ease-in-out infinite; animation-delay: 0.5s; transform-origin: center; transform-box: fill-box; }
+          .po-pulse3  { animation: poNode 2s ease-in-out infinite; animation-delay: 1s; transform-origin: center; transform-box: fill-box; }
+          @keyframes poReveal { from { stroke-dashoffset:100; opacity:0; } to { stroke-dashoffset:0; opacity:0.6; } }
+          .po-rev1 { stroke-dasharray:100; stroke-dashoffset:100; animation: poReveal 2s ease-out forwards infinite; animation-delay:1.0s; }
+          .po-rev2 { stroke-dasharray:100; stroke-dashoffset:100; animation: poReveal 2s ease-out forwards infinite; animation-delay:1.2s; }
+          .po-rev3 { stroke-dasharray:100; stroke-dashoffset:100; animation: poReveal 2s ease-out forwards infinite; animation-delay:1.4s; }
+          .po-rev4 { stroke-dasharray:100; stroke-dashoffset:100; animation: poReveal 2s ease-out forwards infinite; animation-delay:1.6s; }
+          .po-rev5 { stroke-dasharray:100; stroke-dashoffset:100; animation: poReveal 2s ease-out forwards infinite; animation-delay:2.0s; }
+          @keyframes poBounce { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-14px); } }
+          .po-bounce  { animation: poBounce 2s ease-in-out infinite; animation-delay:2.2s; }
+          @keyframes poCheck  { to { stroke-dashoffset:0; } }
+          .po-check-anim { animation: poCheck 0.9s ease-out forwards infinite; animation-delay:2.6s; }
+          @keyframes poGlow   { 0%,100%{ opacity:0.15; } 50%{ opacity:0.35; } }
+          .po-glow { animation: poGlow 2.5s ease-in-out infinite; }
+        `}</style>
+      </defs>
+
+      {/* Grid */}
+      <pattern id="poGrid" width="100" height="100" patternUnits="userSpaceOnUse">
+        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#00E5A0" strokeWidth="0.5" opacity="0.04"/>
+      </pattern>
+      <rect width="100%" height="100%" fill="url(#poGrid)" />
+
+      <g transform="translate(150, 190)">
+
+        {/* ── Input files (left) ── */}
+
+        {/* DXF file icon */}
+        <g transform="translate(0, 0)">
+          <rect className="po-stroke" x="0" y="0" width="80" height="100" rx="8" fill="#060E0A" />
+          <path className="po-stroke" d="M50,0 L80,30 L80,100 M50,0 L50,30 L80,30" fill="#060E0A" />
+          <text x="12" y="72" fontFamily="'DM Mono',monospace" fontWeight="bold" fill="#2A5A42" fontSize="22">DXF</text>
+          {/* Top accent dot */}
+          <circle cx="70" cy="12" r="3" fill="#00E5A0" opacity="0.4" />
+        </g>
+
+        {/* List / spec file icon */}
+        <g transform="translate(0, 148)">
+          <rect className="po-stroke" x="0" y="0" width="80" height="100" rx="8" fill="#060E0A" />
+          <line className="po-stroke" x1="18" y1="30" x2="62" y2="30" />
+          <line className="po-stroke" x1="18" y1="48" x2="62" y2="48" />
+          <line className="po-stroke" x1="18" y1="66" x2="46" y2="66" />
+          <circle className="po-stroke" cx="10" cy="30" r="2" fill="#00E5A0" fillOpacity="0.3" />
+          <circle className="po-stroke" cx="10" cy="48" r="2" fill="#00E5A0" fillOpacity="0.3" />
+          <circle className="po-stroke" cx="10" cy="66" r="2" fill="#00E5A0" fillOpacity="0.3" />
+          <text x="12" y="85" fontFamily="'DM Mono',monospace" fontWeight="bold" fill="#2A5A42" fontSize="13">LISTA</text>
+        </g>
+
+        {/* ── Pipeline ── */}
+        <g transform="translate(100, 50)">
+
+          {/* Pipe paths */}
+          <path className="po-pipe po-flow" d="M0,0 C150,0 150,150 300,150 L500,150" />
+          <path className="po-pipe po-flow" d="M0,150 C100,150 200,150 300,150" opacity="0.3" />
+
+          {/* Glow along pipe */}
+          <path d="M0,0 C150,0 150,150 300,150 L500,150"
+            fill="none" stroke="#00E5A0" strokeWidth="12" className="po-glow" />
+
+          {/* Pulse nodes */}
+          <circle className="po-node po-pulse"  cx="0"   cy="0"   r="7" />
+          <circle className="po-node po-pulse2" cx="0"   cy="150" r="7" />
+          <circle className="po-node po-pulse3" cx="300" cy="150" r="11" />
+
+          {/* Travelling dots */}
+          <circle r="5" fill="#00E5A0" opacity="0.9">
+            <animateMotion dur="3s" repeatCount="indefinite"
+              path="M0,0 C150,0 150,150 300,150 L500,150" />
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.8;1" dur="3s" repeatCount="indefinite" />
+          </circle>
+          <circle r="5" fill="#00E5A0" opacity="0.9">
+            <animateMotion dur="3s" begin="1s" repeatCount="indefinite"
+              path="M0,150 C100,150 200,150 300,150 L500,150" />
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.8;1" dur="3s" begin="1s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        {/* ── PDF document (right) ── */}
+        <g transform="translate(648, -60)">
+
+          {/* Card shadow glow */}
+          <rect x="-8" y="-8" width="266" height="366" rx="16"
+            fill="#00E5A0" opacity="0.03" className="po-glow" />
+
+          {/* Card */}
+          <rect x="0" y="0" width="250" height="350" rx="12"
+            fill="#060E0A" stroke="#00E5A0" strokeWidth="1" strokeOpacity="0.25" />
+          <rect x="0" y="0" width="250" height="3" rx="1" fill="#00E5A0" opacity="0.6" />
+
+          {/* Header area */}
+          <rect x="20" y="24" width="70" height="16" rx="4" fill="#0D2018" />
+          <rect x="20" y="24" width="70" height="16" rx="4" fill="#00E5A0" fillOpacity="0.07" stroke="#00E5A0" strokeWidth="0.5" strokeOpacity="0.2" />
+          <text x="26" y="36" fontFamily="'DM Mono',monospace" fontSize="9" fill="#00E5A0" letterSpacing="1">ÁRAJÁNLAT</text>
+
+          <line x1="20" y1="55" x2="230" y2="55" stroke="#0D2018" strokeWidth="1" />
+
+          {/* Logo placeholder */}
+          <rect x="175" y="20" width="55" height="28" rx="4" fill="#0A1A12" stroke="#1E3A28" strokeWidth="1" />
+          <text x="186" y="33" fontFamily="'DM Mono',monospace" fontSize="8" fill="#2A5040" letterSpacing="1">LOGO</text>
+          <line x1="179" y1="40" x2="226" y2="40" stroke="#00E5A0" strokeWidth="0.5" strokeOpacity="0.3" />
+
+          {/* Animated text lines (content appearing) */}
+          <g transform="translate(28, 80)">
+            <line className="po-pdf-ln po-rev1" x1="0" y1="0"  x2="150" y2="0" />
+            <line className="po-pdf-ln po-rev2" x1="0" y1="28" x2="180" y2="28" />
+            <line className="po-pdf-ln po-rev3" x1="0" y1="56" x2="120" y2="56" />
+            <line className="po-pdf-ln po-rev4" x1="0" y1="84" x2="160" y2="84" />
+            {/* Total line – accent */}
+            <line className="po-pdf-acc po-rev5" x1="80" y1="140" x2="190" y2="140" />
+          </g>
+
+          {/* Price tag */}
+          <g transform="translate(80, 270)">
+            <rect x="-4" y="-18" width="100" height="26" rx="5"
+              fill="rgba(0,229,160,0.07)" stroke="#00E5A0" strokeWidth="0.5" strokeOpacity="0.25" />
+            <text fontFamily="'DM Mono',monospace" fontSize="15" fill="#00E5A0" fontWeight="bold" x="0" y="0">
+              2 450 000 Ft
+              <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.55;0.7;1" dur="4s" repeatCount="indefinite" />
+            </text>
+          </g>
+
+          {/* Download icon (bouncing) */}
+          <g transform="translate(200, 306)" className="po-bounce">
+            <circle cx="0" cy="8" r="16" fill="rgba(0,229,160,0.08)" stroke="#00E5A0" strokeWidth="1" strokeOpacity="0.3" />
+            <path className="po-dl" d="M0,-4 L0,10 M-7,4 L0,10 L7,4 M-10,16 L10,16" />
+          </g>
+
+          {/* Checkmark badge */}
+          <g transform="translate(220, 36)">
+            <circle fill="#060E0A" stroke="#00E5A0" strokeWidth="1" strokeOpacity="0.4" r="18" />
+            <circle fill="rgba(0,229,160,0.08)" r="18" className="po-glow" />
+            <path className="po-check po-check-anim" d="M-8,0 L-2,6 L10,-7" transform="translate(0,1)" />
+          </g>
+        </g>
+
+      </g>
+    </svg>
+  )
+}
+
+function PDFOutputSection() {
+  return (
+    <section style={{ padding: '100px 24px', background: '#060606', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+      {/* Radial glow */}
+      <div style={{ position: 'absolute', right: '15%', top: '50%', transform: 'translateY(-50%)', width: 500, height: 400, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }} className="pdf-section-grid">
+
+          {/* Left: animated SVG */}
+          <FadeIn delay={0.1}>
+            <div style={{
+              borderRadius: 16,
+              overflow: 'hidden',
+              border: '1px solid #0E2018',
+              boxShadow: '0 0 0 1px #0A1A12, 0 32px 80px rgba(0,0,0,0.7), 0 0 60px rgba(0,229,160,0.03)',
+              aspectRatio: '3/2',
+              background: '#050E08',
+              position: 'relative',
+            }}>
+              {/* Corner accents */}
+              {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h],i) => (
+                <div key={i} style={{ position:'absolute', [v]:0, [h]:0, width:18, height:18,
+                  [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]: '1.5px solid #00E5A0',
+                  [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]: '1.5px solid #00E5A0',
+                  borderRadius: i===0?'4px 0 0 0':i===1?'0 4px 0 0':i===2?'0 0 0 4px':'0 0 4px 0',
+                  opacity:0.45, zIndex:2 }} />
+              ))}
+              <PDFOutputAnimation />
+            </div>
+          </FadeIn>
+
+          {/* Right: explanation */}
+          <FadeIn delay={0.2}>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>
+              PDF Generálás
+            </div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(26px, 4vw, 42px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 20, lineHeight: 1.2 }}>
+              Egy kattintás –<br />
+              <span style={{ color: '#00E5A0' }}>profi ajánlat azonnal</span>
+            </h2>
+            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', lineHeight: 1.85, marginBottom: 32 }}>
+              A kalkuláció végén az app összegyűjti a tételeket, a normaidőket és az anyagárakat – és generál egy branded PDF ajánlatot, amit azonnal elküldhetsz az ügyfélnek.
+            </p>
+
+            {[
+              ['Céglogó és fejléc',    'Saját arculattal, cégadatokkal, ügyfél névvel'],
+              ['Tételes bontás',       'Minden sor: tétel, mennyiség, egységár, összeg'],
+              ['Normaidő összesítő',   'Munkadíj kalkuláció külön sorban, átláthatóan'],
+              ['Egy kattintás',        'DXF feltöltéstől PDF letöltésig < 2 perc'],
+            ].map(([title, desc], i) => (
+              <div key={i} style={{ display: 'flex', gap: 14, marginBottom: 18, alignItems: 'flex-start' }}>
+                <div style={{ width: 20, height: 20, flexShrink: 0, marginTop: 1 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: '#DDD', marginBottom: 3 }}>{title}</div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#777', lineHeight: 1.6 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+
+            {/* CTA hint */}
+            <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(0,229,160,0.05)', border: '1px solid rgba(0,229,160,0.12)', borderRadius: 8, padding: '10px 16px' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 2v20M2 12l10 10 10-10"/>
+              </svg>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#00E5A0' }}>Minta PDF letöltése →</span>
+            </div>
+          </FadeIn>
+        </div>
+      </div>
+
+      <style>{`
+        @media (max-width: 900px) { .pdf-section-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
+    </section>
+  )
+}
+
 function PricingSection({ onStart }) {
   const [annual, setAnnual] = useState(false)
   return (
@@ -985,6 +1224,7 @@ export default function Landing({ onStart }) {
       <NormTimeSection />
       <HowSection />
       <AISection />
+      <PDFOutputSection />
       <PricingSection onStart={onStart} />
       <FAQSection />
       <CTASection onStart={onStart} />
