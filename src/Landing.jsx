@@ -520,6 +520,236 @@ function FeaturesSection() {
   )
 }
 
+function NormTimeAnimation() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice"
+      style={{ width: '100%', height: '100%', display: 'block' }}>
+      <defs>
+        <style>{`
+          .nt2-card    { fill: none; stroke: #1A3328; stroke-width: 1.5px; }
+          .nt2-header  { font-family: 'DM Mono',monospace; font-size: 18px; fill: #4A8A6A; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
+          .nt2-item    { font-family: 'DM Mono',monospace; font-size: 17px; fill: #9CA3AF; }
+          .nt2-total   { font-family: 'DM Mono',monospace; font-size: 36px; fill: #00E5A0; font-weight: bold; }
+          .nt2-conf    { font-family: 'DM Mono',monospace; font-size: 14px; fill: #00E5A0; font-weight: bold; }
+          .nt2-prog-bg   { fill: none; stroke: #0D2018; stroke-width: 6px; stroke-linecap: round; }
+          .nt2-prog-fill { fill: none; stroke: #00E5A0; stroke-width: 6px; stroke-linecap: round; stroke-dasharray: 200; stroke-dashoffset: 200; }
+          .nt2-icon    { fill: none; stroke: #00E5A0; stroke-width: 2px; }
+          @keyframes nt2Prog1 { 0% { stroke-dashoffset: 200; } 100% { stroke-dashoffset: 40; } }
+          @keyframes nt2Prog2 { 0% { stroke-dashoffset: 200; } 100% { stroke-dashoffset: 90; } }
+          @keyframes nt2Prog3 { 0% { stroke-dashoffset: 200; } 100% { stroke-dashoffset: 20; } }
+          .nt2-anim1 { animation: nt2Prog1 3s ease-out forwards infinite; animation-delay: 0.5s; }
+          .nt2-anim2 { animation: nt2Prog2 3s ease-out forwards infinite; animation-delay: 0.8s; }
+          .nt2-anim3 { animation: nt2Prog3 3s ease-out forwards infinite; animation-delay: 1.1s; }
+          @keyframes nt2Pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+          .nt2-pulse { animation: nt2Pulse 2s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+          @keyframes nt2FadeA { 0%, 45% { opacity: 1; } 50%, 95% { opacity: 0; } }
+          @keyframes nt2FadeB { 0%, 45% { opacity: 0; } 50%, 95% { opacity: 1; } }
+          .nt2-ctx-a  { animation: nt2FadeA 5s infinite; }
+          .nt2-ctx-b  { animation: nt2FadeB 5s infinite; }
+          .nt2-ctx-a2 { animation: nt2FadeA 5s infinite; animation-delay: 0.5s; }
+          .nt2-ctx-b2 { animation: nt2FadeB 5s infinite; animation-delay: 0.5s; }
+        `}</style>
+      </defs>
+
+      {/* Subtle grid */}
+      <pattern id="nt2Grid" width="100" height="100" patternUnits="userSpaceOnUse">
+        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#00E5A0" strokeWidth="0.5" opacity="0.04"/>
+      </pattern>
+      <rect width="100%" height="100%" fill="url(#nt2Grid)" />
+
+      <g transform="translate(300, 150)">
+        {/* Card */}
+        <rect width="600" height="500" rx="12"
+          fill="#060E0A" stroke="#00E5A0" strokeWidth="1" strokeOpacity="0.2" />
+        {/* Top accent strip */}
+        <rect width="600" height="3" rx="1" fill="#00E5A0" opacity="0.6" />
+
+        {/* Title */}
+        <text className="nt2-header" x="30" y="50">NORM-IDŐ KALKULÁTOR</text>
+        <line x1="30" y1="70" x2="570" y2="70" stroke="#00E5A0" strokeWidth="0.5" strokeOpacity="0.2" />
+
+        {/* Row 1 */}
+        <g transform="translate(30, 130)">
+          <text className="nt2-item" y="5">EL-061 Dugalj beépítés</text>
+          <line className="nt2-prog-bg"   x1="250" y1="0" x2="450" y2="0" />
+          <line className="nt2-prog-fill nt2-anim1" x1="250" y1="0" x2="450" y2="0" />
+          <text fontFamily="'DM Mono',monospace" fontSize="12" fill="#4A8A6A" x="460" y="4">0.45 h</text>
+        </g>
+
+        {/* Row 2 */}
+        <g transform="translate(30, 200)">
+          <text className="nt2-item" y="5">EL-062 Kapcsoló 1-pólusú</text>
+          <line className="nt2-prog-bg"   x1="250" y1="0" x2="450" y2="0" />
+          <line className="nt2-prog-fill nt2-anim2" x1="250" y1="0" x2="450" y2="0" />
+          <text fontFamily="'DM Mono',monospace" fontSize="12" fill="#4A8A6A" x="460" y="4">0.25 h</text>
+        </g>
+
+        {/* Row 3 */}
+        <g transform="translate(30, 270)">
+          <text className="nt2-item" y="5">EL-070 LED Panel 60×60</text>
+          <line className="nt2-prog-bg"   x1="250" y1="0" x2="450" y2="0" />
+          <line className="nt2-prog-fill nt2-anim3" x1="250" y1="0" x2="450" y2="0" />
+          <text fontFamily="'DM Mono',monospace" fontSize="12" fill="#4A8A6A" x="460" y="4">0.90 h</text>
+        </g>
+
+        {/* Context modifiers */}
+        <g transform="translate(30, 350)">
+          <text className="nt2-header" style={{ fontSize: '13px' }} y="0">KÖRNYEZETI MÓDOSÍTÓK</text>
+
+          {/* Icon group 1: fal típus (tégla ↔ beton) */}
+          <g transform="translate(0, 28)">
+            {/* Brick */}
+            <g className="nt2-ctx-a">
+              <rect className="nt2-icon" x="0" y="0" width="30" height="30" />
+              <line className="nt2-icon" x1="0"   y1="15" x2="30"  y2="15" />
+              <line className="nt2-icon" x1="15"  y1="0"  x2="15"  y2="15" />
+              <line className="nt2-icon" x1="7.5" y1="15" x2="7.5" y2="30" />
+              <line className="nt2-icon" x1="22.5" y1="15" x2="22.5" y2="30" />
+            </g>
+            {/* Concrete */}
+            <g className="nt2-ctx-b">
+              <rect className="nt2-icon" x="0" y="0" width="30" height="30" />
+              <circle className="nt2-icon" cx="10" cy="10" r="2"   fill="#00E5A0" fillOpacity="0.12" />
+              <circle className="nt2-icon" cx="20" cy="20" r="3"   fill="#00E5A0" fillOpacity="0.12" />
+              <circle className="nt2-icon" cx="22" cy="8"  r="1.5" fill="#00E5A0" fillOpacity="0.12" />
+              <circle className="nt2-icon" cx="8"  cy="22" r="2"   fill="#00E5A0" fillOpacity="0.12" />
+            </g>
+            {/* Modifier value */}
+            <text fontFamily="'DM Mono',monospace" fontSize="13" fill="#00E5A0" x="40" y="18">×1.3</text>
+          </g>
+
+          {/* Icon group 2: magasság */}
+          <g transform="translate(110, 28)">
+            {/* Normal height arrow */}
+            <g className="nt2-ctx-b2">
+              <line className="nt2-icon" x1="5"  y1="22" x2="5"  y2="4" />
+              <line className="nt2-icon" x1="2"  y1="8"  x2="5"  y2="4" />
+              <line className="nt2-icon" x1="8"  y1="8"  x2="5"  y2="4" />
+              <line className="nt2-icon" x1="17" y1="22" x2="17" y2="4" />
+              <line className="nt2-icon" x1="14" y1="8"  x2="17" y2="4" />
+              <line className="nt2-icon" x1="20" y1="8"  x2="17" y2="4" />
+              <line className="nt2-icon" x1="2"  y1="22" x2="22" y2="22" />
+            </g>
+            {/* Tall height arrow */}
+            <g className="nt2-ctx-a2">
+              <line className="nt2-icon" x1="5"  y1="30" x2="5"  y2="0" />
+              <line className="nt2-icon" x1="2"  y1="6"  x2="5"  y2="0" />
+              <line className="nt2-icon" x1="8"  y1="6"  x2="5"  y2="0" />
+              <line className="nt2-icon" x1="17" y1="30" x2="17" y2="0" />
+              <line className="nt2-icon" x1="14" y1="6"  x2="17" y2="0" />
+              <line className="nt2-icon" x1="20" y1="6"  x2="17" y2="0" />
+              <line className="nt2-icon" x1="2"  y1="30" x2="22" y2="30" />
+            </g>
+            <text fontFamily="'DM Mono',monospace" fontSize="13" fill="#00E5A0" x="32" y="18">×1.4</text>
+          </g>
+        </g>
+
+        {/* Total + Confidence */}
+        <g transform="translate(350, 400)">
+          <text className="nt2-header" style={{ fontSize: '13px' }} x="220" y="-20" textAnchor="end">BECSÜLT ÖSSZES IDŐ</text>
+
+          <text className="nt2-total" x="220" y="20" textAnchor="end" opacity="1">
+            00.0 h
+            <animate attributeName="opacity" values="1;0;0" keyTimes="0;0.3;1" dur="5s" repeatCount="indefinite" />
+          </text>
+          <text className="nt2-total" x="220" y="20" textAnchor="end" opacity="0">
+            45.5 h
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.3;0.8;1" dur="5s" repeatCount="indefinite" />
+          </text>
+
+          <g transform="translate(180, 60)" className="nt2-pulse">
+            <rect x="-44" y="-15" width="88" height="30" rx="15"
+              fill="rgba(0,229,160,0.08)" stroke="#00E5A0" strokeWidth="1" strokeOpacity="0.35" />
+            <circle cx="-30" cy="0" r="3" fill="#00E5A0">
+              <animate attributeName="opacity" values="1;0.2;1" dur="1.4s" repeatCount="indefinite" />
+            </circle>
+            <text className="nt2-conf" x="-16" y="4" textAnchor="start">
+              92% CONF.
+              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.5;0.8;1" dur="5s" repeatCount="indefinite" />
+            </text>
+          </g>
+        </g>
+      </g>
+    </svg>
+  )
+}
+
+function NormTimeSection() {
+  return (
+    <section style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+      {/* Background glow */}
+      <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 400, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }} className="normtime-grid">
+
+          {/* Left: explanation */}
+          <FadeIn>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>
+              Normaidő Motor
+            </div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(26px, 4vw, 42px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 20, lineHeight: 1.2 }}>
+              Nem becsül –<br />
+              <span style={{ color: '#00E5A0' }}>pontosan számol</span>
+            </h2>
+            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', lineHeight: 1.85, marginBottom: 32 }}>
+              60+ normaidő-adat, tételenként. A motor figyelembe veszi a fal anyagát, a szerelési magasságot és a mennyiségi szorzókat – és P50/P90 becslést ad, nem egy sima átlagot.
+            </p>
+
+            {/* Feature bullets */}
+            {[
+              ['P50 / P90', 'Valószínűségi becslés, nem átlag – látod a kockázatot'],
+              ['Kontextus módosítók', 'Tégla vs. beton, normál vs. emelt magasság'],
+              ['60+ tétel', 'Magyar elektromos normák alapján előre feltöltve'],
+              ['Saját normák', 'Pro csomagban szerkeszthető és bővíthető'],
+            ].map(([title, desc], i) => (
+              <div key={i} style={{ display: 'flex', gap: 14, marginBottom: 18, alignItems: 'flex-start' }}>
+                <div style={{ width: 20, height: 20, flexShrink: 0, marginTop: 1 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: '#DDD', marginBottom: 3 }}>{title}</div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#777', lineHeight: 1.6 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </FadeIn>
+
+          {/* Right: animated SVG */}
+          <FadeIn delay={0.15}>
+            <div style={{
+              borderRadius: 16,
+              overflow: 'hidden',
+              border: '1px solid #0E2018',
+              boxShadow: '0 0 0 1px #0A1A12, 0 32px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,229,160,0.03)',
+              aspectRatio: '3/2',
+              background: '#050E08',
+              position: 'relative',
+            }}>
+              {/* Corner accents */}
+              {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h],i) => (
+                <div key={i} style={{ position:'absolute', [v]:0, [h]:0, width:18, height:18,
+                  [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]: '1.5px solid #00E5A0',
+                  [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]: '1.5px solid #00E5A0',
+                  borderRadius: i===0?'4px 0 0 0':i===1?'0 4px 0 0':i===2?'0 0 0 4px':'0 0 4px 0',
+                  opacity:0.5, zIndex:2 }} />
+              ))}
+              <NormTimeAnimation />
+            </div>
+          </FadeIn>
+
+        </div>
+      </div>
+
+      <style>{`
+        @media (max-width: 900px) { .normtime-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
+    </section>
+  )
+}
+
 function HowSection() {
   return (
     <section id="how" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
@@ -752,6 +982,7 @@ export default function Landing({ onStart }) {
       <NavBar onStart={onStart} />
       <HeroSection onStart={onStart} />
       <FeaturesSection />
+      <NormTimeSection />
       <HowSection />
       <AISection />
       <PricingSection onStart={onStart} />
