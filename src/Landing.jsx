@@ -169,47 +169,320 @@ function NavBar({ onStart }) {
   )
 }
 
+function TakeoffAnimation() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"
+      style={{ width: '100%', height: '100%', display: 'block' }}>
+      <defs>
+        <style>{`
+          .tp-bp-wall   { fill: none; stroke: #1E4030; stroke-width: 3px; }
+          .tp-bp-sym    { fill: none; stroke: #1E4030; stroke-width: 2px; }
+          .tp-bp-active { fill: none; stroke: #00E5A0; stroke-width: 3px; opacity: 0; }
+          .tp-ui-label  { font-family: 'DM Mono', monospace; font-size: 16px; fill: #3A6A52; letter-spacing: 2px; text-transform: uppercase; }
+          .tp-ui-zero   { font-family: 'DM Mono', monospace; font-size: 32px; fill: #1A3028; }
+          .tp-ui-val    { font-family: 'DM Mono', monospace; font-size: 32px; fill: #00E5A0; }
+          .tp-scan-beam { fill: url(#tpScanGrad); }
+          @keyframes tpScan {
+            0%   { transform: translateX(-100px); }
+            100% { transform: translateX(1700px); }
+          }
+          .tp-scan-anim { animation: tpScan 6s linear infinite; }
+        `}</style>
+
+        {/* Scanner gradient – green beam */}
+        <linearGradient id="tpScanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor="#00E5A0" stopOpacity="0" />
+          <stop offset="35%"  stopColor="#00E5A0" stopOpacity="0.08" />
+          <stop offset="50%"  stopColor="#00E5A0" stopOpacity="0.35" />
+          <stop offset="65%"  stopColor="#00E5A0" stopOpacity="0.08" />
+          <stop offset="100%" stopColor="#00E5A0" stopOpacity="0" />
+        </linearGradient>
+
+        {/* Symbol glow radial */}
+        <radialGradient id="tpSymGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="#00E5A0" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#00E5A0" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* Grid */}
+      <pattern id="tpGrid" width="100" height="100" patternUnits="userSpaceOnUse">
+        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#00E5A0" strokeWidth="0.5" opacity="0.04"/>
+      </pattern>
+      <rect width="100%" height="100%" fill="url(#tpGrid)" />
+
+      {/* ── Blueprint floorplan ── */}
+      <g transform="translate(100, 100)">
+
+        {/* Walls – identical layout to original */}
+        <path className="tp-bp-wall" d="M50,50 L50,600 L400,600 L400,400 L800,400 L800,50 L50,50 Z" />
+        <path className="tp-bp-wall" d="M400,600 L800,600 L800,400" />
+        <line className="tp-bp-wall" x1="400" y1="50" x2="400" y2="400" />
+
+        {/* Interior partition lines */}
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="200" y1="50" x2="200" y2="600" />
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="50"  y1="300" x2="400" y2="300" />
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="600" y1="50"  x2="600" y2="400" />
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="400" y1="500" x2="800" y2="500" />
+
+        {/* Door arcs */}
+        <path stroke="#1A3828" strokeWidth="1.5" fill="none" d="M50,300 Q80,270 110,300" />
+        <path stroke="#1A3828" strokeWidth="1.5" fill="none" d="M400,400 Q430,370 460,400" />
+
+        {/* ── SOCKET symbols (X in circle) ── */}
+        <g transform="translate(150, 550)">
+          <circle className="tp-bp-sym" r="10" />
+          <path className="tp-bp-sym" d="M-7,-7 L7,7 M-7,7 L7,-7" />
+          <circle className="tp-bp-active" r="20">
+            <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="6s" begin="1s" repeatCount="indefinite" />
+            <animateTransform attributeName="transform" type="scale" values="0.8;1.2;1" keyTimes="0;0.2;0.4" dur="6s" begin="1s" repeatCount="indefinite" />
+          </circle>
+          <circle r="28" fill="url(#tpSymGlow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="6s" begin="1s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        <g transform="translate(250, 550)">
+          <circle className="tp-bp-sym" r="10" />
+          <path className="tp-bp-sym" d="M-7,-7 L7,7 M-7,7 L7,-7" />
+          <circle className="tp-bp-active" r="20">
+            <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="6s" begin="1.2s" repeatCount="indefinite" />
+          </circle>
+          <circle r="28" fill="url(#tpSymGlow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="6s" begin="1.2s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        <g transform="translate(600, 200)">
+          <circle className="tp-bp-sym" r="10" />
+          <path className="tp-bp-sym" d="M-7,-7 L7,7 M-7,7 L7,-7" />
+          <circle className="tp-bp-active" r="20">
+            <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="6s" begin="2.5s" repeatCount="indefinite" />
+          </circle>
+          <circle r="28" fill="url(#tpSymGlow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="6s" begin="2.5s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        {/* ── SWITCH symbols (plain circle) ── */}
+        <g transform="translate(350, 400)">
+          <circle className="tp-bp-sym" r="12" />
+          <circle className="tp-bp-active" r="20">
+            <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="6s" begin="1.8s" repeatCount="indefinite" />
+          </circle>
+          <circle r="28" fill="url(#tpSymGlow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="6s" begin="1.8s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        <g transform="translate(750, 400)">
+          <circle className="tp-bp-sym" r="12" />
+          <circle className="tp-bp-active" r="20">
+            <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="6s" begin="3s" repeatCount="indefinite" />
+          </circle>
+          <circle r="28" fill="url(#tpSymGlow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="6s" begin="3s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        {/* ── LAMP symbols (circle + crosshair) ── */}
+        <g transform="translate(225, 225)">
+          <circle className="tp-bp-sym" r="15" />
+          <path className="tp-bp-sym" d="M-15,0 L15,0 M0,-15 L0,15" />
+          <circle className="tp-bp-active" r="25">
+            <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="6s" begin="1.5s" repeatCount="indefinite" />
+          </circle>
+          <circle r="34" fill="url(#tpSymGlow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="6s" begin="1.5s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        <g transform="translate(600, 500)">
+          <circle className="tp-bp-sym" r="15" />
+          <path className="tp-bp-sym" d="M-15,0 L15,0 M0,-15 L0,15" />
+          <circle className="tp-bp-active" r="25">
+            <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="6s" begin="2.8s" repeatCount="indefinite" />
+          </circle>
+          <circle r="34" fill="url(#tpSymGlow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="6s" begin="2.8s" repeatCount="indefinite" />
+          </circle>
+        </g>
+
+        {/* ── Scanner beam & line ── */}
+        <rect className="tp-scan-beam tp-scan-anim" x="-20" y="0" width="40" height="700" />
+        <line className="tp-scan-anim" x1="20" y1="0" x2="20" y2="700"
+          stroke="#00E5A0" strokeWidth="1.5" opacity="0.9" />
+      </g>
+
+      {/* ── UI panel (right) ── */}
+      <g transform="translate(1020, 150)">
+
+        {/* Card */}
+        <rect width="360" height="400" rx="10" fill="#060E0A"
+          stroke="#00E5A0" strokeWidth="1" strokeOpacity="0.25" />
+        {/* Top accent strip */}
+        <rect width="360" height="3" rx="1" fill="#00E5A0" opacity="0.7" />
+
+        {/* Title */}
+        <text x="28" y="44"
+          fontFamily="'DM Mono',monospace" fontSize="14" fontWeight="bold"
+          fill="#C8D8D0" letterSpacing="2">QUANTITY TAKEOFF</text>
+        <line x1="28" y1="60" x2="332" y2="60"
+          stroke="#00E5A0" strokeWidth="0.5" strokeOpacity="0.2" />
+
+        {/* Scanning indicator */}
+        <circle cx="28" cy="84" r="4" fill="#00E5A0">
+          <animate attributeName="opacity" values="1;0.25;1" dur="1.8s" repeatCount="indefinite" />
+        </circle>
+        <text x="40" y="89"
+          fontFamily="'DM Mono',monospace" fontSize="10" fill="#2A5040" letterSpacing="2">
+          SCANNING...
+        </text>
+
+        {/* ── Row: DUGALJ ── */}
+        <g transform="translate(28, 134)">
+          <text className="tp-ui-label" x="0" y="0">DUGALJ (DB)</text>
+          <text className="tp-ui-zero" x="304" y="0" textAnchor="end">
+            00
+            <animate attributeName="opacity" values="1;0" dur="6s" begin="1.2s" fill="freeze" repeatCount="indefinite" />
+          </text>
+          <text className="tp-ui-val" x="304" y="0" textAnchor="end" opacity="0">
+            12
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.8;1" dur="6s" begin="1.2s" fill="freeze" repeatCount="indefinite" />
+          </text>
+          <line x1="0" y1="16" x2="304" y2="16" stroke="#0A1E14" strokeWidth="1" />
+        </g>
+
+        {/* ── Row: KAPCSOLÓ ── */}
+        <g transform="translate(28, 220)">
+          <text className="tp-ui-label" x="0" y="0">KAPCSOLÓ (DB)</text>
+          <text className="tp-ui-zero" x="304" y="0" textAnchor="end">
+            00
+            <animate attributeName="opacity" values="1;0" dur="6s" begin="3s" fill="freeze" repeatCount="indefinite" />
+          </text>
+          <text className="tp-ui-val" x="304" y="0" textAnchor="end" opacity="0">
+            07
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.8;1" dur="6s" begin="3s" fill="freeze" repeatCount="indefinite" />
+          </text>
+          <line x1="0" y1="16" x2="304" y2="16" stroke="#0A1E14" strokeWidth="1" />
+        </g>
+
+        {/* ── Row: LÁMPA ── */}
+        <g transform="translate(28, 306)">
+          <text className="tp-ui-label" x="0" y="0">LÁMPA (DB)</text>
+          <text className="tp-ui-zero" x="304" y="0" textAnchor="end">
+            00
+            <animate attributeName="opacity" values="1;0" dur="6s" begin="2.8s" fill="freeze" repeatCount="indefinite" />
+          </text>
+          <text className="tp-ui-val" x="304" y="0" textAnchor="end" opacity="0">
+            18
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.8;1" dur="6s" begin="2.8s" fill="freeze" repeatCount="indefinite" />
+          </text>
+          <line x1="0" y1="16" x2="304" y2="16" stroke="#0A1E14" strokeWidth="1" />
+        </g>
+
+        {/* ── Total ── */}
+        <g transform="translate(28, 370)">
+          <text fontFamily="'DM Mono',monospace" fontSize="10" fill="#2A5040" letterSpacing="2" x="0" y="0">
+            ÖSSZES TÉTEL
+          </text>
+          <text fontFamily="'DM Mono',monospace" fontSize="22" fill="#00E5A0"
+            x="304" y="0" textAnchor="end"
+            style={{ filter: 'drop-shadow(0 0 8px rgba(0,229,160,0.6))' }}>
+            37
+            <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.5;0.65;1" dur="6s" begin="0s" repeatCount="indefinite" />
+          </text>
+        </g>
+      </g>
+
+      {/* Dashed connector: blueprint → UI */}
+      <line x1="900" y1="430" x2="1020" y2="340"
+        stroke="#00E5A0" strokeWidth="1" strokeDasharray="5,4" opacity="0.15" />
+    </svg>
+  )
+}
+
 function HeroSection({ onStart }) {
   return (
-    <section style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '120px 24px 80px' }}>
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.028, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
-      <div style={{ maxWidth: 800, textAlign: 'center', position: 'relative' }}>
-        <FadeIn>
-          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(38px, 7vw, 72px)', color: '#F0F0F0', marginBottom: 24, letterSpacing: '-0.03em' }}>
-            DXF-ből profi<br />
-            <span style={{ color: '#00E5A0', textShadow: '0 0 40px rgba(0,229,160,0.4)' }}>árajánlat 2 perc alatt</span>
-          </h1>
-        </FadeIn>
-        <FadeIn delay={0.1}>
-          <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(14px, 2vw, 17px)', color: '#999', marginBottom: 48, lineHeight: 1.8, maxWidth: 560, margin: '0 auto 48px' }}>
-            Töltsd fel a villamossági tervet, az AI kiszámolja a mennyiségeket,<br />javasol anyagokat, és generál egy profi PDF ajánlatot.
-          </p>
-        </FadeIn>
-        <FadeIn delay={0.2}>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={onStart} style={{ padding: '16px 36px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 17, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
-              onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.5)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
-              onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
-              Próbáld ki 14 napig →
-            </button>
-            <a href="#how" style={{ padding: '16px 36px', background: 'transparent', border: '1px solid #2A2A2A', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 14, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor='#2A2A2A'; e.currentTarget.style.color='#999' }}>
-              Hogyan működik?
-            </a>
+    <section style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '100px 48px 60px' }}>
+
+      {/* Subtle grid bg */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.025, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+
+      <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'center' }} className="hero-grid">
+
+        {/* ── Left: text content ── */}
+        <div>
+          <FadeIn>
+            <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(36px, 4.5vw, 64px)', color: '#F0F0F0', marginBottom: 24, letterSpacing: '-0.03em' }}>
+              DXF-ből profi<br />
+              <span style={{ color: '#00E5A0', textShadow: '0 0 40px rgba(0,229,160,0.35)' }}>árajánlat 2 perc alatt</span>
+            </h1>
+          </FadeIn>
+          <FadeIn delay={0.1}>
+            <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.4vw, 16px)', color: '#999', lineHeight: 1.85, marginBottom: 40, maxWidth: 480 }}>
+              Töltsd fel a villamossági tervet, az AI automatikusan megszámolja a szerelvényeket, javasol anyagokat, és generál egy profi PDF ajánlatot.
+            </p>
+          </FadeIn>
+          <FadeIn delay={0.2}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 56 }}>
+              <button onClick={onStart} style={{ padding: '15px 32px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 16, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.55)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
+                onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
+                Próbáld ki 14 napig →
+              </button>
+              <a href="#how" style={{ padding: '15px 32px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='#252525'; e.currentTarget.style.color='#999' }}>
+                Hogyan működik?
+              </a>
+            </div>
+          </FadeIn>
+          {/* Stats row */}
+          <FadeIn delay={0.3}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px 0', borderTop: '1px solid #161616', paddingTop: 32 }}>
+              {STATS.map((s, i) => (
+                <div key={i} style={{ paddingRight: 24 }}>
+                  <div style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 900, color: '#00E5A0', marginBottom: 4 }}>{s.value}</div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#666', lineHeight: 1.4 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </FadeIn>
+        </div>
+
+        {/* ── Right: animated SVG ── */}
+        <FadeIn delay={0.15}>
+          <div style={{
+            position: 'relative',
+            borderRadius: 16,
+            overflow: 'hidden',
+            border: '1px solid #0E2018',
+            boxShadow: '0 0 0 1px #0A1A12, 0 32px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,229,160,0.04)',
+            aspectRatio: '16/9',
+            background: '#050E08',
+          }}>
+            {/* Corner accents */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, borderTop: '1.5px solid #00E5A0', borderLeft: '1.5px solid #00E5A0', borderRadius: '4px 0 0 0', opacity: 0.6, zIndex: 2 }} />
+            <div style={{ position: 'absolute', top: 0, right: 0, width: 20, height: 20, borderTop: '1.5px solid #00E5A0', borderRight: '1.5px solid #00E5A0', borderRadius: '0 4px 0 0', opacity: 0.6, zIndex: 2 }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, width: 20, height: 20, borderBottom: '1.5px solid #00E5A0', borderLeft: '1.5px solid #00E5A0', borderRadius: '0 0 0 4px', opacity: 0.6, zIndex: 2 }} />
+            <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderBottom: '1.5px solid #00E5A0', borderRight: '1.5px solid #00E5A0', borderRadius: '0 0 4px 0', opacity: 0.6, zIndex: 2 }} />
+            {/* File badge */}
+            <div style={{ position: 'absolute', top: 12, left: 28, zIndex: 3, background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.18)', borderRadius: 5, padding: '3px 10px', fontFamily: 'DM Mono', fontSize: 10, color: '#00E5A0', letterSpacing: '0.1em' }}>
+              alaprajz_1.dxf
+            </div>
+            <TakeoffAnimation />
           </div>
         </FadeIn>
-        <FadeIn delay={0.3}>
-          <div style={{ display: 'flex', gap: 0, marginTop: 72, justifyContent: 'center', flexWrap: 'wrap', borderTop: '1px solid #181818', paddingTop: 40 }}>
-            {STATS.map((s, i) => (
-              <div key={i} style={{ flex: '1 1 140px', padding: '0 24px', textAlign: 'center', borderRight: i < STATS.length - 1 ? '1px solid #181818' : 'none' }}>
-                <div style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 900, color: '#00E5A0', marginBottom: 6 }}>{s.value}</div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#777', lineHeight: 1.4 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-        </FadeIn>
+
       </div>
+
+      {/* Responsive CSS */}
+      <style>{`
+        @media (max-width: 900px) {
+          .hero-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </section>
   )
 }
