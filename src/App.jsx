@@ -11,6 +11,7 @@ import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, s
 import { WORK_ITEMS_DEFAULT as WORK_ITEMS_DB, CONTEXT_FACTORS } from './data/workItemsDb.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import DxfViewerPanel from './components/DxfViewer/index.jsx'
+import { parseDxfFile, parseDxfText } from './dxfParser.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -354,16 +355,21 @@ function UploadStep({ onParsed }) {
       setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: isDwg ? 'converting' : 'parsing' } : x))
 
       try {
-        let base64
-        if (isDwg) {
-          base64 = await convertDwgToDxf(f.file, apiBase)
+        let result
+        if (isPdf) {
+          // PDF: must go to server (binary, needs PyMuPDF)
+          const base64 = await fileToBase64(f.file)
+          result = await parsePdfBase64(base64, apiBase)
+        } else if (isDwg) {
+          // DWG: convert server-side (binary), then parse client-side
+          const base64 = await convertDwgToDxf(f.file, apiBase)
           setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'parsing' } : x))
+          result = parseDxfText(atob(base64))
         } else {
-          base64 = await fileToBase64(f.file)
+          // DXF: parse 100% in the browser — no file size limit
+          result = await parseDxfFile(f.file)
         }
-        const result = isPdf
-          ? await parsePdfBase64(base64, apiBase)
-          : await parseDxfBase64(base64, apiBase)
+        if (!result.success) throw new Error(result.error || 'Elemzési hiba')
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'done', result } : x))
       } catch (err) {
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'error', error: err.message } : x))
@@ -399,7 +405,15 @@ function UploadStep({ onParsed }) {
         <div style={{ color: C.text, fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
           Húzd ide a DXF/DWG fájlokat
         </div>
-        <div style={{ color: C.muted, fontSize: 13 }}>vagy kattints a böngészéshez</div>
+        <div style={{ color: C.muted, fontSize: 13, marginBottom: 10 }}>vagy kattints a böngészéshez</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 4, padding: '2px 8px' }}>
+            DXF – korlátlan méret ✓
+          </span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 8px' }}>
+            DWG / PDF – max 4 MB
+          </span>
+        </div>
         <input ref={inputRef} type="file" multiple accept=".dxf,.dwg,.pdf" style={{ display: 'none' }}
           onChange={e => processFiles(e.target.files)} />
       </div>
