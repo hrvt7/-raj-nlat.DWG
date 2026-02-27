@@ -217,6 +217,34 @@ export function estimateCablesFallback(geometry) {
   const { devices, panels, polylines, scale, bounds } = geometry
   const uf = scale.factor || 0.001  // to meters
 
+  // Ha PDF vektoros elemzésből jön és már vannak kábelhosszak (_cable_m, _tray_m),
+  // azokat közvetlenül felhasználjuk Manhattan becslés helyett
+  if (geometry._from_blocks && (geometry._cable_m > 0 || geometry._tray_m > 0)) {
+    const cableM = geometry._cable_m || 0
+    const trayM = geometry._tray_m || 0
+    const totalM = cableM + trayM
+    const hasAnyData = totalM > 0 || devices.length > 0
+    return {
+      success: true,
+      _source: 'pdf_vector_direct',
+      cable_total_m: Math.round(totalM),
+      cable_by_type: {
+        socket_m: Math.round(cableM * 0.7),   // 70% dugalj körök (erőátviteli tervnél)
+        light_m: 0,
+        switch_m: 0,
+        other_m: Math.round(cableM * 0.3 + trayM),
+      },
+      circuits: [],
+      confidence: hasAnyData ? 0.72 : 0.25,
+      method: 'PDF vektoros elemzés (piros vonalak mérése)',
+      warnings: [
+        ...(trayM === 0 ? ['Kábeltálca hossz nem azonosítható a PDF-ből'] : []),
+        ...(!devices.length ? ['Eszközök nem számolhatók – PDF szimbólum detektálás korlátozott'] : []),
+      ],
+      panels_found: panels.map(p => ({ name: p.name, layer: p.layer })),
+    }
+  }
+
   // Find panel or use centroid
   let panelX, panelY
   if (panels.length > 0) {

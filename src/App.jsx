@@ -823,7 +823,7 @@ function UploadStep({ onParsed }) {
                   color: f.status === 'error' ? C.red : f.status === 'done' ? C.accent : C.muted }}>
                   {f.status === 'waiting'    ? 'Várakozás...' :
                    f.status === 'parsing'    ? (
-                     f.name.toLowerCase().endsWith('.pdf') ? '🔍 Vision AI elemez...' :
+                     f.name.toLowerCase().endsWith('.pdf') ? '📐 PDF elemzés...' :
                      f.name.toLowerCase().endsWith('.dwg') ? '🔍 DWG elemzés...' : 'Elemzés...'
                    ) :
                    f.status === 'done'       ? (() => {
@@ -833,6 +833,8 @@ function UploadStep({ onParsed }) {
                      if (src === 'vision_screenshot') return `🤖 Vision: ${blocks} elem`
                      if (src === 'dxf_replacement')  return `📐 DXF: ${blocks} elem`
                      if (src === 'vision_gpt4o')     return `🤖 Vision: ${blocks} elem (${Math.round((f.result?._vision_confidence||0)*100)}%)`
+                     if (src === 'pdf_vector')        return `📐 PDF vektor: ${blocks} elem`
+                     if (src === 'vision_gpt4o' || src === 'vision_pdf') return `🤖 Vision AI: ${blocks} elem`
                      if (src.startsWith('dwg'))      return `📐 DWG: ${blocks} elem`
                      return `${(f.result?.blocks?.length||0) + (f.result?.lengths?.length||0)} elem`
                    })() :
@@ -1673,23 +1675,25 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
     setApproved(null)
 
     try {
-      const dxfFile = parsedFiles.find(f =>
-        f.name?.toLowerCase().endsWith('.dxf') || f.name?.toLowerCase().endsWith('.dwg')
-      )
+      // Csak valódi DXF fájlból nyerünk geometriát – DWG/PDF esetén a reviewData alapján becsülünk
+      const dxfFile = parsedFiles.find(f => f.name?.toLowerCase().endsWith('.dxf'))
 
       let geometry
-      if (!dxfFile) {
-        geometry = buildGeometryFromBlocks(reviewData)
-      } else if (dxfFile._rawText) {
+      if (dxfFile?._rawText) {
+        // DXF szöveg már kinyerve
         geometry = extractGeometry(dxfFile._rawText)
-      } else {
+      } else if (dxfFile?.file instanceof Blob) {
+        // DXF fájl Blob-ként elérhető
         const text = await new Promise((res, rej) => {
           const reader = new FileReader()
           reader.onload = e => res(e.target.result)
           reader.onerror = rej
-          reader.readAsText(dxfFile.file || dxfFile, 'utf-8')
+          reader.readAsText(dxfFile.file, 'utf-8')
         })
         geometry = extractGeometry(text)
+      } else {
+        // DWG/PDF esetén: a már feldolgozott reviewData-ból építjük fel a geometriát
+        geometry = buildGeometryFromBlocks(reviewData)
       }
 
       if (!withAI) {
@@ -1983,11 +1987,13 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
 // Build minimal geometry from block data (when no DXF text available)
 function buildGeometryFromBlocks(reviewData) {
   const blocks = reviewData?.blocks || []
-  const PANEL_KW = ['ELOSZTO', 'PANEL', 'DB', 'MDB', 'SZEKRÉNY']
-  const SOCKET_KW = ['DUGALJ', 'SOCKET', 'ALJZAT']
-  const LIGHT_KW = ['LAMPA', 'LIGHT', 'LED']
+  const lengths = reviewData?.lengths || []
+  const PANEL_KW = ['ELOSZTO', 'PANEL', 'DB', 'MDB', 'SZEKRÉNY', 'ELOSZTÓ']
+  const SOCKET_KW = ['DUGALJ', 'SOCKET', 'ALJZAT', 'ERŐÁTVITELI', 'EROATVITELI']
+  const LIGHT_KW = ['LAMPA', 'LÁMPA', 'LIGHT', 'LED', 'VILAGITAS', 'VILÁGÍTÁS']
+  const TRAY_KW = ['TALCA', 'TÁLCA', 'TRAY', 'KABELTALCA', 'KÁBELTÁLCA']
   const classify = (name) => {
-    const up = name.toUpperCase()
+    const up = (name || '').toUpperCase()
     if (PANEL_KW.some(k => up.includes(k))) return 'panel'
     if (SOCKET_KW.some(k => up.includes(k))) return 'socket'
     if (LIGHT_KW.some(k => up.includes(k))) return 'light'
@@ -2004,7 +2010,36 @@ function buildGeometryFromBlocks(reviewData) {
       else devices.push(d)
     }
   }
-  return { devices, panels, polylines: [], scale: { factor: 0.001, unit: 'mm' }, bounds: { minX: 0, maxX: x * 1000, minY: 0, maxY: 5000 }, stats: { has_tray_layers: false, has_wall_layers: false } }
+
+  // Kábel/tálca hosszak beépítése polyline-ként
+  const polylines = []
+  let hasTray = false
+  for (const lenEntry of lengths) {
+    const lengthM = lenEntry.length || lenEntry.length_raw || 0
+    if (lengthM <= 0) continue
+    const info = lenEntry.info || {}
+    const isTray = TRAY_KW.some(k => (info.name || lenEntry.layer || '').toUpperCase().includes(k))
+    if (isTray) hasTray = true
+    // Reprezentálj egy egyenes polyline-t a megadott hosszal (mm-ben)
+    polylines.push({
+      layer: lenEntry.layer || 'CABLE',
+      length: lengthM * 1000,  // mm-be konvertálva
+      isTray,
+      color: info.color || null,
+    })
+  }
+
+  const scaleFactor = reviewData?._scale?.m_per_pt || 0.001
+  return {
+    devices, panels, polylines,
+    scale: { factor: scaleFactor, unit: 'm' },
+    bounds: { minX: 0, maxX: Math.max(x * 1000, 10000), minY: 0, maxY: 5000 },
+    stats: { has_tray_layers: hasTray, has_wall_layers: false },
+    _from_blocks: true,
+    _block_count: devices.length + panels.length,
+    _cable_m: polylines.filter(p => !p.isTray).reduce((s, p) => s + p.length / 1000, 0),
+    _tray_m: polylines.filter(p => p.isTray).reduce((s, p) => s + p.length / 1000, 0),
+  }
 }
 
 // ─── New Quote Wizard (full) ───────────────────────────────────────────────────
@@ -2350,6 +2385,41 @@ async function parseDxfBase64(base64, apiBase) {
 }
 
 async function parsePdfBase64(base64, filename, legendContext, apiBase) {
+  const LEGEND_KW = ['jelmagyarazat', 'jelmagyarázat', 'legend', 'jeloles', 'jelmag', 'jelkulcs']
+  const isLegend = LEGEND_KW.some(kw => (filename || '').toLowerCase().includes(kw))
+
+  // Jelmagyarázatnál csak a legend promptot használjuk
+  if (isLegend) {
+    const res = await fetch(`${apiBase}/api/parse-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdf_base64: base64, filename, legend_context: null }),
+    })
+    if (!res.ok) throw new Error('PDF jelmagyarázat elemzés sikertelen')
+    return await res.json()
+  }
+
+  // 1. Lépés: Vektoros PDF elemzés (gyors, pontos színalapú)
+  try {
+    const vRes = await fetch(`${apiBase}/api/parse-pdf-vectors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdf_base64: base64, filename: filename || '' }),
+    })
+    if (vRes.ok) {
+      const vResult = await vRes.json()
+      if (vResult.success && vResult._confidence >= 0.60) {
+        // Jó vektoros eredmény - nem kérünk Vision AI-t
+        return vResult
+      }
+      // Gyenge vektoros eredmény - folytatjuk Vision AI-val de menti a vektoros adatot
+      console.log('PDF vector confidence low:', vResult._confidence, '- falling back to Vision AI')
+    }
+  } catch (e) {
+    console.warn('PDF vector analysis failed:', e.message)
+  }
+
+  // 2. Lépés: Vision AI (GPT-4o) - ha vektoros elemzés gyenge volt
   const res = await fetch(`${apiBase}/api/parse-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
