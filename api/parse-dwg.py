@@ -202,24 +202,50 @@ class handler(BaseHTTPRequestHandler):
                     warnings.append(f'Screenshot Vision hiba: {e}')
 
             # ── Strategy 2: Binary text extraction ───────────────────────────
-            blocks, lengths, found = extract_text_from_dwg(file_bytes)
+            try:
+                blocks, lengths, found = extract_text_from_dwg(file_bytes)
+            except Exception as ex:
+                blocks, lengths, found = [], [], False
+                warnings.append(f'Bináris kinyerési hiba: {ex}')
 
             if not lengths:
                 lengths = [{'layer': 'DWG', 'length': 0.0, 'length_raw': 0.0, 'info': None}]
 
-            confidence = 0.5 if found else 0.2
+            # Gyenge eredmény de NEM hiba – a frontend Vision modalt nyit alacsony confidence-nél
+            confidence = 0.45 if found else 0.15
             note = (
-                f'DWG bináris szöveg-kinyerés. {"Találtunk adatokat." if found else "Kevés adat olvasható ki – DXF formátum ajánlott."}'
+                'DWG bináris szöveg-kinyerés – adatok találhatók.' if found
+                else 'DWG-ből kevés szöveges adat nyerhető ki – ez normális viselkedés erőátviteli '
+                     'és kábeltálca DWG-knél. Pontosabb eredményhez használd a Vision AI pontosítást '
+                     '(képernyőkép feltöltés) vagy exportálj DXF formátumba.'
             )
             if not found:
-                warnings.append('DWG-ből kevés szöveges adat nyerhető ki. DXF formátumban töltsd fel a pontosabb elemzéshez.')
+                warnings.append(
+                    'A DWG bináris formátumból nem sikerült szöveges adatot kinyerni. '
+                    'Nyisd meg a fájlt AutoCAD DWG TrueView-ban, zoom ki hogy az egész terv látsszon, '
+                    'készíts képernyőképet, és töltsd fel Vision AI elemzéshez.'
+                )
 
             self._respond(200, self._build_result(
                 blocks, lengths, source, confidence, filename, warnings, note
             ))
 
         except Exception as e:
-            self._respond(500, {'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+            # Még általános hibánál is success:true – a frontend kezeli
+            self._respond(200, {
+                'success': True,
+                'blocks': [],
+                'lengths': [{'layer': 'DWG', 'length': 0.0, 'length_raw': 0.0, 'info': None}],
+                'layers': ['DWG'],
+                'units': {'insunits': 0, 'name': 'DWG', 'factor': None, 'auto_detected': False},
+                'title_block': {},
+                'summary': {'total_block_types': 0, 'total_blocks': 0, 'total_layers': 0, 'layers_with_lines': 0},
+                '_source': 'dwg_text',
+                '_confidence': 0.1,
+                '_filename': filename,
+                '_note': f'DWG feldolgozási hiba: {e}. Vision AI pontosítás ajánlott.',
+                'warnings': [str(e)],
+            })
 
     def _build_result(self, blocks, lengths, source, confidence, filename, warnings, note):
         return {

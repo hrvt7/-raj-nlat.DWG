@@ -662,8 +662,20 @@ function UploadStep({ onParsed }) {
     const newFiles = arr.map(f => ({ file: f, name: f.name, status: 'waiting', result: null, error: null }))
     setFiles(prev => [...prev, ...newFiles])
 
-    for (let i = 0; i < newFiles.length; i++) {
-      const f = newFiles[i]
+    // Jelmagyarázat fájlok azonosítása – ezeket először dolgozzuk fel
+    const LEGEND_KW = ['jelmagyarazat', 'jelmagyarázat', 'legend', 'jeloles', 'jelölés', 'jelmag', 'jelkulcs']
+    const isLegendFile = name => LEGEND_KW.some(kw => name.toLowerCase().includes(kw))
+
+    // Jelmagyarázat PDF-ek előre
+    const sorted = [...newFiles].sort((a, b) =>
+      (isLegendFile(a.name) ? 0 : 1) - (isLegendFile(b.name) ? 0 : 1)
+    )
+
+    // Globális legend kontextus a többi PDF elemzéséhez
+    let legendContext = null
+
+    for (let i = 0; i < sorted.length; i++) {
+      const f = sorted[i]
       const isDwg = f.name.toLowerCase().endsWith('.dwg')
       const isPdf = f.name.toLowerCase().endsWith('.pdf')
 
@@ -672,22 +684,23 @@ function UploadStep({ onParsed }) {
       try {
         let result
         if (isPdf) {
-          // PDF: Vision AI (GPT-4o) → szöveg fallback
           const base64 = await fileToBase64(f.file)
-          result = await parsePdfBase64(base64, apiBase)
+          result = await parsePdfBase64(base64, f.name, legendContext, apiBase)
+          // Ha jelmagyarázat eredményt adott vissza, tárold el kontextusként
+          if (result._legend && result._legend.length > 0) {
+            legendContext = result._legend
+          }
         } else if (isDwg) {
-          // DWG: direkt bináris kinyerés + Vision opcionálisan
           const base64 = await fileToBase64(f.file)
           result = await parseDwgBase64(base64, f.name, apiBase)
-          // Store base64 in result for Vision modal reuse
           result._dwg_base64 = base64
         } else {
-          // DXF: 100% böngészőben, korlátlan méret
           result = await parseDxfFile(f.file)
         }
-        if (!result.success) throw new Error(result.error || 'Elemzési hiba')
+
+        if (!result.success) throw new Error(result.error || 'Elemézési hiba')
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'done', result } : x))
-        // Auto-open Vision modal if DWG result is weak
+
         if (isDwg) {
           const blocks = result?.summary?.total_blocks || 0
           const conf   = result?._confidence || 0
@@ -696,7 +709,21 @@ function UploadStep({ onParsed }) {
           }
         }
       } catch (err) {
-        setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'error', error: err.message } : x))
+        // DWG-nél ne error status – mindig done + Vision modal
+        if (isDwg) {
+          const fallback = {
+            success: true, blocks: [], lengths: [{ layer: 'DWG', length: 0, length_raw: 0, info: null }],
+            layers: ['DWG'], units: { name: 'DWG' }, title_block: {},
+            summary: { total_block_types: 0, total_blocks: 0, total_layers: 0, layers_with_lines: 0 },
+            _source: 'dwg_text', _confidence: 0.1, _filename: f.name,
+            _note: 'DWG feldolgozási hiba – Vision AI pontosítás szükséges.',
+            warnings: [err.message],
+          }
+          setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'done', result: fallback } : x))
+          setDwgModal({ filename: f.name, weakResult: fallback })
+        } else {
+          setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'error', error: err.message } : x))
+        }
       }
     }
   }, [apiBase])
@@ -713,7 +740,8 @@ function UploadStep({ onParsed }) {
   const anyDone = files.some(f => f.status === 'done')
 
   const handleNext = () => {
-    const results = files.filter(f => f.status === 'done').map(f => ({ name: f.name, rawFile: f.file, ...f.result }))
+    // Jelmagyarázat fájlok nem kerülnek az elemzési összesítőbe (csak kontextus szerepük volt)
+    const results = files.filter(f => f.status === 'done' && f.result?._source !== 'legend_pdf').map(f => ({ name: f.name, rawFile: f.file, ...f.result }))
     onParsed(results)
   }
 
@@ -801,6 +829,7 @@ function UploadStep({ onParsed }) {
                    f.status === 'done'       ? (() => {
                      const src = f.result?._source || ''
                      const blocks = f.result?.summary?.total_blocks || 0
+                     if (src === 'legend_pdf')       return `📖 Jelmagyarázat: ${f.result?._legend?.length || 0} szimbólum`
                      if (src === 'vision_screenshot') return `🤖 Vision: ${blocks} elem`
                      if (src === 'dxf_replacement')  return `📐 DXF: ${blocks} elem`
                      if (src === 'vision_gpt4o')     return `🤖 Vision: ${blocks} elem (${Math.round((f.result?._vision_confidence||0)*100)}%)`
@@ -2320,11 +2349,11 @@ async function parseDxfBase64(base64, apiBase) {
   return await res.json()
 }
 
-async function parsePdfBase64(base64, apiBase) {
+async function parsePdfBase64(base64, filename, legendContext, apiBase) {
   const res = await fetch(`${apiBase}/api/parse-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pdf_base64: base64 }),
+    body: JSON.stringify({ pdf_base64: base64, filename: filename || '', legend_context: legendContext || null }),
   })
   if (!res.ok) throw new Error('PDF elemzés sikertelen')
   return await res.json()

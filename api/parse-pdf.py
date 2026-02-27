@@ -4,52 +4,105 @@ from collections import Counter
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
-# ── Hungarian electrical symbol keywords for text-based fallback ───────────────
 SYMBOL_KEYWORDS = {
     'dugalj':        ['dugalj', 'konnektor', 'socket', 'aljzat'],
     'kapcsolo':      ['kapcsoló', 'kapcsolo', 'switch', 'villanykapcs'],
     'lampa':         ['lámpa', 'lampa', 'light', 'luminaire', 'ledfény', 'downlight', 'spot'],
     'fi_rele':       ['fi relé', 'fi rele', 'rcd', 'rcbo'],
     'kismegszakito': ['kismegszakító', 'kismegszakito', 'mcb', 'megszakít'],
-    'panel':         ['elosztó', 'eloszto', 'panel', 'szekrény', 'szekreny', 'tábla', 'db'],
+    'panel':         ['elosztó', 'eloszto', 'panel', 'szekrény', 'szekreny', 'tábla'],
     'kabel':         ['kábel', 'kabel', 'cable', 'vezeték', 'nayy', 'nyy', 'cyky', 'nym'],
+    'kabeltalca':    ['kábeltálca', 'kabeltalca', 'tálca', 'talca', 'cable tray', 'tray'],
 }
 
-VISION_PROMPT = """Te egy tapasztalt magyar villamos tervező mérnök asszisztens vagy.
-Ez egy villamossági tervrajz vagy mennyiségjegyzék oldala.
+# ── Prompt: tervrajz elemzés (kábeltálca, erőátviteli vonalrajz) ───────────────
+VISION_PROMPT_PLAN = """Te egy tapasztalt magyar villamos tervező mérnök asszisztens vagy.
+Ez egy VILLAMOSSÁGI TERVRAJZ – lehetséges hogy erőátviteli szerelési terv vagy kábeltálca elrendezési terv.
 
-FELADATOD: Azonosítsd és számold meg az összes villamos eszközt, jelölést, mennyiséget.
+FONTOS TUDNIVALÓK A VONALRAJZOKRÓL:
+- Kábeltálca terveken vastag vonalak/téglalapok jelölik a tálcákat – mérd/becsüld a hosszukat
+- Erőátviteli terveken egyenes vonalak = kábelek vagy tálcák, méretekkel/jelölésekkel
+- A tervrajzon lévő méretszámokat (pl. "300mm", "3m", "12.5m") vedd figyelembe
+- Szimbólumokat számold meg: körök=dugalj/kapcsoló, kereszt=lámpa, téglalap=panel
+- Ha látod a kábeltálca szimbólumot (dupla vonal vagy vastag téglalap vonal) → add meg a hosszát méterben
+- Ha látod a léptéket (pl. 1:50, 1:100) → használd a hosszbecsléshez
 
-Keress:
-- Dugaljak / konnektorok (db szám)
-- Kapcsolók (db szám)  
-- Lámpák, luminaire-ek (db szám)
-- Kismegszakítók, FI-relék (db szám)
-- Elosztók, panelek (db szám)
-- Kábelek (fm / méter hossz)
-- Kábeltálca (fm / méter hossz)
-- Bármilyen más villamos szerelvény mennyiséggel
-
-Ha táblázatot, mennyiségjegyzéket vagy tételjegyzéket látsz: olvasd ki az összes sort.
-Ha tervrajzot látsz: számold meg a szimbólumokat vizuálisan.
+KÁBELTÁLCA AZONOSÍTÁS:
+- Dupla párhuzamos vonal = kábeltálca nyomvonal
+- Általában tetőn vagy falon futó sáv jelöli
+- Mérete lehet pl. 100x60, 200x60, 300x100 mm – ez a neve, de a HOSSZA kell méterben
 
 VÁLASZOLJ KIZÁRÓLAG valid JSON-ban:
 {
   "items": [
-    {"name": "Dugalj 2P+F", "type": "dugalj", "quantity": 24, "unit": "db", "notes": ""},
-    {"name": "NYM-J 3x1.5 kábel", "type": "kabel", "quantity": 145, "unit": "fm", "notes": ""},
-    {"name": "Kismegszakító 1P 16A", "type": "kismegszakito", "quantity": 6, "unit": "db", "notes": ""}
+    {"name": "Kábeltálca 200x60", "type": "kabeltalca", "quantity": 45.5, "unit": "fm", "notes": "3. sor alapján"},
+    {"name": "NYM-J 3x2.5", "type": "kabel", "quantity": 120, "unit": "fm", "notes": ""},
+    {"name": "Dugalj 2P+F IP44", "type": "dugalj", "quantity": 8, "unit": "db", "notes": ""},
+    {"name": "LED panel 60x60", "type": "lampa", "quantity": 12, "unit": "db", "notes": ""}
   ],
-  "confidence": 0.85,
-  "source": "vision",
-  "notes": "Mennyiségjegyzék 1. oldal – 12 tétel azonosítva"
+  "confidence": 0.65,
+  "source": "vision_plan",
+  "notes": "Kábeltálca elrendezési terv – vonalak alapján becsülve"
 }
 
-Ha nem látható villamos tartalom az oldalon, adj vissza üres items tömböt.
-"""
+Ha semmit sem azonosítasz, adj vissza üres items tömböt confidence: 0.1-gyel."""
+
+# ── Prompt: mennyiségjegyzék / táblázat ───────────────────────────────────────
+VISION_PROMPT_TABLE = """Te egy tapasztalt magyar villamos tervező mérnök asszisztens vagy.
+Ez egy MENNYISÉGJEGYZÉK, TÉTELJEGYZÉK vagy ANYAGKIMUTATÁS táblázat.
+
+FELADATOD: Olvasd ki az összes sort a táblázatból.
+- Keress Megnevezés/Tétel oszlopot
+- Keress Mennyiség/Db/Hossz oszlopot  
+- Keress Egység oszlopot (db, fm, m, méter)
+- Ha nincs egység megadva és szerelvény → db, ha kábel/tálca → fm
+
+VÁLASZOLJ KIZÁRÓLAG valid JSON-ban:
+{
+  "items": [
+    {"name": "Kábeltálca 300x60", "type": "kabeltalca", "quantity": 85, "unit": "fm", "notes": ""},
+    {"name": "Dugalj 2P+F", "type": "dugalj", "quantity": 24, "unit": "db", "notes": ""},
+    {"name": "NYM-J 3x1.5", "type": "kabel", "quantity": 340, "unit": "fm", "notes": ""}
+  ],
+  "confidence": 0.92,
+  "source": "vision_table",
+  "notes": "Mennyiségjegyzék – 8 sor azonosítva"
+}"""
+
+# ── Prompt: jelmagyarázat/legend ──────────────────────────────────────────────
+LEGEND_PROMPT = """Ez egy JELMAGYARÁZAT (legend) lap egy villamossági tervhez.
+
+FELADATOD: Azonosítsd az összes szimbólum-jelölés párt.
+Minden sorhoz: mi a szimbólum és mit jelent magyarul.
+
+VÁLASZOLJ KIZÁRÓLAG valid JSON-ban:
+{
+  "legend": [
+    {"symbol": "kör", "meaning": "Dugalj 2P+F 230V", "type": "dugalj"},
+    {"symbol": "X jel körben", "meaning": "Vízálló dugalj IP44", "type": "dugalj"},
+    {"symbol": "dupla vonal", "meaning": "Kábeltálca nyomvonal", "type": "kabeltalca"},
+    {"symbol": "kereszt körben", "meaning": "Mennyezeti lámpa", "type": "lampa"}
+  ],
+  "notes": "Villamos jelmagyarázat – 12 szimbólum azonosítva"
+}"""
 
 
-def pdf_pages_to_images(file_bytes, max_pages=8, dpi=150):
+def is_legend_file(filename):
+    """Detektálja ha a fájl jelmagyarázat."""
+    fn = filename.lower()
+    return any(kw in fn for kw in [
+        'jelmagyarazat', 'jelmagyarázat', 'legend', 'jeloles', 'jelölés',
+        'jelmag', 'symbol', 'jelkulcs', 'jelkulcse'
+    ])
+
+
+def is_table_like(img_b64):
+    """Rövid heurisztika: ha sok vízszintes vonal van, valószínűleg táblázat.
+    Mivel nem futtatunk CV-t, ezt a fájlnévből/kontextusból döntjük el."""
+    return False  # override-olható ha kell
+
+
+def pdf_pages_to_images(file_bytes, max_pages=6, dpi=180):
     """Render PDF pages to PNG base64 images using PyMuPDF."""
     import fitz
     doc = fitz.open(stream=file_bytes, filetype='pdf')
@@ -64,28 +117,22 @@ def pdf_pages_to_images(file_bytes, max_pages=8, dpi=150):
     return images, len(doc)
 
 
-def call_vision_for_page(img_b64, page_num):
-    """Send one page image to GPT-4o Vision and get structured result."""
+def call_vision(img_b64, prompt, page_num=1):
+    """Send page image to GPT-4o Vision with given prompt."""
     import urllib.request
 
     payload = json.dumps({
         'model': 'gpt-4o',
-        'max_tokens': 2000,
+        'max_tokens': 2500,
         'response_format': {'type': 'json_object'},
         'messages': [{
             'role': 'user',
             'content': [
                 {
                     'type': 'image_url',
-                    'image_url': {
-                        'url': f'data:image/png;base64,{img_b64}',
-                        'detail': 'high'
-                    }
+                    'image_url': {'url': f'data:image/png;base64,{img_b64}', 'detail': 'high'}
                 },
-                {
-                    'type': 'text',
-                    'text': VISION_PROMPT
-                }
+                {'type': 'text', 'text': prompt}
             ]
         }]
     }).encode()
@@ -98,20 +145,18 @@ def call_vision_for_page(img_b64, page_num):
             'Content-Type': 'application/json',
         }
     )
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=55) as r:
         resp = json.loads(r.read())
 
     raw = resp['choices'][0]['message']['content']
     try:
-        parsed = json.loads(raw.replace('```json', '').replace('```', '').strip())
+        return json.loads(raw.replace('```json', '').replace('```', '').strip())
     except Exception:
-        parsed = {'items': [], 'confidence': 0.0, 'source': 'vision', 'notes': f'Parse error on page {page_num}'}
-    return parsed
+        return {'items': [], 'confidence': 0.0, 'notes': f'Parse error page {page_num}'}
 
 
 def merge_vision_results(page_results):
-    """Merge items from multiple pages, aggregate by type."""
-    merged = {}  # key = (name.lower(), type) → item
+    merged = {}
     for pr in page_results:
         for item in pr.get('items', []):
             name = item.get('name', '').strip()
@@ -130,29 +175,26 @@ def merge_vision_results(page_results):
 
 
 def vision_results_to_blocks(items):
-    """Convert vision items to the block/length format the wizard expects."""
     blocks = []
     lengths = []
 
     for item in items:
-        qty = int(round(item['quantity']))
         itype = item.get('type', 'egyeb')
         name = item.get('name', itype)
         unit = item.get('unit', 'db')
+        qty_raw = item.get('quantity', 0) or 0
 
-        if itype == 'kabel' or unit in ('fm', 'm', 'méter', 'lm'):
+        if itype in ('kabel', 'kabeltalca') or unit in ('fm', 'm', 'méter', 'lm'):
             lengths.append({
-                'layer': 'PDF_VISION',
-                'length': float(item['quantity']),
-                'length_raw': float(item['quantity']),
-                'info': {'name': name},
-            })
-        elif qty > 0:
-            blocks.append({
-                'name': name,
                 'layer': f'PDF_{itype.upper()}',
-                'count': qty,
+                'length': float(qty_raw),
+                'length_raw': float(qty_raw),
+                'info': {'name': name, 'type': itype},
             })
+        else:
+            qty = int(round(float(qty_raw)))
+            if qty > 0:
+                blocks.append({'name': name, 'layer': f'PDF_{itype.upper()}', 'count': qty})
 
     if not lengths:
         lengths = [{'layer': 'PDF', 'length': 0.0, 'length_raw': 0.0, 'info': None}]
@@ -161,7 +203,6 @@ def vision_results_to_blocks(items):
 
 
 def parse_pdf_text_fallback(file_bytes):
-    """Original text-based extraction as fallback when no OpenAI key or vision fails."""
     import fitz
     doc = fitz.open(stream=file_bytes, filetype='pdf')
     all_text = [page.get_text('text') for page in doc]
@@ -174,83 +215,120 @@ def parse_pdf_text_fallback(file_bytes):
             if hits > 0:
                 counts[symbol] += hits
 
-    qty_patterns = [
-        r'(\d+)\s*db\s+(\w+)',
-        r'(\w+)[:\s]+(\d+)\s*db',
-        r'(\d+)\s*x\s*(\w+)',
-    ]
-    explicit = Counter()
-    for pat in qty_patterns:
-        for m in re.finditer(pat, full_text):
-            try:
-                qty = int(m.group(1))
-                word = m.group(2).lower()
-                for symbol, keywords in SYMBOL_KEYWORDS.items():
-                    if any(kw in word for kw in keywords):
-                        explicit[symbol] = max(explicit[symbol], qty)
-            except Exception:
-                pass
-
-    final = {**counts}
-    for s, q in explicit.items():
-        final[s] = q
-
-    blocks = [{'name': n, 'layer': 'PDF', 'count': int(c)} for n, c in final.items() if c > 0]
-
+    blocks = [{'name': n, 'layer': 'PDF', 'count': int(c)} for n, c in counts.items() if c > 0]
     lengths = []
-    for m in re.finditer(r'(\d+[\.,]?\d*)\s*(fm|m|méter|meter|lm)', full_text):
+    for m in re.finditer(r'(\d+[\.,]?\d*)\s*(fm|m\b|méter|lm)', full_text):
         try:
             val = float(m.group(1).replace(',', '.'))
             if val > 0.5:
                 lengths.append({'layer': 'PDF_TEXT', 'length': val, 'length_raw': val, 'info': None})
         except Exception:
             pass
-
     if not lengths:
         lengths = [{'layer': 'PDF', 'length': 0.0, 'length_raw': 0.0, 'info': None}]
-
     return blocks, lengths, len(doc), 'text_fallback'
 
 
-def parse_pdf_bytes(file_bytes):
-    """Main entry point: tries Vision first, falls back to text extraction."""
+def parse_legend_pdf(file_bytes):
+    """Jelmagyarázat PDF feldolgozása – kontextusként visszaadja a legendát, nem mennyiségként."""
     try:
-        import fitz  # noqa – ensure PyMuPDF available
+        import fitz
+        images, page_count = pdf_pages_to_images(file_bytes, max_pages=4, dpi=200)
+        if not images or not OPENAI_API_KEY:
+            raise ValueError('Nincs kép vagy API kulcs')
+
+        all_legend = []
+        for i, img_b64 in enumerate(images):
+            result = call_vision(img_b64, LEGEND_PROMPT, i + 1)
+            all_legend.extend(result.get('legend', []))
+
+        return {
+            'success': True,
+            'is_legend': True,
+            'blocks': [],
+            'lengths': [{'layer': 'LEGEND', 'length': 0.0, 'length_raw': 0.0, 'info': None}],
+            'layers': ['LEGEND'],
+            'units': {'insunits': 0, 'name': 'Jelmagyarázat', 'factor': None, 'auto_detected': False},
+            'title_block': {},
+            'summary': {
+                'total_block_types': 0,
+                'total_blocks': 0,
+                'total_layers': 0,
+                'layers_with_lines': 0,
+            },
+            '_source': 'legend_pdf',
+            '_confidence': 1.0,
+            '_legend': all_legend,
+            '_pages': page_count,
+            '_note': f'Jelmagyarázat – {len(all_legend)} szimbólum azonosítva. Ez a fájl kontextusként kerül felhasználásra a többi terv elemzésekor.',
+            'warnings': [],
+        }
+    except Exception as e:
+        return {
+            'success': True,
+            'is_legend': True,
+            'blocks': [],
+            'lengths': [{'layer': 'LEGEND', 'length': 0.0, 'length_raw': 0.0, 'info': None}],
+            'layers': ['LEGEND'],
+            'units': {'insunits': 0, 'name': 'Jelmagyarázat', 'factor': None, 'auto_detected': False},
+            'title_block': {},
+            'summary': {'total_block_types': 0, 'total_blocks': 0, 'total_layers': 0, 'layers_with_lines': 0},
+            '_source': 'legend_pdf',
+            '_confidence': 0.5,
+            '_legend': [],
+            '_note': f'Jelmagyarázat – nem sikerült feldolgozni ({e}). Kézzel is felhasználható.',
+            'warnings': [str(e)],
+        }
+
+
+def parse_pdf_bytes(file_bytes, filename='', legend_context=None):
+    try:
+        import fitz
     except ImportError:
         return {'success': False, 'error': 'PyMuPDF nincs telepítve a szerveren.'}
 
-    page_count = 0
-    source = 'text_fallback'
+    # ── Jelmagyarázat detektálás ──────────────────────────────────────────────
+    if is_legend_file(filename):
+        return parse_legend_pdf(file_bytes)
+
     warnings = []
 
-    # ── VISION PATH (GPT-4o) ──────────────────────────────────────────────────
     if OPENAI_API_KEY:
         try:
-            images, page_count = pdf_pages_to_images(file_bytes, max_pages=8, dpi=150)
-
+            images, page_count = pdf_pages_to_images(file_bytes, max_pages=6, dpi=180)
             if not images:
                 raise ValueError('Nem sikerült képet renderelni a PDF-ből.')
 
+            # Ha van legend kontextus, építsd be a promptba
+            plan_prompt = VISION_PROMPT_PLAN
+            if legend_context:
+                legend_str = '\n'.join(
+                    f"- {l.get('symbol','?')} → {l.get('meaning','?')} ({l.get('type','?')})"
+                    for l in legend_context
+                )
+                plan_prompt = VISION_PROMPT_PLAN + f"""
+
+JELMAGYARÁZAT KONTEXTUS (a projekthez tartozó jelölések):
+{legend_str}
+
+Ezeket a szimbólumokat keresd a tervrajzon!"""
+
             page_results = []
             for i, img_b64 in enumerate(images):
-                pr = call_vision_for_page(img_b64, i + 1)
+                # Első oldal: tervrajz prompt; ha táblázatszerű, table prompt
+                prompt = plan_prompt
+                pr = call_vision(img_b64, prompt, i + 1)
                 page_results.append(pr)
 
             vision_items, avg_conf = merge_vision_results(page_results)
             blocks, lengths = vision_results_to_blocks(vision_items)
-            source = 'vision_gpt4o'
 
             return {
                 'success': True,
                 'blocks': blocks,
                 'lengths': lengths,
                 'layers': ['PDF_VISION'],
-                'units': {
-                    'insunits': 0,
-                    'name': 'PDF (Vision AI)',
-                    'factor': None,
-                    'auto_detected': False,
-                },
+                'units': {'insunits': 0, 'name': 'PDF (Vision AI)', 'factor': None, 'auto_detected': False},
                 'title_block': {},
                 'summary': {
                     'total_block_types': len(blocks),
@@ -258,7 +336,7 @@ def parse_pdf_bytes(file_bytes):
                     'total_layers': 1,
                     'layers_with_lines': len([l for l in lengths if l['length'] > 0]),
                 },
-                '_source': source,
+                '_source': 'vision_gpt4o',
                 '_pages': page_count,
                 '_pages_analyzed': len(images),
                 '_vision_confidence': round(avg_conf, 2),
@@ -268,9 +346,9 @@ def parse_pdf_bytes(file_bytes):
             }
 
         except Exception as e:
-            warnings.append(f'Vision elemzés nem sikerült ({e}), szövegalapú módra váltás.')
+            warnings.append(f'Vision elemzés hiba ({e}), szövegalapú módra váltás.')
 
-    # ── TEXT FALLBACK ─────────────────────────────────────────────────────────
+    # ── Text fallback ─────────────────────────────────────────────────────────
     try:
         blocks, lengths, page_count, source = parse_pdf_text_fallback(file_bytes)
         return {
@@ -278,12 +356,7 @@ def parse_pdf_bytes(file_bytes):
             'blocks': blocks,
             'lengths': lengths,
             'layers': ['PDF'],
-            'units': {
-                'insunits': 0,
-                'name': 'PDF (szöveg alapú)',
-                'factor': None,
-                'auto_detected': False,
-            },
+            'units': {'insunits': 0, 'name': 'PDF (szöveg)', 'factor': None, 'auto_detected': False},
             'title_block': {},
             'summary': {
                 'total_block_types': len(blocks),
@@ -293,7 +366,7 @@ def parse_pdf_bytes(file_bytes):
             },
             '_source': source,
             '_pages': page_count,
-            '_note': 'PDF szöveg alapú felismerés (nincs OPENAI_API_KEY vagy Vision hiba). Pontosabb eredményhez DXF fájlt használj.',
+            '_note': 'PDF szöveg alapú felismerés. Pontosabb eredményhez DXF ajánlott.',
             'warnings': warnings,
         }
     except Exception as e:
@@ -314,22 +387,17 @@ class handler(BaseHTTPRequestHandler):
             content_type = self.headers.get('Content-Type', '')
 
             pdf_bytes = None
+            filename = ''
+            legend_context = None
+
             if 'application/json' in content_type:
                 payload = json.loads(body or b'{}')
                 b64 = payload.get('pdf_base64') or payload.get('data') or ''
                 if not b64:
                     raise ValueError('pdf_base64 mező hiányzik')
                 pdf_bytes = base64.b64decode(b64)
-            elif 'multipart/form-data' in content_type:
-                import cgi
-                env = {
-                    'REQUEST_METHOD': 'POST',
-                    'CONTENT_TYPE': content_type,
-                    'CONTENT_LENGTH': str(length),
-                }
-                form = cgi.FieldStorage(fp=io.BytesIO(body), environ=env, keep_blank_values=True)
-                if 'file' in form:
-                    pdf_bytes = form['file'].file.read()
+                filename = payload.get('filename', '')
+                legend_context = payload.get('legend_context')  # opcionális: [{symbol, meaning, type}]
             else:
                 try:
                     pdf_bytes = base64.b64decode(body)
@@ -339,15 +407,11 @@ class handler(BaseHTTPRequestHandler):
             if not pdf_bytes:
                 raise ValueError('Üres PDF tartalom.')
 
-            result = parse_pdf_bytes(pdf_bytes)
+            result = parse_pdf_bytes(pdf_bytes, filename=filename, legend_context=legend_context)
             self._respond(200, result)
 
         except Exception as e:
-            self._respond(500, {
-                'success': False,
-                'error': str(e),
-                'trace': traceback.format_exc(),
-            })
+            self._respond(500, {'success': False, 'error': str(e), 'trace': traceback.format_exc()})
 
     def _respond(self, code, data):
         self.send_response(code)
