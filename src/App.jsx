@@ -12,6 +12,7 @@ import { WORK_ITEMS_DEFAULT as WORK_ITEMS_DB, CONTEXT_FACTORS } from './data/wor
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import DxfViewerPanel from './components/DxfViewer/index.jsx'
 import { parseDxfFile, parseDxfText } from './dxfParser.js'
+import { extractGeometry, runCableAgent, estimateCablesFallback } from './cableAgent.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -43,7 +44,7 @@ function getAssemblySuggestions() {
 
 // ─── WizardStepBar ─────────────────────────────────────────────────────────────
 function WizardStepBar({ step }) {
-  const steps = ['Feltöltés', 'Ellenőrzés', 'Körülmények', 'Árazás', 'Ajánlat']
+  const steps = ['Feltöltés', 'Ellenőrzés', 'Kábelterv', 'Körülmények', 'Árazás', 'Ajánlat']
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 32 }}>
       {steps.map((s, i) => {
@@ -1262,11 +1263,294 @@ function QuoteView({ quote, onBack, onStatusChange }) {
   )
 }
 
+// ─── CableEstimateStep ─────────────────────────────────────────────────────────
+function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
+  const [status, setStatus] = useState('idle') // idle | extracting | ai_running | fallback | done | error
+  const [estimate, setEstimate] = useState(null)
+  const [error, setError] = useState(null)
+  const [useAI, setUseAI] = useState(true)
+  const apiBase = import.meta.env.VITE_API_URL || ''
+
+  const run = useCallback(async (withAI = true) => {
+    setStatus('extracting')
+    setError(null)
+    setEstimate(null)
+
+    try {
+      // 1. Get DXF text from parsed files
+      const dxfFile = parsedFiles.find(f => f.name?.toLowerCase().endsWith('.dxf') || f.name?.toLowerCase().endsWith('.dwg'))
+      if (!dxfFile) {
+        // No DXF – run fallback on blocks data
+        const fallbackGeom = buildGeometryFromBlocks(reviewData)
+        setEstimate(estimateCablesFallback(fallbackGeom))
+        setStatus('done')
+        return
+      }
+
+      // 2. Extract full geometry with coordinates
+      let geometry
+      if (dxfFile._rawText) {
+        geometry = extractGeometry(dxfFile._rawText)
+      } else {
+        // Re-read the file for raw text
+        const text = await new Promise((res, rej) => {
+          const reader = new FileReader()
+          reader.onload = e => res(e.target.result)
+          reader.onerror = rej
+          reader.readAsText(dxfFile.file || dxfFile, 'utf-8')
+        })
+        geometry = extractGeometry(text)
+      }
+
+      if (!withAI) {
+        setStatus('fallback')
+        const result = estimateCablesFallback(geometry)
+        setEstimate(result)
+        setStatus('done')
+        return
+      }
+
+      // 3. Try AI Vision agent
+      setStatus('ai_running')
+      try {
+        const result = await runCableAgent({ geometry, screenshotBase64: null, apiBase })
+        setEstimate(result)
+        setStatus('done')
+      } catch (aiErr) {
+        console.warn('AI agent failed, using fallback:', aiErr.message)
+        const result = estimateCablesFallback(geometry)
+        result._fallback_reason = aiErr.message
+        setEstimate(result)
+        setStatus('done')
+      }
+    } catch (err) {
+      setError(err.message)
+      setStatus('error')
+    }
+  }, [parsedFiles, reviewData, apiBase])
+
+  const confidenceColor = (c) => c >= 0.75 ? C.accent : c >= 0.5 ? '#FFD166' : '#FF6B6B'
+  const confidenceLabel = (c) => c >= 0.75 ? 'Magas bizalom' : c >= 0.5 ? 'Közepes bizalom' : 'Alacsony bizalom'
+  const confidenceBars = (c) => {
+    const filled = Math.round(c * 5)
+    return Array.from({length: 5}, (_, i) => (
+      <div key={i} style={{ width: 16, height: 6, borderRadius: 2, background: i < filled ? confidenceColor(c) : C.border }} />
+    ))
+  }
+
+  return (
+    <div style={{ maxWidth: 780 }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(0,229,160,0.12)', border: '1px solid rgba(0,229,160,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text }}>AI Kábelterv becslés</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Vision AI elemzi a rajzot és megtervezi az optimális kábelútvonalakat</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Idle state – start button */}
+      {status === 'idle' && (
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔌</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text, marginBottom: 8 }}>
+            Kábelhossz automatikus becslése
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.muted, marginBottom: 28, maxWidth: 480, margin: '0 auto 28px' }}>
+            Az AI elemzi a tervrajzot, azonosítja az elosztókat, csoportosítja az áramköröket és kiszámolja a becsült kábelhosszt.
+          </div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => run(true)} style={{ padding: '12px 28px', background: C.accent, color: C.bg, border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15 }}>
+              🧠 AI Vision elemzés
+            </button>
+            <button onClick={() => run(false)} style={{ padding: '12px 22px', background: C.bgCard, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 13 }}>
+              📐 Gyors becslés (AI nélkül)
+            </button>
+          </div>
+          <div style={{ marginTop: 16, fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
+            Vagy: <button onClick={() => onNext(null)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono' }}>kihagyom ezt a lépést →</button>
+          </div>
+        </div>
+      )}
+
+      {/* Running states */}
+      {(status === 'extracting' || status === 'ai_running' || status === 'fallback') && (
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 40, textAlign: 'center' }}>
+          <div style={{ width: 48, height: 48, border: `3px solid ${C.border}`, borderTopColor: C.accent, borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 16, color: C.text, marginBottom: 8 }}>
+            {status === 'extracting' ? 'Geometria kinyerése...' : status === 'ai_running' ? 'AI Vision elemzés folyamatban...' : 'Gyors becslés számítása...'}
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
+            {status === 'ai_running' ? 'Claude claude-sonnet-4-20250514 elemzi a tervrajzot (30–60 mp)' : 'Koordináta alapú számítás...'}
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {status === 'error' && (
+        <div style={{ background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.25)', borderRadius: 14, padding: 24 }}>
+          <div style={{ color: '#FF6B6B', fontFamily: 'Syne', fontWeight: 600, marginBottom: 8 }}>Hiba történt</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, marginBottom: 16 }}>{error}</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => run(false)} style={{ padding: '8px 16px', background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Gyors becslés</button>
+            <button onClick={() => onNext(null)} style={{ padding: '8px 16px', background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 13 }}>Kihagyás</button>
+          </div>
+        </div>
+      )}
+
+      {/* Results */}
+      {status === 'done' && estimate && (
+        <div>
+          {/* Summary header card */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 24, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, letterSpacing: '0.08em', marginBottom: 4 }}>BECSÜLT KÁBEL ÖSSZESEN</div>
+                <div style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 42, color: C.accent, lineHeight: 1 }}>
+                  {estimate.cable_total_m?.toLocaleString('hu-HU')} <span style={{ fontSize: 20, color: C.muted }}>m</span>
+                </div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, marginTop: 6 }}>{estimate.method}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 6 }}>BIZALMI SZINT</div>
+                <div style={{ display: 'flex', gap: 3, justifyContent: 'flex-end', marginBottom: 4 }}>
+                  {confidenceBars(estimate.confidence || 0)}
+                </div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: confidenceColor(estimate.confidence || 0) }}>
+                  {confidenceLabel(estimate.confidence || 0)} ({Math.round((estimate.confidence || 0) * 100)}%)
+                </div>
+                {estimate._source && (
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 4 }}>
+                    {estimate._source === 'n8n_claude_vision' ? '🧠 Claude Vision AI' : '📐 Determinisztikus becslés'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Breakdown by type */}
+          {estimate.cable_by_type && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+              {Object.entries(estimate.cable_by_type).map(([key, val]) => {
+                const labels = { socket_m: 'Dugalj körök', light_m: 'Lámpa körök', switch_m: 'Kapcsolók', other_m: 'Egyéb' }
+                const icons  = { socket_m: '🔌', light_m: '💡', switch_m: '🔘', other_m: '⚡' }
+                return (
+                  <div key={key} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 18, marginBottom: 6 }}>{icons[key] || '⚡'}</div>
+                    <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, color: C.text }}>{val?.toLocaleString('hu-HU')} m</div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{labels[key] || key}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Circuits list */}
+          {estimate.circuits?.length > 0 && (
+            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 16, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 14, color: C.text }}>Áramkörök ({estimate.circuits.length} kör)</span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>AI által csoportosítva</span>
+              </div>
+              {estimate.circuits.map((c, i) => (
+                <div key={i} style={{ padding: '10px 16px', borderBottom: i < estimate.circuits.length - 1 ? `1px solid ${C.border}` : 'none', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 6, background: c.type === 'socket' ? 'rgba(76,201,240,0.12)' : 'rgba(255,209,102,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
+                    {c.type === 'socket' ? '🔌' : c.type === 'light' ? '💡' : '⚡'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 13, color: C.text }}>{c.id} – {c.notes || (c.type === 'socket' ? 'Dugalj kör' : c.type === 'light' ? 'Lámpa kör' : 'Vegyes kör')}</div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{c.device_count} eszköz{c.zone ? ` · ${c.zone}` : ''}</div>
+                  </div>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, flexShrink: 0 }}>
+                    {c.estimated_length_m?.toLocaleString('hu-HU')} m
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Warnings */}
+          {estimate.warnings?.length > 0 && (
+            <div style={{ background: 'rgba(255,209,102,0.06)', border: '1px solid rgba(255,209,102,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+              {estimate.warnings.map((w, i) => (
+                <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#FFD166', marginBottom: i < estimate.warnings.length - 1 ? 4 : 0 }}>⚠ {w}</div>
+              ))}
+            </div>
+          )}
+
+          {/* AI reasoning */}
+          {estimate.reasoning && (
+            <div style={{ background: 'rgba(0,229,160,0.04)', border: '1px solid rgba(0,229,160,0.12)', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, marginBottom: 4 }}>AI MAGYARÁZAT</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, lineHeight: 1.7 }}>{estimate.reasoning}</div>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <button onClick={() => { setStatus('idle'); setEstimate(null) }} style={{ padding: '10px 18px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
+              ↺ Újrafuttatás
+            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={onBack} style={{ padding: '10px 18px', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.text, fontFamily: 'DM Mono', fontSize: 13 }}>
+                ← Vissza
+              </button>
+              <button onClick={() => onNext(estimate)} style={{ padding: '10px 28px', background: C.accent, color: C.bg, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 14 }}>
+                Tovább: Körülmények →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Back button when idle */}
+      {status === 'idle' && (
+        <div style={{ marginTop: 16 }}>
+          <button onClick={onBack} style={{ padding: '8px 16px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
+            ← Vissza
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Build minimal geometry from block data (when no DXF text available)
+function buildGeometryFromBlocks(reviewData) {
+  const blocks = reviewData?.blocks || []
+  const PANEL_KW = ['ELOSZTO', 'PANEL', 'DB', 'MDB', 'SZEKRÉNY']
+  const SOCKET_KW = ['DUGALJ', 'SOCKET', 'ALJZAT']
+  const LIGHT_KW = ['LAMPA', 'LIGHT', 'LED']
+  const classify = (name) => {
+    const up = name.toUpperCase()
+    if (PANEL_KW.some(k => up.includes(k))) return 'panel'
+    if (SOCKET_KW.some(k => up.includes(k))) return 'socket'
+    if (LIGHT_KW.some(k => up.includes(k))) return 'light'
+    return 'unknown'
+  }
+  const devices = [], panels = []
+  let x = 0
+  for (const b of blocks) {
+    for (let i = 0; i < (b.count || 1); i++) {
+      const type = classify(b.name)
+      const d = { type, name: b.name, layer: b.layer || '', x: x * 1000, y: 0 }
+      x += 1
+      if (type === 'panel') panels.push(d)
+      else devices.push(d)
+    }
+  }
+  return { devices, panels, polylines: [], scale: { factor: 0.001, unit: 'mm' }, bounds: { minX: 0, maxX: x * 1000, minY: 0, maxY: 5000 }, stats: { has_tray_layers: false, has_wall_layers: false } }
+}
+
 // ─── New Quote Wizard (full) ───────────────────────────────────────────────────
 function NewQuoteWizard({ settings, materials, onSaved, onCancel }) {
   const [step, setStep] = useState(0)
   const [parsedFiles, setParsedFiles] = useState([])
   const [reviewData, setReviewData] = useState(null)
+  const [cableEstimate, setCableEstimate] = useState(null)
   const [context, setContext] = useState({
     wall_material: 'brick', access: 'empty', project_type: 'renovation', height: 'normal',
   })
@@ -1282,15 +1566,23 @@ function NewQuoteWizard({ settings, materials, onSaved, onCancel }) {
         <ReviewStep parsedFiles={parsedFiles} onNext={rd => { setReviewData(rd); setStep(2) }} onBack={() => setStep(0)} />
       )}
       {step === 2 && (
-        <ContextStep context={context} onChange={setContext} settings={settings} onNext={() => setStep(3)} onBack={() => setStep(1)} />
+        <CableEstimateStep
+          parsedFiles={parsedFiles}
+          reviewData={reviewData}
+          onNext={est => { setCableEstimate(est); setStep(3) }}
+          onBack={() => setStep(1)}
+        />
       )}
       {step === 3 && (
-        <PricingStep reviewData={reviewData} context={context} settings={settings} materials={materials}
-          onNext={pd => { setPricingData(pd); setStep(4) }} onBack={() => setStep(2)} />
+        <ContextStep context={context} onChange={setContext} settings={settings} onNext={() => setStep(4)} onBack={() => setStep(2)} />
       )}
       {step === 4 && (
+        <PricingStep reviewData={reviewData} context={context} settings={settings} materials={materials} cableEstimate={cableEstimate}
+          onNext={pd => { setPricingData(pd); setStep(5) }} onBack={() => setStep(3)} />
+      )}
+      {step === 5 && (
         <QuoteResultStep pricingData={pricingData} context={context} settings={settings}
-          onBack={() => setStep(3)} onSaved={onSaved} onNewProject={onCancel} />
+          onBack={() => setStep(4)} onSaved={onSaved} onNewProject={onCancel} />
       )}
     </div>
   )

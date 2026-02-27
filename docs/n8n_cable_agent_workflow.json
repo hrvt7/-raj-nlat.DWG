@@ -1,0 +1,88 @@
+{
+  "name": "TakeoffPro – Cable Vision Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cable-estimate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate and prepare input\nconst body = $input.first().json.body || $input.first().json;\nconst geometry = body.geometry;\nconst screenshotBase64 = body.screenshot_base64;\n\nif (!geometry) throw new Error('geometry missing');\n\n// Build a concise text summary for the LLM\nconst { devices = [], panels = [], polylines = [], scale, bounds, stats } = geometry;\n\nconst deviceSummary = devices.reduce((acc, d) => {\n  acc[d.type] = (acc[d.type] || 0) + 1;\n  return acc;\n}, {});\n\nconst traySummary = polylines\n  .filter(p => p.info?.type === 'tray')\n  .map(p => `${p.layer} (${p.points.length} pont)`)\n  .slice(0, 5);\n\nconst textContext = `\nSKÁLA: 1 rajzi egység = ${scale.factor ? (scale.factor * 1000).toFixed(1) + 'mm' : 'ismeretlen'}\nHATÁROK: X: ${Math.round(bounds.minX)}–${Math.round(bounds.maxX)}, Y: ${Math.round(bounds.minY)}–${Math.round(bounds.maxY)}\nELOSZTÓK AZONOSÍTVA (${panels.length}): ${panels.map(p => p.name + ' @ (' + Math.round(p.x) + ',' + Math.round(p.y) + ')').join(', ') || 'NINCS – becslés szükséges'}\nESZKÖZÖK (${devices.length} db összesen):\n${Object.entries(deviceSummary).map(([t,c]) => `  - ${t}: ${c} db`).join('\\n')}\nKÁBELTÁLCA LAYER-EK: ${traySummary.length > 0 ? traySummary.join(', ') : 'NINCS'}\nFAL GEOMETRIA: ${polylines.some(p => ['FAL','WALL','ARCH','A-WALL'].some(k => p.layer.toUpperCase().includes(k))) ? 'VAN' : 'NINCS'}\n`.trim();\n\nreturn [{\n  json: {\n    geometry,\n    screenshotBase64,\n    textContext,\n    hasScreenshot: !!screenshotBase64,\n    deviceCount: devices.length,\n    panelCount: panels.length,\n  }\n}];"
+      },
+      "id": "prepare-input",
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "claude-opus-4-6",
+        "options": {
+          "maxTokens": 4000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ (() => {\n  const data = $json;\n  const parts = [];\n  \n  parts.push({\n    type: 'text',\n    text: `Te egy tapasztalt magyar villamos tervező mérnök AI asszisztens vagy. Elemezz egy villamossági tervrajzot.\n\nGEOMETRIAI ADATOK A DXF FÁJLBÓL:\n${data.textContext}\n\nFELADATOD:\n1. ELOSZTÓ AZONOSÍTÁS: Ha nincs elosztó azonosítva, a képen keresd meg (szekrény, tábla, DB szimbólum). Ha sem a képen sem a geometriában nincs: becsüld a fogyasztók centroidjából.\n\n2. ÁRAMKÖRÖK TERVEZÉSE:\n   - Dugalj körök: max 10 dugalj/kör, térbeli közelség alapján\n   - Lámpa körök: max 15 lámpa/kör, helyiségek szerint\n   - Kapcsolók: a hozzájuk tartozó lámpakörrel együtt\n   - Ha több szint/zóna látszik: zónánként külön körök\n\n3. KÁBELHOSSZ BECSLÉS (elosztótól minden eszközig):\n   - Ha van kábeltálca: tálca mentén vezess, majd le az eszközig (+1.5m/eszköz)\n   - Ha nincs tálca de falak látszanak: fal mentén Manhattan út × 1.2\n   - Ha csak koordináták: Euclidean × 1.35 (valóságfaktor)\n   - Mindig adj +10% ráhagyást a végeredményhez\n\n4. CONFIDENCE SCORE (0.0–1.0):\n   - 0.85+: elosztó OK + kábeltálca látható + skála OK\n   - 0.65–0.84: elosztó OK + falak látszanak\n   - 0.40–0.64: csak koordináták, nincs tálca\n   - -0.15 ha az elosztót becsülni kellett\n\nVÁLASZOLJ KIZÁRÓLAG valid JSON-ban, semmi más:\n{\n  \"panels_identified\": [{\"id\": \"P1\", \"x\": 0, \"y\": 0, \"source\": \"layer|image|estimated\", \"confidence\": 0.9}],\n  \"circuits\": [\n    {\n      \"id\": \"K1\",\n      \"type\": \"socket|light|switch|other\",\n      \"panel_id\": \"P1\",\n      \"device_count\": 8,\n      \"zone\": \"földszint\",\n      \"estimated_length_m\": 145,\n      \"method\": \"manhattan|tray|euclidean\",\n      \"notes\": \"Nappali + konyha dugalj kör\"\n    }\n  ],\n  \"cable_total_m\": 847,\n  \"cable_by_type\": {\n    \"socket_m\": 480,\n    \"light_m\": 210,\n    \"switch_m\": 80,\n    \"other_m\": 77\n  },\n  \"confidence\": 0.72,\n  \"method\": \"Manhattan + 20% ráhagyás\",\n  \"warnings\": [\"Kábeltálca nem azonosítható\"],\n  \"reasoning\": \"Rövid magyarázat 2-3 mondatban magyarul\"\n}`\n  });\n  \n  if (data.hasScreenshot && data.screenshotBase64) {\n    parts.push({\n      type: 'image_url',\n      image_url: { url: `data:image/png;base64,${data.screenshotBase64}` }\n    });\n    parts.push({\n      type: 'text',\n      text: 'A fenti képen látod a DXF tervrajzot. Használd a vizuális információt az elosztók és kábelútvonalak azonosításához.'\n    });\n  }\n  \n  return parts;\n})() }}"
+            }
+          ]
+        }
+      },
+      "id": "claude-vision",
+      "name": "Claude Vision Agent",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.content?.[0]?.text || $input.first().json.text || '';\n\nlet parsed;\ntry {\n  // Strip markdown code blocks if present\n  const clean = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(clean);\n} catch (e) {\n  // Try to extract JSON from text\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { parsed = JSON.parse(match[0]); }\n    catch { throw new Error('AI válasz nem valid JSON: ' + raw.slice(0, 200)); }\n  } else {\n    throw new Error('Nem található JSON az AI válaszban');\n  }\n}\n\n// Validate required fields\nif (!parsed.circuits || !Array.isArray(parsed.circuits)) {\n  throw new Error('Hiányzó circuits tömb az AI válaszból');\n}\n\n// Ensure cable_total_m is set\nif (!parsed.cable_total_m) {\n  parsed.cable_total_m = parsed.circuits.reduce((s, c) => s + (c.estimated_length_m || 0), 0);\n}\n\n// Clamp confidence\nparsed.confidence = Math.max(0, Math.min(1, parsed.confidence || 0.5));\n\n// Add metadata\nparsed._source = 'n8n_claude_vision';\nparsed._timestamp = new Date().toISOString();\n\nreturn [{ json: { success: true, ...parsed } }];"
+      },
+      "id": "parse-response",
+      "name": "Parse & Validate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Prepare Input", "type": "main", "index": 0}]]
+    },
+    "Prepare Input": {
+      "main": [[{"node": "Claude Vision Agent", "type": "main", "index": 0}]]
+    },
+    "Claude Vision Agent": {
+      "main": [[{"node": "Parse & Validate Response", "type": "main", "index": 0}]]
+    },
+    "Parse & Validate Response": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{"name": "TakeoffPro"}]
+}
