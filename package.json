@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.98.0",
     "dxf-viewer": "^1.0.46",
     "localforage": "^1.10.0",
     "lucide-react": "^0.263.1",

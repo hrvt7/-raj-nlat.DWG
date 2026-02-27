@@ -1,5 +1,6 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Landing from './Landing.jsx'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Quotes from './pages/Quotes.jsx'
@@ -454,8 +455,12 @@ function UploadStep({ onParsed }) {
                   color: f.status === 'error' ? C.red : f.status === 'done' ? C.accent : C.muted }}>
                   {f.status === 'waiting'    ? 'Várakozás...' :
                    f.status === 'converting' ? 'DWG → DXF...' :
-                   f.status === 'parsing'    ? 'Elemzés...' :
-                   f.status === 'done'       ? `${(f.result?.blocks?.length || 0) + (f.result?.lengths?.length || 0)} elem` :
+                   f.status === 'parsing'    ? (f.name.toLowerCase().endsWith('.pdf') ? '🔍 Vision AI elemez...' : 'Elemzés...') :
+                   f.status === 'done'       ? (
+                     f.result?._source === 'vision_gpt4o'
+                       ? `🤖 Vision: ${f.result?.summary?.total_blocks || 0} elem (${Math.round((f.result?._vision_confidence||0)*100)}%)`
+                       : `${(f.result?.blocks?.length || 0) + (f.result?.lengths?.length || 0)} elem`
+                   ) :
                    f.error || 'Hiba'}
                 </span>
               </div>
@@ -1658,12 +1663,141 @@ function NewQuoteWizard({ settings, materials, onSaved, onCancel }) {
 }
 
 // ─── SaaS Shell ────────────────────────────────────────────────────────────────
+
+// ── AuthModal ─────────────────────────────────────────────────────────────────
+function AuthModal({ onAuth }) {
+  const [mode, setMode]       = useState('login') // login | register
+  const [email, setEmail]     = useState('')
+  const [password, setPass]   = useState('')
+  const [name, setName]       = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
+
+  const submit = async () => {
+    setError(''); setLoading(true)
+    try {
+      if (mode === 'login') {
+        await signIn(email, password)
+      } else {
+        await signUp(email, password, name)
+      }
+      onAuth()
+    } catch (e) {
+      setError(e.message || 'Hiba történt')
+    } finally { setLoading(false) }
+  }
+
+  const inp = {
+    width: '100%', padding: '10px 14px', background: '#1A1F2E',
+    border: `1px solid ${C.border}`, borderRadius: 8, color: C.text,
+    fontSize: 14, outline: 'none', boxSizing: 'border-box',
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+    }}>
+      <div style={{
+        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16,
+        padding: '36px 32px', width: '100%', maxWidth: 400, boxSizing: 'border-box',
+      }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+          {mode === 'login' ? 'Bejelentkezés' : 'Regisztráció'}
+        </div>
+        <div style={{ color: C.muted, fontSize: 13, marginBottom: 24 }}>TakeoffPro fiók</div>
+
+        {mode === 'register' && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Teljes név</div>
+            <input style={inp} placeholder="Kovács János" value={name}
+              onChange={e => setName(e.target.value)} />
+          </div>
+        )}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>E-mail</div>
+          <input style={inp} type="email" placeholder="email@ceg.hu" value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && submit()} />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Jelszó</div>
+          <input style={inp} type="password" placeholder="••••••••" value={password}
+            onChange={e => setPass(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && submit()} />
+        </div>
+
+        {error && (
+          <div style={{ background: '#FF6B6B18', border: '1px solid #FF6B6B40',
+            color: '#FF6B6B', fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+
+        <button
+          onClick={submit}
+          disabled={loading || !email || !password}
+          style={{
+            width: '100%', padding: '11px', borderRadius: 8, border: 'none',
+            background: loading ? C.accentDim : C.accent, color: '#0A0E1A',
+            fontWeight: 700, fontSize: 15, cursor: loading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {loading ? 'Folyamatban...' : (mode === 'login' ? 'Bejelentkezés' : 'Fiók létrehozása')}
+        </button>
+
+        <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: C.muted }}>
+          {mode === 'login' ? 'Még nincs fiókod?' : 'Már van fiókod?'}{' '}
+          <span
+            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}
+            style={{ color: C.accent, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            {mode === 'login' ? 'Regisztráció' : 'Bejelentkezés'}
+          </span>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: C.muted }}>
+          Folytatás bejelentkezés nélkül →{' '}
+          <span onClick={onAuth} style={{ color: C.muted, cursor: 'pointer', textDecoration: 'underline' }}>
+            vendégként
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SaaSShell() {
   const [page, setPage] = useState('dashboard')
   const [settings, setSettings] = useState(loadSettings)
   const [materials, setMaterials] = useState(loadMaterials)
   const [quotes, setQuotes] = useState(loadQuotes)
   const [viewingQuote, setViewingQuote] = useState(null)
+
+  // ── Auth state ─────────────────────────────────────────────────────────────
+  const [session, setSession] = useState(null)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [showAuth, setShowAuth] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setUserEmail(session?.user?.email || '')
+      setAuthChecked(true)
+    })
+    const { data: { subscription } } = onAuthChange(s => {
+      setSession(s)
+      setUserEmail(s?.user?.email || '')
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    await signOut()
+    setSession(null)
+    setUserEmail('')
+  }
 
   const pageTitles = {
     dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
@@ -1682,6 +1816,8 @@ function SaaSShell() {
     setQuotes(updated)
     setViewingQuote(quote)
     setPage('quotes')
+    // Sync to Supabase if logged in
+    if (session) saveQuoteRemote(quote).catch(console.error)
   }
 
   const handleStatusChange = (quoteId, newStatus) => {
@@ -1708,6 +1844,7 @@ function SaaSShell() {
   const sidebarW = 220
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
+      {showAuth && <AuthModal onAuth={() => setShowAuth(false)} />}
       <Sidebar
         active={page}
         onNavigate={p => { setViewingQuote(null); setPage(p) }}
@@ -1737,7 +1874,29 @@ function SaaSShell() {
               {viewingQuote ? viewingQuote.projectName : pageTitles[page] || page}
             </div>
           </div>
-          <div style={{ color: C.muted, fontSize: 12, flexShrink: 0 }}>TakeoffPro v2.0</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {session ? (
+              <>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent,
+                  background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+                  borderRadius: 20, padding: '3px 10px', maxWidth: 160,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  ⚡ {userEmail}
+                </span>
+                <button onClick={handleSignOut} style={{
+                  background: 'transparent', border: `1px solid ${C.border}`,
+                  borderRadius: 7, padding: '4px 10px', cursor: 'pointer',
+                  color: C.muted, fontSize: 12,
+                }}>Ki</button>
+              </>
+            ) : (
+              <button onClick={() => setShowAuth(true)} style={{
+                background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+                borderRadius: 7, padding: '5px 14px', cursor: 'pointer',
+                color: C.accent, fontSize: 12, fontWeight: 600,
+              }}>Bejelentkezés</button>
+            )}
+          </div>
         </div>
 
         {/* Content */}
