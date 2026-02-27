@@ -149,11 +149,13 @@ function InlineItemInput({ value, onChange, placeholder = 'Tétel neve...' }) {
 
 // ─── File Processing Animation ────────────────────────────────────────────────
 function FileProcessingAnimation({ status, filename }) {
-  // status: 'converting' | 'parsing' | 'done'
   const isDone = status === 'done'
-  const label = status === 'converting' ? 'DWG → DXF konvertálás...' :
-                status === 'parsing'    ? 'DXF elemzés folyamatban...' :
-                                          'Kész!'
+  const ext = filename?.split('.').pop()?.toLowerCase()
+  const label = status === 'parsing' ? (
+    ext === 'pdf' ? 'Vision AI elemzés (PDF)...' :
+    ext === 'dwg' ? 'DWG elemzés folyamatban...' :
+    'DXF elemzés folyamatban...'
+  ) : 'Kész!'
   return (
     <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden',
       border: `1px solid ${isDone ? '#00E5A020' : '#00E5A015'}`,
@@ -354,21 +356,20 @@ function UploadStep({ onParsed }) {
       const isDwg = f.name.toLowerCase().endsWith('.dwg')
       const isPdf = f.name.toLowerCase().endsWith('.pdf')
 
-      setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: isDwg ? 'converting' : 'parsing' } : x))
+      setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'parsing' } : x))
 
       try {
         let result
         if (isPdf) {
-          // PDF: must go to server (binary, needs PyMuPDF)
+          // PDF: Vision AI (GPT-4o) → szöveg fallback
           const base64 = await fileToBase64(f.file)
           result = await parsePdfBase64(base64, apiBase)
         } else if (isDwg) {
-          // DWG: convert server-side (binary), then parse client-side
-          const base64 = await convertDwgToDxf(f.file, apiBase)
-          setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'parsing' } : x))
-          result = parseDxfText(atob(base64))
+          // DWG: direkt bináris kinyerés + Vision opcionálisan
+          const base64 = await fileToBase64(f.file)
+          result = await parseDwgBase64(base64, f.name, apiBase)
         } else {
-          // DXF: parse 100% in the browser — no file size limit
+          // DXF: 100% böngészőben, korlátlan méret
           result = await parseDxfFile(f.file)
         }
         if (!result.success) throw new Error(result.error || 'Elemzési hiba')
@@ -405,15 +406,18 @@ function UploadStep({ onParsed }) {
       >
         <div style={{ fontSize: 40, marginBottom: 12 }}>📁</div>
         <div style={{ color: C.text, fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
-          Húzd ide a DXF/DWG fájlokat
+          Húzd ide a DXF / DWG / PDF fájlokat
         </div>
         <div style={{ color: C.muted, fontSize: 13, marginBottom: 10 }}>vagy kattints a böngészéshez</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 4, padding: '2px 8px' }}>
             DXF – korlátlan méret ✓
           </span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 4, padding: '2px 8px' }}>
+            DWG – direkt elemzés ✓
+          </span>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 8px' }}>
-            DWG / PDF – max 4 MB
+            PDF – Vision AI 🤖
           </span>
         </div>
         <input ref={inputRef} type="file" multiple accept=".dxf,.dwg,.pdf" style={{ display: 'none' }}
@@ -422,7 +426,7 @@ function UploadStep({ onParsed }) {
 
       {files.length > 0 && (() => {
         // Find the currently active (processing) file
-        const activeFile = files.find(f => f.status === 'converting' || f.status === 'parsing')
+        const activeFile = files.find(f => f.status === 'parsing')
         // Find last finished file to show done state briefly
         const lastDone = !activeFile && files.find(f => f.status === 'done')
 
@@ -454,11 +458,15 @@ function UploadStep({ onParsed }) {
                 <span style={{ fontSize: 11, fontFamily: 'DM Mono, monospace',
                   color: f.status === 'error' ? C.red : f.status === 'done' ? C.accent : C.muted }}>
                   {f.status === 'waiting'    ? 'Várakozás...' :
-                   f.status === 'converting' ? 'DWG → DXF...' :
-                   f.status === 'parsing'    ? (f.name.toLowerCase().endsWith('.pdf') ? '🔍 Vision AI elemez...' : 'Elemzés...') :
+                   f.status === 'parsing'    ? (
+                     f.name.toLowerCase().endsWith('.pdf') ? '🔍 Vision AI elemez...' :
+                     f.name.toLowerCase().endsWith('.dwg') ? '🔍 DWG elemzés...' : 'Elemzés...'
+                   ) :
                    f.status === 'done'       ? (
                      f.result?._source === 'vision_gpt4o'
                        ? `🤖 Vision: ${f.result?.summary?.total_blocks || 0} elem (${Math.round((f.result?._vision_confidence||0)*100)}%)`
+                       : f.result?._source?.startsWith('dwg')
+                       ? `📐 DWG: ${f.result?.summary?.total_blocks || 0} elem`
                        : `${(f.result?.blocks?.length || 0) + (f.result?.lengths?.length || 0)} elem`
                    ) :
                    f.error || 'Hiba'}
@@ -1941,13 +1949,14 @@ async function fileToBase64(file) {
   })
 }
 
-async function convertDwgToDxf(file, apiBase) {
-  const formData = new FormData()
-  formData.append('file', file)
-  const res = await fetch(`${apiBase}/api/convert-dwg`, { method: 'POST', body: formData })
-  if (!res.ok) throw new Error('DWG konverzió sikertelen')
-  const data = await res.json()
-  return data.dxf_base64
+async function parseDwgBase64(base64, filename, apiBase) {
+  const res = await fetch(`${apiBase}/api/parse-dwg`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dwg_base64: base64, filename }),
+  })
+  if (!res.ok) throw new Error('DWG elemzés sikertelen')
+  return await res.json()
 }
 
 async function parseDxfBase64(base64, apiBase) {
