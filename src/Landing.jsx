@@ -117,8 +117,27 @@ function NavBar({ onStart }) {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 32, height: 32, background: '#00E5A0', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 16px rgba(0,229,160,0.4)' }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <div style={{ width: 34, height: 34, background: '#050E08', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 16px rgba(0,229,160,0.25)', border: '1px solid rgba(0,229,160,0.2)', flexShrink: 0 }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+            <defs>
+              <clipPath id="nav-scan-clip">
+                <rect x="0" y="256" width="256" height="256">
+                  <animateTransform attributeName="transform" type="translate" from="0 0" to="0 -256" begin="0s" dur="3s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1" />
+                </rect>
+              </clipPath>
+            </defs>
+            <g stroke="#00E5A0" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M48 208H208V48H48V208Z" />
+              <path d="M48 128H208" opacity="0.3"/>
+              <path d="M128 208V48" opacity="0.3"/>
+            </g>
+            <g clipPath="url(#nav-scan-clip)" fill="#00E5A0" opacity="0.85">
+              <rect x="58" y="58" width="60" height="60" rx="4"/>
+              <rect x="138" y="58" width="60" height="60" rx="4"/>
+              <rect x="58" y="138" width="60" height="60" rx="4"/>
+              <rect x="138" y="138" width="60" height="60" rx="4"/>
+            </g>
+          </svg>
         </div>
         <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, letterSpacing: '-0.03em', color: '#F0F0F0' }}>Takeoff<span style={{ color: '#00E5A0' }}>Pro</span></span>
       </div>
@@ -1193,8 +1212,27 @@ function Footer() {
   return (
     <footer className="footer-root" style={{ borderTop: '1px solid #141414', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, position: 'relative', zIndex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 24, height: 24, background: '#00E5A0', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <div style={{ width: 26, height: 26, background: '#050E08', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0,229,160,0.18)', flexShrink: 0 }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+            <defs>
+              <clipPath id="footer-scan-clip">
+                <rect x="0" y="256" width="256" height="256">
+                  <animateTransform attributeName="transform" type="translate" from="0 0" to="0 -256" begin="0s" dur="3s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.2 1" />
+                </rect>
+              </clipPath>
+            </defs>
+            <g stroke="#00E5A0" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M48 208H208V48H48V208Z" />
+              <path d="M48 128H208" opacity="0.3"/>
+              <path d="M128 208V48" opacity="0.3"/>
+            </g>
+            <g clipPath="url(#footer-scan-clip)" fill="#00E5A0" opacity="0.85">
+              <rect x="58" y="58" width="60" height="60" rx="4"/>
+              <rect x="138" y="58" width="60" height="60" rx="4"/>
+              <rect x="58" y="138" width="60" height="60" rx="4"/>
+              <rect x="138" y="138" width="60" height="60" rx="4"/>
+            </g>
+          </svg>
         </div>
         <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 15, color: '#F0F0F0' }}>Takeoff<span style={{ color: '#00E5A0' }}>Pro</span></span>
       </div>
