@@ -339,12 +339,323 @@ function FileProcessingAnimation({ status, filename }) {
   )
 }
 
+
+// ─── DWG Vision Modal ──────────────────────────────────────────────────────────
+function DwgVisionModal({ filename, weakResult, apiBase, onResult, onClose }) {
+  const [tab, setTab]           = useState('screenshot') // screenshot | dxf
+  const [imgFile, setImgFile]   = useState(null)
+  const [imgPreview, setImgPreview] = useState(null)
+  const [dxfFile, setDxfFile]   = useState(null)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
+  const imgRef  = useRef()
+  const dxfRef  = useRef()
+
+  const weakBlocks = weakResult?.summary?.total_blocks || 0
+  const confidence = weakResult?._confidence || 0
+
+  const handleImageSelect = (file) => {
+    setImgFile(file)
+    setError('')
+    const reader = new FileReader()
+    reader.onload = e => setImgPreview(e.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleImageDrop = (e) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith('image/')) handleImageSelect(file)
+  }
+
+  const handleVisionAnalyze = async () => {
+    if (!imgFile) return
+    setLoading(true); setError('')
+    try {
+      const b64Full = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = e => res(e.target.result.split(',')[1])
+        r.onerror = rej
+        r.readAsDataURL(imgFile)
+      })
+      // Also send original DWG base64 if available in weakResult
+      const res = await fetch(`${apiBase}/api/parse-dwg`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dwg_base64: weakResult?._dwg_base64 || btoa(''),
+          filename,
+          screenshot_base64: b64Full,
+        }),
+      })
+      if (!res.ok) throw new Error('Vision elemzés sikertelen')
+      const result = await res.json()
+      if (!result.success) throw new Error(result.error || 'Ismeretlen hiba')
+      onResult(result)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDxfUpload = async () => {
+    if (!dxfFile) return
+    setLoading(true); setError('')
+    try {
+      const text = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = e => res(e.target.result)
+        r.onerror = rej
+        r.readAsText(dxfFile, 'utf-8')
+      })
+      const { parseDxfText } = await import('./dxfParser.js')
+      const result = parseDxfText(text)
+      if (!result.success) throw new Error(result.error || 'DXF elemzési hiba')
+      onResult({ ...result, _source: 'dxf_replacement', _original_dwg: filename })
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const tabBtn = (id, label) => (
+    <button onClick={() => { setTab(id); setError('') }} style={{
+      flex: 1, padding: '9px 0', borderRadius: 8, border: 'none',
+      background: tab === id ? C.accent : 'transparent',
+      color: tab === id ? '#0A0E1A' : C.muted,
+      fontWeight: tab === id ? 700 : 400, fontSize: 13, cursor: 'pointer',
+      transition: 'all 0.15s',
+    }}>{label}</button>
+  )
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, padding: 16,
+    }}>
+      <div style={{
+        background: C.bgCard, border: `1px solid ${C.border}`,
+        borderRadius: 16, width: '100%', maxWidth: 480,
+        boxSizing: 'border-box', maxHeight: '90vh', overflowY: 'auto',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px 0', borderBottom: `1px solid ${C.border}`, paddingBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ color: C.text, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
+                📐 DWG pontosítás
+              </div>
+              <div style={{ color: C.muted, fontSize: 12, fontFamily: 'DM Mono', marginBottom: 8 }}>
+                {filename}
+              </div>
+            </div>
+            <button onClick={onClose} style={{
+              background: 'transparent', border: `1px solid ${C.border}`,
+              borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+              color: C.muted, fontSize: 13, flexShrink: 0,
+            }}>✕</button>
+          </div>
+
+          {/* Weak result warning */}
+          <div style={{
+            background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.25)',
+            borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#FFC107',
+            marginBottom: 4,
+          }}>
+            ⚠️ Bináris kinyerésből csak <strong>{weakBlocks} elem</strong> olvasható ki
+            {confidence > 0 && ` (${Math.round(confidence * 100)}% bizalom)`}.
+            Pontosabb elemzéshez válassz az alábbi opciók közül.
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ padding: '16px 24px 0' }}>
+          <div style={{
+            display: 'flex', gap: 4, background: 'rgba(255,255,255,0.04)',
+            borderRadius: 10, padding: 4, marginBottom: 20,
+          }}>
+            {tabBtn('screenshot', '📸 Képernyőkép → Vision AI')}
+            {tabBtn('dxf', '📄 DXF feltöltés')}
+          </div>
+
+          {/* ── Screenshot tab ── */}
+          {tab === 'screenshot' && (
+            <div>
+              <div style={{ color: C.muted, fontSize: 12, marginBottom: 12, lineHeight: 1.6 }}>
+                Nyisd meg a DWG-t bármelyik CAD nézőben, zoom ki hogy az egész terv látsszon, majd küldj egy képernyőképet.
+                <br/>
+                <span style={{ color: C.accent }}>
+                  Ingyenes nézők: AutoCAD DWG TrueView · DraftSight · A360 Viewer
+                </span>
+              </div>
+
+              {/* Image drop zone */}
+              <div
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleImageDrop}
+                onClick={() => !imgPreview && imgRef.current?.click()}
+                style={{
+                  border: `2px dashed ${imgPreview ? C.accent : C.border}`,
+                  borderRadius: 10, padding: imgPreview ? 8 : '28px 20px',
+                  textAlign: 'center', cursor: imgPreview ? 'default' : 'pointer',
+                  background: imgPreview ? 'transparent' : C.bg,
+                  marginBottom: 14, transition: 'all 0.2s',
+                }}
+              >
+                {imgPreview ? (
+                  <div style={{ position: 'relative' }}>
+                    <img src={imgPreview} alt="preview" style={{
+                      width: '100%', borderRadius: 8, display: 'block', maxHeight: 220, objectFit: 'contain',
+                    }} />
+                    <button onClick={() => { setImgFile(null); setImgPreview(null) }} style={{
+                      position: 'absolute', top: 6, right: 6,
+                      background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: 4,
+                      color: '#fff', fontSize: 12, padding: '2px 8px', cursor: 'pointer',
+                    }}>✕ Töröl</button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>📸</div>
+                    <div style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>
+                      Húzd ide vagy kattints a képhez
+                    </div>
+                    <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>PNG · JPG · WEBP</div>
+                  </>
+                )}
+              </div>
+              <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={e => e.target.files[0] && handleImageSelect(e.target.files[0])} />
+
+              <button
+                onClick={handleVisionAnalyze}
+                disabled={!imgFile || loading}
+                style={{
+                  width: '100%', padding: '11px', borderRadius: 8, border: 'none',
+                  background: !imgFile || loading ? C.accentDim : C.accent,
+                  color: '#0A0E1A', fontWeight: 700, fontSize: 14,
+                  cursor: !imgFile || loading ? 'not-allowed' : 'pointer',
+                  marginBottom: 8,
+                }}
+              >
+                {loading ? '🔍 Vision AI elemez...' : '🤖 Elemzés Vision AI-val'}
+              </button>
+
+              {/* TrueView link */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 14px',
+                fontSize: 11, color: C.muted, marginTop: 4,
+              }}>
+                💡 <strong style={{ color: C.text }}>Nincs CAD szoftvered?</strong>{' '}
+                <a href="https://www.autodesk.com/products/dwg-trueview/overview"
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ color: C.accent }}>
+                  AutoCAD DWG TrueView →
+                </a>{' '}
+                ingyenes nézőprogram, DXF exporttal is.
+              </div>
+            </div>
+          )}
+
+          {/* ── DXF tab ── */}
+          {tab === 'dxf' && (
+            <div>
+              <div style={{ color: C.muted, fontSize: 12, marginBottom: 14, lineHeight: 1.6 }}>
+                Ha a DWG-t meg tudod nyitni, exportáld DXF formátumba és töltsd fel – ez adja a legjobb eredményt.
+              </div>
+
+              {/* How to export steps */}
+              <div style={{
+                background: 'rgba(0,229,160,0.05)', border: `1px solid ${C.accentBorder}`,
+                borderRadius: 8, padding: '12px 14px', marginBottom: 16, fontSize: 12,
+              }}>
+                <div style={{ color: C.accent, fontWeight: 700, marginBottom: 8 }}>
+                  AutoCAD / DWG TrueView → DXF export:
+                </div>
+                {['Nyisd meg a DWG fájlt', 'Fájl → Mentés másként → DXF', 'Verzió: AutoCAD 2010 DXF ajánlott', 'Töltsd fel az alábbi mezőbe'].map((s, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 4, color: C.muted }}>
+                    <span style={{ color: C.accent, fontWeight: 700, minWidth: 16 }}>{i+1}.</span>
+                    <span>{s}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                onClick={() => dxfRef.current?.click()}
+                style={{
+                  border: `2px dashed ${dxfFile ? C.accent : C.border}`,
+                  borderRadius: 10, padding: '20px', textAlign: 'center',
+                  cursor: 'pointer', background: C.bg, marginBottom: 14,
+                }}
+              >
+                {dxfFile ? (
+                  <div style={{ color: C.accent, fontSize: 13, fontFamily: 'DM Mono' }}>
+                    ✓ {dxfFile.name}
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 24, marginBottom: 6 }}>📄</div>
+                    <div style={{ color: C.text, fontSize: 13 }}>Kattints a DXF fájl kiválasztásához</div>
+                  </>
+                )}
+              </div>
+              <input ref={dxfRef} type="file" accept=".dxf" style={{ display: 'none' }}
+                onChange={e => { setDxfFile(e.target.files[0]); setError('') }} />
+
+              <button
+                onClick={handleDxfUpload}
+                disabled={!dxfFile || loading}
+                style={{
+                  width: '100%', padding: '11px', borderRadius: 8, border: 'none',
+                  background: !dxfFile || loading ? C.accentDim : C.accent,
+                  color: '#0A0E1A', fontWeight: 700, fontSize: 14,
+                  cursor: !dxfFile || loading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {loading ? 'Elemzés...' : '📐 DXF elemzése'}
+              </button>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              background: '#FF6B6B18', border: '1px solid #FF6B6B40',
+              color: '#FF6B6B', fontSize: 12, padding: '10px 14px',
+              borderRadius: 8, marginTop: 12,
+            }}>{error}</div>
+          )}
+
+          {/* Skip */}
+          <div style={{ textAlign: 'center', padding: '16px 0 20px' }}>
+            <span onClick={onClose} style={{
+              color: C.muted, fontSize: 12, cursor: 'pointer',
+              textDecoration: 'underline',
+            }}>
+              Folytatás a jelenlegi eredménnyel ({weakBlocks} elem)
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Step 0: Upload ────────────────────────────────────────────────────────────
 function UploadStep({ onParsed }) {
   const [files, setFiles] = useState([])
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef()
   const apiBase = import.meta.env.VITE_API_URL || ''
+
+  // DWG Vision modal state
+  const [dwgModal, setDwgModal] = useState(null) // { filename, weakResult } | null
+
+  // Auto-trigger modal when DWG result is weak
+  const DWG_CONFIDENCE_THRESHOLD = 0.5
+  const DWG_MIN_BLOCKS = 3
 
   const processFiles = useCallback(async (fileList) => {
     const arr = Array.from(fileList)
@@ -368,12 +679,22 @@ function UploadStep({ onParsed }) {
           // DWG: direkt bináris kinyerés + Vision opcionálisan
           const base64 = await fileToBase64(f.file)
           result = await parseDwgBase64(base64, f.name, apiBase)
+          // Store base64 in result for Vision modal reuse
+          result._dwg_base64 = base64
         } else {
           // DXF: 100% böngészőben, korlátlan méret
           result = await parseDxfFile(f.file)
         }
         if (!result.success) throw new Error(result.error || 'Elemzési hiba')
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'done', result } : x))
+        // Auto-open Vision modal if DWG result is weak
+        if (isDwg) {
+          const blocks = result?.summary?.total_blocks || 0
+          const conf   = result?._confidence || 0
+          if (conf < DWG_CONFIDENCE_THRESHOLD || blocks < DWG_MIN_BLOCKS) {
+            setDwgModal({ filename: f.name, weakResult: result })
+          }
+        }
       } catch (err) {
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'error', error: err.message } : x))
       }
@@ -381,6 +702,12 @@ function UploadStep({ onParsed }) {
   }, [apiBase])
 
   const handleDrop = e => { e.preventDefault(); setDragging(false); processFiles(e.dataTransfer.files) }
+
+  // When Vision/DXF result comes back from modal – override the DWG file's result
+  const handleDwgImprove = (filename, newResult) => {
+    setFiles(prev => prev.map(x => x.name === filename ? { ...x, result: newResult } : x))
+    setDwgModal(null)
+  }
 
   const allDone = files.length > 0 && files.every(f => f.status === 'done' || f.status === 'error')
   const anyDone = files.some(f => f.status === 'done')
@@ -392,6 +719,15 @@ function UploadStep({ onParsed }) {
 
   return (
     <div>
+      {dwgModal && (
+        <DwgVisionModal
+          filename={dwgModal.filename}
+          weakResult={dwgModal.weakResult}
+          apiBase={apiBase}
+          onResult={result => handleDwgImprove(dwgModal.filename, result)}
+          onClose={() => setDwgModal(null)}
+        />
+      )}
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
@@ -462,15 +798,30 @@ function UploadStep({ onParsed }) {
                      f.name.toLowerCase().endsWith('.pdf') ? '🔍 Vision AI elemez...' :
                      f.name.toLowerCase().endsWith('.dwg') ? '🔍 DWG elemzés...' : 'Elemzés...'
                    ) :
-                   f.status === 'done'       ? (
-                     f.result?._source === 'vision_gpt4o'
-                       ? `🤖 Vision: ${f.result?.summary?.total_blocks || 0} elem (${Math.round((f.result?._vision_confidence||0)*100)}%)`
-                       : f.result?._source?.startsWith('dwg')
-                       ? `📐 DWG: ${f.result?.summary?.total_blocks || 0} elem`
-                       : `${(f.result?.blocks?.length || 0) + (f.result?.lengths?.length || 0)} elem`
-                   ) :
+                   f.status === 'done'       ? (() => {
+                     const src = f.result?._source || ''
+                     const blocks = f.result?.summary?.total_blocks || 0
+                     if (src === 'vision_screenshot') return `🤖 Vision: ${blocks} elem`
+                     if (src === 'dxf_replacement')  return `📐 DXF: ${blocks} elem`
+                     if (src === 'vision_gpt4o')     return `🤖 Vision: ${blocks} elem (${Math.round((f.result?._vision_confidence||0)*100)}%)`
+                     if (src.startsWith('dwg'))      return `📐 DWG: ${blocks} elem`
+                     return `${(f.result?.blocks?.length||0) + (f.result?.lengths?.length||0)} elem`
+                   })() :
                    f.error || 'Hiba'}
                 </span>
+                {/* Pontosít gomb – DWG done és gyenge eredmény esetén */}
+                {f.status === 'done' && f.name.toLowerCase().endsWith('.dwg') &&
+                 !['vision_screenshot','dxf_replacement'].includes(f.result?._source) && (
+                  <button
+                    onClick={() => setDwgModal({ filename: f.name, weakResult: f.result })}
+                    style={{
+                      background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+                      borderRadius: 6, padding: '3px 8px', fontSize: 11,
+                      color: C.accent, cursor: 'pointer', flexShrink: 0,
+                      fontFamily: 'DM Mono, monospace',
+                    }}
+                  >🔍 Pontosít</button>
+                )}
               </div>
             ))}
           </div>
