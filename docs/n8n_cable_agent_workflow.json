@@ -12,7 +12,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -22,7 +25,10 @@
       "name": "Prepare Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -43,17 +49,11 @@
       "name": "Claude Vision Agent",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
-      "position": [680, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const raw = $input.first().json.content?.[0]?.text || $input.first().json.text || '';\n\nlet parsed;\ntry {\n  // Strip markdown code blocks if present\n  const clean = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  parsed = JSON.parse(clean);\n} catch (e) {\n  // Try to extract JSON from text\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { parsed = JSON.parse(match[0]); }\n    catch { throw new Error('AI válasz nem valid JSON: ' + raw.slice(0, 200)); }\n  } else {\n    throw new Error('Nem található JSON az AI válaszban');\n  }\n}\n\n// Validate required fields\nif (!parsed.circuits || !Array.isArray(parsed.circuits)) {\n  throw new Error('Hiányzó circuits tömb az AI válaszból');\n}\n\n// Ensure cable_total_m is set\nif (!parsed.cable_total_m) {\n  parsed.cable_total_m = parsed.circuits.reduce((s, c) => s + (c.estimated_length_m || 0), 0);\n}\n\n// Clamp confidence\nparsed.confidence = Math.max(0, Math.min(1, parsed.confidence || 0.5));\n\n// Add metadata\nparsed._source = 'n8n_claude_vision';\nparsed._timestamp = new Date().toISOString();\n\nreturn [{ json: { success: true, ...parsed } }];"
-      },
-      "id": "parse-response",
-      "name": "Parse & Validate Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        680,
+        300
+      ],
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -64,25 +64,148 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Claude failed – pass context forward for GPT-4o\nconst preparedData = $('Prepare Input').first().json;\nreturn [{ json: { ...preparedData, _claude_failed: true } }];"
+      },
+      "id": "claude-error-handler",
+      "name": "Claude Error → GPT Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o",
+        "options": {
+          "maxTokens": 4000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Te egy tapasztalt magyar villamos tervező mérnök AI asszisztens vagy. Válaszolj KIZÁRÓLAG valid JSON-ban, magyarul."
+            },
+            {
+              "role": "user",
+              "content": "={{ (() => {\n  const data = $('Prepare Input').first().json;\n  let prompt = `GEOMETRIAI ADATOK:\\n${data.textContext}\\n\\nFELADATOD: Elemezd a villamossági tervet. Azonosítsd az elosztókat, csoportosítsd az áramköröket, számítsd ki a kábelhosszt.\\n\\nVÁLASZOLJ KIZÁRÓLAG valid JSON-ban:\\n{ \"panels_identified\": [], \"circuits\": [], \"cable_total_m\": 0, \"cable_by_type\": {\"socket_m\":0,\"light_m\":0,\"switch_m\":0,\"other_m\":0}, \"confidence\": 0.5, \"method\": \"\", \"warnings\": [], \"reasoning\": \"\" }`;\n  return prompt;\n})() }}"
+            }
+          ]
+        }
+      },
+      "id": "gpt4o-fallback",
+      "name": "GPT-4o Fallback",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.7,
+      "position": [
+        680,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Take whichever result came through (Claude or GPT-4o)\nconst items = $input.all();\nconst item = items[0];\nconst raw = item.json.content?.[0]?.text \n  || item.json.choices?.[0]?.message?.content \n  || item.json.text \n  || JSON.stringify(item.json);\n\nlet parsed;\ntry {\n  const clean = raw.replace(/```json\\n?/g,'').replace(/```\\n?/g,'').trim();\n  parsed = JSON.parse(clean);\n} catch(e) {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  if (match) { try { parsed = JSON.parse(match[0]); } catch { throw new Error('AI válasz nem valid JSON'); } }\n  else throw new Error('Nem található JSON az AI válaszban: ' + raw.slice(0,200));\n}\n\nif (!parsed.circuits || !Array.isArray(parsed.circuits)) parsed.circuits = [];\nif (!parsed.cable_total_m) parsed.cable_total_m = parsed.circuits.reduce((s,c)=>s+(c.estimated_length_m||0),0);\nparsed.confidence = Math.max(0, Math.min(1, parsed.confidence || 0.5));\nparsed._source = item.json._claude_failed ? 'n8n_gpt4o_fallback' : 'n8n_claude_vision';\nparsed._timestamp = new Date().toISOString();\n\nreturn [{ json: { success: true, ...parsed } }];"
+      },
+      "id": "merge-results",
+      "name": "Merge & Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{"node": "Prepare Input", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Input": {
-      "main": [[{"node": "Claude Vision Agent", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Claude Vision Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Claude Vision Agent": {
-      "main": [[{"node": "Parse & Validate Response", "type": "main", "index": 0}]]
+      "main": [
+        [
+          {
+            "node": "Merge & Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claude Error → GPT Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Parse & Validate Response": {
-      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    "Claude Error → GPT Fallback": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o Fallback": {
+      "main": [
+        [
+          {
+            "node": "Merge & Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge & Parse Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1"
   },
-  "tags": [{"name": "TakeoffPro"}]
+  "tags": [
+    {
+      "name": "TakeoffPro"
+    }
+  ]
 }

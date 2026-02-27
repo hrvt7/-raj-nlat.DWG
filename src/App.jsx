@@ -1268,31 +1268,28 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
   const [status, setStatus] = useState('idle') // idle | extracting | ai_running | fallback | done | error
   const [estimate, setEstimate] = useState(null)
   const [error, setError] = useState(null)
-  const [useAI, setUseAI] = useState(true)
+  // Editable approved values (user can adjust before proceeding)
+  const [approved, setApproved] = useState(null) // { socket_m, light_m, switch_m, other_m, total_m }
+  const [editMode, setEditMode] = useState(false)
   const apiBase = import.meta.env.VITE_API_URL || ''
 
   const run = useCallback(async (withAI = true) => {
     setStatus('extracting')
     setError(null)
     setEstimate(null)
+    setApproved(null)
 
     try {
-      // 1. Get DXF text from parsed files
-      const dxfFile = parsedFiles.find(f => f.name?.toLowerCase().endsWith('.dxf') || f.name?.toLowerCase().endsWith('.dwg'))
-      if (!dxfFile) {
-        // No DXF – run fallback on blocks data
-        const fallbackGeom = buildGeometryFromBlocks(reviewData)
-        setEstimate(estimateCablesFallback(fallbackGeom))
-        setStatus('done')
-        return
-      }
+      const dxfFile = parsedFiles.find(f =>
+        f.name?.toLowerCase().endsWith('.dxf') || f.name?.toLowerCase().endsWith('.dwg')
+      )
 
-      // 2. Extract full geometry with coordinates
       let geometry
-      if (dxfFile._rawText) {
+      if (!dxfFile) {
+        geometry = buildGeometryFromBlocks(reviewData)
+      } else if (dxfFile._rawText) {
         geometry = extractGeometry(dxfFile._rawText)
       } else {
-        // Re-read the file for raw text
         const text = await new Promise((res, rej) => {
           const reader = new FileReader()
           reader.onload = e => res(e.target.result)
@@ -1306,21 +1303,22 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
         setStatus('fallback')
         const result = estimateCablesFallback(geometry)
         setEstimate(result)
+        setApproved(buildApproved(result))
         setStatus('done')
         return
       }
 
-      // 3. Try AI Vision agent
       setStatus('ai_running')
       try {
         const result = await runCableAgent({ geometry, screenshotBase64: null, apiBase })
         setEstimate(result)
+        setApproved(buildApproved(result))
         setStatus('done')
       } catch (aiErr) {
-        console.warn('AI agent failed, using fallback:', aiErr.message)
         const result = estimateCablesFallback(geometry)
         result._fallback_reason = aiErr.message
         setEstimate(result)
+        setApproved(buildApproved(result))
         setStatus('done')
       }
     } catch (err) {
@@ -1329,17 +1327,65 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
     }
   }, [parsedFiles, reviewData, apiBase])
 
-  const confidenceColor = (c) => c >= 0.75 ? C.accent : c >= 0.5 ? '#FFD166' : '#FF6B6B'
-  const confidenceLabel = (c) => c >= 0.75 ? 'Magas bizalom' : c >= 0.5 ? 'Közepes bizalom' : 'Alacsony bizalom'
-  const confidenceBars = (c) => {
-    const filled = Math.round(c * 5)
-    return Array.from({length: 5}, (_, i) => (
-      <div key={i} style={{ width: 16, height: 6, borderRadius: 2, background: i < filled ? confidenceColor(c) : C.border }} />
-    ))
+  const buildApproved = (est) => ({
+    socket_m: est.cable_by_type?.socket_m ?? 0,
+    light_m:  est.cable_by_type?.light_m ?? 0,
+    switch_m: est.cable_by_type?.switch_m ?? 0,
+    other_m:  est.cable_by_type?.other_m ?? 0,
+    total_m:  est.cable_total_m ?? 0,
+  })
+
+  const updateApproved = (key, val) => {
+    const v = Math.max(0, parseInt(val) || 0)
+    setApproved(prev => {
+      const next = { ...prev, [key]: v }
+      next.total_m = next.socket_m + next.light_m + next.switch_m + next.other_m
+      return next
+    })
   }
+
+  const handleProceed = () => {
+    onNext({
+      ...estimate,
+      cable_total_m: approved.total_m,
+      cable_by_type: {
+        socket_m: approved.socket_m,
+        light_m:  approved.light_m,
+        switch_m: approved.switch_m,
+        other_m:  approved.other_m,
+      },
+      _user_approved: true,
+      _approved_at: new Date().toISOString(),
+    })
+  }
+
+  const confidenceColor = (c) => c >= 0.75 ? C.accent : c >= 0.5 ? '#FFD166' : '#FF6B6B'
+  const confidenceLabel = (c) => c >= 0.75 ? 'Magas' : c >= 0.5 ? 'Közepes' : 'Alacsony'
+
+  const EditableRow = ({ label, icon, field, color }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
+      <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{icon}</span>
+      <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 13, color: C.text }}>{label}</span>
+      {editMode ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="number" min="0" value={approved[field]}
+            onChange={e => updateApproved(field, e.target.value)}
+            style={{ width: 80, background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 6, padding: '4px 8px', color: C.text, fontFamily: 'DM Mono', fontSize: 14, textAlign: 'right' }}
+          />
+          <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>m</span>
+        </div>
+      ) : (
+        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: color || C.text }}>
+          {(approved[field] || 0).toLocaleString('hu-HU')} m
+        </span>
+      )}
+    </div>
+  )
 
   return (
     <div style={{ maxWidth: 780 }}>
+      {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(0,229,160,0.12)', border: '1px solid rgba(0,229,160,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1347,12 +1393,12 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
           </div>
           <div>
             <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text }}>AI Kábelterv becslés</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Vision AI elemzi a rajzot és megtervezi az optimális kábelútvonalakat</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Ellenőrizd és szükség esetén módosítsd az AI becslést mielőtt az anyaglistába kerül</div>
           </div>
         </div>
       </div>
 
-      {/* Idle state – start button */}
+      {/* ── IDLE ── */}
       {status === 'idle' && (
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 32, textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔌</div>
@@ -1360,7 +1406,7 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
             Kábelhossz automatikus becslése
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.muted, marginBottom: 28, maxWidth: 480, margin: '0 auto 28px' }}>
-            Az AI elemzi a tervrajzot, azonosítja az elosztókat, csoportosítja az áramköröket és kiszámolja a becsült kábelhosszt.
+            A Vision AI elemzi a tervrajzot, azonosítja az elosztókat, csoportosítja az áramköröket és kiszámolja a becsült kábelhosszt. Az eredményt jóváhagyhatod vagy módosíthatod.
           </div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={() => run(true)} style={{ padding: '12px 28px', background: C.accent, color: C.bg, border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15 }}>
@@ -1371,142 +1417,165 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
             </button>
           </div>
           <div style={{ marginTop: 16, fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-            Vagy: <button onClick={() => onNext(null)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono' }}>kihagyom ezt a lépést →</button>
+            Vagy:{' '}
+            <button onClick={() => onNext(null)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono' }}>
+              kihagyom ezt a lépést →
+            </button>
           </div>
         </div>
       )}
 
-      {/* Running states */}
+      {/* ── RUNNING ── */}
       {(status === 'extracting' || status === 'ai_running' || status === 'fallback') && (
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 40, textAlign: 'center' }}>
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 48, textAlign: 'center' }}>
           <div style={{ width: 48, height: 48, border: `3px solid ${C.border}`, borderTopColor: C.accent, borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 0.8s linear infinite' }} />
           <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 16, color: C.text, marginBottom: 8 }}>
-            {status === 'extracting' ? 'Geometria kinyerése...' : status === 'ai_running' ? 'AI Vision elemzés folyamatban...' : 'Gyors becslés számítása...'}
+            {status === 'extracting' ? 'Geometria kinyerése...'
+              : status === 'ai_running' ? 'AI Vision elemzés folyamatban...'
+              : 'Gyors becslés számítása...'}
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
-            {status === 'ai_running' ? 'Claude claude-sonnet-4-20250514 elemzi a tervrajzot (30–60 mp)' : 'Koordináta alapú számítás...'}
+            {status === 'ai_running'
+              ? 'Claude claude-sonnet-4-20250514 elemzi a tervrajzot · ha nem válaszol, GPT-4o veszi át (30–90 mp)'
+              : 'Koordináta alapú Manhattan-becslés...'}
+          </div>
+          {/* Progress steps */}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 24, flexWrap: 'wrap' }}>
+            {['Geometria', 'Elosztók', 'Áramkörök', 'Kábelhossz'].map((s, i) => {
+              const stepIdx = status === 'extracting' ? 0 : status === 'ai_running' ? 2 : 3
+              return (
+                <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '3px 10px', borderRadius: 20,
+                  background: i <= stepIdx ? 'rgba(0,229,160,0.12)' : 'transparent',
+                  color: i <= stepIdx ? C.accent : C.muted,
+                  border: `1px solid ${i <= stepIdx ? 'rgba(0,229,160,0.25)' : C.border}`,
+                }}>{s}</div>
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* Error state */}
+      {/* ── ERROR ── */}
       {status === 'error' && (
         <div style={{ background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.25)', borderRadius: 14, padding: 24 }}>
           <div style={{ color: '#FF6B6B', fontFamily: 'Syne', fontWeight: 600, marginBottom: 8 }}>Hiba történt</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, marginBottom: 16 }}>{error}</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => run(false)} style={{ padding: '8px 16px', background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Gyors becslés</button>
+            <button onClick={() => run(false)} style={{ padding: '8px 16px', background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>📐 Gyors becslés</button>
             <button onClick={() => onNext(null)} style={{ padding: '8px 16px', background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 13 }}>Kihagyás</button>
           </div>
         </div>
       )}
 
-      {/* Results */}
-      {status === 'done' && estimate && (
+      {/* ── DONE – APPROVAL UI ── */}
+      {status === 'done' && estimate && approved && (
         <div>
-          {/* Summary header card */}
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 24, marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, letterSpacing: '0.08em', marginBottom: 4 }}>BECSÜLT KÁBEL ÖSSZESEN</div>
-                <div style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 42, color: C.accent, lineHeight: 1 }}>
-                  {estimate.cable_total_m?.toLocaleString('hu-HU')} <span style={{ fontSize: 20, color: C.muted }}>m</span>
-                </div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, marginTop: 6 }}>{estimate.method}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 6 }}>BIZALMI SZINT</div>
-                <div style={{ display: 'flex', gap: 3, justifyContent: 'flex-end', marginBottom: 4 }}>
-                  {confidenceBars(estimate.confidence || 0)}
-                </div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: confidenceColor(estimate.confidence || 0) }}>
-                  {confidenceLabel(estimate.confidence || 0)} ({Math.round((estimate.confidence || 0) * 100)}%)
-                </div>
-                {estimate._source && (
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 4 }}>
-                    {estimate._source === 'n8n_claude_vision' ? '🧠 Claude Vision AI' : '📐 Determinisztikus becslés'}
+          {/* AI badge + confidence */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '4px 10px', borderRadius: 20, background: estimate._source === 'n8n_claude_vision' ? 'rgba(0,229,160,0.1)' : estimate._source === 'n8n_gpt4o_fallback' ? 'rgba(76,201,240,0.1)' : 'rgba(255,255,255,0.05)', border: `1px solid ${estimate._source?.includes('n8n') ? (estimate._source === 'n8n_claude_vision' ? 'rgba(0,229,160,0.25)' : 'rgba(76,201,240,0.25)') : C.border}`, color: estimate._source === 'n8n_claude_vision' ? C.accent : estimate._source === 'n8n_gpt4o_fallback' ? '#4CC9F0' : C.muted }}>
+              {estimate._source === 'n8n_claude_vision' ? '🧠 Claude Vision AI' : estimate._source === 'n8n_gpt4o_fallback' ? '🤖 GPT-4o (fallback)' : '📐 Determinisztikus becslés'}
+            </div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'transparent', border: `1px solid ${confidenceColor(estimate.confidence)}`, color: confidenceColor(estimate.confidence) }}>
+              {confidenceLabel(estimate.confidence)} bizalom · {Math.round((estimate.confidence || 0) * 100)}%
+            </div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{estimate.method}</div>
+          </div>
+
+          {/* Total + edit toggle */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, letterSpacing: '0.08em', marginBottom: 4 }}>JÓVÁHAGYOTT KÁBEL ÖSSZESEN</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                {editMode ? (
+                  <input type="number" min="0" value={approved.total_m}
+                    onChange={e => setApproved(p => ({ ...p, total_m: Math.max(0, parseInt(e.target.value) || 0) }))}
+                    style={{ width: 120, background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 8, padding: '4px 10px', color: C.accent, fontFamily: 'Syne', fontWeight: 900, fontSize: 36, textAlign: 'right' }}
+                  />
+                ) : (
+                  <div style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 42, color: C.accent, lineHeight: 1 }}>
+                    {approved.total_m.toLocaleString('hu-HU')}
                   </div>
+                )}
+                <span style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 22, color: C.muted }}>m</span>
+                {estimate.cable_total_m !== approved.total_m && (
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#FFD166' }}>
+                    (AI: {estimate.cable_total_m?.toLocaleString('hu-HU')} m)
+                  </span>
                 )}
               </div>
             </div>
+            <button onClick={() => setEditMode(e => !e)} style={{ padding: '8px 16px', background: editMode ? C.accent + '20' : C.bg, border: `1px solid ${editMode ? C.accent : C.border}`, borderRadius: 8, cursor: 'pointer', color: editMode ? C.accent : C.muted, fontFamily: 'DM Mono', fontSize: 12 }}>
+              {editMode ? '✓ Szerkesztés kész' : '✏ Módosítás'}
+            </button>
           </div>
 
-          {/* Breakdown by type */}
-          {estimate.cable_by_type && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
-              {Object.entries(estimate.cable_by_type).map(([key, val]) => {
-                const labels = { socket_m: 'Dugalj körök', light_m: 'Lámpa körök', switch_m: 'Kapcsolók', other_m: 'Egyéb' }
-                const icons  = { socket_m: '🔌', light_m: '💡', switch_m: '🔘', other_m: '⚡' }
-                return (
-                  <div key={key} style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 18, marginBottom: 6 }}>{icons[key] || '⚡'}</div>
-                    <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, color: C.text }}>{val?.toLocaleString('hu-HU')} m</div>
-                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{labels[key] || key}</div>
-                  </div>
-                )
-              })}
+          {/* Breakdown – editable rows */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 14, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 13, color: C.text }}>Bontás típusonként</span>
+              {editMode && <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent }}>✏ Szerkeszthető</span>}
             </div>
-          )}
+            <EditableRow label="Dugalj körök" icon="🔌" field="socket_m" color="#4CC9F0" />
+            <EditableRow label="Lámpa körök" icon="💡" field="light_m" color="#FFD166" />
+            <EditableRow label="Kapcsolók" icon="🔘" field="switch_m" color={C.muted} />
+            <EditableRow label="Egyéb" icon="⚡" field="other_m" color={C.muted} />
+          </div>
 
-          {/* Circuits list */}
+          {/* Circuits summary (collapsed) */}
           {estimate.circuits?.length > 0 && (
-            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 16, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 14, color: C.text }}>Áramkörök ({estimate.circuits.length} kör)</span>
-                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>AI által csoportosítva</span>
+            <details style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, marginBottom: 14, padding: '10px 16px', cursor: 'pointer' }}>
+              <summary style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 13, color: C.text, listStyle: 'none', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Áramkörök részletezés ({estimate.circuits.length} kör)</span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>▼ részletek</span>
+              </summary>
+              <div style={{ marginTop: 12 }}>
+                {estimate.circuits.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '6px 0', borderBottom: i < estimate.circuits.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                    <span style={{ fontSize: 14 }}>{c.type === 'socket' ? '🔌' : c.type === 'light' ? '💡' : '⚡'}</span>
+                    <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 12, color: C.text }}>{c.id} – {c.notes || c.type}</span>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{c.device_count} eszköz</span>
+                    <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>{c.estimated_length_m} m</span>
+                  </div>
+                ))}
               </div>
-              {estimate.circuits.map((c, i) => (
-                <div key={i} style={{ padding: '10px 16px', borderBottom: i < estimate.circuits.length - 1 ? `1px solid ${C.border}` : 'none', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 6, background: c.type === 'socket' ? 'rgba(76,201,240,0.12)' : 'rgba(255,209,102,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
-                    {c.type === 'socket' ? '🔌' : c.type === 'light' ? '💡' : '⚡'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 13, color: C.text }}>{c.id} – {c.notes || (c.type === 'socket' ? 'Dugalj kör' : c.type === 'light' ? 'Lámpa kör' : 'Vegyes kör')}</div>
-                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{c.device_count} eszköz{c.zone ? ` · ${c.zone}` : ''}</div>
-                  </div>
-                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, flexShrink: 0 }}>
-                    {c.estimated_length_m?.toLocaleString('hu-HU')} m
-                  </div>
-                </div>
-              ))}
-            </div>
+            </details>
           )}
 
           {/* Warnings */}
           {estimate.warnings?.length > 0 && (
-            <div style={{ background: 'rgba(255,209,102,0.06)', border: '1px solid rgba(255,209,102,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ background: 'rgba(255,209,102,0.06)', border: '1px solid rgba(255,209,102,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
               {estimate.warnings.map((w, i) => (
-                <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#FFD166', marginBottom: i < estimate.warnings.length - 1 ? 4 : 0 }}>⚠ {w}</div>
+                <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#FFD166', marginBottom: i < estimate.warnings.length - 1 ? 3 : 0 }}>⚠ {w}</div>
               ))}
             </div>
           )}
 
           {/* AI reasoning */}
           {estimate.reasoning && (
-            <div style={{ background: 'rgba(0,229,160,0.04)', border: '1px solid rgba(0,229,160,0.12)', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, marginBottom: 4 }}>AI MAGYARÁZAT</div>
+            <div style={{ background: 'rgba(0,229,160,0.04)', border: '1px solid rgba(0,229,160,0.1)', borderRadius: 10, padding: '10px 14px', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.accent, letterSpacing: '0.08em', marginBottom: 4 }}>AI INDOKLÁS</div>
               <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, lineHeight: 1.7 }}>{estimate.reasoning}</div>
             </div>
           )}
 
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <button onClick={() => { setStatus('idle'); setEstimate(null) }} style={{ padding: '10px 18px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-              ↺ Újrafuttatás
-            </button>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={onBack} style={{ padding: '10px 18px', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.text, fontFamily: 'DM Mono', fontSize: 13 }}>
+          {/* Action bar */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setStatus('idle'); setEstimate(null); setApproved(null) }} style={{ padding: '9px 16px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.muted, fontFamily: 'DM Mono', fontSize: 12 }}>
+                ↺ Újrafuttatás
+              </button>
+              <button onClick={onBack} style={{ padding: '9px 16px', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.text, fontFamily: 'DM Mono', fontSize: 13 }}>
                 ← Vissza
               </button>
-              <button onClick={() => onNext(estimate)} style={{ padding: '10px 28px', background: C.accent, color: C.bg, border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 14 }}>
-                Tovább: Körülmények →
-              </button>
             </div>
+            <button onClick={handleProceed} style={{ padding: '11px 32px', background: C.accent, color: C.bg, border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15 }}>
+              Jóváhagyom · Tovább →
+            </button>
           </div>
         </div>
       )}
 
-      {/* Back button when idle */}
+      {/* Back when idle */}
       {status === 'idle' && (
         <div style={{ marginTop: 16 }}>
           <button onClick={onBack} style={{ padding: '8px 16px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
