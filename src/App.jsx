@@ -1436,7 +1436,7 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
             {status === 'ai_running'
-              ? 'Claude claude-sonnet-4-20250514 elemzi a tervrajzot · ha nem válaszol, GPT-4o veszi át (30–90 mp)'
+              ? 'Claude claude-sonnet-4-6 Vision elemzi a tervrajzot · ha nem válaszol, GPT-4o veszi át (30–90 mp)'
               : 'Koordináta alapú Manhattan-becslés...'}
           </div>
           {/* Progress steps */}

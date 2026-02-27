@@ -5,5 +5,12 @@
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/cable-agent.py": { "maxDuration": 90 },
+    "api/ai.py":          { "maxDuration": 60 },
+    "api/parse-pdf.py":   { "maxDuration": 30 },
+    "api/parse-dxf.py":   { "maxDuration": 30 },
+    "api/convert-dwg.py": { "maxDuration": 60 }
+  }
 }
