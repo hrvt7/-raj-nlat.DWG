@@ -29,199 +29,121 @@ INSUNITS_MAP = {
 
 
 def parse_dxf_bytes(file_bytes):
+    """
+    Server-side DXF parser using stdlib only (no ezdxf).
+    This is a fallback – primary parsing runs client-side in the browser.
+    """
     try:
-        import ezdxf
         from collections import Counter, defaultdict
+        import re
 
-        with tempfile.NamedTemporaryFile(suffix='.dxf', delete=False) as tmp:
-            tmp.write(file_bytes)
-            tmp_path = tmp.name
+        text = file_bytes.decode('utf-8', errors='replace')
+        lines = text.split('\n')
 
-        try:
-            doc = ezdxf.readfile(tmp_path)
-            msp = doc.modelspace()
-
-            # ── Detect drawing units from header ──────────────────
+        # Tokenize DXF: alternating group_code / value lines
+        tokens = []
+        for i in range(0, len(lines) - 1, 2):
             try:
-                insunits = doc.header.get('$INSUNITS', 0)
-            except:
-                insunits = 0
+                code = int(lines[i].strip())
+                val = lines[i + 1].strip()
+                tokens.append((code, val))
+            except ValueError:
+                continue
 
-            unit_name, unit_factor = INSUNITS_MAP.get(insunits, ("unknown", None))
-            
-            # If unknown, try to guess from drawing extents
-            if unit_factor is None:
-                try:
-                    extmin = doc.header.get('$EXTMIN', None)
-                    extmax = doc.header.get('$EXTMAX', None)
-                    if extmin and extmax:
-                        dx = abs(extmax[0] - extmin[0])
-                        dy = abs(extmax[1] - extmin[1])
-                        max_dim = max(dx, dy)
-                        if max_dim > 10000:
-                            unit_name, unit_factor = "mm (guessed)", 0.001
-                        elif max_dim > 100:
-                            unit_name, unit_factor = "cm (guessed)", 0.01
-                        else:
-                            unit_name, unit_factor = "m (guessed)", 1.0
-                except:
-                    unit_name, unit_factor = "mm (default)", 0.001
+        # Detect $INSUNITS
+        insunits = 0
+        in_header, current_var = False, None
+        for code, val in tokens:
+            if code == 0 and val == 'SECTION': in_header = False
+            if code == 2 and val == 'HEADER': in_header = True
+            if code == 2 and val != 'HEADER' and in_header: current_var = val
+            if in_header and current_var == '$INSUNITS' and code == 70:
+                insunits = int(val); break
 
-            # ── Extract title block texts ──────────────────────────
-            title_block = {}
-            try:
-                for e in msp:
-                    if e.dxftype() in ("TEXT", "MTEXT"):
-                        try:
-                            layer = e.dxf.layer.upper()
-                            if any(k in layer for k in ["TITLE", "CIM", "FEJLEC", "BORDER", "KERET"]):
-                                text = e.dxf.text if e.dxftype() == "TEXT" else e.text
-                                text = text.strip()
-                                if text and len(text) > 1:
-                                    title_block[layer] = title_block.get(layer, [])
-                                    title_block[layer].append(text)
-                        except:
-                            pass
-            except:
-                pass
+        INSUNITS_MAP_LOCAL = {0:('unknown',None),1:('inches',0.0254),2:('feet',0.3048),
+            4:('mm',0.001),5:('cm',0.01),6:('m',1.0),14:('decimeters',0.1)}
+        unit_name, unit_factor = INSUNITS_MAP_LOCAL.get(insunits, ('unknown', None))
 
-            # ── Parse entities ─────────────────────────────────────
-            block_counts = Counter()
-            lengths_by_layer = defaultdict(float)
-            all_layers = set()
-            layer_info = {}  # layer name → parsed info (cable size, tray size etc.)
+        # Find ENTITIES section start
+        entity_start = 0
+        section_name, in_section = '', False
+        for i, (code, val) in enumerate(tokens):
+            if code == 0 and val == 'SECTION': in_section = True
+            elif in_section and code == 2:
+                section_name = val; in_section = False
+                if val == 'ENTITIES': entity_start = i + 1; break
 
-            for e in msp:
-                t = e.dxftype()
-                try:
-                    layer = e.dxf.layer
-                except:
-                    layer = 'DEFAULT'
-                all_layers.add(layer)
+        block_counts = Counter()
+        lengths_by_layer = defaultdict(float)
+        all_layers = set()
 
-                # Try to auto-parse layer name for useful info
-                if layer not in layer_info:
-                    info = parse_layer_name(layer)
-                    if info:
-                        layer_info[layer] = info
+        etype, elayer = None, 'DEFAULT'
+        pts, pt_x, pt_y = [], None, None
+        closed, line_start = False, None
 
-                if t == "INSERT":
-                    try:
-                        name = e.dxf.name
-                    except:
-                        name = 'UNKNOWN'
-                    block_counts[(name, layer)] += 1
+        def flush_poly():
+            if etype == 'LWPOLYLINE' and len(pts) > 1:
+                L = sum(((pts[j+1][0]-pts[j][0])**2+(pts[j+1][1]-pts[j][1])**2)**0.5
+                        for j in range(len(pts)-1))
+                if closed:
+                    L += ((pts[0][0]-pts[-1][0])**2+(pts[0][1]-pts[-1][1])**2)**0.5
+                lengths_by_layer[elayer] += L
 
-                elif t == "LWPOLYLINE":
-                    try:
-                        pts = list(e.get_points())
-                        L = 0.0
-                        for i in range(len(pts) - 1):
-                            dx = pts[i+1][0] - pts[i][0]
-                            dy = pts[i+1][1] - pts[i][1]
-                            L += (dx*dx + dy*dy) ** 0.5
-                        if e.closed and len(pts) > 1:
-                            dx = pts[0][0] - pts[-1][0]
-                            dy = pts[0][1] - pts[-1][1]
-                            L += (dx*dx + dy*dy) ** 0.5
-                        lengths_by_layer[layer] += L
-                    except:
-                        pass
+        i = entity_start
+        while i < len(tokens):
+            code, val = tokens[i]
+            if code == 0 and val == 'ENDSEC': break
+            if code == 0:
+                flush_poly()
+                etype, elayer = val, 'DEFAULT'
+                pts, pt_x, pt_y, closed, line_start = [], None, None, False, None
+                i += 1; continue
+            if code == 8:
+                elayer = val; all_layers.add(val)
+            if etype == 'INSERT' and code == 2:
+                block_counts[(val, elayer)] += 1
+            if etype == 'LWPOLYLINE':
+                if code == 70: closed = bool(int(val) & 1)
+                if code == 10:
+                    if pt_x is not None: pts.append((pt_x, pt_y or 0))
+                    pt_x = float(val); pt_y = None
+                if code == 20: pt_y = float(val)
+            if etype == 'LINE':
+                if code == 10: line_start = [float(val), 0]
+                if code == 20 and line_start: line_start[1] = float(val)
+                if code == 11 and line_start:
+                    ex = float(val)
+                    ey = float(tokens[i+1][1]) if i+1 < len(tokens) and tokens[i+1][0] == 21 else 0
+                    dx, dy = ex - line_start[0], ey - line_start[1]
+                    lengths_by_layer[elayer] += (dx*dx + dy*dy)**0.5
+                    line_start = None
+            i += 1
+        flush_poly()
 
-                elif t == "POLYLINE":
-                    try:
-                        lengths_by_layer[layer] += e.length()
-                    except:
-                        pass
+        if not unit_factor:
+            max_raw = max(lengths_by_layer.values(), default=0)
+            if max_raw > 10000: unit_name, unit_factor = 'mm (guessed)', 0.001
+            elif max_raw > 100: unit_name, unit_factor = 'cm (guessed)', 0.01
+            else: unit_name, unit_factor = 'm (guessed)', 1.0
 
-                elif t == "LINE":
-                    try:
-                        s, en = e.dxf.start, e.dxf.end
-                        lengths_by_layer[layer] += ((en.x-s.x)**2+(en.y-s.y)**2)**0.5
-                    except:
-                        pass
+        blocks = [{'name': n, 'layer': l, 'count': c}
+                  for (n, l), c in block_counts.most_common(300)]
+        lengths = [{'layer': l, 'length': round(v * unit_factor, 3),
+                    'length_raw': round(v, 4), 'info': None}
+                   for l, v in sorted(lengths_by_layer.items(), key=lambda x: -x[1]) if v > 0.01]
 
-            blocks = [
-                {"name": n, "layer": l, "count": c}
-                for (n, l), c in block_counts.most_common(300)
-            ]
-            
-            # Convert lengths to meters using detected unit
-            lengths = []
-            for l, v in sorted(lengths_by_layer.items(), key=lambda x: -x[1]):
-                if v > 0.01:
-                    v_m = v * unit_factor if unit_factor else v * 0.001
-                    lengths.append({
-                        "layer": l,
-                        "length": round(v_m, 3),
-                        "length_raw": round(v, 4),
-                        "info": layer_info.get(l)
-                    })
-
-            return {
-                "success": True,
-                "blocks": blocks,
-                "lengths": lengths,
-                "layers": sorted(list(all_layers)),
-                "units": {
-                    "insunits": insunits,
-                    "name": unit_name,
-                    "factor": unit_factor,
-                    "auto_detected": True
-                },
-                "title_block": title_block,
-                "summary": {
-                    "total_block_types": len(set(b['name'] for b in blocks)),
-                    "total_blocks": sum(b['count'] for b in blocks),
-                    "total_layers": len(all_layers),
-                    "layers_with_lines": len(lengths)
-                }
-            }
-        finally:
-            try: os.unlink(tmp_path)
-            except: pass
-
+        return {
+            'success': True, 'blocks': blocks, 'lengths': lengths,
+            'layers': sorted(all_layers),
+            'units': {'insunits': insunits, 'name': unit_name, 'factor': unit_factor, 'auto_detected': True},
+            'title_block': {},
+            'summary': {'total_block_types': len(set(b['name'] for b in blocks)),
+                        'total_blocks': sum(b['count'] for b in blocks),
+                        'total_layers': len(all_layers), 'layers_with_lines': len(lengths)},
+            '_source': 'server_stdlib',
+        }
     except Exception as e:
-        return {"success": False, "error": str(e), "trace": traceback.format_exc()}
-
-
-def parse_layer_name(layer):
-    """Try to extract useful info from layer name."""
-    import re
-    layer_up = layer.upper()
-    info = {}
-
-    # Tray size: TRAY_300x60, TALCA_500X100, CABLE_TRAY_300
-    m = re.search(r'(\d{2,4})[xX×](\d{2,4})', layer_up)
-    if m:
-        info['tray_width'] = int(m.group(1))
-        info['tray_height'] = int(m.group(2))
-        info['type'] = 'tray'
-
-    # Cable cross section: NYY_4x10, CYKY_3x2.5, YKY_1x95
-    m = re.search(r'(\d+)[xX×](\d+\.?\d*)', layer_up)
-    if m and not info.get('type'):
-        info['cores'] = int(m.group(1))
-        info['cross_section'] = float(m.group(2))
-        info['type'] = 'cable'
-
-    # Cable type keywords
-    for cable_type in ['NYY', 'CYKY', 'YKY', 'NAYY', 'NYM', 'H07V']:
-        if cable_type in layer_up:
-            info['cable_type'] = cable_type
-            if 'type' not in info:
-                info['type'] = 'cable'
-            break
-
-    # Tray keywords
-    for tray_kw in ['TRAY', 'TALCA', 'TÁLCA', 'CABLE_TRAY']:
-        if tray_kw in layer_up:
-            if 'type' not in info:
-                info['type'] = 'tray'
-            break
-
-    return info if info else None
-
+        return {'success': False, 'error': str(e), 'trace': traceback.format_exc()}
 
 class handler(BaseHTTPRequestHandler):
 
