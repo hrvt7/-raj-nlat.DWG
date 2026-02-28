@@ -14,6 +14,7 @@ import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, f
 import DxfViewerPanel from './components/DxfViewer/index.jsx'
 import { parseDxfFile, parseDxfText } from './dxfParser.js'
 import { extractGeometry, runCableAgent, estimateCablesFallback } from './cableAgent.js'
+import SuccessPage from './pages/Success.jsx'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -409,7 +410,6 @@ function DwgVisionModal({ filename, weakResult, apiBase, onResult, onClose }) {
         r.onerror = rej
         r.readAsText(dxfFile, 'utf-8')
       })
-      const { parseDxfText } = await import('./dxfParser.js')
       const result = parseDxfText(text)
       if (!result.success) throw new Error(result.error || 'DXF elemzési hiba')
       onResult({ ...result, _source: 'dxf_replacement', _original_dwg: filename })
@@ -1136,7 +1136,7 @@ function ContextStep({ context, onChange, settings, onNext, onBack }) {
 }
 
 // ─── Step 3: Pricing ───────────────────────────────────────────────────────────
-function PricingStep({ reviewData, context, settings, materials, onNext, onBack }) {
+function PricingStep({ reviewData, context, settings, materials, cableEstimate, onNext, onBack }) {
   const [laborMode, setLaborMode] = useState('hourly')
   const [hourlyRate, setHourlyRate] = useState(settings.labor.hourly_rate)
   const [margin, setMargin] = useState(settings.labor.default_margin)
@@ -1463,6 +1463,7 @@ ${settings.quote?.footer_text ? `<p style="margin-top:40px;font-size:12px;color:
 </body></html>`
 
     const w = window.open('', '_blank')
+    if (!w) { alert('A böngésző blokkolta a nyomtatási ablakot. Engedélyezd a felugró ablakokat ehhez az oldalhoz.'); return }
     w.document.write(html)
     w.document.close()
     w.print()
@@ -1759,26 +1760,29 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
   const confidenceColor = (c) => c >= 0.75 ? C.accent : c >= 0.5 ? '#FFD166' : '#FF6B6B'
   const confidenceLabel = (c) => c >= 0.75 ? 'Magas' : c >= 0.5 ? 'Közepes' : 'Alacsony'
 
-  const EditableRow = ({ label, icon, field, color }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
-      <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{icon}</span>
-      <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 13, color: C.text }}>{label}</span>
-      {editMode ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input
-            type="number" min="0" value={approved[field]}
-            onChange={e => updateApproved(field, e.target.value)}
-            style={{ width: 80, background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 6, padding: '4px 8px', color: C.text, fontFamily: 'DM Mono', fontSize: 14, textAlign: 'right' }}
-          />
-          <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>m</span>
-        </div>
-      ) : (
-        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: color || C.text }}>
-          {(approved[field] || 0).toLocaleString('hu-HU')} m
-        </span>
-      )}
-    </div>
-  )
+  const EditableRow = ({ label, icon, field, color }) => {
+    if (!approved) return null
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
+        <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{icon}</span>
+        <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 13, color: C.text }}>{label}</span>
+        {editMode ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="number" min="0" value={approved[field] ?? 0}
+              onChange={e => updateApproved(field, e.target.value)}
+              style={{ width: 80, background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 6, padding: '4px 8px', color: C.text, fontFamily: 'DM Mono', fontSize: 14, textAlign: 'right' }}
+            />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>m</span>
+          </div>
+        ) : (
+          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: color || C.text }}>
+            {(approved[field] ?? 0).toLocaleString('hu-HU')} m
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div style={{ maxWidth: 780 }}>
@@ -2091,7 +2095,7 @@ function NewQuoteWizard({ settings, materials, onSaved, onCancel }) {
 function AuthModal({ onAuth }) {
   const [mode, setMode]       = useState('login') // login | register
   const [email, setEmail]     = useState('')
-  const [password, setPass]   = useState('')
+  const [password, setPassword] = useState('')
   const [name, setName]       = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
@@ -2146,7 +2150,7 @@ function AuthModal({ onAuth }) {
         <div style={{ marginBottom: 20 }}>
           <div style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Jelszó</div>
           <input style={inp} type="password" placeholder="••••••••" value={password}
-            onChange={e => setPass(e.target.value)}
+            onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && submit()} />
         </div>
 
@@ -2482,8 +2486,6 @@ styleEl.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`
 document.head.appendChild(styleEl)
 
 // ─── Root App ──────────────────────────────────────────────────────────────────
-import SuccessPage from './pages/Success.jsx'
-
 export default function App() {
   const [route, setRoute] = useState(() => {
     const path = window.location.pathname

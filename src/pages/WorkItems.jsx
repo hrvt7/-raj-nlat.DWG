@@ -41,7 +41,7 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
     import('../data/workItemsDb.js').then(m => {
       onWorkItemsChange([...m.WORK_ITEMS_DEFAULT])
       saveWorkItems(m.WORK_ITEMS_DEFAULT)
-    })
+    }).catch(e => { console.error('Alapértelmezések visszaállítása sikertelen:', e); alert('Hiba: ' + e.message) })
   }
 
   return (

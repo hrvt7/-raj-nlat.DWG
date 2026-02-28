@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL      || 'https://hsvrmwvofhyueusketkt.supabase.co'
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhzdnjtd3ZvZmh5dWV1c2tldGt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk4NTU3OTMsImV4cCI6MjA4NTQzMTc5M30.6vqgf5YiXuV_P04GPlbeECIwbDnwhx-R34RdXTEhpXU'
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL      || 'https://pprlbtsqfyrbfhbqjpai.supabase.co'
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwcmxidHNxZnlyYmZoYnFqcGFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyODI0MTIsImV4cCI6MjA4Nzg1ODQxMn0.oBGF_sPm9BM4nhwCdDJWrZSSYMWdBN2PF0TxqFy1GwQ'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
-  db: { schema: 'takeoffpro' },
+  // TakeoffPro Supabase: public schema (nem takeoffpro)
   auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
 })
 

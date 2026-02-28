@@ -8,7 +8,7 @@ Returns: { "url": "<stripe-checkout-url>" }
 """
 
 from http.server import BaseHTTPRequestHandler
-import json, os, urllib.request, urllib.error
+import json, os, urllib.request, urllib.error, urllib.parse
 
 STRIPE_SECRET_KEY      = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_PRICE_MONTHLY   = os.environ.get('STRIPE_PRICE_MONTHLY', '')   # pl. price_xxxxx
@@ -56,7 +56,6 @@ class handler(BaseHTTPRequestHandler):
         if not price_id:
             return self._error(500, f'STRIPE_PRICE_{plan.upper()} nincs beállítva')
 
-        import urllib.parse
         try:
             session = stripe_request('checkout/sessions', {
                 'mode': 'subscription',

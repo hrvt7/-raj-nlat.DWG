@@ -26,7 +26,7 @@ def verify_stripe_signature(payload, sig_header, secret):
     ts    = parts.get('t', '')
     v1    = parts.get('v1', '')
     signed_payload = f"{ts}.{payload}"
-    expected = hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()  # type: ignore[attr-defined]
     return hmac.compare_digest(expected, v1)
 
 
@@ -69,6 +69,12 @@ def supabase_find_user_by_email(email):
 
 class handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
+
+    def do_OPTIONS(self):
+        """CORS preflight — Stripe CLI teszteléshez és browser fetch-hez."""
+        self.send_response(200)
+        self._cors()
+        self.end_headers()
 
     def do_POST(self):
         length  = int(self.headers.get('Content-Length', 0))

@@ -10,12 +10,19 @@ export default function Success() {
   const [status, setStatus] = useState('loading') // loading | ok | error
 
   useEffect(() => {
-    // Supabase sesison frissítés (plan webhook már frissítette DB-t)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setStatus('ok')
-      else setStatus('ok') // vendégnek is mutatjuk a thank you oldalt
-    })
+    // Supabase session frissítés (plan webhook már frissítette DB-t)
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) { setStatus('error'); return }
+      // Bejelentkezett user vagy vendég (pl. ha nem volt session a checkoutnál) — mindkettőnek mutatjuk
+      setStatus('ok')
+    }).catch(() => setStatus('error'))
   }, [])
+
+  if (status === 'loading') return (
+    <div style={{ minHeight: '100vh', background: '#0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontFamily: 'DM Mono', color: '#555', fontSize: 13 }}>Betöltés...</div>
+    </div>
+  )
 
   return (
     <div style={{

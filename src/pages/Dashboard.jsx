@@ -5,7 +5,9 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
   const stats = useMemo(() => {
     const now = new Date()
     const thisMonth = quotes.filter(q => {
+      if (!q.created_at) return false
       const d = new Date(q.created_at)
+      if (isNaN(d.getTime())) return false
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
     })
     const won  = quotes.filter(q => q.status === 'won')

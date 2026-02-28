@@ -176,10 +176,7 @@ function AssemblyCard({ assembly, isSelected, onClick }) {
   const cat = WORK_ITEM_CATEGORIES.find(c => c.key === assembly.category)
   const compCount = assembly.components?.length || 0
   const workItems = assembly.components?.filter(c => c.itemType === 'workitem') || []
-  const totalNorm = workItems.reduce((s, c) => {
-    // We'd need to look up normtime from workItems DB, for now just show count
-    return s
-  }, 0)
+  const totalNorm = workItems.reduce((s, c) => s + (parseFloat(c.norm_time) || 0), 0)
 
   return (
     <div onClick={onClick} style={{
