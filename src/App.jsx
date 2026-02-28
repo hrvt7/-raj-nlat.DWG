@@ -2435,9 +2435,18 @@ styleEl.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`
 document.head.appendChild(styleEl)
 
 // ─── Root App ──────────────────────────────────────────────────────────────────
+import SuccessPage from './pages/Success.jsx'
+
 export default function App() {
-  const [route, setRoute] = useState(() => window.location.hash === '#app' ? 'app' : 'landing')
-  return route === 'landing'
-    ? <Landing onStart={() => { window.location.hash = '#app'; setRoute('app') }} />
-    : <SaaSShell />
+  const [route, setRoute] = useState(() => {
+    const path = window.location.pathname
+    const hash = window.location.hash
+    if (path === '/success' || hash === '#success') return 'success'
+    if (hash === '#app') return 'app'
+    return 'landing'
+  })
+
+  if (route === 'success') return <SuccessPage />
+  if (route === 'app') return <SaaSShell />
+  return <Landing onStart={() => { window.location.hash = '#app'; setRoute('app') }} />
 }

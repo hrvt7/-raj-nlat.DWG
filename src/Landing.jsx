@@ -1046,6 +1046,7 @@ function PDFOutputSection() {
 
 function PricingSection({ onStart }) {
   const [annual, setAnnual] = useState(false)
+  const [loading, setLoading] = useState(false)
   const monthlyPrice = PLAN.price             // 99 000
   const annualMonthly = Math.round(monthlyPrice * 0.85) // 84 150 → round
   const price = annual ? annualMonthly : monthlyPrice
@@ -1120,18 +1121,52 @@ function PricingSection({ onStart }) {
                   <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0' }}>{PLAN.trial}</span>
                 </div>
 
-                <button onClick={onStart} style={{
-                  display: 'block', width: '100%', padding: '14px 20px', borderRadius: 10,
-                  border: 'none', cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
-                  background: '#00E5A0', color: '#0A0A0A',
-                  boxShadow: '0 0 30px rgba(0,229,160,0.3)', transition: 'all 0.2s',
-                }}
-                  onMouseEnter={e => { e.target.style.boxShadow='0 0 50px rgba(0,229,160,0.5)'; e.target.style.transform='translateY(-1px)' }}
+                <button
+                  disabled={loading}
+                  onClick={async () => {
+                    setLoading(true)
+                    try {
+                      // Ha van bejelentkezett user, Stripe Checkout-ra irányítunk
+                      const { supabase } = await import('./supabase.js')
+                      const { data: { session } } = await supabase.auth.getSession()
+                      if (session) {
+                        const res = await fetch('/api/create-checkout', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            plan: annual ? 'annual' : 'monthly',
+                            user_id: session.user.id,
+                            email: session.user.email,
+                          }),
+                        })
+                        const data = await res.json()
+                        if (data.url) {
+                          window.location.href = data.url
+                          return
+                        }
+                      }
+                      // Nincs session → sima onStart (regisztrációs flow)
+                      onStart()
+                    } catch (e) {
+                      console.error('Checkout error:', e)
+                      onStart() // fallback
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                  style={{
+                    display: 'block', width: '100%', padding: '14px 20px', borderRadius: 10,
+                    border: 'none', cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
+                    background: loading ? '#0A7A56' : '#00E5A0', color: '#0A0A0A',
+                    boxShadow: '0 0 30px rgba(0,229,160,0.3)', transition: 'all 0.2s',
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                  onMouseEnter={e => { if (!loading) { e.target.style.boxShadow='0 0 50px rgba(0,229,160,0.5)'; e.target.style.transform='translateY(-1px)' }}}
                   onMouseLeave={e => { e.target.style.boxShadow='0 0 30px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
-                  {PLAN.cta}
+                  {loading ? 'Átirányítás...' : PLAN.cta}
                 </button>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#444', marginTop: 10, textAlign: 'center' }}>
-                  Hitelkártya nem szükséges
+                  14 nap ingyen · Kártyát a próba után kérjük
                 </div>
               </div>
 

@@ -106,3 +106,26 @@ export const loadMaterialsRemote   = () => loadUserBlob('materials')
 export const saveMaterialsRemote   = (d) => upsertUserBlob('materials', d)
 export const loadAssembliesRemote  = () => loadUserBlob('assemblies')
 export const saveAssembliesRemote  = (d) => upsertUserBlob('assemblies', d)
+
+// ── Subscription ───────────────────────────────────────────────────────────────
+export async function getSubscriptionStatus() {
+  const { data, error } = await supabase.from('profiles').select('plan, subscription_end').single()
+  if (error && error.code !== 'PGRST116') throw error
+  if (!data) return { plan: 'free', active: false }
+  const plan = data.plan || 'free'
+  const active = ['active', 'trial_active'].includes(plan)
+  return { plan, active, subscriptionEnd: data.subscription_end }
+}
+
+/**
+ * Gyors check: van-e aktív előfizetés (active | trial_active)?
+ * Usage: const ok = await isSubscribed()
+ */
+export async function isSubscribed() {
+  try {
+    const { active } = await getSubscriptionStatus()
+    return active
+  } catch {
+    return false
+  }
+}
