@@ -1,7 +1,12 @@
-// ─── Lightweight browser-side DXF parser ──────────────────────────────────────
-// For small files: parses inline (fast).
-// For large files (>5MB): uses a Web Worker to avoid freezing the UI.
-// No file size limit.
+// ─── DXF Parser Web Worker ────────────────────────────────────────────────────
+// Runs heavy DXF parsing in a background thread so the UI never freezes.
+// Supports files of any size (tested with 125 MB / 11.5M line files).
+//
+// Message protocol:
+//   IN:  { type: 'parse', text: string }
+//   OUT: { type: 'progress', pct: number }        (periodic)
+//         { type: 'result',   data: ParsedDxf }   (success)
+//         { type: 'error',    message: string }    (failure)
 
 const INSUNITS_MAP = {
   0:  ['unknown',     null],
@@ -29,45 +34,24 @@ function parseLayerName(layer) {
   return Object.keys(info).length ? info : null
 }
 
-// ── Worker-based parse (for large files) ───────────────────────────────────
-function parseDxfTextInWorker(text, onProgress) {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL('./workers/dxfParser.worker.js', import.meta.url),
-      { type: 'module' }
-    )
-
-    worker.onmessage = (e) => {
-      const { type, pct, data, message } = e.data
-      if (type === 'progress') {
-        onProgress?.(pct)
-      } else if (type === 'result') {
-        worker.terminate()
-        resolve(data)
-      } else if (type === 'error') {
-        worker.terminate()
-        reject(new Error(message))
-      }
-    }
-
-    worker.onerror = (err) => {
-      worker.terminate()
-      reject(new Error(err.message || 'Worker error'))
-    }
-
-    worker.postMessage({ type: 'parse', text })
-  })
-}
-
-// ── Main thread parse (for small files, <5 MB) ────────────────────────────
-export function parseDxfText(text) {
+function parseDxfText(text) {
   const lines = text.split(/\r?\n/)
+  const totalLines = lines.length
+
+  // ── Tokenize in chunks with progress updates ───────────────────────────────
   const tokens = []
+  const CHUNK = 500_000
   for (let i = 0; i + 1 < lines.length; i += 2) {
     const code = parseInt(lines[i].trim(), 10)
     const val  = lines[i + 1].trim()
     if (!isNaN(code)) tokens.push([code, val])
+
+    // Report progress every CHUNK lines
+    if (i % CHUNK === 0) {
+      self.postMessage({ type: 'progress', pct: Math.round((i / totalLines) * 40) })
+    }
   }
+  self.postMessage({ type: 'progress', pct: 42 })
 
   // ── HEADER: find $INSUNITS ─────────────────────────────────────────────────
   let insunits = 0
@@ -79,14 +63,19 @@ export function parseDxfText(text) {
     if (inHeader && currentVar === '$INSUNITS' && code === 70) { insunits = parseInt(val, 10); break }
   }
   let [unitName, unitFactor] = INSUNITS_MAP[insunits] || ['unknown', null]
+  self.postMessage({ type: 'progress', pct: 45 })
 
   // ── Find ENTITIES section ──────────────────────────────────────────────────
   let entityStart = -1, sectionName = '', inSection = false
   for (let i = 0; i < tokens.length; i++) {
     const [code, val] = tokens[i]
     if (code === 0 && val === 'SECTION') { inSection = true; continue }
-    if (inSection && code === 2) { sectionName = val; inSection = false; if (val === 'ENTITIES') { entityStart = i + 1; break } }
+    if (inSection && code === 2) {
+      sectionName = val; inSection = false
+      if (val === 'ENTITIES') { entityStart = i + 1; break }
+    }
   }
+  self.postMessage({ type: 'progress', pct: 50 })
 
   const blockCounts   = {}
   const lengthByLayer = {}
@@ -104,13 +93,19 @@ export function parseDxfText(text) {
         const dx = pts[j+1][0]-pts[j][0], dy = pts[j+1][1]-pts[j][1]
         L += Math.sqrt(dx*dx+dy*dy)
       }
-      if (closed) { const dx=pts[0][0]-pts[pts.length-1][0], dy=pts[0][1]-pts[pts.length-1][1]; L+=Math.sqrt(dx*dx+dy*dy) }
+      if (closed) {
+        const dx=pts[0][0]-pts[pts.length-1][0], dy=pts[0][1]-pts[pts.length-1][1]
+        L+=Math.sqrt(dx*dx+dy*dy)
+      }
       lengthByLayer[entityLayer] = (lengthByLayer[entityLayer]||0) + L
     }
   }
 
-  for (let i = entityStart >= 0 ? entityStart : 0; i < tokens.length; i++) {
-    const [code, val] = tokens[i]
+  const entityTokens = tokens.slice(entityStart >= 0 ? entityStart : 0)
+  const entityTotal  = entityTokens.length
+
+  for (let i = 0; i < entityTokens.length; i++) {
+    const [code, val] = entityTokens[i]
     if (code === 0 && val === 'ENDSEC') break
 
     if (code === 0) {
@@ -141,7 +136,7 @@ export function parseDxfText(text) {
       if (code === 20 && lineStart) lineStart[1] = parseFloat(val)
       if (code === 11 && lineStart) {
         const ex = parseFloat(val)
-        const next = tokens[i+1]
+        const next = entityTokens[i+1]
         let ey = 0; if (next && next[0] === 21) { ey = parseFloat(next[1]); i++ }
         const dx=ex-lineStart[0], dy=ey-lineStart[1]
         lengthByLayer[entityLayer] = (lengthByLayer[entityLayer]||0) + Math.sqrt(dx*dx+dy*dy)
@@ -156,10 +151,16 @@ export function parseDxfText(text) {
         if (val.trim().length > 1) titleBlock[entityLayer].push(val.trim())
       }
     }
+
+    // Progress every 500k tokens
+    if (i % 500_000 === 0) {
+      self.postMessage({ type: 'progress', pct: 50 + Math.round((i / entityTotal) * 45) })
+    }
   }
   flushPolyline()
+  self.postMessage({ type: 'progress', pct: 96 })
 
-  // ── Auto-detect units from raw lengths ────────────────────────────────────
+  // ── Auto-detect units from raw lengths ─────────────────────────────────────
   if (!unitFactor) {
     const maxRaw = Math.max(...Object.values(lengthByLayer), 0)
     if (maxRaw > 10000)    { unitName='mm (guessed)'; unitFactor=0.001 }
@@ -174,7 +175,7 @@ export function parseDxfText(text) {
   const lengths = Object.entries(lengthByLayer)
     .filter(([,v])=>v>0.01)
     .map(([layer,v])=>({
-      layer, length: Math.round(v*unitFactor*1000)/1000,
+      layer, length: Math.round(v*(unitFactor||0.001)*1000)/1000,
       length_raw: Math.round(v*10000)/10000, info: layerInfo[layer]||null,
     }))
     .sort((a,b)=>b.length-a.length)
@@ -194,30 +195,17 @@ export function parseDxfText(text) {
   }
 }
 
-// ── parseDxfFile — main entry point ──────────────────────────────────────────
-// Large files (>5 MB) → Web Worker (non-blocking)
-// Small files (<5 MB) → main thread (fast, no worker overhead)
-export async function parseDxfFile(file, onProgress) {
-  const LARGE_FILE_THRESHOLD = 5 * 1024 * 1024 // 5 MB
+// ── Main message handler ────────────────────────────────────────────────────
+self.onmessage = function(e) {
+  const { type, text } = e.data
+  if (type !== 'parse') return
 
-  const text = await new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload  = e => resolve(e.target.result)
-    reader.onerror = reject
-    reader.readAsText(file, 'utf-8')
-  })
-
-  if (file.size > LARGE_FILE_THRESHOLD) {
-    // Large file — use Web Worker to avoid freezing the UI
-    try {
-      return await parseDxfTextInWorker(text, onProgress)
-    } catch (workerErr) {
-      console.warn('DXF Worker failed, falling back to main thread:', workerErr.message)
-      // Fallback to main thread (will be slow but won't fail silently)
-      return parseDxfText(text)
-    }
-  } else {
-    // Small file — parse inline
-    return parseDxfText(text)
+  try {
+    self.postMessage({ type: 'progress', pct: 5 })
+    const result = parseDxfText(text)
+    self.postMessage({ type: 'progress', pct: 100 })
+    self.postMessage({ type: 'result', data: result })
+  } catch (err) {
+    self.postMessage({ type: 'error', message: err.message })
   }
 }

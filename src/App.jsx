@@ -695,7 +695,12 @@ function UploadStep({ onParsed }) {
           result = await parseDwgBase64(base64, f.name, apiBase)
           result._dwg_base64 = base64
         } else {
-          result = await parseDxfFile(f.file)
+          // Large DXF files are parsed in a Web Worker — report progress
+          result = await parseDxfFile(f.file, (pct) => {
+            setFiles(prev => prev.map(x =>
+              x.name === f.name ? { ...x, status: 'parsing', progress: pct } : x
+            ))
+          })
         }
 
         if (!result.success) throw new Error(result.error || 'Elemézési hiba')
@@ -824,7 +829,8 @@ function UploadStep({ onParsed }) {
                   {f.status === 'waiting'    ? 'Várakozás...' :
                    f.status === 'parsing'    ? (
                      f.name.toLowerCase().endsWith('.pdf') ? '📐 PDF elemzés...' :
-                     f.name.toLowerCase().endsWith('.dwg') ? '🔍 DWG elemzés...' : 'Elemzés...'
+                     f.name.toLowerCase().endsWith('.dwg') ? '🔍 DWG elemzés...' :
+                     f.progress != null ? `⚙️ DXF feldolgozás... ${f.progress}%` : '⚙️ DXF elemzés...'
                    ) :
                    f.status === 'done'       ? (() => {
                      const src = f.result?._source || ''
@@ -870,13 +876,68 @@ function UploadStep({ onParsed }) {
   )
 }
 
+// ─── DXF Fullscreen Modal ─────────────────────────────────────────────────────
+function DxfFullscreenModal({ file, unitFactor, onClose }) {
+  // Prevent body scroll while open
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.92)',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Header bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 16px',
+        background: C.bgCard, borderBottom: `1px solid ${C.border}`,
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>📐</span>
+          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text }}>
+            Tervrajz megtekintő
+          </span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginLeft: 4 }}>
+            — Kattints a számláláshoz, húzd a méréshez
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'rgba(255,255,255,0.08)', border: `1px solid ${C.border}`,
+            borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
+            fontFamily: 'Syne', fontWeight: 600, fontSize: 13, color: C.text,
+          }}
+        >✕ Bezárás</button>
+      </div>
+
+      {/* Full-height viewer */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <DxfViewerPanel
+          file={file}
+          unitFactor={unitFactor}
+          compact={false}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Step 1: Review (Split Panel — Viewer left, Data right) ────────────────
 function ReviewStep({ parsedFiles, onNext, onBack }) {
   const [activeFile, setActiveFile] = useState(0)
   const [merged, setMerged] = useState(false)
   const [blockMappings, setBlockMappings] = useState({})
   const [lengthMappings, setLengthMappings] = useState({})
-  const [showViewer, setShowViewer] = useState(true)
+  const [showViewer, setShowViewer] = useState(false)
+  const [fullscreenViewer, setFullscreenViewer] = useState(false)
 
   const file = parsedFiles[activeFile] || parsedFiles[0]
   const blocks = file?.blocks || []
@@ -1010,21 +1071,40 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Viewer toggle */}
+      {/* Fullscreen viewer portal */}
+      {fullscreenViewer && rawFile && (
+        <DxfFullscreenModal
+          file={rawFile}
+          unitFactor={unitFactor}
+          onClose={() => setFullscreenViewer(false)}
+        />
+      )}
+
+      {/* Viewer buttons */}
       {rawFile && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
           <button
             onClick={() => setShowViewer(v => !v)}
             style={{
-              padding: '4px 12px', borderRadius: 5, cursor: 'pointer',
+              padding: '5px 12px', borderRadius: 5, cursor: 'pointer',
               fontSize: 11, fontFamily: 'DM Mono',
               background: showViewer ? C.accent + '10' : 'transparent',
               border: `1px solid ${showViewer ? C.accent + '40' : C.border}`,
               color: showViewer ? C.accent : C.muted,
             }}
           >
-            {showViewer ? '📐 Tervrajz elrejtése' : '📐 Tervrajz megjelenítése'}
+            {showViewer ? '📐 Előnézet elrejtése' : '📐 Kis előnézet'}
           </button>
+          <button
+            onClick={() => setFullscreenViewer(true)}
+            style={{
+              padding: '5px 12px', borderRadius: 5, cursor: 'pointer',
+              fontSize: 11, fontFamily: 'DM Mono',
+              background: C.accent + '15',
+              border: `1px solid ${C.accent + '50'}`,
+              color: C.accent, fontWeight: 600,
+            }}
+          >⛶ Teljes képernyő — Mérés & Számlálás</button>
         </div>
       )}
 
@@ -1033,15 +1113,36 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
         display: 'flex', gap: 16, flex: 1, minHeight: 0,
         flexDirection: showViewer && rawFile ? 'row' : 'column',
       }}>
-        {/* Left: DXF Viewer */}
+        {/* Left: DXF Viewer (small preview) */}
         {showViewer && rawFile && (
-          <div style={{ flex: 1, minWidth: 0, minHeight: 400 }}>
+          <div style={{ flex: 1, minWidth: 0, minHeight: 400, position: 'relative' }}>
             <DxfViewerPanel
               file={rawFile}
               unitFactor={unitFactor}
               compact={true}
               style={{ height: '100%' }}
             />
+            {/* Overlay hint */}
+            <div
+              onClick={() => setFullscreenViewer(true)}
+              style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'transparent',
+                cursor: 'pointer',
+                opacity: 0,
+                transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = 1}
+              onMouseLeave={e => e.currentTarget.style.opacity = 0}
+            >
+              <div style={{
+                background: 'rgba(0,0,0,0.75)',
+                border: `1px solid ${C.accent}`,
+                borderRadius: 8, padding: '10px 20px',
+                color: C.accent, fontFamily: 'Syne', fontWeight: 700, fontSize: 14,
+              }}>⛶ Teljes képernyőn megnyitás</div>
+            </div>
           </div>
         )}
 
@@ -2328,11 +2429,18 @@ function SaaSShell() {
                 }}>Ki</button>
               </>
             ) : (
-              <button onClick={() => setShowAuth(true)} style={{
-                background: C.accentDim, border: `1px solid ${C.accentBorder}`,
-                borderRadius: 7, padding: '5px 14px', cursor: 'pointer',
-                color: C.accent, fontSize: 12, fontWeight: 600,
-              }}>Bejelentkezés</button>
+              <>
+                <span style={{
+                  fontFamily: 'DM Mono', fontSize: 10, color: '#FFD166',
+                  background: 'rgba(255,209,102,0.1)', border: '1px solid rgba(255,209,102,0.3)',
+                  borderRadius: 20, padding: '2px 8px',
+                }}>⚠️ TESZT – vendég mód</span>
+                <button onClick={() => setShowAuth(true)} style={{
+                  background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+                  borderRadius: 7, padding: '5px 14px', cursor: 'pointer',
+                  color: C.accent, fontSize: 12, fontWeight: 600,
+                }}>Bejelentkezés</button>
+              </>
             )}
           </div>
         </div>
@@ -2350,44 +2458,11 @@ function SaaSShell() {
               onNavigate={p => setPage(p)}
               onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
           ) : page === 'new-quote' ? (
-            (!session) ? (
-              <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
-                <h2 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 24, color: C.text, marginBottom: 12 }}>Bejelentkezés szükséges</h2>
-                <p style={{ color: C.muted, fontSize: 14, marginBottom: 24 }}>Új ajánlat készítéséhez jelentkezz be vagy regisztrálj.</p>
-                <button onClick={() => setShowAuth(true)} style={{
-                  padding: '12px 32px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                  fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
-                  background: C.accent, color: C.bg,
-                }}>Bejelentkezés</button>
-              </div>
-            ) : (!subStatus.active && subStatus.plan !== 'free') ? (
-              <div style={{ textAlign: 'center', padding: '80px 24px' }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>⚡</div>
-                <h2 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 24, color: C.text, marginBottom: 12 }}>Előfizetés lejárt</h2>
-                <p style={{ color: C.muted, fontSize: 14, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
-                  Az ajánlat-készítő funkció aktív előfizetést igényel. Újítsd meg a csomagod a folytatáshoz.
-                </p>
-                <button onClick={async () => {
-                  try {
-                    const res = await fetch('/api/create-checkout', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ plan: 'monthly', user_id: session.user.id, email: session.user.email }),
-                    })
-                    const data = await res.json()
-                    if (data.url) window.location.href = data.url
-                  } catch (e) { console.error(e) }
-                }} style={{
-                  padding: '12px 32px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                  fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
-                  background: C.accent, color: C.bg,
-                }}>Előfizetés megújítása</button>
-              </div>
-            ) : (
+            // TESZT MÓD: login + subscription gate kikapcsolva — éles kiadás előtt visszakapcsolni!
+            // Éles kiadásnál:
+            //   (!session) ? <LoginWall /> : (!subStatus.active && subStatus.plan !== 'free') ? <UpgradeWall /> :
             <NewQuoteWizard settings={settings} materials={materials}
               onSaved={handleQuoteSaved} onCancel={() => setPage('quotes')} />
-            )
           ) : page === 'work-items' ? (
             <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} />
           ) : page === 'plans' ? (
