@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Quotes from './pages/Quotes.jsx'
@@ -2216,10 +2216,21 @@ function SaaSShell() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // ── Subscription state ────────────────────────────────────────────────────
+  const [subStatus, setSubStatus] = useState({ plan: 'free', active: false })
+  useEffect(() => {
+    if (session) {
+      getSubscriptionStatus()
+        .then(s => setSubStatus(s))
+        .catch(() => setSubStatus({ plan: 'free', active: false }))
+    }
+  }, [session])
+
   const handleSignOut = async () => {
     await signOut()
     setSession(null)
     setUserEmail('')
+    setSubStatus({ plan: 'free', active: false })
   }
 
   const pageTitles = {
@@ -2335,8 +2346,44 @@ function SaaSShell() {
               onNavigate={p => setPage(p)}
               onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
           ) : page === 'new-quote' ? (
+            (!session) ? (
+              <div style={{ textAlign: 'center', padding: '80px 24px' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+                <h2 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 24, color: C.text, marginBottom: 12 }}>Bejelentkezés szükséges</h2>
+                <p style={{ color: C.muted, fontSize: 14, marginBottom: 24 }}>Új ajánlat készítéséhez jelentkezz be vagy regisztrálj.</p>
+                <button onClick={() => setShowAuth(true)} style={{
+                  padding: '12px 32px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                  fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
+                  background: C.accent, color: C.bg,
+                }}>Bejelentkezés</button>
+              </div>
+            ) : (!subStatus.active && subStatus.plan !== 'free') ? (
+              <div style={{ textAlign: 'center', padding: '80px 24px' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>⚡</div>
+                <h2 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 24, color: C.text, marginBottom: 12 }}>Előfizetés lejárt</h2>
+                <p style={{ color: C.muted, fontSize: 14, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
+                  Az ajánlat-készítő funkció aktív előfizetést igényel. Újítsd meg a csomagod a folytatáshoz.
+                </p>
+                <button onClick={async () => {
+                  try {
+                    const res = await fetch('/api/create-checkout', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ plan: 'monthly', user_id: session.user.id, email: session.user.email }),
+                    })
+                    const data = await res.json()
+                    if (data.url) window.location.href = data.url
+                  } catch (e) { console.error(e) }
+                }} style={{
+                  padding: '12px 32px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                  fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
+                  background: C.accent, color: C.bg,
+                }}>Előfizetés megújítása</button>
+              </div>
+            ) : (
             <NewQuoteWizard settings={settings} materials={materials}
               onSaved={handleQuoteSaved} onCancel={() => setPage('quotes')} />
+            )
           ) : page === 'work-items' ? (
             <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} />
           ) : page === 'plans' ? (
