@@ -14,17 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# ── ODA File Converter telepítés ────────────────────────────────
-# ODA letöltési URL: https://www.opendesign.com/guestfiles/oda_file_converter
-# Linux x64 Qt5 .deb csomag
+# ── ODA File Converter telepítés (opcionális – ha fail, folytatódik) ──
 RUN wget -q -O /tmp/ODAFileConverter.deb \
     "https://download.opendesign.com/guestfiles/ODAFileConverter/ODAFileConverter_QT5_lnxX64_7.6dll_25.4.deb" \
-    && dpkg -i /tmp/ODAFileConverter.deb || apt-get -f install -y \
+    && dpkg -i /tmp/ODAFileConverter.deb \
     && rm /tmp/ODAFileConverter.deb \
-    && which ODAFileConverter || echo "ODA installed to non-standard path"
+    || (echo "WARNING: ODA install failed, continuing without ODA" && rm -f /tmp/ODAFileConverter.deb)
 
-# ODA bináris helye ellenőrzés és PATH beállítás
-RUN find / -name "ODAFileConverter" -type f 2>/dev/null | head -5 || true
+RUN find /usr /opt -name "ODAFileConverter" 2>/dev/null || echo "ODA not found"
 ENV ODA_PATH=/usr/bin/ODAFileConverter
 
 # ── Python környezet ────────────────────────────────────────────
@@ -42,7 +39,6 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
