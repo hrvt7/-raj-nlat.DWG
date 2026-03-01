@@ -12,7 +12,7 @@ import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, s
 import { WORK_ITEMS_DEFAULT as WORK_ITEMS_DB, CONTEXT_FACTORS } from './data/workItemsDb.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import { parseDxfFile, parseDxfText } from './dxfParser.js'
-import { extractGeometry, runCableAgent, estimateCablesFallback } from './cableAgent.js'
+import { extractGeometry, estimateCablesFallback } from './cableAgent.js'
 import SuccessPage from './pages/Success.jsx'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -1513,15 +1513,14 @@ function QuoteView({ quote, onBack, onStatusChange }) {
 
 // ─── CableEstimateStep ─────────────────────────────────────────────────────────
 function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
-  const [status, setStatus] = useState('idle') // idle | extracting | ai_running | fallback | done | error
+  const [status, setStatus] = useState('idle') // idle | extracting | done | error
   const [estimate, setEstimate] = useState(null)
   const [error, setError] = useState(null)
   // Editable approved values (user can adjust before proceeding)
   const [approved, setApproved] = useState(null) // { socket_m, light_m, switch_m, other_m, total_m }
   const [editMode, setEditMode] = useState(false)
-  const apiBase = import.meta.env.VITE_API_URL || ''
 
-  const run = useCallback(async (withAI = true) => {
+  const run = useCallback(async () => {
     setStatus('extracting')
     setError(null)
     setEstimate(null)
@@ -1533,10 +1532,8 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
 
       let geometry
       if (dxfFile?._rawText) {
-        // DXF szöveg már kinyerve
         geometry = extractGeometry(dxfFile._rawText)
       } else if (dxfFile?.file instanceof Blob) {
-        // DXF fájl Blob-ként elérhető
         const text = await new Promise((res, rej) => {
           const reader = new FileReader()
           reader.onload = e => res(e.target.result)
@@ -1549,33 +1546,18 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
         geometry = buildGeometryFromBlocks(reviewData)
       }
 
-      if (!withAI) {
-        setStatus('fallback')
-        const result = estimateCablesFallback(geometry)
-        setEstimate(result)
-        setApproved(buildApproved(result))
-        setStatus('done')
-        return
-      }
-
-      setStatus('ai_running')
-      try {
-        const result = await runCableAgent({ geometry, screenshotBase64: null, apiBase })
-        setEstimate(result)
-        setApproved(buildApproved(result))
-        setStatus('done')
-      } catch (aiErr) {
-        const result = estimateCablesFallback(geometry)
-        result._fallback_reason = aiErr.message
-        setEstimate(result)
-        setApproved(buildApproved(result))
-        setStatus('done')
-      }
+      const result = estimateCablesFallback(geometry)
+      setEstimate(result)
+      setApproved(buildApproved(result))
+      setStatus('done')
     } catch (err) {
       setError(err.message)
       setStatus('error')
     }
-  }, [parsedFiles, reviewData, apiBase])
+  }, [parsedFiles, reviewData])
+
+  // Automatikusan elindul a lépés betöltésekor
+  useEffect(() => { run() }, [])
 
   const buildApproved = (est) => ({
     socket_m: est.cable_by_type?.socket_m ?? 0,
@@ -1645,8 +1627,8 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           </div>
           <div>
-            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text }}>AI Kábelterv becslés</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Ellenőrizd és szükség esetén módosítsd az AI becslést mielőtt az anyaglistába kerül</div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text }}>Kábelterv becslés</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Ellenőrizd és szükség esetén módosítsd a becsült kábelhosszakat mielőtt az anyaglistába kerül</div>
           </div>
         </div>
       </div>
@@ -1656,17 +1638,14 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 32, textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔌</div>
           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text, marginBottom: 8 }}>
-            Kábelhossz automatikus becslése
+            Kábelhossz becslése
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.muted, marginBottom: 28, maxWidth: 480, margin: '0 auto 28px' }}>
-            A Vision AI elemzi a tervrajzot, azonosítja az elosztókat, csoportosítja az áramköröket és kiszámolja a becsült kábelhosszt. Az eredményt jóváhagyhatod vagy módosíthatod.
+            Koordináta-alapú Manhattan-becslés a feltöltött tervrajz adataiból. Az eredményt jóváhagyhatod vagy módosíthatod.
           </div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => run(true)} style={{ padding: '12px 28px', background: C.accent, color: C.bg, border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15 }}>
-              🧠 AI Vision elemzés
-            </button>
-            <button onClick={() => run(false)} style={{ padding: '12px 22px', background: C.bgCard, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 13 }}>
-              📐 Gyors becslés (AI nélkül)
+            <button onClick={() => run()} style={{ padding: '12px 28px', background: C.accent, color: C.bg, border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15 }}>
+              📐 Becslés indítása
             </button>
           </div>
           <div style={{ marginTop: 16, fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
@@ -1679,31 +1658,22 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
       )}
 
       {/* ── RUNNING ── */}
-      {(status === 'extracting' || status === 'ai_running' || status === 'fallback') && (
+      {status === 'extracting' && (
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 14, padding: 48, textAlign: 'center' }}>
           <div style={{ width: 48, height: 48, border: `3px solid ${C.border}`, borderTopColor: C.accent, borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 0.8s linear infinite' }} />
           <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 16, color: C.text, marginBottom: 8 }}>
-            {status === 'extracting' ? 'Geometria kinyerése...'
-              : status === 'ai_running' ? 'AI Vision elemzés folyamatban...'
-              : 'Gyors becslés számítása...'}
+            Kábelhossz becslése folyamatban...
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
-            {status === 'ai_running'
-              ? 'Claude claude-sonnet-4-6 Vision elemzi a tervrajzot · ha nem válaszol, GPT-4o veszi át (30–90 mp)'
-              : 'Koordináta alapú Manhattan-becslés...'}
+            Koordináta alapú Manhattan-becslés a tervrajz adataiból
           </div>
-          {/* Progress steps */}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 24, flexWrap: 'wrap' }}>
-            {['Geometria', 'Elosztók', 'Áramkörök', 'Kábelhossz'].map((s, i) => {
-              const stepIdx = status === 'extracting' ? 0 : status === 'ai_running' ? 2 : 3
-              return (
-                <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '3px 10px', borderRadius: 20,
-                  background: i <= stepIdx ? 'rgba(0,229,160,0.12)' : 'transparent',
-                  color: i <= stepIdx ? C.accent : C.muted,
-                  border: `1px solid ${i <= stepIdx ? 'rgba(0,229,160,0.25)' : C.border}`,
-                }}>{s}</div>
-              )
-            })}
+            {['Geometria', 'Elosztók', 'Áramkörök', 'Kábelhossz'].map((s, i) => (
+              <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '3px 10px', borderRadius: 20,
+                background: 'rgba(0,229,160,0.12)', color: C.accent,
+                border: '1px solid rgba(0,229,160,0.25)',
+              }}>{s}</div>
+            ))}
           </div>
         </div>
       )}
@@ -1714,7 +1684,7 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
           <div style={{ color: '#FF6B6B', fontFamily: 'Syne', fontWeight: 600, marginBottom: 8 }}>Hiba történt</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, marginBottom: 16 }}>{error}</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => run(false)} style={{ padding: '8px 16px', background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>📐 Gyors becslés</button>
+            <button onClick={() => run()} style={{ padding: '8px 16px', background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>📐 Újra</button>
             <button onClick={() => onNext(null)} style={{ padding: '8px 16px', background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 13 }}>Kihagyás</button>
           </div>
         </div>
@@ -1723,15 +1693,15 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
       {/* ── DONE – APPROVAL UI ── */}
       {status === 'done' && estimate && approved && (
         <div>
-          {/* AI badge + confidence */}
+          {/* Forrás badge */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '4px 10px', borderRadius: 20, background: estimate._source === 'n8n_claude_vision' ? 'rgba(0,229,160,0.1)' : estimate._source === 'n8n_gpt4o_fallback' ? 'rgba(76,201,240,0.1)' : 'rgba(255,255,255,0.05)', border: `1px solid ${estimate._source?.includes('n8n') ? (estimate._source === 'n8n_claude_vision' ? 'rgba(0,229,160,0.25)' : 'rgba(76,201,240,0.25)') : C.border}`, color: estimate._source === 'n8n_claude_vision' ? C.accent : estimate._source === 'n8n_gpt4o_fallback' ? '#4CC9F0' : C.muted }}>
-              {estimate._source === 'n8n_claude_vision' ? '🧠 Claude Vision AI' : estimate._source === 'n8n_gpt4o_fallback' ? '🤖 GPT-4o (fallback)' : '📐 Determinisztikus becslés'}
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.muted }}>
+              📐 Koordináta-alapú becslés
             </div>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, padding: '4px 10px', borderRadius: 20, background: 'transparent', border: `1px solid ${confidenceColor(estimate.confidence)}`, color: confidenceColor(estimate.confidence) }}>
               {confidenceLabel(estimate.confidence)} bizalom · {Math.round((estimate.confidence || 0) * 100)}%
             </div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{estimate.method}</div>
+            {estimate.method && <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{estimate.method}</div>}
           </div>
 
           {/* Total + edit toggle */}
@@ -1752,7 +1722,7 @@ function CableEstimateStep({ parsedFiles, reviewData, onNext, onBack }) {
                 <span style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 22, color: C.muted }}>m</span>
                 {estimate.cable_total_m !== approved.total_m && (
                   <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#FFD166' }}>
-                    (AI: {estimate.cable_total_m?.toLocaleString('hu-HU')} m)
+                    (eredeti: {estimate.cable_total_m?.toLocaleString('hu-HU')} m)
                   </span>
                 )}
               </div>
