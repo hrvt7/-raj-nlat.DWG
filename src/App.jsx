@@ -558,9 +558,11 @@ function UploadStep({ onParsed }) {
         setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'done', result } : x))
 
         if (isDwg) {
+          // dwg_converted = CloudConvert sikeresen konvertált → ne mutasd a modalt
+          const src    = result?._source
           const blocks = result?.summary?.total_blocks || 0
           const conf   = result?._confidence || 0
-          if (conf < DWG_CONFIDENCE_THRESHOLD || blocks < DWG_MIN_BLOCKS) {
+          if (src !== 'dwg_converted' && (conf < DWG_CONFIDENCE_THRESHOLD || blocks < DWG_MIN_BLOCKS)) {
             setDwgModal({ filename: f.name, weakResult: result })
           }
         }
@@ -2216,7 +2218,7 @@ async function parseDwgBase64(base64, filename, apiBase) {
         const dxfText = new TextDecoder('utf-8').decode(dxfBytes)
         const parsed = parseDxfText(dxfText)
         if (parsed.success) {
-          return { ...parsed, _source: 'dwg_converted', _filename: filename }
+          return { ...parsed, _source: 'dwg_converted', _filename: filename, _confidence: 1.0 }
         }
       }
     }
