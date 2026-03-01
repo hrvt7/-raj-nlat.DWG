@@ -65,7 +65,7 @@ def detect_scale(page_width_pt, page_height_pt):
     return scale, m_per_pt, best_fmt, page_w_mm, page_h_mm
 
 
-def analyze_pdf_vectors(file_bytes, filename=''):
+def analyze_pdf_vectors(file_bytes, filename='', scale_override=None):
     """
     Direkt PDF vektoros elemzés:
     - Szimbólumok számlálása (zárt kis alakzatok szín/méret szerint)
@@ -86,9 +86,15 @@ def analyze_pdf_vectors(file_bytes, filename=''):
         # Lépték detektálás az első oldalon
         if page_num == 0:
             scale, m_per_pt, fmt, pw_mm, ph_mm = detect_scale(page.rect.width, page.rect.height)
+            # Ha az API hívó átad scale_override értéket, azt használjuk az auto-detektálás helyett
+            if scale_override and isinstance(scale_override, (int, float)) and scale_override > 0:
+                scale = int(scale_override)
+                pt_to_mm = 0.3528
+                m_per_pt = pt_to_mm * scale / 1000.0
             scale_info = {
                 'scale': scale, 'm_per_pt': m_per_pt,
-                'format': fmt, 'page_w_mm': round(pw_mm), 'page_h_mm': round(ph_mm)
+                'format': fmt, 'page_w_mm': round(pw_mm), 'page_h_mm': round(ph_mm),
+                'scale_overridden': bool(scale_override),
             }
 
         for p in paths:
@@ -222,13 +228,15 @@ def analyze_pdf_vectors(file_bytes, filename=''):
             'info': {'name': 'Kábeltálca (kék/türkiz)', 'type': 'kabeltalca', 'color': 'cyan'},
         })
 
-    # Ha piros kábel nincs de fekete van (régebbi tervek)
+    # Ha piros kábel nincs de fekete van (régebbi tervek – fekete = minden vonal)
+    # Megjegyzés: fekete vonalak falakat, bútorvonalakat és kábeleket is tartalmaznak.
+    # Nem alkalmazunk szorzót – a felhasználó maga ítéli meg a relevanciát.
     if not lengths and black_cable_m > 5:
         lengths.append({
             'layer': 'PDF_BLACK_CABLE',
-            'length': round(black_cable_m * 0.25, 1),  # ~25% a falaktól különböző kábel
+            'length': round(black_cable_m, 1),
             'length_raw': round(black_cable_m, 1),
-            'info': {'name': 'Kábel (fekete, becsült)', 'type': 'kabel'},
+            'info': {'name': 'Fekete vonal összesen (fal + kábel vegyesen)', 'type': 'kabel'},
         })
 
     if not lengths:
@@ -252,12 +260,14 @@ def analyze_pdf_vectors(file_bytes, filename=''):
     if confidence < 0.6:
         warnings.append(
             'Kevés piros/kék szimbólum azonosítható. A terv esetleg más színkódolást használ. '
-            'Vision AI módra váltás ajánlott a pontosabb elemzéshez.'
+            'Ha a terv villamos elemei más színűek (pl. fekete, zöld), a PDF vektor elemzés '
+            'kevesebb elemet azonosít – fontold meg DXF formátumban exportálni a tervrajzot.'
         )
-    if scale_info['scale'] != 50:
+    if not scale_info.get('scale_overridden') and scale_info['scale'] != 50:
         warnings.append(
-            f"Lépték automatikusan {scale_info['scale']}:1-re becsülve "
-            f"({scale_info['format']} lapméret alapján). Ha ez eltér, a hosszak aránytévesek lehetnek."
+            f"Lépték automatikusan 1:{scale_info['scale']}-ra becsülve "
+            f"({scale_info['format']} lapméret alapján). Ha a tényleges lépték eltér, "
+            f"állítsd be manuálisan a \"Lépték\" gombbal."
         )
 
     return {
@@ -307,6 +317,7 @@ class handler(BaseHTTPRequestHandler):
             if not b64:
                 raise ValueError('pdf_base64 mező hiányzik')
             filename = payload.get('filename', '')
+            scale_override = payload.get('scale_override')  # opcionális (pl. 50, 100)
 
             try:
                 import fitz  # noqa
@@ -314,7 +325,7 @@ class handler(BaseHTTPRequestHandler):
                 raise RuntimeError('PyMuPDF nincs telepítve')
 
             pdf_bytes = base64.b64decode(b64)
-            result = analyze_pdf_vectors(pdf_bytes, filename)
+            result = analyze_pdf_vectors(pdf_bytes, filename, scale_override)
             self._respond(200, result)
 
         except Exception as e:

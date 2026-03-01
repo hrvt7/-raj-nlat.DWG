@@ -152,7 +152,7 @@ function FileProcessingAnimation({ status, filename }) {
   const isDone = status === 'done'
   const ext = filename?.split('.').pop()?.toLowerCase()
   const label = status === 'parsing' ? (
-    ext === 'pdf' ? 'Vision AI elemzés (PDF)...' :
+    ext === 'pdf' ? 'PDF vektoros elemzés...' :
     ext === 'dwg' ? 'DWG elemzés folyamatban...' :
     'DXF elemzés folyamatban...'
   ) : 'Kész!'
@@ -504,6 +504,9 @@ function UploadStep({ onParsed }) {
   // DWG Vision modal state
   const [dwgModal, setDwgModal] = useState(null) // { filename, weakResult } | null
 
+  // PDF base64 cache (lépték újraelemzéshez)
+  const pdfBase64Cache = useRef({})
+
   // Auto-trigger modal when DWG result is weak
   const DWG_CONFIDENCE_THRESHOLD = 0.5
   const DWG_MIN_BLOCKS = 3
@@ -536,6 +539,7 @@ function UploadStep({ onParsed }) {
         let result
         if (isPdf) {
           const base64 = await fileToBase64(f.file)
+          pdfBase64Cache.current[f.name] = base64   // cache a lépték újraelemzéshez
           result = await parsePdfBase64(base64, f.name, legendContext, apiBase)
           // Ha jelmagyarázat eredményt adott vissza, tárold el kontextusként
           if (result._legend && result._legend.length > 0) {
@@ -574,7 +578,7 @@ function UploadStep({ onParsed }) {
             layers: ['DWG'], units: { name: 'DWG' }, title_block: {},
             summary: { total_block_types: 0, total_blocks: 0, total_layers: 0, layers_with_lines: 0 },
             _source: 'dwg_text', _confidence: 0.1, _filename: f.name,
-            _note: 'DWG feldolgozási hiba – Vision AI pontosítás szükséges.',
+            _note: 'DWG feldolgozási hiba – exportálj DXF formátumba az AutoCAD / DWG TrueView programból.',
             warnings: [err.message],
           }
           setFiles(prev => prev.map(x => x.name === f.name ? { ...x, status: 'done', result: fallback } : x))
@@ -593,6 +597,19 @@ function UploadStep({ onParsed }) {
     setFiles(prev => prev.map(x => x.name === filename ? { ...x, result: newResult } : x))
     setDwgModal(null)
   }
+
+  // PDF lépték újraelemzés – ha a felhasználó más léptéket választ
+  const reanalyzePdfWithScale = useCallback(async (filename, scaleValue) => {
+    const base64 = pdfBase64Cache.current[filename]
+    if (!base64) return
+    setFiles(prev => prev.map(x => x.name === filename ? { ...x, status: 'parsing' } : x))
+    try {
+      const result = await parsePdfBase64(base64, filename, null, apiBase, scaleValue)
+      setFiles(prev => prev.map(x => x.name === filename ? { ...x, status: 'done', result } : x))
+    } catch (err) {
+      setFiles(prev => prev.map(x => x.name === filename ? { ...x, status: 'error', error: err.message } : x))
+    }
+  }, [apiBase])
 
   const allDone = files.length > 0 && files.every(f => f.status === 'done' || f.status === 'error')
   const anyDone = files.some(f => f.status === 'done')
@@ -688,11 +705,12 @@ function UploadStep({ onParsed }) {
                      const src = f.result?._source || ''
                      const blocks = f.result?.summary?.total_blocks || 0
                      if (src === 'legend_pdf')       return `📖 Jelmagyarázat: ${f.result?._legend?.length || 0} szimbólum`
-                     if (src === 'vision_screenshot') return `🤖 Vision: ${blocks} elem`
                      if (src === 'dxf_replacement')  return `📐 DXF: ${blocks} elem`
-                     if (src === 'vision_gpt4o')     return `🤖 Vision: ${blocks} elem (${Math.round((f.result?._vision_confidence||0)*100)}%)`
-                     if (src === 'pdf_vector')        return `📐 PDF vektor: ${blocks} elem`
-                     if (src === 'vision_gpt4o' || src === 'vision_pdf') return `🤖 Vision AI: ${blocks} elem`
+                     if (src === 'pdf_vector') {
+                       const scale = f.result?._scale?.scale
+                       const scaleStr = scale ? ` (1:${scale})` : ''
+                       return `📐 PDF vektor: ${blocks} elem${scaleStr}`
+                     }
                      if (src === 'dwg_converted')    return `✅ DWG→DXF: ${blocks} elem`
                      if (src.startsWith('dwg'))      return `📐 DWG: ${blocks} elem`
                      return `${(f.result?.blocks?.length||0) + (f.result?.lengths?.length||0)} elem`
@@ -711,6 +729,27 @@ function UploadStep({ onParsed }) {
                       fontFamily: 'DM Mono, monospace',
                     }}
                   >🔍 Pontosít</button>
+                )}
+                {/* Lépték választó – PDF vektor elemzésnél */}
+                {f.status === 'done' && f.result?._source === 'pdf_vector' && (
+                  <select
+                    title="PDF lépték – ha az automatikus detektálás téves, állítsd be manuálisan"
+                    value={f.result?._scale?.scale || 50}
+                    onChange={e => reanalyzePdfWithScale(f.name, Number(e.target.value))}
+                    style={{
+                      background: C.bgCard, border: `1px solid ${C.border}`,
+                      borderRadius: 6, padding: '3px 6px', fontSize: 11,
+                      color: C.muted, cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    <option value={20}>1:20</option>
+                    <option value={25}>1:25</option>
+                    <option value={33}>1:33</option>
+                    <option value={50}>1:50</option>
+                    <option value={75}>1:75</option>
+                    <option value={100}>1:100</option>
+                    <option value={200}>1:200</option>
+                  </select>
                 )}
               </div>
             ))}
@@ -2170,9 +2209,8 @@ function SaaSShell() {
               onNavigate={p => setPage(p)}
               onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
           ) : page === 'new-quote' ? (
-            // TESZT MÓD: login + subscription gate kikapcsolva — éles kiadás előtt visszakapcsolni!
-            // Éles kiadásnál:
-            //   (!session) ? <LoginWall /> : (!subStatus.active && subStatus.plan !== 'free') ? <UpgradeWall /> :
+            (!session) ? <LoginWall /> :
+            (!subStatus.active && subStatus.plan !== 'free') ? <UpgradeWall /> :
             <NewQuoteWizard settings={settings} materials={materials}
               onSaved={handleQuoteSaved} onCancel={() => setPage('quotes')} />
           ) : page === 'work-items' ? (
@@ -2246,11 +2284,11 @@ async function parseDxfBase64(base64, apiBase) {
   return await res.json()
 }
 
-async function parsePdfBase64(base64, filename, legendContext, apiBase) {
+async function parsePdfBase64(base64, filename, legendContext, apiBase, scaleOverride = null) {
   const LEGEND_KW = ['jelmagyarazat', 'jelmagyarázat', 'legend', 'jeloles', 'jelmag', 'jelkulcs']
   const isLegend = LEGEND_KW.some(kw => (filename || '').toLowerCase().includes(kw))
 
-  // Jelmagyarázatnál csak a legend promptot használjuk
+  // Jelmagyarázatnál a legend PDF parser-t használjuk (nem vektoros)
   if (isLegend) {
     const res = await fetch(`${apiBase}/api/parse-pdf`, {
       method: 'POST',
@@ -2261,34 +2299,16 @@ async function parsePdfBase64(base64, filename, legendContext, apiBase) {
     return await res.json()
   }
 
-  // 1. Lépés: Vektoros PDF elemzés (gyors, pontos színalapú)
-  try {
-    const vRes = await fetch(`${apiBase}/api/parse-pdf-vectors`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pdf_base64: base64, filename: filename || '' }),
-    })
-    if (vRes.ok) {
-      const vResult = await vRes.json()
-      if (vResult.success && vResult._confidence >= 0.60) {
-        // Jó vektoros eredmény - nem kérünk Vision AI-t
-        return vResult
-      }
-      // Gyenge vektoros eredmény - folytatjuk Vision AI-val de menti a vektoros adatot
-      console.log('PDF vector confidence low:', vResult._confidence, '- falling back to Vision AI')
-    }
-  } catch (e) {
-    console.warn('PDF vector analysis failed:', e.message)
-  }
-
-  // 2. Lépés: Vision AI (GPT-4o) - ha vektoros elemzés gyenge volt
-  const res = await fetch(`${apiBase}/api/parse-pdf`, {
+  // Vektoros PDF elemzés – csak a tényleges vektoros adatokból dolgozunk, Vision AI NINCS
+  const body = { pdf_base64: base64, filename: filename || '' }
+  if (scaleOverride) body.scale_override = scaleOverride
+  const vRes = await fetch(`${apiBase}/api/parse-pdf-vectors`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pdf_base64: base64, filename: filename || '', legend_context: legendContext || null }),
+    body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error('PDF elemzés sikertelen')
-  return await res.json()
+  if (!vRes.ok) throw new Error('PDF vektoros elemzés sikertelen')
+  return await vRes.json()
 }
 
 // ─── CSS animations ────────────────────────────────────────────────────────────

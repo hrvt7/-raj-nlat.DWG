@@ -162,10 +162,11 @@ export function parseDxfText(text) {
   // ── Auto-detect units from raw lengths ────────────────────────────────────
   if (!unitFactor) {
     const maxRaw = Math.max(...Object.values(lengthByLayer), 0)
-    if (maxRaw > 10000)    { unitName='mm (guessed)'; unitFactor=0.001 }
-    else if (maxRaw > 100) { unitName='cm (guessed)'; unitFactor=0.01 }
-    else                   { unitName='m (guessed)';  unitFactor=1.0 }
+    if      (maxRaw > 10000)  { unitName='mm (guessed)'; unitFactor=0.001 }
+    else if (maxRaw >= 100)   { unitName='cm (guessed)'; unitFactor=0.01 }
+    else                      { unitName='m (guessed)';  unitFactor=1.0 }
   }
+  if (!unitFactor) unitFactor = 1.0   // last-resort safety
 
   const blocks = Object.entries(blockCounts)
     .map(([key, count]) => { const [name,layer]=key.split('||'); return {name,layer,count} })
@@ -174,8 +175,10 @@ export function parseDxfText(text) {
   const lengths = Object.entries(lengthByLayer)
     .filter(([,v])=>v>0.01)
     .map(([layer,v])=>({
-      layer, length: Math.round(v*unitFactor*1000)/1000,
-      length_raw: Math.round(v*10000)/10000, info: layerInfo[layer]||null,
+      layer,
+      length:     Math.round(v * unitFactor * 100000) / 100000,   // 5 decimal precision
+      length_raw: Math.round(v * 100000) / 100000,                // 5 decimal precision
+      info: layerInfo[layer]||null,
     }))
     .sort((a,b)=>b.length-a.length)
 
