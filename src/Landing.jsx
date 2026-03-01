@@ -48,9 +48,9 @@ const SvgIcon = ({ path, size = 18, color = '#00E5A0', sw = 1.8 }) => (
 )
 
 const FEATURES = [
-  { icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2zM14 2v6h6M9 15l2 2 4-4', title: 'DXF & DWG Import', desc: 'DXF fájlok korlátlan méretben, DWG direkt elemzéssel. PDF tervek Vision AI-val. Több emelet egyszerre, automatikus összesítéssel.' },
+  { icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2zM14 2v6h6M9 15l2 2 4-4', title: 'DXF & DWG Import', desc: 'DXF fájlok korlátlan méretben, DWG direkt bináris elemzéssel – nem kell konvertálni. Több emelet egyszerre, automatikus összesítéssel.' },
   { icon: 'M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zM3 14l3 3 5-5', title: 'Automatikus Mennyiségkimutatás', desc: 'Dugaljak, kapcsolók, lámpák, kismegszakítók, kábeltálcák – automatikus felismerés és számlálás. Kábelnyomvonalak hossza méterben, rétegek szerint.' },
-  { icon: ['M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', 'M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12'], title: 'Vision AI – PDF és DWG elemzés', desc: 'Ha nincs DXF, nem gond. Töltsd fel a PDF tervet vagy DWG screenshotot – a GPT-4o Vision kiszámolja a szerelvényeket és kábelmennyiségeket képből is.' },
+  { icon: ['M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', 'M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12'], title: 'Intelligens Réteg & Blokk Felismerés', desc: 'Automatikus rétegazonosítás DXF/DWG fájlokban: DUGALJ, LAMPA, KAPCSOLO, KABEL rétegek névkonvenció alapján. Blokkok és vonalak gépi precizitással számlálva.' },
   { icon: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2z', 'M14 2v6h6M9 13h6M9 17h4'], title: 'Profi PDF Árajánlat', desc: 'Tételes kalkuláció: anyagköltség + munkadíj + árrés, céglogóval és fejléccel. Egy kattintás – azonnal küldhető az ügyfélnek.' },
   { icon: ['M12 2L2 7l10 5 10-5-10-5z', 'M2 17l10 5 10-5', 'M2 12l10 5 10-5'], title: 'Assembly Szerkesztő', desc: 'Saját szerelvény-csomagok építése: pl. "2-pólusú kapcsoló + keret + doboz" egy tételként. Egyszer beállítod, mindig újrahasználod.' },
   { icon: ['M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z', 'M7 7h.01'], title: 'Szerkeszthető Normaidő-adatbázis', desc: '60+ előre feltöltött normaidő-adat villamos tételekre. Saját normáid, saját anyagáraid – az ajánlat mindig a valós céges adataidat tükrözi.' },
@@ -72,9 +72,9 @@ const STATS = [
 ]
 
 const FAQ = [
-  { q: 'Milyen fájlformátumokat fogad el?', a: 'DXF natívan, korlátlan méretben. DWG direkt elemzéssel – nem kell konvertálni, az app kinyeri az adatokat a bináris fájlból is. PDF villamos terveket Vision AI (GPT-4o) elemzi, és képből azonosítja a szerelvényeket. Ha a DWG-ből kevés adat olvasható ki, egy screenshotot is feltölthetsz a pontosabb Vision AI elemzéshez.' },
-  { q: 'Mennyire pontos a mennyiségkimutatás?', a: 'DXF esetén 95%+ pontosság – a blokkok és vonalak gépi precizitással számolhatók. DWG és PDF esetén a Vision AI ~75-90% pontosságot ér el attól függően, mennyire olvasható a terv. Minden esetben van review lépés, ahol javíthatsz mielőtt ajánlatot generálsz.' },
-  { q: 'Kell AutoCAD a használathoz?', a: 'Nem. DXF-et a tervező exportál AutoCAD-ből, azt feltöltöd – kész. Ha csak DWG-d van, azt is feltöltheted. Ha PDF-ed van, a Vision AI azt is elemzi. Az app böngészőben fut, nem kell semmit telepíteni.' },
+  { q: 'Milyen fájlformátumokat fogad el?', a: 'DXF natívan, korlátlan méretben. DWG direkt elemzéssel – nem kell konvertálni, az app kinyeri az adatokat a bináris fájlból is. A terv feltöltése után az alkalmazás automatikusan azonosítja a rétegeket és blokkokat. Minden esetben van review lépés, ahol ellenőrizheted az eredményt.' },
+  { q: 'Mennyire pontos a mennyiségkimutatás?', a: 'DXF esetén 95%+ pontosság – a blokkok és vonalak gépi precizitással számolhatók. DWG esetén az adatok kinyerése a bináris formátumból közvetlen – a pontosság a terv struktúrájától függ. Minden esetben van review lépés, ahol javíthatsz mielőtt ajánlatot generálsz.' },
+  { q: 'Kell AutoCAD a használathoz?', a: 'Nem. DXF-et a tervező exportál AutoCAD-ből, azt feltöltöd – kész. Ha csak DWG-d van, azt is feltöltheted közvetlenül. Az app böngészőben fut, nem kell semmit telepíteni.' },
   { q: 'Mi van a normaidő-adatbázisban?', a: '60+ villamos szerelési normaidő-tétel, magyar szabványok alapján: dugalj, kapcsoló, lámpa, kismegszakító, kábeltálca, kábel fektetés és több. Módosítók: fal anyaga (tégla/beton), szerelési magasság. Az adatbázis az app beállításaiban szerkeszthető és bővíthető.' },
   { q: 'Mennyit spórolok egy ajánlaton?', a: 'Egy átlagos közepes projekt ajánlata manuálisan 3-8 munkaóra. Az appban ugyanez 15-30 perc. Heti 2-3 ajánlatnál ez havi 20-50 munkaóra megtakarítás – vagyis a szoftver ára a megtakarítás töredéke.' },
   { q: 'Biztonságos a fájlfeltöltés?', a: 'A feltöltött terveket kizárólag az aktuális kalkulációhoz használjuk. A fájlok titkosított csatornán kerülnek feldolgozásra.' },
@@ -86,9 +86,9 @@ const PLAN = {
   trial: '14 napos ingyenes próba',
   features: [
     'DXF import – korlátlan fájlméret',
-    'DWG direkt elemzés + Vision AI pontosítás',
-    'PDF tervek Vision AI (GPT-4o) elemzéssel',
-    'Automatikus mennyiségkimutatás (blokkok + kábelhosszak)',
+    'DWG direkt bináris elemzés',
+    'Automatikus réteg- és blokkfelismerés',
+    'Mennyiségkimutatás (blokkok + kábelhosszak)',
     'Assembly szerkesztő – saját szerelvény-csomagok',
     'Szerkeszthető normaidő-adatbázis (60+ tétel)',
     'Saját anyagárlista és kedvezmény kezelés',
@@ -391,63 +391,69 @@ function TakeoffAnimation() {
 
 function HeroSection({ onStart }) {
   return (
-    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '100px 48px 60px' }}>
+    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '120px 48px 80px' }}>
 
       {/* Subtle grid bg */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.025, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
 
-      <div className="hero-grid" style={{ maxWidth: 1400, margin: '0 auto', width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'center' }}>
+      {/* Radial glow center */}
+      <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%,-50%)', width: 700, height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-        {/* ── Left: text content ── */}
-        <div>
-          <FadeIn>
-            <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(36px, 4.5vw, 64px)', color: '#F0F0F0', marginBottom: 24, letterSpacing: '-0.03em' }}>
-              DXF-ből profi<br />
-              <span style={{ color: '#00E5A0', textShadow: '0 0 40px rgba(0,229,160,0.35)' }}>árajánlat 2 perc alatt</span>
-            </h1>
-          </FadeIn>
-          <FadeIn delay={0.1}>
-            <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.4vw, 16px)', color: '#999', lineHeight: 1.85, marginBottom: 40, maxWidth: 480 }}>
-              Töltsd fel a villamossági tervet, az AI automatikusan megszámolja a szerelvényeket, javasol anyagokat, és generál egy profi PDF ajánlatot.
-            </p>
-          </FadeIn>
-          <FadeIn delay={0.2}>
-            <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 56 }}>
-              <button onClick={onStart} style={{ padding: '15px 32px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 16, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
-                onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.55)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
-                onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
-                Próbáld ki 14 napig →
-              </button>
-              <a href="#how" style={{ padding: '15px 32px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor='#252525'; e.currentTarget.style.color='#999' }}>
-                Hogyan működik?
-              </a>
-            </div>
-          </FadeIn>
-          {/* Stats row */}
-          <FadeIn delay={0.3}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px 0', borderTop: '1px solid #161616', paddingTop: 32 }}>
-              {STATS.map((s, i) => (
-                <div key={i} style={{ paddingRight: 24 }}>
-                  <div style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 900, color: '#00E5A0', marginBottom: 4 }}>{s.value}</div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#666', lineHeight: 1.4 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-          </FadeIn>
-        </div>
+      <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
 
-        {/* ── Right: animated SVG ── */}
-        <FadeIn delay={0.15}>
+        {/* ── Badge ── */}
+        <FadeIn>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(0,229,160,0.07)', border: '1px solid rgba(0,229,160,0.18)', borderRadius: 999, padding: '6px 16px', marginBottom: 28 }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E5A0', boxShadow: '0 0 8px #00E5A0' }} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Villamos kivitelezőknek</span>
+          </div>
+        </FadeIn>
+
+        {/* ── Headline ── */}
+        <FadeIn delay={0.05}>
+          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(38px, 5.5vw, 72px)', color: '#F0F0F0', marginBottom: 24, letterSpacing: '-0.03em' }}>
+            DXF-ből profi árajánlat
+            <br />
+            <span style={{ color: '#00E5A0', textShadow: '0 0 50px rgba(0,229,160,0.35)' }}>2 perc alatt</span>
+          </h1>
+        </FadeIn>
+
+        {/* ── Subtext ── */}
+        <FadeIn delay={0.12}>
+          <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.5vw, 16px)', color: '#999', lineHeight: 1.9, marginBottom: 40, maxWidth: 560, margin: '0 auto 40px' }}>
+            Töltsd fel a villamossági tervet, az alkalmazás automatikusan megszámolja<br className="hero-br" />
+            a szerelvényeket, és generál egy profi PDF ajánlatot.
+          </p>
+        </FadeIn>
+
+        {/* ── CTAs ── */}
+        <FadeIn delay={0.2}>
+          <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 64 }}>
+            <button onClick={onStart} style={{ padding: '15px 36px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 16, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
+              onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.55)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
+              onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
+              Próbáld ki 14 napig →
+            </button>
+            <a href="#how" style={{ padding: '15px 32px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor='#252525'; e.currentTarget.style.color='#999' }}>
+              Hogyan működik?
+            </a>
+          </div>
+        </FadeIn>
+
+        {/* ── Animated SVG below ── */}
+        <FadeIn delay={0.25}>
           <div className="anim-frame-169" style={{
             position: 'relative',
             borderRadius: 16,
             overflow: 'hidden',
             border: '1px solid #0E2018',
-            boxShadow: '0 0 0 1px #0A1A12, 0 32px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,229,160,0.04)',
+            boxShadow: '0 0 0 1px #0A1A12, 0 40px 100px rgba(0,0,0,0.7), 0 0 80px rgba(0,229,160,0.05)',
             aspectRatio: '16/9',
             background: '#050E08',
+            maxWidth: 880,
+            margin: '0 auto',
           }}>
             {/* Corner accents */}
             <div style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, borderTop: '1.5px solid #00E5A0', borderLeft: '1.5px solid #00E5A0', borderRadius: '4px 0 0 0', opacity: 0.6, zIndex: 2 }} />
@@ -463,8 +469,6 @@ function HeroSection({ onStart }) {
         </FadeIn>
 
       </div>
-
-      {/* Responsive CSS handled by global style block */}
     </section>
   )
 }
@@ -766,14 +770,20 @@ function AISection() {
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div className="ai-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60, alignItems: 'center' }}>
           <FadeIn>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>AI Asszisztens</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>Intelligens Elemzés</div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(24px, 4vw, 40px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 20, lineHeight: 1.2 }}>
-              Töltsd fel a műszaki leírást, az AI elvégzi a többit
+              Töltsd fel a tervet,<br />
+              <span style={{ color: '#00E5A0' }}>az app elvégzi a többit</span>
             </h2>
             <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', lineHeight: 1.8, marginBottom: 28 }}>
-              Az AI elemzi az OTÉK-ot, szabványszámokat, IP besorolásokat és anyagkövetelményeket – és figyelmeztet, ha valami hiányzik a tervből.
+              Az alkalmazás automatikusan azonosítja a DXF/DWG rétegeket, megszámolja a blokkokat és kinyeri a kábelnyomvonalakat – rétegnév-konvenciók alapján, gépi precizitással.
             </p>
-            {['IP védettség automatikus azonosítás', 'MSZ HD szabványok ellenőrzése', 'Anyag- és típusajánlások', 'Hiányzó réteg figyelmeztetések'].map((item, i) => (
+            {[
+              'Automatikus rétegazonosítás (DUGALJ, LAMPA, KABEL…)',
+              'Blokkok számlálása és típusonkénti összesítés',
+              'Kábelhossz kinyerése vonalak és polilinék alapján',
+              'Hiányzó réteg figyelmeztetések review lépésnél',
+            ].map((item, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
                 <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#aaa' }}>{item}</span>
@@ -784,13 +794,13 @@ function AISection() {
             <div style={{ background: '#0D0D0D', border: '1px solid #1A1A1A', borderRadius: 16, padding: 24, fontFamily: 'DM Mono' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #1A1A1A' }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E5A0', boxShadow: '0 0 8px #00E5A0' }} />
-                <span style={{ fontSize: 12, color: '#888' }}>AI Elemzés eredménye</span>
+                <span style={{ fontSize: 12, color: '#888' }}>Réteg- és blokkfelismerés eredménye</span>
               </div>
               {[
-                { label: 'IP védettség',   value: 'IP44 – nedves helyiségek',   ok: true },
-                { label: 'Kábel típus',    value: 'NYY-J 3×2.5mm²',            ok: true },
-                { label: 'Szabvány',       value: 'MSZ HD 60364-7-701',         ok: true },
-                { label: 'Figyelmeztetés', value: 'TRAY_100x60 réteg hiányzik', ok: false },
+                { label: 'DUGALJ réteg',    value: '12 db azonosítva',    ok: true },
+                { label: 'LAMPA réteg',     value: '18 db azonosítva',    ok: true },
+                { label: 'KAPCSOLO réteg',  value: '7 db azonosítva',     ok: true },
+                { label: 'Figyelmeztetés',  value: 'KABEL_NYM6 réteg hiányzik', ok: false },
               ].map((row, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < 3 ? '1px solid #111' : 'none' }}>
                   <span style={{ fontSize: 11, color: '#777' }}>{row.label}</span>
@@ -798,7 +808,7 @@ function AISection() {
                 </div>
               ))}
               <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(0,229,160,0.04)', border: '1px solid rgba(0,229,160,0.1)', borderRadius: 8, fontSize: 11, color: '#5A9A7A', lineHeight: 1.6 }}>
-                "A tervek megfelelnek az MSZ HD szabványnak. A nedves helyiségekben IP44 védettségű szerelvények szükségesek."
+                Összes felismert blokk: <strong style={{ color: '#00E5A0' }}>37 db</strong> · Kábelhossz összesen: <strong style={{ color: '#00E5A0' }}>248 m</strong>
               </div>
             </div>
           </FadeIn>
@@ -1044,14 +1054,7 @@ function PDFOutputSection() {
   )
 }
 
-function PricingSection({ onStart }) {
-  const [annual, setAnnual] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const monthlyPrice = PLAN.price             // 99 000
-  const annualMonthly = Math.round(monthlyPrice * 0.85) // 84 150 → round
-  const price = annual ? annualMonthly : monthlyPrice
-  const annualTotal = annualMonthly * 12       // ~1 009 800
-
+function PricingSection() {
   return (
     <section id="pricing" className="sec-100" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
@@ -1059,18 +1062,10 @@ function PricingSection({ onStart }) {
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>Árazás</div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(28px, 5vw, 48px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 16 }}>Egy csomag. Minden benne.</h2>
-            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', maxWidth: 440, margin: '0 auto 28px', lineHeight: 1.7 }}>
-              Az árajánlat pontosságához az összes funkció szükséges egyszerre –<br/>
-              ezért nincs alap- és pro verzió. Csak egy ár, minden funkcióval.
+            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', maxWidth: 440, margin: '0 auto', lineHeight: 1.7 }}>
+              Az árajánlat pontosságához az összes funkció szükséges egyszerre –
+              ezért nincs alap- és pro verzió.
             </p>
-
-            {/* Billing toggle */}
-            <div className="billing-toggle" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#111', border: '1px solid #1E1E1E', borderRadius: 999, padding: 4 }}>
-              <button onClick={() => setAnnual(false)} style={{ padding: '7px 18px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 12, background: !annual ? '#00E5A0' : 'transparent', color: !annual ? '#0A0A0A' : '#777', transition: 'all 0.2s' }}>Havi</button>
-              <button onClick={() => setAnnual(true)} style={{ padding: '7px 18px', borderRadius: 999, border: 'none', cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 12, background: annual ? '#00E5A0' : 'transparent', color: annual ? '#0A0A0A' : '#777', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6 }}>
-                Éves <span style={{ background: annual ? 'rgba(0,0,0,0.15)' : 'rgba(0,229,160,0.15)', color: annual ? '#0A0A0A' : '#00E5A0', fontSize: 10, padding: '1px 6px', borderRadius: 999 }}>-15%</span>
-              </button>
-            </div>
           </div>
         </FadeIn>
 
@@ -1079,7 +1074,7 @@ function PricingSection({ onStart }) {
           <div style={{
             background: 'linear-gradient(145deg, #0C1C15 0%, #08120E 100%)',
             border: '1px solid rgba(0,229,160,0.28)',
-            borderRadius: 24, padding: '40px 44px',
+            borderRadius: 24, padding: '44px 44px 40px',
             position: 'relative',
             boxShadow: '0 0 80px rgba(0,229,160,0.08)',
           }}>
@@ -1090,83 +1085,34 @@ function PricingSection({ onStart }) {
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 40, alignItems: 'flex-start' }}>
 
-              {/* Left: price + cta */}
+              {/* Left: contact CTA */}
               <div style={{ flex: '0 0 auto', minWidth: 220 }}>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>TakeoffPro</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>TakeoffPro</div>
 
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
-                  <span style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 52, color: '#F0F0F0', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                    {price.toLocaleString('hu')}
-                  </span>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#777' }}>Ft/hó</span>
-                </div>
-
-                {annual ? (
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#00E5A0', marginBottom: 8 }}>
-                    {annualTotal.toLocaleString('hu')} Ft/év · 2 hónap ingyen
-                  </div>
-                ) : (
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#555', marginBottom: 8 }}>
-                    Éves fizetéssel: {annualMonthly.toLocaleString('hu')} Ft/hó
-                  </div>
-                )}
-
-                <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#888', lineHeight: 1.7, marginBottom: 20, maxWidth: 220 }}>
-                  {PLAN.desc}
+                <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#aaa', lineHeight: 1.75, marginBottom: 24, maxWidth: 240 }}>
+                  Pontos árakért érdeklődjön – személyre szabott ajánlatot adunk.
                 </p>
 
-                {/* Trial badge */}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.15)', borderRadius: 6, padding: '6px 12px', marginBottom: 20 }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0' }}>{PLAN.trial}</span>
-                </div>
-
-                <button
-                  disabled={loading}
-                  onClick={async () => {
-                    setLoading(true)
-                    try {
-                      // Ha van bejelentkezett user, Stripe Checkout-ra irányítunk
-                      const { supabase } = await import('./supabase.js')
-                      const { data: { session } } = await supabase.auth.getSession()
-                      if (session) {
-                        const res = await fetch('/api/create-checkout', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            plan: annual ? 'annual' : 'monthly',
-                            user_id: session.user.id,
-                            email: session.user.email,
-                          }),
-                        })
-                        const data = await res.json()
-                        if (data.url) {
-                          window.location.href = data.url
-                          return
-                        }
-                      }
-                      // Nincs session → sima onStart (regisztrációs flow)
-                      onStart()
-                    } catch (e) {
-                      console.error('Checkout error:', e)
-                      onStart() // fallback
-                    } finally {
-                      setLoading(false)
-                    }
-                  }}
+                {/* Phone CTA */}
+                <a href="tel:+36305252336"
                   style={{
-                    display: 'block', width: '100%', padding: '14px 20px', borderRadius: 10,
-                    border: 'none', cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
-                    background: loading ? '#0A7A56' : '#00E5A0', color: '#0A0A0A',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '14px 20px', borderRadius: 10,
+                    background: '#00E5A0', color: '#0A0A0A',
+                    textDecoration: 'none', fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
                     boxShadow: '0 0 30px rgba(0,229,160,0.3)', transition: 'all 0.2s',
-                    opacity: loading ? 0.7 : 1,
+                    marginBottom: 14,
                   }}
-                  onMouseEnter={e => { if (!loading) { e.target.style.boxShadow='0 0 50px rgba(0,229,160,0.5)'; e.target.style.transform='translateY(-1px)' }}}
-                  onMouseLeave={e => { e.target.style.boxShadow='0 0 30px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
-                  {loading ? 'Átirányítás...' : PLAN.cta}
-                </button>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#444', marginTop: 10, textAlign: 'center' }}>
-                  14 nap ingyen · Kártyát a próba után kérjük
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow='0 0 50px rgba(0,229,160,0.5)'; e.currentTarget.style.transform='translateY(-1px)' }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow='0 0 30px rgba(0,229,160,0.3)'; e.currentTarget.style.transform='none' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.64 3.42 2 2 0 0 1 3.62 1.25h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 16.92z"/>
+                  </svg>
+                  +36 30 525 2336
+                </a>
+
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444', textAlign: 'center' }}>
+                  Hétfő–Péntek · 8:00–17:00
                 </div>
               </div>
 
@@ -1184,10 +1130,6 @@ function PricingSection({ onStart }) {
             </div>
           </div>
         </FadeIn>
-
-        <p style={{ textAlign: 'center', fontFamily: 'DM Mono', fontSize: 12, color: '#444', marginTop: 24 }}>
-          14 napos ingyenes próba · Lemondható bármikor · Éves előfizetéssel –15%
-        </p>
       </div>
     </section>
   )
@@ -1371,12 +1313,12 @@ export default function Landing({ onStart }) {
       <GlobalMouseGlow />
       <NavBar onStart={onStart} />
       <HeroSection onStart={onStart} />
-      <FeaturesSection />
       <NormTimeSection />
-      <HowSection />
       <AISection />
       <PDFOutputSection />
-      <PricingSection onStart={onStart} />
+      <HowSection />
+      <FeaturesSection />
+      <PricingSection />
       <FAQSection />
       <CTASection onStart={onStart} />
       <Footer />

@@ -92,80 +92,23 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
         <Input value={search} onChange={setSearch} placeholder="Keresés: név, kód..." />
       </div>
 
-      {/* Table */}
-      <Card style={{ overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: C.bgCard }}>
-              {['Kód', 'Megnevezés', 'Kategória', 'Egys.', 'P50 (perc)', 'P90 (perc)', 'Magas.faktor', ''].map(h => (
-                <th key={h} style={{
-                  padding: '10px 14px', textAlign: 'left', fontSize: 10,
-                  color: C.textSub, fontFamily: 'DM Mono', fontWeight: 500,
-                  borderBottom: `1px solid ${C.border}`, textTransform: 'uppercase', letterSpacing: '0.06em',
-                  whiteSpace: 'nowrap'
-                }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((wi, i) => {
-              const cat = WORK_ITEM_CATEGORIES.find(c => c.key === wi.category)
-              return (
-                <tr key={wi.code}
-                  style={{ borderBottom: `1px solid ${C.border}` }}
-                  onMouseEnter={e => e.currentTarget.style.background = C.bgHover}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <td style={{ padding: '11px 14px' }}>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted }}>{wi.code}</span>
-                  </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.text }}>{wi.name}</div>
-                    {wi.desc && <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{wi.desc}</div>}
-                  </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: cat?.color || C.textSub }}>
-                      {cat?.icon} {cat?.label || wi.category}
-                    </span>
-                  </td>
-                  <td style={{ padding: '11px 14px', fontFamily: 'DM Mono', fontSize: 12, color: C.textSub }}>
-                    {wi.unit}
-                  </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <span style={{
-                      fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.accent,
-                      background: C.accentDim, padding: '3px 8px', borderRadius: 6
-                    }}>{wi.p50}</span>
-                  </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <span style={{
-                      fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.yellow,
-                      background: C.yellowDim, padding: '3px 8px', borderRadius: 6
-                    }}>{wi.p90}</span>
-                  </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: wi.heightFactor ? C.accent : C.textMuted }}>
-                      {wi.heightFactor ? '✓ igen' : '–'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => setEditItem({ ...wi })} style={{
-                        padding: '4px 10px', background: C.bgHover, border: `1px solid ${C.border}`,
-                        borderRadius: 6, color: C.textSub, fontFamily: 'DM Mono', fontSize: 11, cursor: 'pointer'
-                      }}>Szerkeszt</button>
-                      <button onClick={() => deleteItem(wi.code)} style={{
-                        padding: '4px 8px', background: C.redDim, border: '1px solid rgba(255,107,107,0.15)',
-                        borderRadius: 6, color: C.red, fontFamily: 'DM Mono', fontSize: 11, cursor: 'pointer'
-                      }}>Törlés</button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </Card>
+      {/* Cards grid */}
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: C.textMuted, fontFamily: 'DM Mono', fontSize: 13 }}>
+          Nincs találat a szűrési feltételekre.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+          {filtered.map(wi => (
+            <WorkItemGridCard
+              key={wi.code}
+              workItem={wi}
+              onEdit={() => setEditItem({ ...wi })}
+              onDelete={() => deleteItem(wi.code)}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Info box */}
       <div style={{ marginTop: 16, padding: '12px 16px', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10 }}>
@@ -180,6 +123,97 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
       {editItem && (
         <WorkItemModal item={editItem} onSave={saveItem} onClose={() => { setEditItem(null); setShowAdd(false) }} />
       )}
+    </div>
+  )
+}
+
+function WorkItemGridCard({ workItem, onEdit, onDelete }) {
+  const [hovered, setHovered] = useState(false)
+  const cat = WORK_ITEM_CATEGORIES.find(c => c.key === workItem.category)
+
+  return (
+    <div
+      onClick={onEdit}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: C.bgCard,
+        border: `1px solid ${hovered ? 'rgba(0,229,160,0.35)' : C.border}`,
+        borderRadius: 12,
+        padding: '14px 16px',
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: hovered ? '0 8px 24px rgba(0,229,160,0.07)' : 'none',
+        position: 'relative',
+      }}
+    >
+      {/* Top row: category badge + code */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{
+          fontFamily: 'DM Mono', fontSize: 10,
+          color: cat?.color || C.textSub,
+          background: `${cat?.color || C.textSub}14`,
+          border: `1px solid ${cat?.color || C.textSub}28`,
+          padding: '2px 8px', borderRadius: 20,
+        }}>
+          {cat?.label || workItem.category}
+        </span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{workItem.code}</span>
+      </div>
+
+      {/* Name */}
+      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, lineHeight: 1.35, marginBottom: workItem.desc ? 4 : 0 }}>
+        {workItem.name}
+      </div>
+      {workItem.desc && (
+        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, lineHeight: 1.5 }}>
+          {workItem.desc}
+        </div>
+      )}
+
+      {/* Divider */}
+      <div style={{ borderTop: `1px solid ${C.border}`, margin: '12px 0 10px' }} />
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>P50</div>
+          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, background: C.accentDim, padding: '2px 7px', borderRadius: 6 }}>
+            {workItem.p50}<span style={{ fontSize: 9, fontWeight: 400, marginLeft: 1, color: C.textSub }}>p</span>
+          </span>
+        </div>
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>P90</div>
+          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.yellow, background: C.yellowDim, padding: '2px 7px', borderRadius: 6 }}>
+            {workItem.p90}<span style={{ fontSize: 9, fontWeight: 400, marginLeft: 1, color: C.textSub }}>p</span>
+          </span>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Egys.</div>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{workItem.unit}</span>
+        </div>
+        {workItem.heightFactor && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Mag.</div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent }}>✓</span>
+          </div>
+        )}
+        {/* Delete button */}
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          style={{
+            marginLeft: 'auto', padding: '4px 7px', background: 'transparent',
+            border: `1px solid ${C.border}`, borderRadius: 6,
+            color: C.textMuted, cursor: 'pointer', fontSize: 11,
+            opacity: hovered ? 1 : 0.4, transition: 'opacity 0.15s',
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }

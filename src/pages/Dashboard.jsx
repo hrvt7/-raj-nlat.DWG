@@ -23,7 +23,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
   return (
     <div>
       {/* Page header */}
-      <div style={{ marginBottom: 28 }}>
+      <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}>
           {settings.company.name ? `${settings.company.name}` : 'Dashboard'}
         </h1>
@@ -32,39 +32,51 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
         </p>
       </div>
 
+      {/* ── Gyors indítás – TOP CENTER ── */}
+      <Card style={{ padding: '20px 24px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', background: `linear-gradient(135deg, rgba(0,229,160,0.05) 0%, transparent 60%)`, border: `1px solid rgba(0,229,160,0.15)` }}>
+        <div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 3 }}>Gyors indítás</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted }}>Hozz létre új ajánlatot DXF/DWG terv feltöltésével</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+          <Button onClick={() => onNavigate('new-quote')}>
+            + Új ajánlat
+          </Button>
+          <Button variant="secondary" onClick={() => onNavigate('settings')}>
+            Beállítások
+          </Button>
+        </div>
+      </Card>
+
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }}>
         <StatCard
           label="Összes ajánlat"
           value={stats.all}
           sub={`${stats.thisMonth} db ez hónapban`}
           color={C.accent}
-          
         />
         <StatCard
           label="Nyitott / várakozó"
           value={stats.open}
           sub="Elküldve, döntésre vár"
           color={C.yellow}
-          
         />
         <StatCard
           label="Nyertes ajánlat"
           value={`${stats.winRate}%`}
           sub={`${stats.won} db nyertes`}
           color={C.accent}
-          
         />
         <StatCard
           label="Nyertes összérték"
           value={stats.wonTotal > 0 ? `${fmt(stats.wonTotal / 1000000)} M` : '–'}
           sub="Ft (bruttó)"
           color={C.blue}
-          
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 18 }}>
         {/* Recent quotes table */}
         <Card style={{ overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -74,10 +86,9 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
 
           {recentQuotes.length === 0 ? (
             <EmptyState
-              
               title="Még nincs ajánlat"
               desc="Hozd létre az első ajánlatot DXF/DWG feltöltéssel."
-              action={<Button onClick={() => onNavigate('new-quote')} >Új ajánlat</Button>}
+              action={<Button onClick={() => onNavigate('new-quote')}>Új ajánlat</Button>}
             />
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -126,24 +137,15 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
           )}
         </Card>
 
-        {/* Right column */}
+        {/* Right column – info cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Quick action */}
-          <Card style={{ padding: 20 }}>
-            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14 }}>Gyors indítás</div>
-            <Button onClick={() => onNavigate('new-quote')} style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }} >
-              Új ajánlat (DXF)
-            </Button>
-            <Button variant="secondary" onClick={() => onNavigate('settings')} style={{ width: '100%', justifyContent: 'center' }} >
-              Beállítások
-            </Button>
-          </Card>
-
           {/* Settings reminder */}
           {!settings.company.name && (
             <Card style={{ padding: 18, border: `1px solid rgba(255,209,102,0.2)`, background: 'rgba(255,209,102,0.04)' }}>
-              <div style={{ fontSize: 16, marginBottom: 10 }}>⚠️</div>
-              <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.yellow, marginBottom: 6 }}>Céges adatok hiányoznak</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.yellow} strokeWidth="2.5" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.yellow }}>Céges adatok hiányoznak</div>
+              </div>
               <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.6, marginBottom: 12 }}>
                 Töltsd ki a cégnevét és adatait az ajánlatokhoz.
               </div>

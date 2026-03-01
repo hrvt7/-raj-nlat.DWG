@@ -139,7 +139,11 @@ export default function Plans() {
           marginBottom: 24,
         }}
       >
-        <div style={{ fontSize: 32, marginBottom: 8 }}>📐</div>
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={dragging ? '#00E5A0' : C.textSub} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
         <div style={{ color: C.text, fontSize: 14, fontWeight: 600, fontFamily: 'Syne' }}>
           Tervrajz feltöltése
         </div>
@@ -160,9 +164,13 @@ export default function Plans() {
       {/* Plans grid */}
       {plans.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, color: C.muted }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📁</div>
-          <div style={{ fontSize: 14, fontFamily: 'Syne' }}>Még nincsenek tervrajzok</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>Töltsd fel az első DXF/DWG fájlt a megtekintéshez</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div style={{ fontSize: 14, fontFamily: 'Syne', color: C.textSub }}>Még nincsenek tervrajzok</div>
+          <div style={{ fontSize: 12, marginTop: 6, fontFamily: 'DM Mono', color: C.textMuted }}>Töltsd fel az első DXF/DWG fájlt a megtekintéshez</div>
         </div>
       ) : (
         <div style={{
@@ -193,12 +201,24 @@ export default function Plans() {
             >
               {/* Preview placeholder */}
               <div style={{
-                height: 120, background: C.bg,
+                height: 110, background: C.bg,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderBottom: `1px solid ${C.border}`,
+                flexDirection: 'column', gap: 6,
               }}>
-                <span style={{ fontSize: 40 }}>
-                  {plan.fileType === 'dwg' ? '📋' : '📐'}
+                {plan.fileType === 'dwg' ? (
+                  <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke={C.yellow} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                ) : (
+                  <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+                  </svg>
+                )}
+                <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, letterSpacing: '0.08em' }}>
+                  {plan.fileType.toUpperCase()} terv
                 </span>
               </div>
 
@@ -250,9 +270,12 @@ export default function Plans() {
                       padding: '6px 10px', borderRadius: 5,
                       background: 'transparent', border: `1px solid ${C.border}`,
                       color: C.muted, fontSize: 11, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                   >
-                    🗑
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                    </svg>
                   </button>
                 </div>
               </div>

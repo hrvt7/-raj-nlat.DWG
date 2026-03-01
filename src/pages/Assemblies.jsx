@@ -3,20 +3,13 @@ import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '.
 import { WORK_ITEM_CATEGORIES, generateAssemblyId } from '../data/workItemsDb.js'
 import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials } from '../data/store.js'
 
-// ─── Assembly Editor v2.1 ─────────────────────────────────────────────────────
+// ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
 
 export default function AssembliesPage() {
   const [assemblies, setAssemblies] = useState(loadAssemblies)
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('all')
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
-
-  useEffect(() => {
-    const fn = () => setIsMobile(window.innerWidth < 768)
-    window.addEventListener('resize', fn)
-    return () => window.removeEventListener('resize', fn)
-  }, [])
 
   const selected = assemblies.find(a => a.id === selectedId) || null
 
@@ -67,28 +60,17 @@ export default function AssembliesPage() {
     if (selectedId === id) setSelectedId(null)
   }
 
-  // Mobile: if selected, show editor full screen
-  if (isMobile && selected) {
-    return (
-      <div>
-        <button onClick={() => setSelectedId(null)} style={{
-          background: 'none', border: 'none', color: C.textSub, cursor: 'pointer',
-          fontSize: 14, marginBottom: 16, fontFamily: 'DM Mono', display: 'flex', alignItems: 'center', gap: 6,
-        }}>← Vissza a listához</button>
-        <AssemblyEditorPanel
-          assembly={selected}
-          onUpdate={handleUpdate}
-          onDuplicate={handleDuplicate}
-          onDelete={handleDelete}
-        />
-      </div>
-    )
-  }
+  // Close modal on Escape
+  useEffect(() => {
+    const fn = (e) => { if (e.key === 'Escape') setSelectedId(null) }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [])
 
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontFamily: 'Syne', fontSize: 24, fontWeight: 800, color: C.text }}>Assemblyk</h1>
           <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, marginTop: 4 }}>
@@ -98,60 +80,176 @@ export default function AssembliesPage() {
         <Button size="sm" onClick={handleCreate} icon="＋">Új assembly</Button>
       </div>
 
-      {/* Split panel */}
-      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-        {/* Left: Assembly list */}
-        <div style={{ width: isMobile ? '100%' : 320, flexShrink: 0 }}>
-          {/* Search */}
-          <div style={{ marginBottom: 12 }}>
-            <Input value={search} onChange={setSearch} placeholder="Keresés..." />
-          </div>
-
-          {/* Category filter */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 14, flexWrap: 'wrap' }}>
-            <FilterChip label="Összes" active={catFilter === 'all'} onClick={() => setCatFilter('all')} />
-            {WORK_ITEM_CATEGORIES.filter(c => assemblies.some(a => a.category === c.key)).map(c => (
-              <FilterChip key={c.key} label={c.label} active={catFilter === c.key}
-                onClick={() => setCatFilter(c.key)} />
-            ))}
-          </div>
-
-          {/* Assembly cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {filtered.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 32, color: C.textMuted, fontSize: 13 }}>
-                Nincs találat
-              </div>
-            )}
-            {filtered.map(asm => (
-              <AssemblyCard key={asm.id} assembly={asm}
-                isSelected={selectedId === asm.id}
-                onClick={() => setSelectedId(asm.id)} />
-            ))}
-          </div>
+      {/* Search + Filter */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 200px', maxWidth: 300 }}>
+          <Input value={search} onChange={setSearch} placeholder="Keresés..." />
         </div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <FilterChip label="Összes" active={catFilter === 'all'} onClick={() => setCatFilter('all')} />
+          {WORK_ITEM_CATEGORIES.filter(c => assemblies.some(a => a.category === c.key)).map(c => (
+            <FilterChip key={c.key} label={c.label} active={catFilter === c.key}
+              onClick={() => setCatFilter(c.key)} />
+          ))}
+        </div>
+      </div>
 
-        {/* Right: Editor panel */}
-        {!isMobile && (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {selected ? (
-              <AssemblyEditorPanel
-                assembly={selected}
-                onUpdate={handleUpdate}
-                onDuplicate={handleDuplicate}
-                onDelete={handleDelete}
-              />
-            ) : (
-              <EmptyState
-                icon="📦"
-                title="Válassz ki egy assembly-t"
-                desc="Vagy hozz létre újat a bal oldali + gombbal"
-              />
-            )}
-          </div>
+      {/* 3-column grid */}
+      {filtered.length === 0 ? (
+        <EmptyState
+          title="Nincs találat"
+          desc="Hozz létre új assembly-t a jobb felső + gombbal"
+          action={<Button onClick={handleCreate}>Új assembly</Button>}
+        />
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: 14,
+        }}>
+          {filtered.map(asm => (
+            <AssemblyGridCard
+              key={asm.id}
+              assembly={asm}
+              onClick={() => setSelectedId(asm.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Modal overlay */}
+      {selected && (
+        <AssemblyModal
+          assembly={selected}
+          onClose={() => setSelectedId(null)}
+          onUpdate={handleUpdate}
+          onDuplicate={(asm) => { handleDuplicate(asm) }}
+          onDelete={(id) => { handleDelete(id); setSelectedId(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Assembly Grid Card ────────────────────────────────────────────────────────
+
+function AssemblyGridCard({ assembly, onClick }) {
+  const cat = WORK_ITEM_CATEGORIES.find(c => c.key === assembly.category)
+  const compCount = assembly.components?.length || 0
+  const workItems = assembly.components?.filter(c => c.itemType === 'workitem') || []
+  const materials = assembly.components?.filter(c => c.itemType === 'material') || []
+  const totalNorm = workItems.reduce((s, c) => s + (parseFloat(c.norm_time) || 0), 0)
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? 'rgba(0,229,160,0.04)' : C.bgCard,
+        border: `1px solid ${hovered ? 'rgba(0,229,160,0.25)' : C.border}`,
+        borderRadius: 14, padding: '20px 20px 16px', cursor: 'pointer',
+        transition: 'all 0.18s',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: hovered ? '0 8px 32px rgba(0,0,0,0.35)' : 'none',
+      }}
+    >
+      {/* Category badge + ID */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        {cat ? (
+          <Badge color="green">{cat.icon} {cat.label}</Badge>
+        ) : (
+          <span />
         )}
+        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{assembly.id}</span>
+      </div>
+
+      {/* Name */}
+      <div style={{
+        fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 6,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {assembly.name}
+      </div>
+
+      {/* Description */}
+      {assembly.description && (
+        <div style={{
+          fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, marginBottom: 14,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {assembly.description}
+        </div>
+      )}
+
+      {/* Divider */}
+      <div style={{ height: 1, background: C.border, marginBottom: 12 }} />
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          </svg>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{materials.length} anyag</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2.5" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{workItems.length} munka</span>
+        </div>
+        <div style={{ marginLeft: 'auto', fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent }}>
+          {compCount} elem
+        </div>
       </div>
     </div>
+  )
+}
+
+// ─── Assembly Modal ────────────────────────────────────────────────────────────
+
+function AssemblyModal({ assembly, onClose, onUpdate, onDuplicate, onDelete }) {
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.72)',
+          backdropFilter: 'blur(4px)',
+        }}
+      />
+      {/* Modal panel */}
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%', zIndex: 1001,
+        transform: 'translate(-50%, -50%)',
+        width: 'min(740px, calc(100vw - 32px))',
+        maxHeight: 'calc(100vh - 64px)',
+        overflowY: 'auto',
+        borderRadius: 18,
+        boxShadow: '0 32px 96px rgba(0,0,0,0.8)',
+      }}>
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: 14, right: 14, zIndex: 10,
+            background: C.bgHover, border: `1px solid ${C.border}`,
+            borderRadius: 8, width: 30, height: 30, cursor: 'pointer',
+            color: C.textSub, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >✕</button>
+        <AssemblyEditorPanel
+          assembly={assembly}
+          onUpdate={onUpdate}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+        />
+      </div>
+    </>
   )
 }
 
