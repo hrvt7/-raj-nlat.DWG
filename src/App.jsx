@@ -2209,8 +2209,9 @@ function SaaSShell() {
               onNavigate={p => setPage(p)}
               onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
           ) : page === 'new-quote' ? (
-            (!session) ? <LoginWall /> :
-            (!subStatus.active && subStatus.plan !== 'free') ? <UpgradeWall /> :
+            // Auth gate – éles kiadás előtt visszakapcsolni:
+            // (!session) ? <LoginWall /> :
+            // (!subStatus.active && subStatus.plan !== 'free') ? <UpgradeWall /> :
             <NewQuoteWizard settings={settings} materials={materials}
               onSaved={handleQuoteSaved} onCancel={() => setPage('quotes')} />
           ) : page === 'work-items' ? (
