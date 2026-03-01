@@ -85,6 +85,55 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-042', name: 'Kismegszakító 3P 16A', unit: 'db', price: 3500, discount: 0, category: 'vedelem' },
   { code: 'MAT-043', name: 'FI-relé 2P 40A 30mA', unit: 'db', price: 8500, discount: 0, category: 'vedelem' },
   { code: 'MAT-044', name: 'FI-relé 4P 40A 30mA', unit: 'db', price: 14000, discount: 0, category: 'vedelem' },
+  // Kismegszakítók bővítés
+  { code: 'MAT-045', name: 'Kismegszakító 1P 20A', unit: 'db', price: 1300, discount: 0, category: 'vedelem' },
+  { code: 'MAT-046', name: 'Kismegszakító 1P 32A', unit: 'db', price: 1500, discount: 0, category: 'vedelem' },
+  { code: 'MAT-047', name: 'Kismegszakító 3P 20A', unit: 'db', price: 4200, discount: 0, category: 'vedelem' },
+  { code: 'MAT-048', name: 'Kismegszakító 3P 32A', unit: 'db', price: 5500, discount: 0, category: 'vedelem' },
+  // Ipari dugaljak (CEE)
+  { code: 'MAT-050', name: 'CEE dugalj 1P+N+F 16A (IP44)', unit: 'db', price: 1800, discount: 0, category: 'ipari' },
+  { code: 'MAT-051', name: 'CEE dugalj 1P+N+F 32A (IP44)', unit: 'db', price: 2600, discount: 0, category: 'ipari' },
+  { code: 'MAT-052', name: 'CEE dugalj 3P+N+F 16A (IP44)', unit: 'db', price: 2800, discount: 0, category: 'ipari' },
+  { code: 'MAT-053', name: 'CEE dugalj 3P+N+F 32A (IP44)', unit: 'db', price: 4200, discount: 0, category: 'ipari' },
+  { code: 'MAT-054', name: 'CEE dugasz 3P+N+F 32A', unit: 'db', price: 3800, discount: 0, category: 'ipari' },
+  // Elosztótáblák
+  { code: 'MAT-060', name: 'Elosztótábla 12M süllyesztett', unit: 'db', price: 4500, discount: 0, category: 'elosztok' },
+  { code: 'MAT-061', name: 'Elosztótábla 24M süllyesztett', unit: 'db', price: 7500, discount: 0, category: 'elosztok' },
+  { code: 'MAT-062', name: 'Elosztótábla 36M süllyesztett', unit: 'db', price: 11000, discount: 0, category: 'elosztok' },
+  { code: 'MAT-063', name: 'DIN sín 1m', unit: 'db', price: 450, discount: 0, category: 'elosztok' },
+  { code: 'MAT-064', name: 'N/PE elosztó sín', unit: 'db', price: 380, discount: 0, category: 'elosztok' },
+  // Gyengeáram
+  { code: 'MAT-070', name: 'Adataljzat RJ45 Cat6 (fehér)', unit: 'db', price: 950, discount: 0, category: 'gyengaram' },
+  { code: 'MAT-071', name: 'TV/koax aljzat (fehér)', unit: 'db', price: 650, discount: 0, category: 'gyengaram' },
+  { code: 'MAT-072', name: 'Füstérzékelő 230V (optikai)', unit: 'db', price: 3800, discount: 0, category: 'gyengaram' },
+  { code: 'MAT-073', name: 'Kaputelefon szett (beltéri + kültéri)', unit: 'db', price: 28000, discount: 0, category: 'gyengaram' },
+  { code: 'MAT-074', name: 'Adatkábel Cat6 UTP (doboz 305m)', unit: 'm', price: 120, discount: 0, category: 'gyengaram' },
+  // Segédanyagok, kötések
+  { code: 'MAT-080', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', price: 120, discount: 0, category: 'seged' },
+  { code: 'MAT-081', name: 'WAGO 222-415 (5-pólusú)', unit: 'db', price: 180, discount: 0, category: 'seged' },
+  { code: 'MAT-082', name: 'Érjelölő spirál (csomag)', unit: 'csomag', price: 350, discount: 0, category: 'seged' },
+  { code: 'MAT-083', name: 'Kábeltömítő M20', unit: 'db', price: 95, discount: 0, category: 'seged' },
+  { code: 'MAT-084', name: 'Rugós bilincs 20mm', unit: 'db', price: 45, discount: 0, category: 'seged' },
+  // Szerelvények bővítés
+  { code: 'MAT-090', name: 'Mozgásérzékelős kapcsoló 230V (fehér)', unit: 'db', price: 3500, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-091', name: 'Digitális programozható termosztát 230V', unit: 'db', price: 8500, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-092', name: 'Csengő nyomógomb (fehér)', unit: 'db', price: 1200, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-093', name: 'Elektronikus csengő 230V', unit: 'db', price: 2500, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-094', name: 'Kábel 2×0.75mm² (csengőkábel, m)', unit: 'm', price: 120, discount: 0, category: 'kabel' },
+  { code: 'MAT-095', name: 'Dupla dugalj keret (2×2P+F)', unit: 'db', price: 1800, discount: 0, category: 'szerelvenyek' },
+  // Világítás anyagok
+  { code: 'MAT-100', name: 'LED szalag 4000K 14W/m IP20 (m)', unit: 'm', price: 1800, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-101', name: 'LED szalag tápegység 60W 24V', unit: 'db', price: 2800, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-102', name: 'LED szalag alumínium profil (m)', unit: 'm', price: 1200, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-103', name: 'Vészvilágítás egység 1h önálló', unit: 'db', price: 12000, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-104', name: 'Kábeltálca fedél 100mm (m)', unit: 'm', price: 480, discount: 0, category: 'talca' },
+  { code: 'MAT-105', name: 'Kábeltálca fedél 200mm (m)', unit: 'm', price: 750, discount: 0, category: 'talca' },
+  { code: 'MAT-106', name: 'Kábeltálca fedél 300mm (m)', unit: 'm', price: 980, discount: 0, category: 'talca' },
+  // Speciális kábelek
+  { code: 'MAT-110', name: 'NYY-J 5×16 (m)', unit: 'm', price: 5200, discount: 0, category: 'kabel' },
+  { code: 'MAT-111', name: 'NYY-J 5×25 (m)', unit: 'm', price: 8200, discount: 0, category: 'kabel' },
+  { code: 'MAT-112', name: 'NYY-J 3×6 (m)', unit: 'm', price: 1250, discount: 0, category: 'kabel' },
+  { code: 'MAT-113', name: 'NYM-J 5×2.5 (m)', unit: 'm', price: 680, discount: 0, category: 'kabel' },
 ]
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
@@ -117,7 +166,19 @@ export function saveWorkItems(items) {
 }
 
 export function loadAssemblies() {
-  return load(LS_KEYS.ASSEMBLIES, ASSEMBLIES_DEFAULT)
+  const stored = load(LS_KEYS.ASSEMBLIES, null)
+  // Ha még nincs semmi mentve → adjuk vissza az összes alapértelmezett assembly-t
+  if (!stored) return ASSEMBLIES_DEFAULT
+  // Migráció: ha meglévő felhasználónak hiányoznak az újabb alapértelmezett
+  // assembly-k (pl. ASM-018..ASM-036), hozzáfűzzük a hiányzókat a listájához
+  const storedIds = new Set(stored.map(a => a.id))
+  const missing = ASSEMBLIES_DEFAULT.filter(a => !storedIds.has(a.id))
+  if (missing.length > 0) {
+    const merged = [...stored, ...missing]
+    save(LS_KEYS.ASSEMBLIES, merged)
+    return merged
+  }
+  return stored
 }
 export function saveAssemblies(assemblies) {
   save(LS_KEYS.ASSEMBLIES, assemblies)
