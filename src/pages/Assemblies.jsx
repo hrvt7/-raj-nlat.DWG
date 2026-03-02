@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
 import { WORK_ITEM_CATEGORIES, generateAssemblyId } from '../data/workItemsDb.js'
-import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials } from '../data/store.js'
+import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings } from '../data/store.js'
 
 // ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
 
@@ -133,12 +133,42 @@ export default function AssembliesPage() {
 
 // ─── Assembly Grid Card ────────────────────────────────────────────────────────
 
+function calcAssemblyPrice(assembly) {
+  const allMaterials = loadMaterials()
+  const allWorkItems = loadWorkItems()
+  const settings = loadSettings()
+  const hourlyRate = settings?.labor?.hourly_rate || 9000
+
+  let materialCost = 0
+  let laborMinutes = 0
+
+  for (const comp of (assembly.components || [])) {
+    const qty = parseFloat(comp.qty) || 0
+    if (comp.itemType === 'material') {
+      const mat = allMaterials.find(m => m.code === comp.itemCode)
+      if (mat) {
+        const price = mat.discount > 0 ? mat.price * (1 - mat.discount / 100) : mat.price
+        materialCost += price * qty
+      }
+    } else if (comp.itemType === 'workitem') {
+      const wi = allWorkItems.find(w => w.code === comp.itemCode)
+      if (wi) {
+        laborMinutes += (wi.p50 || 0) * qty
+      }
+    }
+  }
+
+  const laborCost = (laborMinutes / 60) * hourlyRate
+  return { materialCost, laborCost, total: materialCost + laborCost, laborMinutes, hourlyRate }
+}
+
 function AssemblyGridCard({ assembly, onClick }) {
   const cat = WORK_ITEM_CATEGORIES.find(c => c.key === assembly.category)
   const compCount = assembly.components?.length || 0
-  const workItems = assembly.components?.filter(c => c.itemType === 'workitem') || []
-  const materials = assembly.components?.filter(c => c.itemType === 'material') || []
-  const totalNorm = workItems.reduce((s, c) => s + (parseFloat(c.norm_time) || 0), 0)
+  const workItemComps = assembly.components?.filter(c => c.itemType === 'workitem') || []
+  const materialComps = assembly.components?.filter(c => c.itemType === 'material') || []
+  const pricing = calcAssemblyPrice(assembly)
+  const displayPrice = assembly.priceOverride != null ? assembly.priceOverride : pricing.total
   const [hovered, setHovered] = useState(false)
 
   return (
@@ -183,6 +213,20 @@ function AssemblyGridCard({ assembly, onClick }) {
         </div>
       )}
 
+      {/* Price */}
+      <div style={{
+        background: 'rgba(0,229,160,0.06)', border: `1px solid rgba(0,229,160,0.15)`,
+        borderRadius: 8, padding: '8px 12px', marginBottom: 12,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Kalkulált ár
+        </span>
+        <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.accent }}>
+          {fmt(Math.round(displayPrice))}<span style={{ fontSize: 10, fontWeight: 400, marginLeft: 2, color: C.textSub }}>Ft</span>
+        </span>
+      </div>
+
       {/* Divider */}
       <div style={{ height: 1, background: C.border, marginBottom: 12 }} />
 
@@ -192,13 +236,13 @@ function AssemblyGridCard({ assembly, onClick }) {
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
           </svg>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{materials.length} anyag</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{materialComps.length} anyag</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2.5" strokeLinecap="round">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{workItems.length} munka</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{workItemComps.length} munka</span>
         </div>
         <div style={{ marginLeft: 'auto', fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent }}>
           {compCount} elem
@@ -320,6 +364,7 @@ function AssemblyEditorPanel({ assembly, onUpdate, onDuplicate, onDelete }) {
   const [category, setCategory] = useState(assembly.category)
   const [description, setDescription] = useState(assembly.description || '')
   const [components, setComponents] = useState(assembly.components || [])
+  const [priceOverride, setPriceOverride] = useState(assembly.priceOverride ?? null)
   const [showPalette, setShowPalette] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [dragIdx, setDragIdx] = useState(null)
@@ -331,6 +376,7 @@ function AssemblyEditorPanel({ assembly, onUpdate, onDuplicate, onDelete }) {
     setCategory(assembly.category)
     setDescription(assembly.description || '')
     setComponents(assembly.components || [])
+    setPriceOverride(assembly.priceOverride ?? null)
     setShowPalette(false)
     setShowMenu(false)
   }, [assembly.id])
@@ -340,10 +386,10 @@ function AssemblyEditorPanel({ assembly, onUpdate, onDuplicate, onDelete }) {
   useEffect(() => {
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = setTimeout(() => {
-      onUpdate({ ...assembly, name, category, description, components })
+      onUpdate({ ...assembly, name, category, description, components, priceOverride })
     }, 400)
     return () => clearTimeout(saveTimeout.current)
-  }, [name, category, description, components])
+  }, [name, category, description, components, priceOverride])
 
   // ── Component management ──
   const addComponent = (item) => {
@@ -568,6 +614,13 @@ function AssemblyEditorPanel({ assembly, onUpdate, onDuplicate, onDelete }) {
         )}
       </div>
 
+      {/* Pricing section */}
+      <PricingSection
+        assembly={{ ...assembly, components, priceOverride }}
+        priceOverride={priceOverride}
+        onPriceOverrideChange={setPriceOverride}
+      />
+
       {/* Summary footer */}
       <div style={{
         padding: '14px 22px', borderTop: `1px solid ${C.border}`,
@@ -757,6 +810,123 @@ function PaletteItem({ item, onAdd }) {
       {hovered && (
         <span style={{ color: C.accent, fontSize: 14, fontWeight: 700, flexShrink: 0 }}>+</span>
       )}
+    </div>
+  )
+}
+
+// ─── Pricing Section ─────────────────────────────────────────────────────────
+
+function PricingSection({ assembly, priceOverride, onPriceOverrideChange }) {
+  const pricing = calcAssemblyPrice(assembly)
+  const [editingPrice, setEditingPrice] = useState(false)
+  const [tempPrice, setTempPrice] = useState('')
+  const hasOverride = priceOverride != null
+
+  const handleStartEdit = () => {
+    setTempPrice(String(Math.round(hasOverride ? priceOverride : pricing.total)))
+    setEditingPrice(true)
+  }
+
+  const handleSavePrice = () => {
+    const val = parseFloat(tempPrice)
+    if (!isNaN(val) && val > 0) {
+      onPriceOverrideChange(val)
+    }
+    setEditingPrice(false)
+  }
+
+  const handleResetPrice = () => {
+    onPriceOverrideChange(null)
+    setEditingPrice(false)
+  }
+
+  return (
+    <div style={{
+      padding: '16px 22px', borderTop: `1px solid ${C.border}`,
+      background: 'rgba(0,229,160,0.03)',
+    }}>
+      <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, marginBottom: 12,
+        textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        Árkalkuláció
+      </div>
+
+      {/* Breakdown */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Anyagköltség</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text }}>
+            {fmt(Math.round(pricing.materialCost))}<span style={{ fontSize: 9, color: C.textSub, marginLeft: 2 }}>Ft</span>
+          </div>
+        </div>
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Munkadíj</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.blue }}>
+            {fmt(Math.round(pricing.laborCost))}<span style={{ fontSize: 9, color: C.textSub, marginLeft: 2 }}>Ft</span>
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+            {Math.round(pricing.laborMinutes)}p × {fmt(pricing.hourlyRate)} Ft/ó
+          </div>
+        </div>
+        <div style={{
+          background: 'rgba(0,229,160,0.08)', border: `1px solid rgba(0,229,160,0.2)`,
+          borderRadius: 8, padding: '10px 12px', textAlign: 'center',
+        }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>
+            {hasOverride ? 'Egyedi ár' : 'Összesen'}
+          </div>
+          {editingPrice ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+              <input
+                autoFocus
+                type="number"
+                value={tempPrice}
+                onChange={e => setTempPrice(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSavePrice(); if (e.key === 'Escape') setEditingPrice(false) }}
+                style={{
+                  width: 80, background: C.bg, border: `1px solid ${C.accentBorder}`,
+                  borderRadius: 4, color: C.accent, padding: '2px 6px', fontSize: 13,
+                  fontFamily: 'Syne', fontWeight: 700, textAlign: 'right', outline: 'none',
+                }}
+              />
+              <button onClick={handleSavePrice} style={{
+                background: C.accent, border: 'none', borderRadius: 4, padding: '2px 6px',
+                color: '#09090B', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              }}>✓</button>
+            </div>
+          ) : (
+            <div onClick={handleStartEdit} style={{ cursor: 'pointer' }} title="Kattints a szerkesztéshez">
+              <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.accent }}>
+                {fmt(Math.round(hasOverride ? priceOverride : pricing.total))}<span style={{ fontSize: 9, color: C.textSub, marginLeft: 2 }}>Ft</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={handleStartEdit} style={{
+          padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+          background: 'transparent', border: `1px solid ${C.border}`,
+          color: C.textSub, fontFamily: 'DM Mono', fontSize: 10,
+        }}>
+          ✎ Ár szerkesztése
+        </button>
+        {hasOverride && (
+          <button onClick={handleResetPrice} style={{
+            padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+            background: 'transparent', border: `1px solid ${C.border}`,
+            color: C.yellow, fontFamily: 'DM Mono', fontSize: 10,
+          }}>
+            ⟳ Kalkulált ár visszaállítása
+          </button>
+        )}
+        {hasOverride && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, marginLeft: 'auto' }}>
+            Kalkulált: {fmt(Math.round(pricing.total))} Ft
+          </span>
+        )}
+      </div>
     </div>
   )
 }

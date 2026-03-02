@@ -134,6 +134,51 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-111', name: 'NYY-J 5×25 (m)', unit: 'm', price: 8200, discount: 0, category: 'kabel' },
   { code: 'MAT-112', name: 'NYY-J 3×6 (m)', unit: 'm', price: 1250, discount: 0, category: 'kabel' },
   { code: 'MAT-113', name: 'NYM-J 5×2.5 (m)', unit: 'm', price: 680, discount: 0, category: 'kabel' },
+  // Védőcsövek
+  { code: 'MAT-120', name: 'Védőcső PVC 20mm (m)', unit: 'm', price: 85, discount: 0, category: 'seged' },
+  { code: 'MAT-121', name: 'Védőcső PVC 25mm (m)', unit: 'm', price: 110, discount: 0, category: 'seged' },
+  { code: 'MAT-122', name: 'Gégecső 20mm flexibilis (m)', unit: 'm', price: 120, discount: 0, category: 'seged' },
+  { code: 'MAT-123', name: 'Gégecső 25mm flexibilis (m)', unit: 'm', price: 160, discount: 0, category: 'seged' },
+  { code: 'MAT-124', name: 'Kábelbilics 20mm', unit: 'db', price: 25, discount: 0, category: 'seged' },
+  { code: 'MAT-125', name: 'Kábelsaru 6mm² (csomag/50)', unit: 'csomag', price: 1800, discount: 0, category: 'seged' },
+  { code: 'MAT-126', name: 'Kábelsaru 10mm² (csomag/50)', unit: 'csomag', price: 2200, discount: 0, category: 'seged' },
+  { code: 'MAT-127', name: 'Érjelölő gyűrű szett', unit: 'db', price: 450, discount: 0, category: 'seged' },
+  { code: 'MAT-128', name: 'WAGO 221-412 (2-pólusú)', unit: 'db', price: 95, discount: 0, category: 'seged' },
+  { code: 'MAT-129', name: 'WAGO 221-615 (5-pólusú leveres)', unit: 'db', price: 210, discount: 0, category: 'seged' },
+  // Kiegészítő szerelvények
+  { code: 'MAT-130', name: 'Dimmer kapcsoló (LED kompatibilis)', unit: 'db', price: 4500, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-131', name: 'Redőnykapcsoló', unit: 'db', price: 2200, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-132', name: 'Kulcsos kapcsoló', unit: 'db', price: 3800, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-133', name: 'USB-s dugalj (2×USB-A)', unit: 'db', price: 3200, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-134', name: 'Padlódoboz 4M (rozsdamentes)', unit: 'db', price: 8500, discount: 0, category: 'szerelvenyek' },
+  // Kiegészítő védelem
+  { code: 'MAT-140', name: 'Kismegszakító 1P 6A', unit: 'db', price: 1100, discount: 0, category: 'vedelem' },
+  { code: 'MAT-141', name: 'Kismegszakító 1P 25A', unit: 'db', price: 1350, discount: 0, category: 'vedelem' },
+  { code: 'MAT-142', name: 'Kismegszakító 3P 25A', unit: 'db', price: 4500, discount: 0, category: 'vedelem' },
+  { code: 'MAT-143', name: 'Kismegszakító 3P 40A', unit: 'db', price: 6200, discount: 0, category: 'vedelem' },
+  { code: 'MAT-144', name: 'Kismegszakító 3P 63A', unit: 'db', price: 8500, discount: 0, category: 'vedelem' },
+  { code: 'MAT-145', name: 'FI-relé 2P 25A 30mA', unit: 'db', price: 7200, discount: 0, category: 'vedelem' },
+  { code: 'MAT-146', name: 'Kombinált FI-MCB 1P+N 16A 30mA', unit: 'db', price: 9800, discount: 0, category: 'vedelem' },
+  { code: 'MAT-147', name: 'Túlfeszültség-védő T2 3P+N', unit: 'db', price: 12500, discount: 0, category: 'vedelem' },
+  { code: 'MAT-148', name: 'Főkapcsoló 3P 63A', unit: 'db', price: 5500, discount: 0, category: 'vedelem' },
+  { code: 'MAT-149', name: 'Időrelé (lépcsőházi)', unit: 'db', price: 4200, discount: 0, category: 'vedelem' },
+  // Elosztó kiegészítés
+  { code: 'MAT-066', name: 'Elosztótábla 48M süllyesztett', unit: 'db', price: 16500, discount: 0, category: 'elosztok' },
+  { code: 'MAT-067', name: 'Elosztó szekrény IP54 fém (fali)', unit: 'db', price: 35000, discount: 0, category: 'elosztok' },
+  // Világítás kiegészítés
+  { code: 'MAT-150', name: 'LED panel 60×60 40W 4000K', unit: 'db', price: 8500, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-151', name: 'LED downlight 7W süllyesztett', unit: 'db', price: 2800, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-152', name: 'LED csarnokvilágító 100W IP65', unit: 'db', price: 18000, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-153', name: 'LED fali lámpatest IP44', unit: 'db', price: 5500, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-154', name: 'Mennyezeti lámpatartó kampó', unit: 'db', price: 180, discount: 0, category: 'vilagitas' },
+  // Gyengeáram kiegészítés
+  { code: 'MAT-076', name: 'Koax kábel RG6 (m)', unit: 'm', price: 150, discount: 0, category: 'gyengaram' },
+  { code: 'MAT-077', name: 'Riasztó mozgásérzékelő (PIR)', unit: 'db', price: 5500, discount: 0, category: 'gyengaram' },
+  { code: 'MAT-078', name: 'Riasztó központ 8 zónás', unit: 'db', price: 32000, discount: 0, category: 'gyengaram' },
+  { code: 'MAT-079', name: 'IP kamera PoE kültéri', unit: 'db', price: 22000, discount: 0, category: 'gyengaram' },
+  // Ipari kiegészítés
+  { code: 'MAT-056', name: 'CEE dugalj 3P+N+F 63A (IP44)', unit: 'db', price: 7500, discount: 0, category: 'ipari' },
+  { code: 'MAT-057', name: 'Ipari elosztó (mobil, 4×16A+2×32A)', unit: 'db', price: 45000, discount: 0, category: 'ipari' },
 ]
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────

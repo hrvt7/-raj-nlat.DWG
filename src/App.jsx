@@ -8,6 +8,7 @@ import WorkItems from './pages/WorkItems.jsx'
 import Settings from './pages/Settings.jsx'
 import AssembliesPage from './pages/Assemblies.jsx'
 import PlansPage from './pages/Plans.jsx'
+import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuote, generateQuoteId, loadAssemblies } from './data/store.js'
 import { WORK_ITEMS_DEFAULT as WORK_ITEMS_DB, CONTEXT_FACTORS } from './data/workItemsDb.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
@@ -2061,7 +2062,7 @@ function SaaSShell() {
 
   const pageTitles = {
     dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
-    plans: 'Tervek', 'work-items': 'Munkatételek', assemblies: 'Assemblyk', settings: 'Beállítások',
+    plans: 'Tervek', 'work-items': 'Munkatételek', materials: 'Anyagok', assemblies: 'Assemblyk', settings: 'Beállítások',
   }
 
   const [workItems, setWorkItems] = useState(loadWorkItems)
@@ -2186,6 +2187,8 @@ function SaaSShell() {
               onSaved={handleQuoteSaved} onCancel={() => setPage('quotes')} />
           ) : page === 'work-items' ? (
             <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} />
+          ) : page === 'materials' ? (
+            <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} />
           ) : page === 'plans' ? (
             <PlansPage />
           ) : page === 'assemblies' ? (

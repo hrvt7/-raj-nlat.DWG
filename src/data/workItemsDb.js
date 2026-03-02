@@ -111,6 +111,54 @@ export const WORK_ITEMS_DEFAULT = [
   { code: 'GYE-004', category: 'gyengaram',    name: 'TV aljzat',                   unit: 'db',  p50: 18,  p90: 30,  heightFactor: true,  desc: 'Koax aljzat szerelés, bekötés' },
   { code: 'GYE-005', category: 'gyengaram',    name: 'Kaputelefon egység',          unit: 'db',  p50: 45,  p90: 80,  heightFactor: false, desc: 'Kaputelefon szerelés, bekötés, teszt' },
   { code: 'GYE-006', category: 'gyengaram',    name: 'Füstérzékelő',               unit: 'db',  p50: 15,  p90: 25,  heightFactor: true,  desc: 'Füstérzékelő rögzítés, bekötés' },
+  { code: 'GYE-007', category: 'gyengaram',    name: 'WiFi AP felszerelés',         unit: 'db',  p50: 25,  p90: 45,  heightFactor: true,  desc: 'Mennyezeti/fali AP rögzítés, PoE bekötés' },
+  { code: 'GYE-008', category: 'gyengaram',    name: 'Kamerarendszer pont',         unit: 'db',  p50: 35,  p90: 60,  heightFactor: true,  desc: 'IP kamera rögzítés, kábel bekötés, PoE' },
+  { code: 'GYE-009', category: 'gyengaram',    name: 'Riasztó mozgásérzékelő',      unit: 'db',  p50: 20,  p90: 35,  heightFactor: true,  desc: 'PIR érzékelő rögzítés, vezetékezés' },
+  { code: 'GYE-010', category: 'gyengaram',    name: 'Riasztó központ bekötés',      unit: 'db',  p50: 120, p90: 200, heightFactor: false, desc: 'Riasztó központ szerelés, zónák bekötése, programozás' },
+
+  // ─── BONTÁS KIEGÉSZÍTÉS ──────────────────────────────────────────────────
+  { code: 'BON-005', category: 'bontas',       name: 'Védőcső bontás',              unit: 'm',   p50: 4,   p90: 8,   heightFactor: false, desc: 'Régi PVC/fém védőcső eltávolítása' },
+  { code: 'BON-006', category: 'bontas',       name: 'Kötődoboz bontás',            unit: 'db',  p50: 6,   p90: 12,  heightFactor: false, desc: 'Régi kötődoboz leszedése, kábelvég szigetelése' },
+  { code: 'BON-007', category: 'bontas',       name: 'Régi érintésvédelem bontás',  unit: 'db',  p50: 45,  p90: 80,  heightFactor: false, desc: 'Régi EPH háló, sín, kötések bontása' },
+
+  // ─── NYOMVONAL KIEGÉSZÍTÉS ───────────────────────────────────────────────
+  { code: 'NYO-007', category: 'nyomvonal',    name: 'Betonba vésés (flex)',         unit: 'm',   p50: 20,  p90: 40,  heightFactor: false, desc: 'Beton fal/mennyezet vésés flexszel/vágóval' },
+  { code: 'NYO-008', category: 'nyomvonal',    name: 'Áttörés készítés (fal)',       unit: 'db',  p50: 15,  p90: 30,  heightFactor: false, desc: 'Fal áttörés D50-D100, fúrás+tömítés' },
+  { code: 'NYO-009', category: 'nyomvonal',    name: 'Áttörés készítés (födém)',     unit: 'db',  p50: 25,  p90: 50,  heightFactor: false, desc: 'Födém áttörés D50-D100, mag.fúrás+tömítés' },
+  { code: 'NYO-010', category: 'nyomvonal',    name: 'Gégecső fektetés',             unit: 'm',   p50: 6,   p90: 12,  heightFactor: true,  desc: 'Flexibilis gégecső lefektetés, rögzítés' },
+
+  // ─── DOBOZOLÁS KIEGÉSZÍTÉS ───────────────────────────────────────────────
+  { code: 'DOB-006', category: 'dobozolas',    name: 'Dupla doboz (beton)',          unit: 'db',  p50: 35,  p90: 65,  heightFactor: true,  desc: '2×doboz egymás mellé betonba, keret illesztés' },
+  { code: 'DOB-007', category: 'dobozolas',    name: 'Falon kívüli doboz',          unit: 'db',  p50: 10,  p90: 18,  heightFactor: true,  desc: 'Felületre szerelt doboz rögzítése' },
+
+  // ─── KÁBELEZÉS KIEGÉSZÍTÉS ───────────────────────────────────────────────
+  { code: 'KAB-011', category: 'kabelezes',    name: 'Kábel NYY-J 5×25',            unit: 'm',   p50: 20,  p90: 38,  heightFactor: true,  desc: 'Fővezeték fektetés, nagy keresztmetszet' },
+  { code: 'KAB-012', category: 'kabelezes',    name: 'Kábel földbe (NYY, homokágy)', unit: 'm',   p50: 8,   p90: 15,  heightFactor: false, desc: 'Földkábel fektetés homokágyba, fólia, jelzés' },
+  { code: 'KAB-013', category: 'kabelezes',    name: 'Kábel csőbe húzás (meglévő)', unit: 'm',   p50: 6,   p90: 12,  heightFactor: false, desc: 'Kábel meglévő védőcsőbe húzása, kenés' },
+
+  // ─── KÖTÉS KIEGÉSZÍTÉS ───────────────────────────────────────────────────
+  { code: 'KOT-006', category: 'kotesek',      name: 'WAGO kötés készítés',         unit: 'db',  p50: 3,   p90: 5,   heightFactor: false, desc: 'Egy WAGO csatlakozó készítése (csupaszítás+kötés)' },
+  { code: 'KOT-007', category: 'kotesek',      name: 'Sorkapocs bekötés',           unit: 'db',  p50: 5,   p90: 10,  heightFactor: false, desc: 'Egy ér sorkapocsra kötése, jelölés' },
+  { code: 'KOT-008', category: 'kotesek',      name: 'Kábelsaru préselés',          unit: 'db',  p50: 4,   p90: 8,   heightFactor: false, desc: 'Kábelsaru felhelyezés hidraulikus préssel' },
+
+  // ─── SZERELVÉNYEZÉS KIEGÉSZÍTÉS ──────────────────────────────────────────
+  { code: 'SZE-010', category: 'szerelvenyek', name: 'Dupla dugalj keret',          unit: 'db',  p50: 25,  p90: 42,  heightFactor: true,  desc: '2 dugalj egy keretben, dupla bekötés' },
+  { code: 'SZE-011', category: 'szerelvenyek', name: 'Redőnykapcsoló',              unit: 'db',  p50: 22,  p90: 38,  heightFactor: true,  desc: 'Motoros redőny kapcsoló bekötés + beállítás' },
+  { code: 'SZE-012', category: 'szerelvenyek', name: 'Dimmer',                      unit: 'db',  p50: 22,  p90: 38,  heightFactor: true,  desc: 'Dimmer kapcsoló bekötés, terhelés ellenőrzés' },
+
+  // ─── ELOSZTÓ KIEGÉSZÍTÉS ─────────────────────────────────────────────────
+  { code: 'ELO-009', category: 'elosztok',     name: 'Túlfeszültség-védő',          unit: 'db',  p50: 12,  p90: 20,  heightFactor: false, desc: 'SPD beépítés DIN sínre, bekötés' },
+  { code: 'ELO-010', category: 'elosztok',     name: 'Időrelé beépítés',            unit: 'db',  p50: 15,  p90: 25,  heightFactor: false, desc: 'Időrelé beépítés, programozás (lépcsőházi stb.)' },
+  { code: 'ELO-011', category: 'elosztok',     name: 'Áramváltó beépítés',          unit: 'db',  p50: 20,  p90: 35,  heightFactor: false, desc: 'Mérőáramváltó beépítés, bekötés' },
+  { code: 'ELO-012', category: 'elosztok',     name: 'Főkapcsoló beépítés',         unit: 'db',  p50: 15,  p90: 25,  heightFactor: false, desc: 'Főkapcsoló/leválasztó DIN sínre, bekötés' },
+
+  // ─── VILÁGÍTÁS KIEGÉSZÍTÉS ───────────────────────────────────────────────
+  { code: 'VIL-007', category: 'vilagitas',    name: 'LED panel 60×60',             unit: 'db',  p50: 30,  p90: 50,  heightFactor: true,  desc: 'LED panel álmennyezetbe, keret + bekötés' },
+  { code: 'VIL-008', category: 'vilagitas',    name: 'Kültéri lámpa (IP65)',        unit: 'db',  p50: 30,  p90: 55,  heightFactor: true,  desc: 'Kültéri lámpatest rögzítés, tömített bekötés' },
+
+  // ─── MÉRÉS KIEGÉSZÍTÉS ───────────────────────────────────────────────────
+  { code: 'MER-005', category: 'meres',        name: 'Feszültségpróba (komplett)',   unit: 'db',  p50: 45,  p90: 75,  heightFactor: false, desc: 'Komplett feszültségpróba: feszültség alá helyezés, FI teszt, fázisellenőrzés' },
+  { code: 'MER-006', category: 'meres',        name: 'Hurokimpedancia mérés',       unit: 'db',  p50: 5,   p90: 10,  heightFactor: false, desc: 'Hurokimpedancia mérés áramkörönként' },
 ]
 
 // ─── Assembly definíciók v3.0 ──────────────────────────────────────────────
