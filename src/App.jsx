@@ -1113,66 +1113,89 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
     onNext({ items, laborMode, hourlyRate, margin, vat, totalHours, totalMaterials, totalLabor, overheadLabor, overheadTravel, subtotal, vatAmount, gross })
   }
 
+  const inputCell = {
+    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5,
+    color: C.text, padding: '5px 8px', fontFamily: 'DM Mono', textAlign: 'right',
+    outline: 'none', fontSize: 13,
+  }
+
   return (
     <div>
-      {/* Labor mode */}
+      {/* ── Labor mode selector ── */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
         {[['hourly', 'Órabéres', 'Össz munkaórák × óradíj'], ['per_item', 'Tételes', 'Minden tétel egyedi munkadíj']].map(([key, label, desc]) => (
           <button key={key} onClick={() => setLaborMode(key)} style={{
-            flex: 1, padding: '14px 16px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-            background: laborMode === key ? C.accent + '15' : C.bgCard,
+            flex: 1, padding: '16px 18px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+            background: laborMode === key ? 'rgba(0,229,160,0.08)' : C.bgCard,
             border: `2px solid ${laborMode === key ? C.accent : C.border}`,
+            transition: 'all 0.15s',
           }}>
-            <div style={{ color: laborMode === key ? C.accent : C.text, fontWeight: 600, fontSize: 14 }}>{label}</div>
-            <div style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>{desc}</div>
+            <div style={{ color: laborMode === key ? C.accent : C.text, fontFamily: 'Syne', fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{label}</div>
+            <div style={{ color: C.textSub, fontFamily: 'DM Mono', fontSize: 12 }}>{desc}</div>
           </button>
         ))}
       </div>
 
-      {/* Global settings */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 150 }}>
-          <Input label="Óradíj (Ft/ó)" type="number" value={hourlyRate}
-            onChange={v => setHourlyRate(parseFloat(v) || 0)} suffix="Ft/ó" />
+      {/* ── Global settings ── */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16 }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Óradíj</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="number" value={hourlyRate} onChange={e => setHourlyRate(parseFloat(e.target.value) || 0)}
+              style={{ ...inputCell, flex: 1 }} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, whiteSpace: 'nowrap' }}>Ft/ó</span>
+          </div>
         </div>
         <div style={{ flex: 1, minWidth: 120 }}>
-          <Input label="Árrés szorzó" type="number" value={margin} step="0.01"
-            onChange={v => setMargin(parseFloat(v) || 1)} />
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Árrés szorzó</div>
+          <input type="number" value={margin} step="0.01" onChange={e => setMargin(parseFloat(e.target.value) || 1)}
+            style={{ ...inputCell, width: '100%', boxSizing: 'border-box' }} />
         </div>
         <div style={{ flex: 1, minWidth: 100 }}>
-          <Input label="ÁFA (%)" type="number" value={vat}
-            onChange={v => setVat(parseFloat(v) || 27)} suffix="%" />
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>ÁFA</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="number" value={vat} onChange={e => setVat(parseFloat(e.target.value) || 27)}
+              style={{ ...inputCell, flex: 1 }} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub }}>%</span>
+          </div>
         </div>
       </div>
 
-      {/* Items table */}
-      <div style={{ marginBottom: 8, overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      {/* ── Items table ── */}
+      <div style={{ marginBottom: 8, overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-              <th style={{ textAlign: 'left', padding: '8px 10px', color: C.muted }}>Megnevezés</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Menny.</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Egységár</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Norma (perc)</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Munkadíj</th>
-              <th style={{ width: 24 }} />
+            <tr style={{ background: C.bg }}>
+              <th style={{ textAlign: 'left', padding: '10px 14px', color: C.textSub, fontFamily: 'Syne', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: `1px solid ${C.border}` }}>Megnevezés</th>
+              <th style={{ textAlign: 'right', padding: '10px 14px', color: C.textSub, fontFamily: 'Syne', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: `1px solid ${C.border}` }}>Menny.</th>
+              <th style={{ textAlign: 'right', padding: '10px 14px', color: C.textSub, fontFamily: 'Syne', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: `1px solid ${C.border}` }}>Egységár</th>
+              <th style={{ textAlign: 'right', padding: '10px 14px', color: C.textSub, fontFamily: 'Syne', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: `1px solid ${C.border}` }}>Norma (perc)</th>
+              <th style={{ textAlign: 'right', padding: '10px 14px', color: C.textSub, fontFamily: 'Syne', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: `1px solid ${C.border}` }}>Munkadíj</th>
+              <th style={{ width: 32, borderBottom: `1px solid ${C.border}` }} />
             </tr>
           </thead>
           <tbody>
             {items.map(item => {
               if (item.isGroupHeader) {
                 return (
-                  <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20`, background: 'rgba(0,229,160,0.04)' }}>
-                    <td colSpan={6} style={{ padding: '8px 10px', color: C.accent, fontWeight: 700, fontSize: 12 }}>
-                      {item.name} <span style={{ color: C.textMuted, fontWeight: 400 }}>× {item.qty}</span>
+                  <tr key={item.id} style={{ background: 'rgba(0,229,160,0.05)', borderBottom: `1px solid ${C.border}30` }}>
+                    <td colSpan={6} style={{ padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, background: 'rgba(0,229,160,0.15)', color: C.accent, fontFamily: 'Syne', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>ASSEMBLY</span>
+                        <span style={{ color: C.accent, fontFamily: 'Syne', fontWeight: 700, fontSize: 14 }}>
+                          {item.name.replace('📦 ', '')}
+                        </span>
+                        <span style={{ color: C.textSub, fontFamily: 'DM Mono', fontSize: 12 }}>× {item.qty}</span>
+                      </div>
                     </td>
                   </tr>
                 )
               }
               const laborCost = (item.hours || 0) * hourlyRate
+              const isChild = !!item.assemblyId
               return (
-                <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
-                  <td style={{ padding: '8px 10px', color: item.assemblyId ? C.textSub : C.text, fontSize: item.assemblyId ? 11 : 12 }}>
+                <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20`, background: isChild ? 'transparent' : undefined }}>
+                  <td style={{ padding: isChild ? '7px 14px 7px 28px' : '9px 14px' }}>
                     {item.isCustom ? (
                       <input
                         type="text" value={item.name}
@@ -1182,13 +1205,16 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
                         style={{
                           background: 'transparent', border: 'none',
                           borderBottom: `1px solid ${C.border}`, color: C.text,
-                          fontSize: 12, outline: 'none', width: '100%', minWidth: 120,
-                          fontFamily: 'inherit',
+                          fontFamily: 'DM Mono', fontSize: 13, outline: 'none', width: '100%', minWidth: 140,
                         }}
                       />
-                    ) : item.name}
+                    ) : (
+                      <span style={{ fontFamily: 'DM Mono', fontSize: isChild ? 12 : 13, color: isChild ? C.textSub : C.text }}>
+                        {isChild ? item.name.replace('  ↳ ', '') : item.name}
+                      </span>
+                    )}
                   </td>
-                  <td style={{ padding: '8px 10px', color: C.text, textAlign: 'right' }}>
+                  <td style={{ padding: '9px 14px', textAlign: 'right' }}>
                     {item.isCustom ? (
                       <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
                         <input type="number" value={item.qty}
@@ -1197,48 +1223,47 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
                             setItems(prev => prev.map(i => i.id === item.id
                               ? { ...i, qty: q, hours: (i.normMinutes * q) / 60 } : i))
                           }}
-                          style={{ width: 48, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, padding: '3px 6px', fontSize: 12, textAlign: 'right' }} />
+                          style={{ width: 54, ...inputCell }} />
                         <input type="text" value={item.unit}
                           onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unit: e.target.value } : i))}
-                          style={{ width: 36, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, padding: '3px 5px', fontSize: 11 }} />
+                          style={{ width: 36, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.textSub, padding: '5px 6px', fontFamily: 'DM Mono', fontSize: 12, textAlign: 'center' }} />
                       </div>
-                    ) : `${item.qty} ${item.unit}`}
+                    ) : (
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.text }}>{item.qty} {item.unit}</span>
+                    )}
                   </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                  <td style={{ padding: '9px 14px', textAlign: 'right' }}>
                     <input type="number" value={item.unitPrice}
                       onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
-                      style={{
-                        width: 80, background: C.bg, border: `1px solid ${C.border}`,
-                        borderRadius: 4, color: C.text, padding: '3px 6px', fontSize: 12, textAlign: 'right',
-                      }} />
+                      style={{ width: 90, ...inputCell }} />
                   </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                  <td style={{ padding: '9px 14px', textAlign: 'right' }}>
                     <input type="number" value={item.normMinutes}
                       onChange={e => {
                         const nm = parseFloat(e.target.value) || 0
                         setItems(prev => prev.map(i => i.id === item.id
                           ? { ...i, normMinutes: nm, hours: (nm * i.qty) / 60 } : i))
                       }}
-                      style={{
-                        width: 70, background: C.bg, border: `1px solid ${C.border}`,
-                        borderRadius: 4, color: C.accent, padding: '3px 6px', fontSize: 12, textAlign: 'right',
-                      }} />
+                      style={{ width: 78, ...inputCell, color: laborCost > 0 ? C.accent : C.textSub, borderColor: laborCost > 0 ? C.accent + '50' : C.border }} />
                   </td>
-                  <td style={{ padding: '8px 10px', color: C.blue, textAlign: 'right', fontWeight: 600 }}>
-                    {fmt(Math.round(laborCost))} Ft
+                  <td style={{ padding: '9px 14px', textAlign: 'right' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: laborCost > 0 ? C.blue : C.textSub, fontWeight: laborCost > 0 ? 700 : 400 }}>
+                      {laborCost > 0 ? fmt(Math.round(laborCost)) + ' Ft' : '—'}
+                    </span>
                   </td>
-                  <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                  <td style={{ padding: '4px 8px', textAlign: 'center' }}>
                     <button
                       onClick={() => removeItem(item.id)}
                       title="Tétel törlése"
                       style={{
                         background: 'none', border: 'none', cursor: 'pointer',
                         color: item.isCustom ? C.red : C.border,
-                        fontSize: 14, lineHeight: 1, padding: '2px 4px', borderRadius: 4,
-                        opacity: item.isCustom ? 1 : 0.4,
+                        fontSize: 16, lineHeight: 1, padding: '2px 5px', borderRadius: 4,
+                        opacity: item.isCustom ? 1 : 0.35,
+                        transition: 'all 0.12s',
                       }}
-                      onMouseEnter={e => { if (!item.isCustom) e.currentTarget.style.color = C.red; e.currentTarget.style.opacity = '1' }}
-                      onMouseLeave={e => { e.currentTarget.style.color = item.isCustom ? C.red : C.border; e.currentTarget.style.opacity = item.isCustom ? '1' : '0.4' }}
+                      onMouseEnter={e => { e.currentTarget.style.color = C.red; e.currentTarget.style.opacity = '1' }}
+                      onMouseLeave={e => { e.currentTarget.style.color = item.isCustom ? C.red : C.border; e.currentTarget.style.opacity = item.isCustom ? '1' : '0.35' }}
                     >×</button>
                   </td>
                 </tr>
@@ -1248,57 +1273,61 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
         </table>
       </div>
 
-      {/* Add custom item button */}
+      {/* ── Add custom item ── */}
       <button onClick={addCustomItem} style={{
-        width: '100%', padding: '8px 14px', marginBottom: 20,
+        width: '100%', padding: '10px 14px', marginBottom: 24,
         background: 'transparent', border: `1px dashed ${C.border}`,
-        borderRadius: 6, cursor: 'pointer', color: C.muted,
-        fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
+        borderRadius: 8, cursor: 'pointer', color: C.textSub,
+        fontSize: 13, fontFamily: 'Syne', fontWeight: 600,
         transition: 'all 0.15s',
       }}
         onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.color = C.accent }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSub }}
       >
         + Egyedi tétel hozzáadása
       </button>
 
-      {/* Summary */}
-      <div style={{
-        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20,
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16, marginBottom: 16 }}>
+      {/* ── Summary ── */}
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
+        {/* Top metrics row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderBottom: `1px solid ${C.border}` }}>
           {[
-            ['Anyagköltség', fmt(Math.round(totalMaterials)) + ' Ft', C.text],
-            ['Munkadíj', fmt(Math.round(totalLabor)) + ' Ft', C.blue],
-            ['Munkaóra', totalHours.toFixed(1) + ' ó', C.muted],
-          ].map(([label, value, color]) => (
-            <div key={label}>
-              <div style={{ color: C.muted, fontSize: 12 }}>{label}</div>
-              <div style={{ color, fontWeight: 600, fontSize: 16 }}>{value}</div>
+            { label: 'Anyagköltség', value: fmt(Math.round(totalMaterials)) + ' Ft', color: C.text },
+            { label: 'Munkadíj', value: fmt(Math.round(totalLabor)) + ' Ft', color: C.blue },
+            { label: 'Munkaóra', value: totalHours.toFixed(1) + ' ó', color: C.yellow },
+          ].map((item, i) => (
+            <div key={item.label} style={{
+              padding: '16px 20px',
+              borderRight: i < 2 ? `1px solid ${C.border}` : 'none',
+            }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{item.label}</div>
+              <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 17, color: item.color }}>{item.value}</div>
             </div>
           ))}
         </div>
-        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: C.muted, fontSize: 14 }}>Overhead ({settings.overhead.visits} kiszállás)</span>
-            <span style={{ color: C.text }}>{fmt(Math.round(overheadLabor + overheadTravel))} Ft</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <span style={{ color: C.muted, fontSize: 14 }}>Részösszeg × {margin}</span>
-            <span style={{ color: C.text }}>{fmt(Math.round(subtotal))} Ft</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <span style={{ color: C.muted, fontSize: 14 }}>ÁFA ({vat}%)</span>
-            <span style={{ color: C.text }}>{fmt(Math.round(vatAmount))} Ft</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-            <span style={{ color: C.text, fontWeight: 700, fontSize: 16 }}>BRUTTÓ VÉGÖSSZEG</span>
-            <span style={{ color: C.accent, fontWeight: 800, fontSize: 22 }}>{fmt(Math.round(gross))} Ft</span>
+
+        {/* Cost breakdown */}
+        <div style={{ padding: '16px 20px' }}>
+          {[
+            { label: `Overhead (${settings.overhead.visits} kiszállás)`, value: fmt(Math.round(overheadLabor + overheadTravel)) + ' Ft', color: C.textSub },
+            { label: `Részösszeg × ${margin}`, value: fmt(Math.round(subtotal)) + ' Ft', color: C.text },
+            { label: `ÁFA (${vat}%)`, value: fmt(Math.round(vatAmount)) + ' Ft', color: C.textSub },
+          ].map(row => (
+            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}20` }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>{row.label}</span>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: row.color, fontWeight: 500 }}>{row.value}</span>
+            </div>
+          ))}
+
+          {/* Grand total */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, paddingTop: 14, borderTop: `2px solid ${C.accent}30` }}>
+            <span style={{ fontFamily: 'Syne', color: C.text, fontWeight: 800, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bruttó végösszeg</span>
+            <span style={{ fontFamily: 'Syne', color: C.accent, fontWeight: 900, fontSize: 26, letterSpacing: '-0.01em' }}>{fmt(Math.round(gross))} Ft</span>
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <Button variant="secondary" onClick={onBack}>← Vissza</Button>
         <Button variant="primary" onClick={handleNext}>Ajánlat generálása →</Button>
       </div>
