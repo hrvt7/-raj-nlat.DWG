@@ -2190,7 +2190,7 @@ function SaaSShell() {
           ) : page === 'materials' ? (
             <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} />
           ) : page === 'plans' ? (
-            <PlansPage />
+            <PlansPage onNavigate={p => setPage(p)} />
           ) : page === 'assemblies' ? (
             <AssembliesPage />
           ) : page === 'settings' ? (

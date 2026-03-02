@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { COUNT_CATEGORIES } from './DxfViewer/DxfToolbar.jsx'
-import { loadAssemblies } from '../data/store.js'
+import { loadAssemblies, loadMaterials, loadWorkItems } from '../data/store.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -18,33 +18,58 @@ export default function EstimationPanel({
   measurements = [],     // [{ x1, y1, x2, y2, dist }]
   scale = {},            // { factor, calibrated }
   ceilingHeight = 3.0,
+  switchHeight = 1.2,
   socketHeight = 0.3,
   onCeilingHeightChange,
+  onSwitchHeightChange,
   onSocketHeightChange,
   onGenerateCableRoutes,
-  cableRoutes = [],      // [{ fromX, fromY, toX, toY, distance, category }]
+  cableRoutes = [],
   onClose,
   onCreateQuote,
 }) {
   const [tab, setTab] = useState('summary')
-  const [assignments, setAssignments] = useState({}) // { [category]: assemblyId }
-  const assemblies = useMemo(() => {
-    try { return loadAssemblies() } catch { return [] }
+
+  // assignments: { [category]: { assemblyId: string, materialOverride: null|number, laborRateOverride: null|number } }
+  const [assignments, setAssignments] = useState({})
+
+  // Load data stores
+  const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
+  const materials  = useMemo(() => { try { return loadMaterials()  } catch { return [] } }, [])
+  const workItems  = useMemo(() => { try { return loadWorkItems()  } catch { return [] } }, [])
+
+  // ── Assembly cost helpers (uses actual components structure) ──
+  const getAsmMaterialCost = useCallback((asm) => {
+    return (asm.components || [])
+      .filter(c => c.itemType === 'material')
+      .reduce((sum, c) => {
+        const mat = materials.find(m => m.code === c.itemCode)
+        return sum + (c.qty || 0) * (mat?.price || 0)
+      }, 0)
+  }, [materials])
+
+  const getAsmLaborMinutes = useCallback((asm) => {
+    return (asm.components || [])
+      .filter(c => c.itemType === 'workitem')
+      .reduce((sum, c) => {
+        const wi = workItems.find(w => w.code === c.itemCode)
+        return sum + (c.qty || 0) * (wi?.p50 || 0)
+      }, 0)
+  }, [workItems])
+
+  const getAsmMaterialCount = useCallback((asm) => {
+    return (asm.components || []).filter(c => c.itemType === 'material').length
   }, [])
 
   // ── Count summary ──
   const countByCategory = useMemo(() => {
     const map = {}
-    for (const m of markers) {
-      map[m.category] = (map[m.category] || 0) + 1
-    }
+    for (const m of markers) map[m.category] = (map[m.category] || 0) + 1
     return map
   }, [markers])
 
   const totalMarkers = markers.length
-
-  // ── Panel marker (if exists) ──
-  const panelMarker = markers.find(m => m.category === 'panel')
+  const panelMarker  = markers.find(m => m.category === 'panel')
 
   // ── Cable calculations ──
   const cableData = useMemo(() => {
@@ -52,51 +77,45 @@ export default function EstimationPanel({
     if (!panelMarker) return null
 
     const devices = markers.filter(m => m.category !== 'panel')
-    let totalHorizontal = 0
-    let totalVertical = 0
+    if (devices.length === 0) return null
+
+    let totalHorizontal = 0, totalVertical = 0
     const routes = []
 
     for (const dev of devices) {
-      // Manhattan distance from panel to device
       const dx = Math.abs(dev.x - panelMarker.x)
       const dy = Math.abs(dev.y - panelMarker.y)
-      const sceneDist = dx + dy
-      const realDist = sceneDist * scale.factor
+      const realDist = (dx + dy) * scale.factor
 
-      // Vertical: ceiling_height - device_height (socket at 30cm, switch at 120cm, etc.)
+      // Per-category height logic
       let deviceHeight = socketHeight
-      if (dev.category === 'switch') deviceHeight = 1.2
-      else if (dev.category === 'light') deviceHeight = 0 // ceiling mount
+      if (dev.category === 'switch')   deviceHeight = switchHeight
+      else if (dev.category === 'light')    deviceHeight = 0           // ceiling mount
       else if (dev.category === 'junction') deviceHeight = ceilingHeight - 0.3
-      else if (dev.category === 'conduit') deviceHeight = ceilingHeight - 0.1
+      else if (dev.category === 'conduit')  deviceHeight = ceilingHeight - 0.1
+      else if (dev.category === 'panel')    deviceHeight = ceilingHeight * 0.5
 
-      const verticalRun = (ceilingHeight - deviceHeight) + (ceilingHeight - 0.1) // device drop + panel rise
+      const verticalRun = (ceilingHeight - deviceHeight) + (ceilingHeight - 0.1)
 
       totalHorizontal += realDist
-      totalVertical += verticalRun
-
+      totalVertical   += verticalRun
       routes.push({
         fromX: panelMarker.x, fromY: panelMarker.y,
         toX: dev.x, toY: dev.y,
         horizontal: realDist,
-        vertical: verticalRun,
-        total: realDist + verticalRun,
-        category: dev.category,
+        vertical:   verticalRun,
+        total:      realDist + verticalRun,
+        category:   dev.category,
       })
     }
 
-    return {
-      routes,
-      totalHorizontal,
-      totalVertical,
-      totalCable: totalHorizontal + totalVertical,
-      deviceCount: devices.length,
-      wastePercent: 15,
-      get totalWithWaste() { return this.totalCable * (1 + this.wastePercent / 100) },
-    }
-  }, [markers, scale, panelMarker, ceilingHeight, socketHeight])
+    const totalCable     = totalHorizontal + totalVertical
+    const wastePercent   = 15
+    const totalWithWaste = totalCable * (1 + wastePercent / 100)
+    return { routes, totalHorizontal, totalVertical, totalCable, wastePercent, totalWithWaste, deviceCount: devices.length }
+  }, [markers, scale, panelMarker, ceilingHeight, switchHeight, socketHeight])
 
-  // ── Category cables breakdown ──
+  // ── Cable by category ──
   const cableByCategory = useMemo(() => {
     if (!cableData) return {}
     const map = {}
@@ -108,67 +127,63 @@ export default function EstimationPanel({
     return map
   }, [cableData])
 
-  // ── Assembly assignment ──
+  // ── Assignment handlers ──
   const handleAssign = useCallback((category, assemblyId) => {
-    setAssignments(prev => ({ ...prev, [category]: assemblyId }))
+    setAssignments(prev => ({
+      ...prev,
+      [category]: { ...(prev[category] || {}), assemblyId: assemblyId || null },
+    }))
   }, [])
 
-  // ── Calculate total cost ──
+  const handleOverride = useCallback((category, field, value) => {
+    setAssignments(prev => ({
+      ...prev,
+      [category]: { ...(prev[category] || {}), [field]: value },
+    }))
+  }, [])
+
+  // ── Cost estimate ──
   const costEstimate = useMemo(() => {
-    let totalMaterial = 0
-    let totalLabor = 0
+    let totalMaterial = 0, totalLaborMinutes = 0
 
     for (const cat of Object.keys(countByCategory)) {
-      const asmId = assignments[cat]
-      if (!asmId) continue
-      const asm = assemblies.find(a => a.id === asmId)
+      const asgn = assignments[cat]
+      if (!asgn?.assemblyId) continue
+      const asm = assemblies.find(a => a.id === asgn.assemblyId)
       if (!asm) continue
 
-      const qty = countByCategory[cat]
-      const matCost = (asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0)
-      totalMaterial += matCost * qty
-      totalLabor += (asm.labor_minutes || 0) * qty
+      const qty         = countByCategory[cat]
+      const matPerUnit  = asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm)
+      const labPerUnit  = getAsmLaborMinutes(asm)
+
+      totalMaterial    += matPerUnit * qty
+      totalLaborMinutes += labPerUnit * qty
     }
 
-    // Cable cost (rough: 800 Ft/m for NYM-J 3x2.5)
-    const cableTotal = cableData ? cableData.totalWithWaste : 0
-    const cableCost = cableTotal * 800
+    // Cable cost: 800 Ft/m default (NYM-J 3×2.5 rough)
+    const cableTotal   = cableData?.totalWithWaste ?? 0
+    const cableCost    = cableTotal * 800
+    const laborHours   = totalLaborMinutes / 60
+    const laborRate    = 9000 // Ft/óra
+    const laborCost    = laborHours * laborRate
+    const grandTotal   = totalMaterial + cableCost + laborCost
 
-    return {
-      materialCost: totalMaterial,
-      cableCost,
-      laborMinutes: totalLabor,
-      laborHours: totalLabor / 60,
-      laborCost: (totalLabor / 60) * 9000, // 9000 Ft/hr default
-      totalCable: cableTotal,
-      grandTotal: totalMaterial + cableCost + (totalLabor / 60) * 9000,
-    }
-  }, [assignments, countByCategory, assemblies, cableData])
+    return { materialCost: totalMaterial, cableCost, laborMinutes: totalLaborMinutes, laborHours, laborRate, laborCost, totalCable: cableTotal, grandTotal }
+  }, [assignments, countByCategory, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes])
 
   const TABS = [
     { id: 'summary', label: 'Összesítő' },
-    { id: 'cables', label: 'Kábelek' },
-    { id: 'assign', label: 'Assemblyk' },
-    { id: 'quote', label: 'Kalkuláció' },
+    { id: 'cables',  label: 'Kábelek'   },
+    { id: 'assign',  label: 'Assemblyk' },
+    { id: 'quote',   label: 'Kalkuláció'},
   ]
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', height: '100%',
-      background: C.bgCard, borderLeft: `1px solid ${C.border}`,
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: C.bgCard, borderLeft: `1px solid ${C.border}` }}>
       {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 16px', borderBottom: `1px solid ${C.border}`,
-      }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text }}>
-          Kalkuláció
-        </div>
-        <button onClick={onClose} style={{
-          background: 'none', border: 'none', color: C.muted, cursor: 'pointer',
-          fontSize: 18, padding: 4, lineHeight: 1,
-        }}>✕</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text }}>Kalkuláció</div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18, padding: 4, lineHeight: 1 }}>✕</button>
       </div>
 
       {/* Tabs */}
@@ -187,14 +202,7 @@ export default function EstimationPanel({
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {tab === 'summary' && (
-          <SummaryTab
-            countByCategory={countByCategory}
-            totalMarkers={totalMarkers}
-            measurements={measurements}
-            scale={scale}
-            cableData={cableData}
-            panelMarker={panelMarker}
-          />
+          <SummaryTab countByCategory={countByCategory} totalMarkers={totalMarkers} measurements={measurements} scale={scale} cableData={cableData} panelMarker={panelMarker} />
         )}
         {tab === 'cables' && (
           <CablesTab
@@ -202,9 +210,12 @@ export default function EstimationPanel({
             cableByCategory={cableByCategory}
             scale={scale}
             panelMarker={panelMarker}
+            countByCategory={countByCategory}
             ceilingHeight={ceilingHeight}
+            switchHeight={switchHeight}
             socketHeight={socketHeight}
             onCeilingHeightChange={onCeilingHeightChange}
+            onSwitchHeightChange={onSwitchHeightChange}
             onSocketHeightChange={onSocketHeightChange}
           />
         )}
@@ -214,6 +225,10 @@ export default function EstimationPanel({
             assemblies={assemblies}
             assignments={assignments}
             onAssign={handleAssign}
+            onOverride={handleOverride}
+            getAsmMaterialCost={getAsmMaterialCost}
+            getAsmLaborMinutes={getAsmLaborMinutes}
+            getAsmMaterialCount={getAsmMaterialCount}
           />
         )}
         {tab === 'quote' && (
@@ -223,6 +238,8 @@ export default function EstimationPanel({
             assignments={assignments}
             assemblies={assemblies}
             cableData={cableData}
+            getAsmMaterialCost={getAsmMaterialCost}
+            getAsmLaborMinutes={getAsmLaborMinutes}
             onCreateQuote={onCreateQuote}
           />
         )}
@@ -236,40 +253,31 @@ export default function EstimationPanel({
 function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableData, panelMarker }) {
   return (
     <div>
-      {/* Status indicators */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
         <StatusRow ok={totalMarkers > 0} label={`${totalMarkers} elem bejelölve`} hint="Jelölj be elemeket a tervrajzon" />
-        <StatusRow ok={!!panelMarker} label="Elosztó megjelölve" hint="Jelölj be egy elosztó elemet" />
-        <StatusRow ok={scale.calibrated} label="Skála kalibrálva" hint='Használd a "Skála" eszközt a kalibráláshoz' />
+        <StatusRow ok={!!panelMarker} label="Elosztó megjelölve" hint='Jelölj be egy elosztó elemet' />
+        <StatusRow ok={scale.calibrated} label="Skála kalibrálva" hint='Használd a "Skála" eszközt' />
         <StatusRow ok={!!cableData} label="Kábel számítás kész" hint="Jelölj be elosztót + kalibrálj skálát" />
       </div>
 
-      {/* Count summary */}
       {totalMarkers > 0 && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
-            Eszközök ({totalMarkers})
-          </div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Eszközök ({totalMarkers})</div>
           {COUNT_CATEGORIES.filter(c => countByCategory[c.key]).map(c => (
             <div key={c.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color }} />
                 <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: c.color }}>{c.label}</span>
               </div>
-              <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: c.color }}>
-                {countByCategory[c.key]}
-              </span>
+              <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: c.color }}>{countByCategory[c.key]}</span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Cable summary */}
       {cableData && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
-            Kábel összesítő
-          </div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Kábel összesítő</div>
           <StatRow label="Vízszintes" value={`${cableData.totalHorizontal.toFixed(1)} m`} />
           <StatRow label="Függőleges" value={`${cableData.totalVertical.toFixed(1)} m`} />
           <StatRow label="Összesen" value={`${cableData.totalCable.toFixed(1)} m`} accent />
@@ -277,12 +285,9 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
         </div>
       )}
 
-      {/* Measurements */}
       {measurements.length > 0 && scale.calibrated && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginTop: 16 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
-            Mérések ({measurements.length})
-          </div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Mérések ({measurements.length})</div>
           {measurements.map((m, i) => (
             <StatRow key={i} label={`Mérés #${i + 1}`} value={`${(m.dist * scale.factor).toFixed(2)} m`} />
           ))}
@@ -294,38 +299,38 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
 
 // ─── Cables Tab ─────────────────────────────────────────────────────────────
 
-function CablesTab({ cableData, cableByCategory, scale, panelMarker, ceilingHeight, socketHeight, onCeilingHeightChange, onSocketHeightChange }) {
-  if (!scale.calibrated) {
-    return <HintBox icon="📐" text='Először kalibráld a skálát a "Skála" eszközzel, hogy a kábelhossz számítás pontos legyen.' />
-  }
-  if (!panelMarker) {
-    return <HintBox icon="⚡" text='Jelöld be az elosztó(ka)t a tervrajzon az "Elosztó" kategóriával, hogy a kábelútvonalak kiszámolhatóak legyenek.' />
-  }
-  if (!cableData || cableData.routes.length === 0) {
-    return <HintBox icon="📍" text="Jelölj be eszközöket (dugalj, kapcsoló, stb.) a tervrajzon, hogy a kábelhossz számítás elkészüljön." />
-  }
+function CablesTab({ cableData, cableByCategory, scale, panelMarker, countByCategory, ceilingHeight, switchHeight, socketHeight, onCeilingHeightChange, onSwitchHeightChange, onSocketHeightChange }) {
+  if (!scale.calibrated) return <HintBox icon="📐" text='Először kalibráld a skálát a "Skála" eszközzel, hogy a kábelhossz számítás pontos legyen.' />
+  if (!panelMarker)      return <HintBox icon="⚡" text='Jelöld be az elosztó(ka)t "Elosztó" kategóriával.' />
+  if (!cableData || cableData.routes.length === 0) return <HintBox icon="📍" text="Jelölj be eszközöket a tervrajzon." />
+
+  const hasSockets  = (countByCategory['socket']  || 0) > 0
+  const hasSwitches = (countByCategory['switch']   || 0) > 0
+  const hasLights   = (countByCategory['light']    || 0) > 0
 
   return (
     <div>
       {/* Height settings */}
       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
-          Magassági beállítások
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Magassági beállítások</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <NumberInput label="Belmagasság (m)" value={ceilingHeight} onChange={onCeilingHeightChange} min={2} max={6} step={0.1} />
-          <NumberInput label="Dugalj mag. (m)" value={socketHeight} onChange={onSocketHeightChange} min={0.1} max={2} step={0.05} />
+          {hasSockets  && <NumberInput label="Dugalj mag. (m)"   value={socketHeight} onChange={onSocketHeightChange} min={0.1} max={1.5} step={0.05} />}
+          {hasSwitches && <NumberInput label="Kapcsoló mag. (m)" value={switchHeight} onChange={onSwitchHeightChange} min={0.5} max={2.0} step={0.05} />}
         </div>
-        <div style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono', marginTop: 8 }}>
-          A rendszer automatikusan hozzáadja a függőleges kábelhosszt: elosztótól a mennyezetig + mennyezettől az eszközig.
+        {hasLights && (
+          <div style={{ fontSize: 10, color: C.blue, fontFamily: 'DM Mono', marginTop: 8 }}>
+            Lámpatest: mennyezeti szerelés (0 m) — automatikus
+          </div>
+        )}
+        <div style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono', marginTop: 6 }}>
+          A rendszer hozzáadja a függőleges kábelhosszt: panel→mennyezet + mennyezet→eszköz.
         </div>
       </div>
 
       {/* Per-category breakdown */}
       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
-          Kábelhossz kategóriánként
-        </div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Kábelhossz kategóriánként</div>
         {COUNT_CATEGORIES.filter(c => cableByCategory[c.key]).map(c => {
           const d = cableByCategory[c.key]
           return (
@@ -334,25 +339,19 @@ function CablesTab({ cableData, cableByCategory, scale, panelMarker, ceilingHeig
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color }} />
                 <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: c.color }}>{c.label} ({d.count}×)</span>
               </div>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>
-                {d.total.toFixed(1)} m
-              </span>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>{d.total.toFixed(1)} m</span>
             </div>
           )
         })}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: 4 }}>
-          <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: C.accent }}>Összesen</span>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 13, fontWeight: 700, color: C.accent }}>
-            {cableData.totalWithWaste.toFixed(1)} m
-          </span>
+          <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: C.accent }}>Összesen (+ hulladék)</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 13, fontWeight: 700, color: C.accent }}>{cableData.totalWithWaste.toFixed(1)} m</span>
         </div>
       </div>
 
       {/* Individual routes */}
       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
-          Egyedi útvonalak ({cableData.routes.length})
-        </div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Egyedi útvonalak ({cableData.routes.length})</div>
         <div style={{ maxHeight: 200, overflow: 'auto' }}>
           {cableData.routes.map((r, i) => {
             const cat = COUNT_CATEGORIES.find(c => c.key === r.category)
@@ -374,47 +373,47 @@ function CablesTab({ cableData, cableByCategory, scale, panelMarker, ceilingHeig
 
 // ─── Assembly Assignment Tab ────────────────────────────────────────────────
 
-function AssignTab({ countByCategory, assemblies, assignments, onAssign }) {
+function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverride, getAsmMaterialCost, getAsmLaborMinutes, getAsmMaterialCount }) {
+  const [expanded, setExpanded] = useState({}) // { [category]: bool }
   const categories = COUNT_CATEGORIES.filter(c => countByCategory[c.key])
 
-  if (categories.length === 0) {
-    return <HintBox icon="📍" text="Jelölj be elemeket a tervrajzon, hogy assembly-ket rendelhess hozzájuk." />
-  }
+  if (categories.length === 0) return <HintBox icon="📍" text="Jelölj be elemeket a tervrajzon, hogy assembly-ket rendelhess hozzájuk." />
 
   return (
     <div>
       <div style={{ fontSize: 12, color: C.textSub, fontFamily: 'DM Mono', marginBottom: 16 }}>
-        Rendelj assembly-t minden kategóriához, hogy az anyag- és munkadíj kiszámolható legyen.
+        Rendelj assembly-t minden kategóriához az anyag- és munkadíj kalkulációhoz.
       </div>
 
       {categories.map(c => {
-        const count = countByCategory[c.key]
-        const selectedId = assignments[c.key]
+        const count     = countByCategory[c.key]
+        const asgn      = assignments[c.key] || {}
+        const selectedId = asgn.assemblyId || ''
         const selectedAsm = assemblies.find(a => a.id === selectedId)
+        const isExpanded  = expanded[c.key]
+
+        const matCost = selectedAsm
+          ? (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(selectedAsm))
+          : 0
+        const laborMin = selectedAsm ? getAsmLaborMinutes(selectedAsm) : 0
+        const matCount = selectedAsm ? getAsmMaterialCount(selectedAsm) : 0
 
         return (
-          <div key={c.key} style={{
-            background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
-            padding: 14, marginBottom: 12,
-          }}>
+          <div key={c.key} style={{ background: C.bg, border: `1px solid ${isExpanded ? C.accent + '40' : C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+            {/* Category header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color }} />
                 <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: c.color }}>{c.label}</span>
               </div>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>
-                {count} db
-              </span>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>{count} db</span>
             </div>
 
+            {/* Assembly selector */}
             <select
-              value={selectedId || ''}
+              value={selectedId}
               onChange={e => onAssign(c.key, e.target.value || null)}
-              style={{
-                width: '100%', padding: '8px 10px', borderRadius: 6,
-                background: C.bgCard, border: `1px solid ${C.border}`, color: C.text,
-                fontSize: 12, fontFamily: 'DM Mono',
-              }}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: C.bgCard, border: `1px solid ${C.border}`, color: C.text, fontSize: 12, fontFamily: 'DM Mono' }}
             >
               <option value="">— Válassz assembly-t —</option>
               {assemblies.map(a => (
@@ -422,13 +421,67 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign }) {
               ))}
             </select>
 
+            {/* Assembly info + expand */}
             {selectedAsm && (
-              <div style={{ marginTop: 8, fontSize: 10, fontFamily: 'DM Mono', color: C.muted }}>
-                {(selectedAsm.items || []).length} tétel · {selectedAsm.labor_minutes || 0} perc munka
-                {selectedAsm.items?.length > 0 && (
-                  <span> · anyag: {((selectedAsm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0)).toLocaleString('hu-HU')} Ft</span>
+              <>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted }}>
+                    {matCount} anyagtétel · {laborMin.toFixed(0)} perc munka · {matCost.toLocaleString('hu-HU')} Ft/db
+                  </div>
+                  <button onClick={() => setExpanded(p => ({ ...p, [c.key]: !p[c.key] }))}
+                    style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono', padding: '2px 6px' }}>
+                    {isExpanded ? '▲ Kevesebb' : '▼ Részletek'}
+                  </button>
+                </div>
+
+                {isExpanded && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                    {/* Overrides */}
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, marginBottom: 8 }}>Egyedi felülírás (opcionális)</div>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Anyagköltség (Ft/db)</div>
+                        <input
+                          type="number" min={0} step={50}
+                          value={asgn.materialOverride ?? ''}
+                          placeholder={matCost.toFixed(0)}
+                          onChange={e => onOverride(c.key, 'materialOverride', e.target.value === '' ? null : parseFloat(e.target.value))}
+                          style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bgCard, border: `1px solid ${asgn.materialOverride != null ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Norma perc (perc/db)</div>
+                        <input
+                          type="number" min={0} step={5}
+                          value={asgn.laborMinOverride ?? ''}
+                          placeholder={laborMin.toFixed(0)}
+                          onChange={e => onOverride(c.key, 'laborMinOverride', e.target.value === '' ? null : parseFloat(e.target.value))}
+                          style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bgCard, border: `1px solid ${asgn.laborMinOverride != null ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Component list */}
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, marginBottom: 6 }}>Assembly tartalma:</div>
+                    {(selectedAsm.components || []).map((comp, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 10, fontFamily: 'DM Mono' }}>
+                        <span style={{ color: comp.itemType === 'workitem' ? C.yellow : C.blue, minWidth: 24, fontSize: 9 }}>
+                          {comp.itemType === 'workitem' ? 'MUN' : 'ANY'}
+                        </span>
+                        <span style={{ flex: 1, color: C.textSub }}>{comp.name}</span>
+                        <span style={{ color: C.muted }}>{comp.qty} {comp.unit}</span>
+                      </div>
+                    ))}
+
+                    {asgn.materialOverride != null && (
+                      <button onClick={() => onOverride(c.key, 'materialOverride', null)}
+                        style={{ marginTop: 8, background: 'none', border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono', padding: '3px 8px' }}>
+                        ↩ Visszaállítás alapárra
+                      </button>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         )
@@ -439,54 +492,46 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign }) {
 
 // ─── Quote/Calculation Tab ──────────────────────────────────────────────────
 
-function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cableData, onCreateQuote }) {
-  const hasAssignments = Object.values(assignments).some(v => v)
+function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes, onCreateQuote }) {
+  const hasAssignments = Object.values(assignments).some(v => v?.assemblyId)
 
   return (
     <div>
       {/* Cost breakdown */}
       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 12 }}>
-          Költségbecslés
-        </div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 12 }}>Költségbecslés</div>
         <StatRow label="Anyagköltség" value={`${costEstimate.materialCost.toLocaleString('hu-HU')} Ft`} />
-        <StatRow label={`Kábel (${costEstimate.totalCable.toFixed(0)} m)`} value={`${costEstimate.cableCost.toLocaleString('hu-HU')} Ft`} />
-        <StatRow label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
+        <StatRow label={`Kábel (${costEstimate.totalCable.toFixed(0)} m × 800 Ft)`} value={`${costEstimate.cableCost.toLocaleString('hu-HU')} Ft`} />
+        <StatRow label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra × ${costEstimate.laborRate.toLocaleString('hu-HU')} Ft)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
         <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
-          <span style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 800, color: C.accent }}>
-            {costEstimate.grandTotal.toLocaleString('hu-HU')} Ft
-          </span>
+          <span style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 800, color: C.accent }}>{costEstimate.grandTotal.toLocaleString('hu-HU')} Ft</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó (27% ÁFA)</span>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>
-            {(costEstimate.grandTotal * 1.27).toLocaleString('hu-HU')} Ft
-          </span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{(costEstimate.grandTotal * 1.27).toLocaleString('hu-HU')} Ft</span>
         </div>
       </div>
 
       {/* Per-category cost */}
       {hasAssignments && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
-            Részletes bontás
-          </div>
-          {COUNT_CATEGORIES.filter(c => countByCategory[c.key] && assignments[c.key]).map(c => {
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Részletes bontás</div>
+          {COUNT_CATEGORIES.filter(c => countByCategory[c.key] && assignments[c.key]?.assemblyId).map(c => {
             const count = countByCategory[c.key]
-            const asm = assemblies.find(a => a.id === assignments[c.key])
+            const asgn  = assignments[c.key]
+            const asm   = assemblies.find(a => a.id === asgn.assemblyId)
             if (!asm) return null
-            const matPerUnit = (asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0)
+            const matPerUnit  = asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm)
+            const laborMin    = asgn.laborMinOverride != null ? asgn.laborMinOverride  : getAsmLaborMinutes(asm)
             return (
               <div key={c.key} style={{ padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: c.color }}>{c.label} ({count}×)</span>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>
-                    {(matPerUnit * count).toLocaleString('hu-HU')} Ft
-                  </span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>{(matPerUnit * count).toLocaleString('hu-HU')} Ft</span>
                 </div>
                 <div style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono', marginTop: 2 }}>
-                  {asm.name} · {matPerUnit.toLocaleString('hu-HU')} Ft/db · {asm.labor_minutes} perc/db
+                  {asm.name} · {matPerUnit.toLocaleString('hu-HU')} Ft/db · {laborMin.toFixed(0)} perc/db
                 </div>
               </div>
             )
@@ -494,22 +539,16 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
         </div>
       )}
 
-      {/* Actions */}
+      {/* Action */}
       <button
-        onClick={() => onCreateQuote?.({
-          countByCategory,
-          assignments,
-          cableData,
-          costEstimate,
-        })}
+        onClick={() => onCreateQuote?.({ countByCategory, assignments, cableData, costEstimate })}
         style={{
-          width: '100%', padding: '12px 16px', borderRadius: 8, cursor: 'pointer',
+          width: '100%', padding: '13px 16px', borderRadius: 8, cursor: 'pointer',
           background: C.accent, border: 'none', color: C.bg,
-          fontSize: 14, fontFamily: 'Syne', fontWeight: 700,
-          marginBottom: 8,
+          fontSize: 14, fontFamily: 'Syne', fontWeight: 700, marginBottom: 8,
         }}
       >
-        Ajánlat létrehozása
+        Ajánlat létrehozása →
       </button>
 
       {!hasAssignments && (
@@ -526,12 +565,7 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
 function StatusRow({ ok, label, hint }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{
-        width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: ok ? 'rgba(0,229,160,0.15)' : 'rgba(113,113,122,0.1)',
-        color: ok ? C.accent : C.muted, fontSize: 11,
-      }}>
+      <div style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ok ? 'rgba(0,229,160,0.15)' : 'rgba(113,113,122,0.1)', color: ok ? C.accent : C.muted, fontSize: 11 }}>
         {ok ? '✓' : '○'}
       </div>
       <div>
@@ -553,10 +587,7 @@ function StatRow({ label, value, accent }) {
 
 function HintBox({ icon, text }) {
   return (
-    <div style={{
-      background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10,
-      padding: 20, textAlign: 'center',
-    }}>
+    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20, textAlign: 'center' }}>
       <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
       <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, lineHeight: 1.5 }}>{text}</div>
     </div>
@@ -565,17 +596,12 @@ function HintBox({ icon, text }) {
 
 function NumberInput({ label, value, onChange, min, max, step }) {
   return (
-    <div style={{ flex: 1 }}>
+    <div style={{ flex: 1, minWidth: 120 }}>
       <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginBottom: 4 }}>{label}</div>
       <input
-        type="number" min={min} max={max} step={step}
-        value={value}
+        type="number" min={min} max={max} step={step} value={value}
         onChange={e => onChange?.(parseFloat(e.target.value) || min)}
-        style={{
-          width: '100%', padding: '6px 8px', borderRadius: 5,
-          background: C.bgCard, border: `1px solid ${C.border}`, color: C.text,
-          fontSize: 13, fontFamily: 'DM Mono', boxSizing: 'border-box',
-        }}
+        style={{ width: '100%', padding: '6px 8px', borderRadius: 5, background: C.bgCard, border: `1px solid ${C.border}`, color: C.text, fontSize: 13, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
       />
     </div>
   )

@@ -53,7 +53,7 @@ async function generatePdfThumbnail(file, planId) {
   }
 }
 
-export default function Plans() {
+export default function Plans({ onNavigate }) {
   const [plans, setPlans] = useState([])
   const [activePlan, setActivePlan] = useState(null)
   const [activeFile, setActiveFile] = useState(null)
@@ -141,7 +141,7 @@ export default function Plans() {
       <MergePlansView
         plans={plans}
         onClose={() => setMergeMode(false)}
-        onCreateQuote={(data) => { console.log('Merged quote:', data); setMergeMode(false) }}
+        onCreateQuote={(data) => { setMergeMode(false); onNavigate?.('new-quote') }}
       />
     )
   }
@@ -181,7 +181,7 @@ export default function Plans() {
             <PdfViewerPanel
               file={activeFile}
               planId={activePlan.id}
-              onCreateQuote={(data) => console.log('Quote from PDF:', data)}
+              onCreateQuote={(data) => { onNavigate?.('new-quote') }}
               style={{ height: '100%' }}
             />
           ) : (
@@ -190,7 +190,7 @@ export default function Plans() {
               unitFactor={activePlan.units?.factor}
               unitName={activePlan.units?.name}
               planId={activePlan.id}
-              onCreateQuote={(data) => console.log('Quote from DXF:', data)}
+              onCreateQuote={(data) => { onNavigate?.('new-quote') }}
               style={{ height: '100%' }}
             />
           )}

@@ -62,6 +62,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
   const [estimationOpen, setEstimationOpen] = useState(false)
   const [ceilingHeight, setCeilingHeight] = useState(3.0)
   const [socketHeight, setSocketHeight] = useState(0.3)
+  const [switchHeight, setSwitchHeight] = useState(1.2)
   const [showCableRoutes, setShowCableRoutes] = useState(false)
 
   // ── Load saved annotations on mount ──
@@ -73,6 +74,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
+      if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
     })
   }, [planId])
 
@@ -86,9 +88,10 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
         scale: scaleRef.current,
         ceilingHeight,
         socketHeight,
+        switchHeight,
       })
     }
-  }, [planId, ceilingHeight, socketHeight])
+  }, [planId, ceilingHeight, socketHeight, switchHeight])
 
   // ── Load PDF ──
   useEffect(() => {
@@ -606,8 +609,10 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
             scale={scale}
             ceilingHeight={ceilingHeight}
             socketHeight={socketHeight}
+            switchHeight={switchHeight}
             onCeilingHeightChange={setCeilingHeight}
             onSocketHeightChange={setSocketHeight}
+            onSwitchHeightChange={setSwitchHeight}
             onClose={() => setEstimationOpen(false)}
             onCreateQuote={(data) => {
               onCreateQuote?.({ ...data, planId, markers: [...markersRef.current], measurements: [...measuresRef.current], scale })
@@ -781,10 +786,15 @@ function PdfToolbar({
 
       {/* Cable routes toggle */}
       {markerCount > 0 && (
-        <TinyBtn onClick={onToggleCableRoutes} title="Kábelútvonalak" style={{
+        <button onClick={onToggleCableRoutes} style={{
+          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+          fontFamily: 'Syne', fontWeight: 700,
+          background: showCableRoutes ? 'rgba(255,209,102,0.15)' : 'transparent',
+          border: `1px solid ${showCableRoutes ? C.yellow : C.border}`,
           color: showCableRoutes ? C.yellow : C.muted,
-          background: showCableRoutes ? C.yellow + '20' : undefined,
-        }}>⚡</TinyBtn>
+        }}>
+          {showCableRoutes ? 'Kábelvonalak ✓' : 'Kábelvonalak'}
+        </button>
       )}
 
       {/* Estimation button */}

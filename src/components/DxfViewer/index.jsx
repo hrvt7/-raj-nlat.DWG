@@ -37,6 +37,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
   const [estimationOpen, setEstimationOpen] = useState(false)
   const [renderTick, setRenderTick] = useState(0) // force re-render for counts
   const [ceilingHeight, setCeilingHeight] = useState(3.0)
+  const [switchHeight, setSwitchHeight] = useState(1.2)
   const [socketHeight, setSocketHeight] = useState(0.3)
   const [showCableRoutes, setShowCableRoutes] = useState(false)
   const showCableRoutesRef = useRef(false)
@@ -73,6 +74,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
       if (ann.measurements?.length) { measuresRef.current = ann.measurements }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
+      if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
     })
   }, [planId])
@@ -86,6 +88,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
         measurements: measuresRef.current,
         scale: scaleRef.current,
         ceilingHeight,
+        switchHeight,
         socketHeight,
       })
     }
@@ -615,7 +618,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
                 border: `1px solid ${showCableRoutes ? C.yellow + '60' : C.border}`,
                 color: showCableRoutes ? C.yellow : C.muted,
               }}>
-                {showCableRoutes ? '⚡ Kábelek' : '⚡'}
+                {showCableRoutes ? 'Kábelvonalak ✓' : 'Kábelvonalak'}
               </button>
               <button onClick={() => setEstimationOpen(p => !p)} style={{
                 padding: '2px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 10,
@@ -643,8 +646,10 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
             measurements={[...measuresRef.current]}
             scale={scale}
             ceilingHeight={ceilingHeight}
+            switchHeight={switchHeight}
             socketHeight={socketHeight}
             onCeilingHeightChange={setCeilingHeight}
+            onSwitchHeightChange={setSwitchHeight}
             onSocketHeightChange={setSocketHeight}
             onClose={() => setEstimationOpen(false)}
             onCreateQuote={(data) => {
