@@ -528,6 +528,25 @@ function CablesTab({ cableData, cableByCategory, scale, panelMarker, countByCate
   )
 }
 
+// ─── Category → assembly category mapping ───────────────────────────────────
+// Maps COUNT_CATEGORIES keys to the assembly.category field in ASSEMBLIES_DEFAULT
+const CATEGORY_ASM_MAP = {
+  light:    'vilagitas',
+  switch:   'szerelveny',
+  socket:   'szerelveny',
+  panel:    'elosztok',
+  junction: 'szerelveny',
+  conduit:  'egyeb',
+  other:    'egyeb',
+}
+// Cable trays → 'kabeltálca'
+
+function getRecommendedAssemblies(catKey, isCableTray, assemblies) {
+  const asmCat = isCableTray ? 'kabeltálca' : (CATEGORY_ASM_MAP[catKey] || null)
+  if (!asmCat) return []
+  return assemblies.filter(a => a.category === asmCat && (a.components || []).length > 0)
+}
+
 // ─── Assembly Assignment Tab ────────────────────────────────────────────────
 
 function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverride, getAsmMaterialCost, getAsmLaborMinutes, getAsmMaterialCount, unassignedCategories = [] }) {
@@ -569,18 +588,26 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverr
       )}
 
       {categories.map(c => {
-        const count     = countByCategory[c.key]
-        const asgn      = assignments[c.key] || {}
+        const count      = countByCategory[c.key]
+        const asgn       = assignments[c.key] || {}
         const selectedId = asgn.assemblyId || ''
         const selectedAsm = assemblies.find(a => a.id === selectedId)
         const isExpanded  = expanded[c.key]
 
-        const matCost = selectedAsm
-          ? (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(selectedAsm))
-          : 0
+        // Recommended assemblies for this category (from default DB, non-empty)
+        const recommended = getRecommendedAssemblies(c.key, !!c.isCableTray, assemblies)
+        const recommendedIds = new Set(recommended.map(a => a.id))
+        const otherAssemblies = assemblies.filter(a => !recommendedIds.has(a.id))
+
+        const matCost  = selectedAsm ? (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(selectedAsm)) : 0
         const laborMin = selectedAsm ? getAsmLaborMinutes(selectedAsm) : 0
         const matCount = selectedAsm ? getAsmMaterialCount(selectedAsm) : 0
         const isEmpty  = selectedAsm && matCount === 0 && laborMin === 0
+
+        // Best suggestion when current is empty or missing
+        const suggestion = !selectedAsm || isEmpty
+          ? recommended.find(a => a.id !== selectedId) || recommended[0] || null
+          : null
 
         return (
           <div key={c.key} style={{
@@ -594,35 +621,80 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverr
                 <div style={{ width: 10, height: 10, borderRadius: c.isCableTray ? 2 : '50%', background: c.color }} />
                 <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: c.color }}>{c.label}</span>
                 {!selectedAsm && <span style={{ fontSize: 9, color: C.red, fontFamily: 'DM Mono', fontWeight: 700 }}>✗ HIÁNYZIK</span>}
+                {isEmpty && <span style={{ fontSize: 9, color: C.yellow, fontFamily: 'DM Mono', fontWeight: 700 }}>⚠ ÜRES</span>}
               </div>
               <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>{count} db</span>
             </div>
 
-            {/* Assembly selector */}
+            {/* Suggestion banner — shown when no assembly or empty assembly selected */}
+            {suggestion && (
+              <div style={{
+                marginBottom: 8, padding: '8px 10px', borderRadius: 6,
+                background: 'rgba(0,229,160,0.06)', border: `1px solid rgba(0,229,160,0.2)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 9, color: C.accent, fontFamily: 'DM Mono', fontWeight: 700, marginBottom: 2 }}>
+                    ★ JAVASOLT ALAPÉRTELMEZETT
+                  </div>
+                  <div style={{ fontSize: 11, color: C.text, fontFamily: 'DM Mono', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {suggestion.name}
+                  </div>
+                  <div style={{ fontSize: 9, color: C.textSub, fontFamily: 'DM Mono', marginTop: 1 }}>
+                    {(suggestion.components || []).filter(x => x.itemType === 'material').length} anyag ·{' '}
+                    {getAsmLaborMinutes(suggestion).toFixed(0)} perc ·{' '}
+                    {getAsmMaterialCost(suggestion).toLocaleString('hu-HU')} Ft/db
+                  </div>
+                </div>
+                <button
+                  onClick={() => onAssign(c.key, suggestion.id)}
+                  style={{
+                    padding: '6px 12px', borderRadius: 5, cursor: 'pointer', flexShrink: 0,
+                    background: C.accent, border: 'none', color: C.bg,
+                    fontSize: 11, fontFamily: 'Syne', fontWeight: 700,
+                  }}
+                >
+                  Használ →
+                </button>
+              </div>
+            )}
+
+            {/* Assembly selector — grouped by recommended / other */}
             <select
               value={selectedId}
               onChange={e => onAssign(c.key, e.target.value || null)}
               style={{
                 width: '100%', padding: '8px 10px', borderRadius: 6, background: C.bgCard,
-                border: `1px solid ${!selectedAsm ? C.red + '60' : C.border}`,
+                border: `1px solid ${!selectedAsm ? C.red + '60' : isEmpty ? C.yellow + '60' : C.border}`,
                 color: C.text, fontSize: 12, fontFamily: 'DM Mono',
               }}
             >
               <option value="">— Válassz assembly-t —</option>
-              {assemblies.map(a => {
-                const compCount = (a.components || []).length
-                return <option key={a.id} value={a.id}>{a.name}{compCount === 0 ? ' (üres!)' : ''}</option>
-              })}
+              {recommended.length > 0 && (
+                <optgroup label={`★ Ajánlott (${c.label})`}>
+                  {recommended.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {otherAssemblies.length > 0 && (
+                <optgroup label="Egyéb assemblyk">
+                  {otherAssemblies.map(a => {
+                    const compCount = (a.components || []).length
+                    return <option key={a.id} value={a.id}>{a.name}{compCount === 0 ? ' (üres!)' : ''}</option>
+                  })}
+                </optgroup>
+              )}
             </select>
 
-            {/* Empty assembly warning */}
-            {isEmpty && (
+            {/* Empty assembly warning (when suggestion is exhausted or not found) */}
+            {isEmpty && !suggestion && (
               <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 4, background: 'rgba(255,209,102,0.1)', border: `1px solid rgba(255,209,102,0.3)` }}>
                 <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.yellow, fontWeight: 700 }}>
-                  ⚠ Ez az assembly üres — nincs benne anyagtétel és munkatétel!
+                  ⚠ Ez az assembly üres — nincs komponens benne!
                 </div>
                 <div style={{ fontSize: 9, fontFamily: 'DM Mono', color: C.muted, marginTop: 2 }}>
-                  Menj az Assemblyk oldalra és adj hozzá komponenseket, vagy válassz másikat.
+                  Menj az Assemblyk oldalra és adj hozzá anyag/munka tételeket.
                 </div>
               </div>
             )}
