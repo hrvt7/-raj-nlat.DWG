@@ -1082,6 +1082,23 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
     setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: parseFloat(value) || 0 } : i))
   }
 
+  const updateItemName = (id, name) => {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, name } : i))
+  }
+
+  const addCustomItem = () => {
+    setItems(prev => [...prev, {
+      id: `custom-${Date.now()}`,
+      name: '', qty: 1, unit: 'db',
+      normMinutes: 0, hours: 0, unitPrice: 0,
+      type: 'custom', isCustom: true,
+    }])
+  }
+
+  const removeItem = (id) => {
+    setItems(prev => prev.filter(i => i.id !== id))
+  }
+
   const totalHours = items.reduce((s, i) => s + (i.hours || 0), 0)
   const totalMaterials = items.reduce((s, i) => s + (i.unitPrice || 0) * (i.qty || 0), 0)
   const totalLabor = totalHours * hourlyRate
@@ -1129,66 +1146,121 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
       </div>
 
       {/* Items table */}
-      {items.length > 0 && (
-        <div style={{ marginBottom: 24, overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                <th style={{ textAlign: 'left', padding: '8px 10px', color: C.muted }}>Megnevezés</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Menny.</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Egységár</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Norma (perc)</th>
-                <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Munkadíj</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(item => {
-                if (item.isGroupHeader) {
-                  return (
-                    <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20`, background: 'rgba(0,229,160,0.04)' }}>
-                      <td colSpan={5} style={{ padding: '8px 10px', color: C.accent, fontWeight: 700, fontSize: 12 }}>
-                        {item.name} <span style={{ color: C.textMuted, fontWeight: 400 }}>× {item.qty}</span>
-                      </td>
-                    </tr>
-                  )
-                }
-                const laborCost = (item.hours || 0) * hourlyRate
+      <div style={{ marginBottom: 8, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+              <th style={{ textAlign: 'left', padding: '8px 10px', color: C.muted }}>Megnevezés</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Menny.</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Egységár</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Norma (perc)</th>
+              <th style={{ textAlign: 'right', padding: '8px 10px', color: C.muted }}>Munkadíj</th>
+              <th style={{ width: 24 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(item => {
+              if (item.isGroupHeader) {
                 return (
-                  <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
-                    <td style={{ padding: '8px 10px', color: item.assemblyId ? C.textSub : C.text, fontSize: item.assemblyId ? 11 : 12 }}>{item.name}</td>
-                    <td style={{ padding: '8px 10px', color: C.text, textAlign: 'right' }}>
-                      {item.qty} {item.unit}
-                    </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right' }}>
-                      <input type="number" value={item.unitPrice}
-                        onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
-                        style={{
-                          width: 80, background: C.bg, border: `1px solid ${C.border}`,
-                          borderRadius: 4, color: C.text, padding: '3px 6px', fontSize: 12, textAlign: 'right',
-                        }} />
-                    </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right' }}>
-                      <input type="number" value={item.normMinutes}
-                        onChange={e => {
-                          const nm = parseFloat(e.target.value) || 0
-                          setItems(prev => prev.map(i => i.id === item.id
-                            ? { ...i, normMinutes: nm, hours: (nm * i.qty) / 60 } : i))
-                        }}
-                        style={{
-                          width: 70, background: C.bg, border: `1px solid ${C.border}`,
-                          borderRadius: 4, color: C.accent, padding: '3px 6px', fontSize: 12, textAlign: 'right',
-                        }} />
-                    </td>
-                    <td style={{ padding: '8px 10px', color: C.blue, textAlign: 'right', fontWeight: 600 }}>
-                      {fmt(Math.round(laborCost))} Ft
+                  <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20`, background: 'rgba(0,229,160,0.04)' }}>
+                    <td colSpan={6} style={{ padding: '8px 10px', color: C.accent, fontWeight: 700, fontSize: 12 }}>
+                      {item.name} <span style={{ color: C.textMuted, fontWeight: 400 }}>× {item.qty}</span>
                     </td>
                   </tr>
                 )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+              }
+              const laborCost = (item.hours || 0) * hourlyRate
+              return (
+                <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                  <td style={{ padding: '8px 10px', color: item.assemblyId ? C.textSub : C.text, fontSize: item.assemblyId ? 11 : 12 }}>
+                    {item.isCustom ? (
+                      <input
+                        type="text" value={item.name}
+                        onChange={e => updateItemName(item.id, e.target.value)}
+                        placeholder="Tétel neve..."
+                        autoFocus
+                        style={{
+                          background: 'transparent', border: 'none',
+                          borderBottom: `1px solid ${C.border}`, color: C.text,
+                          fontSize: 12, outline: 'none', width: '100%', minWidth: 120,
+                          fontFamily: 'inherit',
+                        }}
+                      />
+                    ) : item.name}
+                  </td>
+                  <td style={{ padding: '8px 10px', color: C.text, textAlign: 'right' }}>
+                    {item.isCustom ? (
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <input type="number" value={item.qty}
+                          onChange={e => {
+                            const q = parseFloat(e.target.value) || 0
+                            setItems(prev => prev.map(i => i.id === item.id
+                              ? { ...i, qty: q, hours: (i.normMinutes * q) / 60 } : i))
+                          }}
+                          style={{ width: 48, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, padding: '3px 6px', fontSize: 12, textAlign: 'right' }} />
+                        <input type="text" value={item.unit}
+                          onChange={e => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unit: e.target.value } : i))}
+                          style={{ width: 36, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, padding: '3px 5px', fontSize: 11 }} />
+                      </div>
+                    ) : `${item.qty} ${item.unit}`}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                    <input type="number" value={item.unitPrice}
+                      onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
+                      style={{
+                        width: 80, background: C.bg, border: `1px solid ${C.border}`,
+                        borderRadius: 4, color: C.text, padding: '3px 6px', fontSize: 12, textAlign: 'right',
+                      }} />
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                    <input type="number" value={item.normMinutes}
+                      onChange={e => {
+                        const nm = parseFloat(e.target.value) || 0
+                        setItems(prev => prev.map(i => i.id === item.id
+                          ? { ...i, normMinutes: nm, hours: (nm * i.qty) / 60 } : i))
+                      }}
+                      style={{
+                        width: 70, background: C.bg, border: `1px solid ${C.border}`,
+                        borderRadius: 4, color: C.accent, padding: '3px 6px', fontSize: 12, textAlign: 'right',
+                      }} />
+                  </td>
+                  <td style={{ padding: '8px 10px', color: C.blue, textAlign: 'right', fontWeight: 600 }}>
+                    {fmt(Math.round(laborCost))} Ft
+                  </td>
+                  <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      title="Tétel törlése"
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: item.isCustom ? C.red : C.border,
+                        fontSize: 14, lineHeight: 1, padding: '2px 4px', borderRadius: 4,
+                        opacity: item.isCustom ? 1 : 0.4,
+                      }}
+                      onMouseEnter={e => { if (!item.isCustom) e.currentTarget.style.color = C.red; e.currentTarget.style.opacity = '1' }}
+                      onMouseLeave={e => { e.currentTarget.style.color = item.isCustom ? C.red : C.border; e.currentTarget.style.opacity = item.isCustom ? '1' : '0.4' }}
+                    >×</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add custom item button */}
+      <button onClick={addCustomItem} style={{
+        width: '100%', padding: '8px 14px', marginBottom: 20,
+        background: 'transparent', border: `1px dashed ${C.border}`,
+        borderRadius: 6, cursor: 'pointer', color: C.muted,
+        fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
+        transition: 'all 0.15s',
+      }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.color = C.accent }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted }}
+      >
+        + Egyedi tétel hozzáadása
+      </button>
 
       {/* Summary */}
       <div style={{
@@ -1235,8 +1307,8 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
 }
 
 // ─── Step 4: Quote Result ──────────────────────────────────────────────────────
-function QuoteResultStep({ pricingData, context, settings, onBack, onSaved, onNewProject }) {
-  const [projectName, setProjectName] = useState('')
+function QuoteResultStep({ pricingData, context, settings, initialProjectName = '', onBack, onSaved, onNewProject }) {
+  const [projectName, setProjectName] = useState(initialProjectName)
   const [clientName, setClientName] = useState('')
   const [saved, setSaved] = useState(false)
   const [quoteId, setQuoteId] = useState(null)
@@ -1296,13 +1368,20 @@ function QuoteResultStep({ pricingData, context, settings, onBack, onSaved, onNe
 <table>
   <thead><tr><th>Megnevezés</th><th>Menny.</th><th class="right">Anyagár</th><th class="right">Munkadíj</th><th class="right">Összesen</th></tr></thead>
   <tbody>
-    ${(pricingData.items || []).map(item => `<tr>
-      <td>${item.name}</td>
-      <td>${item.qty} ${item.unit}</td>
-      <td class="right">${Math.round((item.unitPrice || 0) * item.qty).toLocaleString('hu-HU')} Ft</td>
-      <td class="right">${Math.round((item.hours || 0) * pricingData.hourlyRate).toLocaleString('hu-HU')} Ft</td>
-      <td class="right">${Math.round(((item.unitPrice || 0) * item.qty) + ((item.hours || 0) * pricingData.hourlyRate)).toLocaleString('hu-HU')} Ft</td>
-    </tr>`).join('')}
+    ${(pricingData.items || []).map(item => {
+      if (item.isGroupHeader) {
+        return `<tr style="background:#f0f9f4"><td colspan="5" style="padding:10px 12px;font-weight:700;color:#1a7a55;font-size:12px;border-top:2px solid #cce8d6">${item.name}</td></tr>`
+      }
+      const matCost = Math.round((item.unitPrice || 0) * item.qty)
+      const labCost = Math.round((item.hours || 0) * pricingData.hourlyRate)
+      return `<tr>
+        <td style="padding-left:${item.assemblyId ? '24px' : '12px'}">${item.name}</td>
+        <td>${item.qty} ${item.unit}</td>
+        <td class="right">${matCost.toLocaleString('hu-HU')} Ft</td>
+        <td class="right">${labCost.toLocaleString('hu-HU')} Ft</td>
+        <td class="right">${(matCost + labCost).toLocaleString('hu-HU')} Ft</td>
+      </tr>`
+    }).join('')}
   </tbody>
 </table>
 <table class="summary" style="width:300px;margin-left:auto">
@@ -1960,6 +2039,7 @@ function NewQuoteWizard({ settings, materials, onSaved, onCancel, prefillData = 
       )}
       {step === 5 && (
         <QuoteResultStep pricingData={pricingData} context={context} settings={settings}
+          initialProjectName={prefillData?.planName ? prefillData.planName.replace(/\.[^.]+$/, '') : ''}
           onBack={() => setStep(4)} onSaved={onSaved} onNewProject={onCancel} />
       )}
     </div>

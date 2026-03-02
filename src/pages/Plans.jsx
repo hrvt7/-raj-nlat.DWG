@@ -181,7 +181,7 @@ export default function Plans({ onNavigate }) {
             <PdfViewerPanel
               file={activeFile}
               planId={activePlan.id}
-              onCreateQuote={(data) => { onNavigate?.('new-quote', data) }}
+              onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
               style={{ height: '100%' }}
             />
           ) : (
@@ -190,7 +190,7 @@ export default function Plans({ onNavigate }) {
               unitFactor={activePlan.units?.factor}
               unitName={activePlan.units?.name}
               planId={activePlan.id}
-              onCreateQuote={(data) => { onNavigate?.('new-quote', data) }}
+              onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
               style={{ height: '100%' }}
             />
           )}
