@@ -164,9 +164,17 @@ export default function EstimationPanel({
       const ov     = quoteOverrides[cat]
 
       if (catDef?.isCableTray) {
-        // ── Cable tray: length-based calculation (meters, not pieces) ──
-        const lengthPerUnit = ov?.lengthPerUnit ?? 1        // m per piece
-        const totalMeters   = qty * lengthPerUnit
+        // ── Cable tray: use linked measurement totals if available, else count × lengthPerUnit ──
+        const linkedMeasures = measurements.filter(m => m.category === cat)
+        let totalMeters
+        if (linkedMeasures.length > 0 && scale.calibrated && scale.factor) {
+          // Sum all measurements tagged with this cable tray category
+          totalMeters = linkedMeasures.reduce((sum, m) => sum + m.dist * scale.factor, 0)
+        } else {
+          // Fallback: manual length-per-piece × count
+          const lengthPerUnit = ov?.lengthPerUnit ?? 1
+          totalMeters = qty * lengthPerUnit
+        }
         const matPerM  = ov?.matPerUnit != null ? ov.matPerUnit : getAsmMaterialCost(asm)
         const labPerM  = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm)
         totalMaterial     += matPerM * totalMeters
@@ -190,7 +198,7 @@ export default function EstimationPanel({
     const grandTotal   = totalMaterial + cableCost + laborCost
 
     return { materialCost: totalMaterial, cableCost, laborMinutes: totalLaborMinutes, laborHours, laborRate, laborCost, totalCable: cableTotal, grandTotal, cableCostPm }
-  }, [assignments, quoteOverrides, countByCategory, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes])
+  }, [assignments, quoteOverrides, countByCategory, assemblies, cableData, measurements, scale, getAsmMaterialCost, getAsmLaborMinutes])
 
   const TABS = [
     { id: 'summary', label: 'Összesítő' },
@@ -264,6 +272,8 @@ export default function EstimationPanel({
             quoteOverrides={quoteOverrides}
             onQuoteOverridesChange={onQuoteOverridesChange}
             onCreateQuote={onCreateQuote}
+            measurements={measurements}
+            scale={scale}
           />
         )}
       </div>
@@ -329,10 +339,47 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
 
       {measurements.length > 0 && scale.calibrated && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginTop: 16 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Mérések ({measurements.length})</div>
-          {measurements.map((m, i) => (
-            <StatRow key={i} label={`Mérés #${i + 1}`} value={`${(m.dist * scale.factor).toFixed(2)} m`} />
-          ))}
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
+            Mérések ({measurements.length})
+          </div>
+
+          {/* ── Cable tray measurements grouped by category ── */}
+          {COUNT_CATEGORIES.filter(c => c.isCableTray).map(c => {
+            const linked = measurements.filter(m => m.category === c.key)
+            if (!linked.length) return null
+            const totalM = linked.reduce((sum, m) => sum + m.dist * scale.factor, 0)
+            return (
+              <div key={c.key} style={{ marginBottom: 10 }}>
+                {/* Category total row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid rgba(255,170,0,0.2)` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={CABLE_TRAY_COLOR} strokeWidth="2.5">
+                      <rect x="2" y="7" width="20" height="10" rx="1"/>
+                      <path d="M6 7v10M10 7v10M14 7v10M18 7v10"/>
+                    </svg>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: CABLE_TRAY_COLOR, fontWeight: 700 }}>{c.label}</span>
+                  </div>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: CABLE_TRAY_COLOR, fontWeight: 700 }}>{totalM.toFixed(2)} m</span>
+                </div>
+                {/* Individual segments */}
+                {linked.map((m, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0 3px 14px' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>#{i + 1}</span>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>{(m.dist * scale.factor).toFixed(2)} m</span>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+
+          {/* ── Uncategorized (generic) measurements ── */}
+          {measurements.filter(m => !m.category).length > 0 && (
+            <div style={{ marginTop: measurements.some(m => m.category) ? 8 : 0, paddingTop: measurements.some(m => m.category) ? 8 : 0, borderTop: measurements.some(m => m.category) ? `1px solid ${C.border}` : 'none' }}>
+              {measurements.filter(m => !m.category).map((m, i) => (
+                <StatRow key={i} label={`Mérés #${i + 1}`} value={`${(m.dist * scale.factor).toFixed(2)} m`} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -534,7 +581,7 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverr
 
 // ─── Quote/Calculation Tab ──────────────────────────────────────────────────
 
-function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes, quoteOverrides, onQuoteOverridesChange, onCreateQuote }) {
+function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes, quoteOverrides, onQuoteOverridesChange, onCreateQuote, measurements = [], scale = {} }) {
   const hasAssignments = Object.values(assignments).some(v => v?.assemblyId)
 
   const setOverride = (key, value) => {
@@ -604,10 +651,16 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
             const matOverridden = ov.matPerUnit  != null
             const labOverridden = ov.laborMin    != null
 
-            // Cable tray: length-based logic
-            const isCT          = !!c.isCableTray
-            const lengthPerUnit = ov.lengthPerUnit ?? 1          // m per piece
-            const totalMeters   = count * lengthPerUnit
+            // Cable tray: length-based logic — prefer linked measurements over manual entry
+            const isCT = !!c.isCableTray
+            const linkedMeasures = isCT ? measurements.filter(m => m.category === c.key) : []
+            const hasMeasured    = linkedMeasures.length > 0 && scale.calibrated && scale.factor
+            const measuredTotal  = hasMeasured
+              ? linkedMeasures.reduce((sum, m) => sum + m.dist * scale.factor, 0)
+              : null
+
+            const lengthPerUnit = ov.lengthPerUnit ?? 1          // m per piece (fallback)
+            const totalMeters   = hasMeasured ? measuredTotal : count * lengthPerUnit
             const lenOverridden = ov.lengthPerUnit != null
 
             // Effective unit cost (cable tray = Ft/m; regular = Ft/db)
@@ -622,28 +675,43 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 8, height: 8, borderRadius: c.isCableTray ? 2 : '50%', background: c.color }} />
                     <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: c.color, fontWeight: 700 }}>
-                      {c.label} × {count} db{isCT ? ` = ${totalMeters.toFixed(1)} m` : ''}
+                      {c.label} × {count} db{isCT ? ` = ${totalMeters.toFixed(2)} m` : ''}{hasMeasured ? ' 📏' : ''}
                     </span>
                   </div>
                   <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{asm.name}</span>
                 </div>
 
-                {/* Cable tray: length per piece input */}
+                {/* Cable tray: show measured total OR manual length-per-piece input */}
                 {isCT && (
                   <div style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 9, color: CABLE_TRAY_COLOR, fontFamily: 'DM Mono', marginBottom: 2 }}>Hossz/db (m)</div>
-                    <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                      <input
-                        type="number" min={0.1} step={0.5}
-                        value={lengthPerUnit}
-                        onChange={e => setCatOverride(c.key, 'lengthPerUnit', parseFloat(e.target.value) || 1)}
-                        style={{ width: 80, padding: '4px 6px', borderRadius: 4, background: C.bgCard, border: `1px solid ${lenOverridden ? CABLE_TRAY_COLOR : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
-                      />
-                      <span style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono' }}>m/db → összesen: {totalMeters.toFixed(1)} m</span>
-                      {lenOverridden && (
-                        <button onClick={() => resetCatOverride(c.key, 'lengthPerUnit')} title="Visszaállítás 1 m/db-re" style={{ padding: '2px 5px', borderRadius: 3, background: 'none', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', fontSize: 9, flexShrink: 0 }}>↩</button>
-                      )}
-                    </div>
+                    {hasMeasured ? (
+                      // Measurement-derived total — shown prominently
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 4, background: 'rgba(255,170,0,0.08)', border: `1px solid rgba(255,170,0,0.3)` }}>
+                          <span style={{ fontSize: 11, lineHeight: 1 }}>📏</span>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.yellow }}>
+                            {linkedMeasures.length} mérés alapján: <strong>{measuredTotal.toFixed(2)} m</strong>
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      // Fallback: manual length per piece
+                      <>
+                        <div style={{ fontSize: 9, color: CABLE_TRAY_COLOR, fontFamily: 'DM Mono', marginBottom: 2 }}>Hossz/db (m) — nincs mérés</div>
+                        <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                          <input
+                            type="number" min={0.1} step={0.5}
+                            value={lengthPerUnit}
+                            onChange={e => setCatOverride(c.key, 'lengthPerUnit', parseFloat(e.target.value) || 1)}
+                            style={{ width: 80, padding: '4px 6px', borderRadius: 4, background: C.bgCard, border: `1px solid ${lenOverridden ? CABLE_TRAY_COLOR : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                          />
+                          <span style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono' }}>m/db → összesen: {totalMeters.toFixed(2)} m</span>
+                          {lenOverridden && (
+                            <button onClick={() => resetCatOverride(c.key, 'lengthPerUnit')} title="Visszaállítás 1 m/db-re" style={{ padding: '2px 5px', borderRadius: 3, background: 'none', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', fontSize: 9, flexShrink: 0 }}>↩</button>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 

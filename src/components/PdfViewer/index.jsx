@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { COUNT_CATEGORIES, CategoryDropdown } from '../DxfViewer/DxfToolbar.jsx'
+import { COUNT_CATEGORIES, CategoryDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
 
@@ -278,8 +278,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
     for (const seg of measuresRef.current) {
       const a = proj(seg.x1, seg.y1)
       const b = proj(seg.x2, seg.y2)
-      const label = sf.factor ? formatDist(seg.dist * sf.factor) : `${seg.dist.toFixed(1)} px`
-      drawMeasureLine(ctx, a.x, a.y, b.x, b.y, label, C.yellow)
+      const distLabel = sf.factor ? formatDist(seg.dist * sf.factor) : `${seg.dist.toFixed(1)} px`
+      const segCatDef = seg.category ? COUNT_CATEGORIES.find(c => c.key === seg.category) : null
+      // Cable tray measurements: show shortened category label + distance
+      const label = segCatDef ? `${segCatDef.label.replace(/ mm$/, '')}: ${distLabel}` : distLabel
+      const color = segCatDef ? CABLE_TRAY_COLOR : C.yellow
+      drawMeasureLine(ctx, a.x, a.y, b.x, b.y, label, color)
     }
 
     // ── Active measure/calibrate ──
@@ -344,7 +348,10 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
           setCalibDialog({ pxDistance: pxDist, x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y })
           activeStartRef.current = null
         } else {
-          measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist })
+          // Tag measurement with cable tray category if the active category is a cable tray
+          const activeCatDef = COUNT_CATEGORIES.find(c => c.key === activeCategory)
+          const measCategory = activeCatDef?.isCableTray ? activeCategory : undefined
+          measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist, ...(measCategory ? { category: measCategory } : {}) })
           activeStartRef.current = null
           setRenderTick(t => t + 1)
         }
@@ -765,8 +772,8 @@ function PdfToolbar({
         )
       })}
 
-      {/* Category picker */}
-      {activeTool === 'count' && (
+      {/* Category picker — shown for count + measure (measure tags cable tray segments) */}
+      {(activeTool === 'count' || activeTool === 'measure') && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
