@@ -1,100 +1,240 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
+import * as three from 'three'
 import DxfViewerCanvas from './DxfViewerCanvas.jsx'
-import DxfToolbar from './DxfToolbar.jsx'
+import DxfToolbar, { COUNT_CATEGORIES } from './DxfToolbar.jsx'
 import DxfLayerPanel from './DxfLayerPanel.jsx'
-import DxfCountOverlay from './DxfCountOverlay.jsx'
-import DxfMeasureOverlay from './DxfMeasureOverlay.jsx'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
-  accent: '#00E5A0', text: '#E4E4E7', muted: '#71717A',
+  accent: '#00E5A0', yellow: '#FFD166', red: '#FF6B6B', blue: '#4CC9F0',
+  text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
 }
 
-let nextMarkerId = 1
+function formatDist(m) {
+  if (m < 0.01) return `${(m * 1000).toFixed(1)} mm`
+  if (m < 1) return `${(m * 100).toFixed(1)} cm`
+  if (m < 100) return `${m.toFixed(2)} m`
+  return `${m.toFixed(1)} m`
+}
 
-// ─── DxfViewerPanel ─────────────────────────────────────────────────────────
-// Complete interactive DXF viewer with toolbar, overlays, and layer panel
+// ═══════════════════════════════════════════════════════════════════════════
+// DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
+// ═══════════════════════════════════════════════════════════════════════════
 export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false }) {
   const canvasRef = useRef(null)
+  const overlayRef = useRef(null)
   const containerRef = useRef(null)
 
-  // Tool state
+  // ── UI State ──
   const [activeTool, setActiveTool] = useState(null)
+  const [activeCategory, setActiveCategory] = useState('socket')
   const [layers, setLayers] = useState([])
   const [layerVisibility, setLayerVisibility] = useState({})
   const [layersPanelOpen, setLayersPanelOpen] = useState(false)
+  const [countPanelOpen, setCountPanelOpen] = useState(false)
+  const [renderTick, setRenderTick] = useState(0) // force re-render for counts
 
-  // Count state
-  const [countMarkers, setCountMarkers] = useState([])
-  const [counts, setCounts] = useState({}) // { category: count }
+  // ── Scale calibration ──
+  const [scale, setScale] = useState({
+    factor: unitFactor || null,
+    unitName: unitName || 'auto',
+    calibrated: false,
+  })
+  const scaleRef = useRef(scale)
+  useEffect(() => { scaleRef.current = scale }, [scale])
 
-  // Measure state
-  const [measurements, setMeasurements] = useState([])
-  const [activeMeasure, setActiveMeasure] = useState(null)
+  // ── Calibration dialog ──
+  const [calibDialog, setCalibDialog] = useState(null) // { sceneDistance, x1, y1, x2, y2 }
+  const [calibInput, setCalibInput] = useState('')
+  const [calibUnit, setCalibUnit] = useState('m')
 
-  // Info popup state (for select tool)
-  const [selectInfo, setSelectInfo] = useState(null)
+  // ── Scene-coordinate data (refs for Canvas2D performance) ──
+  const markersRef = useRef([])   // [{x, y, category, color}]
+  const measuresRef = useRef([])  // [{x1,y1,x2,y2,distance,label}]
+  const activeStartRef = useRef(null) // {x,y} first click of measure/calibrate
+  const mouseSceneRef = useRef(null)  // {x,y} current mouse in scene coords
+  const mouseScreenRef = useRef(null) // {x,y} current mouse in screen coords
+  const activeToolRef = useRef(null)
+  useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
 
-  // On DXF loaded
+  // ── Coordinate projection helper ──
+  const project = useCallback((sx, sy) => {
+    const viewer = canvasRef.current?.getViewer()
+    if (!viewer?.camera || !viewer?.renderer) return null
+    const camera = viewer.camera
+    const canvas = viewer.renderer.domElement
+    const vec = new three.Vector3(sx, sy, 0)
+    vec.project(camera)
+    return {
+      x: (vec.x + 1) / 2 * canvas.clientWidth,
+      y: (-vec.y + 1) / 2 * canvas.clientHeight,
+    }
+  }, [])
+
+  // ═══════════════════════════════════════════════════════════════
+  // Canvas2D overlay — RAF drawing loop
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    let running = true
+
+    function draw() {
+      if (!running) return
+      const canvas = overlayRef.current
+      if (!canvas) { requestAnimationFrame(draw); return }
+      const viewer = canvasRef.current?.getViewer()
+      if (!viewer?.camera || !viewer?.renderer) { requestAnimationFrame(draw); return }
+
+      const cam = viewer.camera
+      const gl = viewer.renderer.domElement
+      const w = gl.clientWidth
+      const h = gl.clientHeight
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
+
+      const ctx = canvas.getContext('2d')
+      ctx.clearRect(0, 0, w, h)
+
+      const proj = (sx, sy) => {
+        const v = new three.Vector3(sx, sy, 0)
+        v.project(cam)
+        return { x: (v.x + 1) / 2 * w, y: (-v.y + 1) / 2 * h }
+      }
+
+      const scaleFactor = scaleRef.current?.factor || 0.001
+
+      // ── Completed measurements ──
+      for (const m of measuresRef.current) {
+        const p1 = proj(m.x1, m.y1)
+        const p2 = proj(m.x2, m.y2)
+        drawMeasureLine(ctx, p1, p2, m.label, false)
+      }
+
+      // ── Active measurement / calibration line ──
+      const aStart = activeStartRef.current
+      const aMouse = mouseSceneRef.current
+      const aTool = activeToolRef.current
+      if (aStart && aMouse && (aTool === 'measure' || aTool === 'calibrate')) {
+        const p1 = proj(aStart.x, aStart.y)
+        const p2 = proj(aMouse.x, aMouse.y)
+        const dx = aMouse.x - aStart.x
+        const dy = aMouse.y - aStart.y
+        const rawDist = Math.sqrt(dx * dx + dy * dy)
+        const label = aTool === 'calibrate'
+          ? `${rawDist.toFixed(1)} egys.`
+          : formatDist(rawDist * scaleFactor)
+        drawMeasureLine(ctx, p1, p2, label, true)
+      }
+
+      // ── Count markers ──
+      const markers = markersRef.current
+      for (let i = 0; i < markers.length; i++) {
+        const m = markers[i]
+        const p = proj(m.x, m.y)
+        drawMarker(ctx, p.x, p.y, i + 1, m.color)
+      }
+
+      // ── Crosshair ──
+      const ms = mouseScreenRef.current
+      if (aTool && ms) {
+        ctx.save()
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)'
+        ctx.lineWidth = 0.5
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(ms.x, 0); ctx.lineTo(ms.x, h)
+        ctx.moveTo(0, ms.y); ctx.lineTo(w, ms.y)
+        ctx.stroke()
+        ctx.restore()
+
+        // Coordinate display
+        if (aMouse) {
+          const coordText = `X: ${aMouse.x.toFixed(1)}  Y: ${aMouse.y.toFixed(1)}`
+          ctx.save()
+          ctx.font = '10px "DM Mono", monospace'
+          const tw = ctx.measureText(coordText).width
+          const cx = Math.min(ms.x + 14, w - tw - 12)
+          const cy = Math.max(ms.y - 10, 20)
+          ctx.fillStyle = 'rgba(9,9,11,0.85)'
+          ctx.beginPath()
+          ctx.roundRect(cx - 4, cy - 11, tw + 8, 16, 3)
+          ctx.fill()
+          ctx.fillStyle = '#9CA3AF'
+          ctx.fillText(coordText, cx, cy)
+          ctx.restore()
+        }
+      }
+
+      requestAnimationFrame(draw)
+    }
+
+    requestAnimationFrame(draw)
+    return () => { running = false }
+  }, [])
+
+  // ═══════════════════════════════════════════════════════════════
+  // Event handlers
+  // ═══════════════════════════════════════════════════════════════
+
   const handleLoad = useCallback((info) => {
     setLayers(info.layers || [])
     const vis = {}
-    for (const l of info.layers || []) {
-      vis[l.name] = true
-    }
+    for (const l of info.layers || []) vis[l.name] = true
     setLayerVisibility(vis)
   }, [])
 
-  // Handle pointer events on canvas
   const handlePointerDown = useCallback((event) => {
-    if (!activeTool) return
+    const tool = activeToolRef.current
+    if (!tool || !event.position) return
 
-    const { position, domEvent, canvasCoord } = event
-    if (!position) return
+    const sx = event.position.x
+    const sy = event.position.y
 
-    // Get screen position from domEvent or canvasCoord
-    const rect = containerRef.current?.getBoundingClientRect()
-    const screenX = domEvent ? domEvent.clientX - (rect?.left || 0) : (canvasCoord?.x || 0)
-    const screenY = domEvent ? domEvent.clientY - (rect?.top || 0) : (canvasCoord?.y || 0)
-
-    if (activeTool === 'count') {
-      const id = nextMarkerId++
-      setCountMarkers(prev => [...prev, {
-        id,
-        screenX, screenY,
-        sceneX: position.x, sceneY: position.y,
-      }])
-      setCounts(prev => ({ ...prev, total: (prev.total || 0) + 1 }))
+    if (tool === 'count') {
+      const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
+      markersRef.current = [...markersRef.current, { x: sx, y: sy, category: activeCategory, color: cat.color }]
+      setRenderTick(t => t + 1)
     }
 
-    if (activeTool === 'measure') {
-      if (!activeMeasure?.start) {
-        // First point
-        setActiveMeasure({
-          start: { screenX, screenY, sceneX: position.x, sceneY: position.y },
-          end: null,
-        })
+    if (tool === 'measure') {
+      if (!activeStartRef.current) {
+        activeStartRef.current = { x: sx, y: sy }
       } else {
-        // Second point — finalize
-        const completed = {
-          ...activeMeasure,
-          end: { screenX, screenY, sceneX: position.x, sceneY: position.y },
-        }
-        setMeasurements(prev => [...prev, completed])
-        setActiveMeasure(null)
+        const start = activeStartRef.current
+        const dx = sx - start.x, dy = sy - start.y
+        const rawDist = Math.sqrt(dx * dx + dy * dy)
+        const factor = scaleRef.current?.factor || 0.001
+        const distM = rawDist * factor
+        measuresRef.current = [...measuresRef.current, {
+          x1: start.x, y1: start.y, x2: sx, y2: sy,
+          distance: distM, label: formatDist(distM),
+        }]
+        activeStartRef.current = null
+        setRenderTick(t => t + 1)
       }
     }
 
-    if (activeTool === 'select') {
-      setSelectInfo({
-        x: screenX, y: screenY,
-        sceneX: position.x?.toFixed(2),
-        sceneY: position.y?.toFixed(2),
-      })
+    if (tool === 'calibrate') {
+      if (!activeStartRef.current) {
+        activeStartRef.current = { x: sx, y: sy }
+      } else {
+        const start = activeStartRef.current
+        const dx = sx - start.x, dy = sy - start.y
+        const rawDist = Math.sqrt(dx * dx + dy * dy)
+        setCalibDialog({ sceneDistance: rawDist, x1: start.x, y1: start.y, x2: sx, y2: sy })
+        activeStartRef.current = null
+      }
     }
-  }, [activeTool, activeMeasure])
 
-  // Layer toggle
+    if (tool === 'select') {
+      // No-op for now; coordinate display is via crosshair
+    }
+  }, [activeCategory])
+
+  const handlePointerMove = useCallback((e) => {
+    mouseSceneRef.current = { x: e.sceneX, y: e.sceneY }
+    mouseScreenRef.current = { x: e.screenX, y: e.screenY }
+  }, [])
+
+  // ── Layer controls ──
   const handleToggleLayer = useCallback((name) => {
     setLayerVisibility(prev => {
       const next = { ...prev, [name]: !prev[name] }
@@ -102,66 +242,126 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
       return next
     })
   }, [])
-
   const handleShowAll = useCallback(() => {
     const next = {}
-    for (const l of layers) {
-      next[l.name] = true
-      canvasRef.current?.showLayer(l.name, true)
-    }
+    for (const l of layers) { next[l.name] = true; canvasRef.current?.showLayer(l.name, true) }
     setLayerVisibility(next)
   }, [layers])
-
   const handleHideAll = useCallback(() => {
     const next = {}
-    for (const l of layers) {
-      next[l.name] = false
-      canvasRef.current?.showLayer(l.name, false)
-    }
+    for (const l of layers) { next[l.name] = false; canvasRef.current?.showLayer(l.name, false) }
     setLayerVisibility(next)
   }, [layers])
 
-  // Fit view
-  const handleFitView = useCallback(() => {
-    canvasRef.current?.fitView()
-  }, [])
-
-  // Tool change — clear active measure when switching away
+  // ── Tool controls ──
   const handleToolChange = useCallback((tool) => {
     setActiveTool(tool)
-    setActiveMeasure(null)
-    setSelectInfo(null)
+    activeStartRef.current = null
   }, [])
 
-  // Remove count marker
-  const handleRemoveMarker = useCallback((id) => {
-    setCountMarkers(prev => prev.filter(m => m.id !== id))
-    setCounts(prev => ({ ...prev, total: Math.max(0, (prev.total || 0) - 1) }))
-  }, [])
+  const handleFitView = useCallback(() => { canvasRef.current?.fitView() }, [])
 
-  // Clear all for current tool
-  const handleClearAll = useCallback(() => {
-    if (activeTool === 'count') {
-      setCountMarkers([])
-      setCounts({})
+  const handleZoomIn = useCallback(() => {
+    const viewer = canvasRef.current?.getViewer()
+    if (viewer?.camera) {
+      const cam = viewer.camera
+      const f = 0.75
+      cam.left *= f; cam.right *= f; cam.top *= f; cam.bottom *= f
+      cam.updateProjectionMatrix()
+      viewer.Render()
     }
-    if (activeTool === 'measure') {
-      setMeasurements([])
-      setActiveMeasure(null)
+  }, [])
+
+  const handleZoomOut = useCallback(() => {
+    const viewer = canvasRef.current?.getViewer()
+    if (viewer?.camera) {
+      const cam = viewer.camera
+      const f = 1.33
+      cam.left *= f; cam.right *= f; cam.top *= f; cam.bottom *= f
+      cam.updateProjectionMatrix()
+      viewer.Render()
+    }
+  }, [])
+
+  const handleUndo = useCallback(() => {
+    if (activeTool === 'count' && markersRef.current.length > 0) {
+      markersRef.current = markersRef.current.slice(0, -1)
+      setRenderTick(t => t + 1)
+    }
+    if (activeTool === 'measure' && measuresRef.current.length > 0) {
+      measuresRef.current = measuresRef.current.slice(0, -1)
+      setRenderTick(t => t + 1)
     }
   }, [activeTool])
+
+  const handleClearAll = useCallback(() => {
+    if (activeTool === 'count') markersRef.current = []
+    if (activeTool === 'measure') measuresRef.current = []
+    activeStartRef.current = null
+    setRenderTick(t => t + 1)
+  }, [activeTool])
+
+  // ── Scale calibration submit ──
+  const handleCalibSubmit = useCallback(() => {
+    if (!calibDialog || !calibInput) return
+    const realDist = parseFloat(calibInput)
+    if (isNaN(realDist) || realDist <= 0) return
+
+    const multiplier = calibUnit === 'mm' ? 0.001 : calibUnit === 'cm' ? 0.01 : 1.0
+    const realM = realDist * multiplier
+    const factor = realM / calibDialog.sceneDistance
+
+    setScale({ factor, unitName: `${realDist} ${calibUnit} = kalibrált`, calibrated: true })
+    setCalibDialog(null)
+    setCalibInput('')
+    setActiveTool(null)
+
+    // Re-label existing measurements with new factor
+    measuresRef.current = measuresRef.current.map(m => {
+      const dx = m.x2 - m.x1, dy = m.y2 - m.y1
+      const rawDist = Math.sqrt(dx * dx + dy * dy)
+      const distM = rawDist * factor
+      return { ...m, distance: distM, label: formatDist(distM) }
+    })
+    setRenderTick(t => t + 1)
+  }, [calibDialog, calibInput, calibUnit])
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      if (e.key === 'i' || e.key === 'I') handleToolChange(activeTool === 'select' ? null : 'select')
+      if (e.key === 'c' || e.key === 'C') handleToolChange(activeTool === 'count' ? null : 'count')
+      if (e.key === 'm' || e.key === 'M') handleToolChange(activeTool === 'measure' ? null : 'measure')
+      if (e.key === 's' || e.key === 'S') handleToolChange(activeTool === 'calibrate' ? null : 'calibrate')
+      if (e.key === 'Escape') { handleToolChange(null); setCalibDialog(null) }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); handleUndo() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [activeTool, handleToolChange, handleUndo])
+
+  // ── Count summary data ──
+  const countSummary = {}
+  for (const m of markersRef.current) {
+    countSummary[m.category] = (countSummary[m.category] || 0) + 1
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Render
+  // ═══════════════════════════════════════════════════════════════
 
   if (!file) {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', minHeight: compact ? 200 : 400,
-        background: C.bgCard, borderRadius: 8,
-        border: `1px solid ${C.border}`,
-        ...style,
+        background: C.bgCard, borderRadius: 8, border: `1px solid ${C.border}`, ...style,
       }}>
         <div style={{ textAlign: 'center', color: C.muted }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>📐</div>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1.4" strokeLinecap="round" style={{ marginBottom: 8 }}>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
           <div style={{ fontSize: 13, fontFamily: 'Syne' }}>Nincs tervrajz betöltve</div>
         </div>
       </div>
@@ -169,64 +369,54 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
   }
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        display: 'flex', flexDirection: 'column',
-        height: '100%', minHeight: compact ? 300 : 500,
-        background: C.bgCard, borderRadius: 8,
-        border: `1px solid ${C.border}`, overflow: 'hidden',
-        position: 'relative',
-        ...style,
-      }}
-    >
-      {/* Toolbar */}
+    <div ref={containerRef} style={{
+      display: 'flex', flexDirection: 'column',
+      height: '100%', minHeight: compact ? 300 : 500,
+      background: C.bgCard, borderRadius: 8,
+      border: `1px solid ${C.border}`, overflow: 'hidden',
+      position: 'relative', ...style,
+    }}>
+      {/* ── Toolbar ── */}
       <DxfToolbar
         activeTool={activeTool}
         onToolChange={handleToolChange}
         onFitView={handleFitView}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
         onToggleLayers={() => setLayersPanelOpen(p => !p)}
         layersPanelOpen={layersPanelOpen}
-        counts={counts}
+        onToggleCountPanel={() => setCountPanelOpen(p => !p)}
+        countPanelOpen={countPanelOpen}
+        activeCategory={activeCategory}
+        onCategoryChange={setActiveCategory}
+        scale={scale}
+        markerCount={markersRef.current.length}
+        measureCount={measuresRef.current.length}
+        onUndo={handleUndo}
+        onClearAll={handleClearAll}
       />
 
-      {/* Canvas area */}
+      {/* ── Canvas area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <DxfViewerCanvas
           ref={canvasRef}
           file={file}
           onLoad={handleLoad}
           onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
         />
 
-        {/* Overlays */}
-        <DxfCountOverlay
-          countMarkers={countMarkers}
-          onRemoveMarker={handleRemoveMarker}
-        />
-        <DxfMeasureOverlay
-          measurements={measurements}
-          activeMeasure={activeMeasure}
-          unitFactor={unitFactor}
-          unitName={unitName}
+        {/* Canvas2D overlay — positioned exactly on top of WebGL canvas */}
+        <canvas
+          ref={overlayRef}
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            pointerEvents: 'none', zIndex: 4,
+          }}
         />
 
-        {/* Select info popup */}
-        {selectInfo && (
-          <div style={{
-            position: 'absolute',
-            left: selectInfo.x + 12, top: selectInfo.y - 8,
-            background: 'rgba(9,9,11,0.92)', border: `1px solid ${C.border}`,
-            borderRadius: 6, padding: '6px 10px', zIndex: 8,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-          }}>
-            <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted }}>
-              X: {selectInfo.sceneX}  Y: {selectInfo.sceneY}
-            </div>
-          </div>
-        )}
-
-        {/* Layer panel */}
+        {/* ── Layer panel ── */}
         {layersPanelOpen && (
           <DxfLayerPanel
             layers={layers}
@@ -236,37 +426,211 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
             onHideAll={handleHideAll}
           />
         )}
+
+        {/* ── Count summary panel ── */}
+        {countPanelOpen && markersRef.current.length > 0 && (
+          <div style={{
+            position: 'absolute', left: 8, top: 8, width: 200,
+            background: 'rgba(17,17,19,0.95)', border: `1px solid ${C.border}`,
+            borderRadius: 10, padding: 12, zIndex: 12,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, marginBottom: 10 }}>
+              Számláló összesítő
+            </div>
+            {COUNT_CATEGORIES.filter(c => countSummary[c.key]).map(c => (
+              <div key={c.key} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '5px 0', borderBottom: `1px solid ${C.border}`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color }} />
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{c.label}</span>
+                </div>
+                <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: c.color }}>
+                  {countSummary[c.key]}
+                </span>
+              </div>
+            ))}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 0 0', marginTop: 4,
+            }}>
+              <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>Összesen</span>
+              <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.accent }}>
+                {markersRef.current.length}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Bottom status bar */}
+      {/* ── Calibration dialog ── */}
+      {calibDialog && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.6)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setCalibDialog(null)}>
+          <div style={{
+            background: '#111113', border: `1px solid ${C.border}`, borderRadius: 14,
+            padding: 24, width: 320, boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.text, marginBottom: 4 }}>
+              Skála kalibrálás
+            </h3>
+            <p style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 16, lineHeight: 1.6 }}>
+              A kijelölt vonal {calibDialog.sceneDistance.toFixed(1)} rajzegység hosszú.
+              Add meg a valós távolságot.
+            </p>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <input
+                autoFocus
+                type="number"
+                value={calibInput}
+                onChange={e => setCalibInput(e.target.value)}
+                placeholder="pl. 5.0"
+                onKeyDown={e => { if (e.key === 'Enter') handleCalibSubmit() }}
+                style={{
+                  flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+                  borderRadius: 8, padding: '9px 12px', color: C.text,
+                  fontFamily: 'DM Mono', fontSize: 14, outline: 'none',
+                }}
+              />
+              <select
+                value={calibUnit}
+                onChange={e => setCalibUnit(e.target.value)}
+                style={{
+                  background: C.bg, border: `1px solid ${C.border}`,
+                  borderRadius: 8, padding: '9px 10px', color: C.text,
+                  fontFamily: 'DM Mono', fontSize: 13, outline: 'none',
+                }}
+              >
+                <option value="mm">mm</option>
+                <option value="cm">cm</option>
+                <option value="m">m</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setCalibDialog(null)} style={dialogBtn('#71717A')}>Mégse</button>
+              <button onClick={handleCalibSubmit} style={dialogBtn(C.accent)}>Alkalmaz</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Status bar ── */}
       <div style={{
         padding: '4px 12px', borderTop: `1px solid ${C.border}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         fontSize: 10, fontFamily: 'DM Mono', color: C.muted,
       }}>
         <span>
-          {activeTool === 'count' && countMarkers.length > 0
-            ? `🔢 Számlálás: ${countMarkers.length} db  (jobb klikk = törlés)`
-            : activeTool === 'measure' && (measurements.length > 0 || activeMeasure)
-            ? `📏 ${measurements.length} mérés${activeMeasure?.start ? ' — kattints a végpontra' : ''}`
+          {activeTool === 'count'
+            ? `Számlálás: ${markersRef.current.length} db  •  Kategória: ${COUNT_CATEGORIES.find(c => c.key === activeCategory)?.label || ''}  •  Jobb klikk = törlés`
+            : activeTool === 'measure'
+            ? activeStartRef.current
+              ? 'Kattints a végpontra a mérés lezárásához'
+              : `Mérés: ${measuresRef.current.length} db  •  Kattints a kezdőpontra`
+            : activeTool === 'calibrate'
+            ? activeStartRef.current
+              ? 'Kattints a végpontra – válassz ismert távolságot'
+              : 'Húzz egy vonalat egy ismert távolságra (pl. falméret)'
             : activeTool === 'select'
-            ? '🔍 Kattints egy pontra a koordináták megtekintéséhez'
-            : `${layers.length} réteg betöltve`
+            ? 'Mozgasd az egeret a koordináták megtekintéséhez'
+            : `${layers.length} réteg  •  Billentyűk: I C M S  •  Görgő: zoom  •  Húzás: mozgatás`
           }
         </span>
-        {(countMarkers.length > 0 || measurements.length > 0) && (
-          <button
-            onClick={handleClearAll}
-            style={{
-              background: 'transparent', border: 'none',
-              color: '#FF6B6B', fontSize: 10, fontFamily: 'DM Mono',
-              cursor: 'pointer', padding: '2px 4px',
-            }}
-          >
-            Törlés ✕
-          </button>
+        {scale.calibrated && (
+          <span style={{ color: C.blue }}>
+            Skála kalibrálva ✓
+          </span>
         )}
       </div>
     </div>
   )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Canvas2D drawing helpers
+// ═══════════════════════════════════════════════════════════════════════════
+
+function drawMeasureLine(ctx, p1, p2, label, isDashed) {
+  ctx.save()
+  ctx.strokeStyle = isDashed ? 'rgba(255,209,102,0.6)' : '#FFD166'
+  ctx.lineWidth = isDashed ? 1.5 : 2
+  if (isDashed) ctx.setLineDash([6, 4])
+  ctx.beginPath()
+  ctx.moveTo(p1.x, p1.y)
+  ctx.lineTo(p2.x, p2.y)
+  ctx.stroke()
+
+  // End dots
+  for (const p of [p1, p2]) {
+    ctx.fillStyle = '#FFD166'
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = '#09090B'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([])
+    ctx.stroke()
+  }
+
+  // Label
+  if (label) {
+    const mx = (p1.x + p2.x) / 2
+    const my = (p1.y + p2.y) / 2
+    ctx.font = 'bold 11px "DM Mono", monospace'
+    const tw = ctx.measureText(label).width
+    ctx.fillStyle = 'rgba(9,9,11,0.88)'
+    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.roundRect(mx - tw / 2 - 6, my - 11, tw + 12, 20, 5)
+    ctx.fill()
+    ctx.strokeStyle = '#FFD166'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = '#FFD166'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, mx, my)
+  }
+  ctx.restore()
+}
+
+function drawMarker(ctx, x, y, num, color) {
+  const r = 13
+  ctx.save()
+  // Outer ring
+  ctx.fillStyle = color
+  ctx.shadowColor = color
+  ctx.shadowBlur = 8
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.shadowBlur = 0
+  // Inner
+  ctx.fillStyle = '#09090B'
+  ctx.beginPath()
+  ctx.arc(x, y, r - 2.5, 0, Math.PI * 2)
+  ctx.fill()
+  // Number
+  ctx.fillStyle = color
+  ctx.font = `bold ${num > 99 ? 8 : 10}px "DM Mono", monospace`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(num), x, y + 0.5)
+  ctx.restore()
+}
+
+function dialogBtn(color) {
+  return {
+    padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+    fontSize: 13, fontFamily: 'Syne', fontWeight: 700,
+    background: `${color}18`, border: `1px solid ${color}40`,
+    color, transition: 'all 0.12s',
+  }
 }

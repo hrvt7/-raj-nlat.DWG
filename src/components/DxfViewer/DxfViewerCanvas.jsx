@@ -1,12 +1,11 @@
-import React, { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react'
+import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react'
 import * as three from 'three'
 
 // ─── DxfViewerCanvas ────────────────────────────────────────────────────────
 // Core WebGL canvas wrapper around dxf-viewer library.
-// Accepts a File or Blob, creates an object URL, loads into dxf-viewer.
-// Exposes imperative API: getLayers, showLayer, fitView, getViewer, subscribe
+// Exposes imperative API: camera access, coordinate conversion, layers, fitView.
 
-const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onError, onPointerDown, clearColor = '#09090B', style }, ref) {
+const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onError, onPointerDown, onPointerMove, clearColor = '#09090B', style }, ref) {
   const containerRef = useRef(null)
   const viewerRef = useRef(null)
   const blobUrlRef = useRef(null)
@@ -14,7 +13,6 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
 
-  // Expose imperative methods
   useImperativeHandle(ref, () => ({
     getViewer: () => viewerRef.current,
     getLayers: (nonEmpty = true) => viewerRef.current?.GetLayers(nonEmpty) || [],
@@ -28,14 +26,38 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
     subscribe: (event, handler) => viewerRef.current?.Subscribe(event, handler),
     getOrigin: () => viewerRef.current?.origin,
     getBounds: () => viewerRef.current?.bounds,
+    getCamera: () => viewerRef.current?.camera || null,
+    getRendererElement: () => viewerRef.current?.renderer?.domElement || containerRef.current?.querySelector('canvas') || null,
+    sceneToScreen: (sx, sy) => {
+      const v = viewerRef.current
+      if (!v?.camera || !v?.renderer) return null
+      const vec = new three.Vector3(sx, sy, 0)
+      vec.project(v.camera)
+      const canvas = v.renderer.domElement
+      return {
+        x: (vec.x + 1) / 2 * canvas.clientWidth,
+        y: (-vec.y + 1) / 2 * canvas.clientHeight,
+      }
+    },
+    screenToScene: (screenX, screenY) => {
+      const v = viewerRef.current
+      if (!v?.camera || !v?.renderer) return null
+      const canvas = v.renderer.domElement
+      const vec = new three.Vector3(
+        (screenX / canvas.clientWidth) * 2 - 1,
+        -(screenY / canvas.clientHeight) * 2 + 1,
+        0
+      )
+      vec.unproject(v.camera)
+      return { x: vec.x, y: vec.y }
+    },
   }))
 
-  // Initialize and load
   useEffect(() => {
     if (!containerRef.current || !file) return
 
     let cancelled = false
-    let viewer = null
+    let moveHandler = null
 
     async function init() {
       setLoading(true)
@@ -43,12 +65,9 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
       setError(null)
 
       try {
-        // Dynamic import to avoid SSR issues and reduce initial bundle
         const { DxfViewer } = await import('dxf-viewer')
-
         if (cancelled) return
 
-        // Cleanup any previous viewer
         if (viewerRef.current) {
           try { viewerRef.current.Destroy() } catch {}
           viewerRef.current = null
@@ -58,11 +77,9 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
           blobUrlRef.current = null
         }
 
-        // Clear container
         containerRef.current.innerHTML = ''
 
-        // Create viewer
-        viewer = new DxfViewer(containerRef.current, {
+        const viewer = new DxfViewer(containerRef.current, {
           clearColor: new three.Color(clearColor),
           autoResize: true,
           antialias: true,
@@ -72,12 +89,10 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
 
         viewerRef.current = viewer
 
-        // Create blob URL from file
         const blob = file instanceof Blob ? file : new Blob([file])
         const url = URL.createObjectURL(blob)
         blobUrlRef.current = url
 
-        // Load with progress callback
         await viewer.Load({
           url,
           progressCbk: (phase, loaded, total) => {
@@ -90,7 +105,6 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
 
         if (cancelled) return
 
-        // Fit the view to content
         if (viewer.bounds) {
           viewer.FitView(viewer.bounds.minX, viewer.bounds.maxX, viewer.bounds.minY, viewer.bounds.maxY, 0.1)
         }
@@ -98,12 +112,31 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
         setLoading(false)
         setProgress(100)
 
-        // Wire up pointer events
         if (onPointerDown) {
           viewer.Subscribe('pointerdown', onPointerDown)
         }
 
-        // Notify parent
+        // Mouse move tracking for crosshair & live measurement
+        if (onPointerMove && viewer.renderer?.domElement) {
+          const canvas = viewer.renderer.domElement
+          moveHandler = (e) => {
+            const rect = canvas.getBoundingClientRect()
+            const sx = e.clientX - rect.left
+            const sy = e.clientY - rect.top
+            const camera = viewer.camera
+            if (camera) {
+              const vec = new three.Vector3(
+                (sx / canvas.clientWidth) * 2 - 1,
+                -(sy / canvas.clientHeight) * 2 + 1,
+                0
+              )
+              vec.unproject(camera)
+              onPointerMove({ screenX: sx, screenY: sy, sceneX: vec.x, sceneY: vec.y })
+            }
+          }
+          canvas.addEventListener('mousemove', moveHandler)
+        }
+
         if (onLoad) {
           const layers = viewer.GetLayers(true)
           onLoad({ layers, bounds: viewer.bounds, origin: viewer.origin })
@@ -122,6 +155,9 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
 
     return () => {
       cancelled = true
+      if (moveHandler && viewerRef.current?.renderer?.domElement) {
+        viewerRef.current.renderer.domElement.removeEventListener('mousemove', moveHandler)
+      }
       if (viewerRef.current) {
         try { viewerRef.current.Destroy() } catch {}
         viewerRef.current = null
@@ -131,28 +167,17 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
         blobUrlRef.current = null
       }
     }
-  }, [file]) // Only re-init when file changes
+  }, [file])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
-      {/* WebGL container */}
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          background: clearColor,
-          borderRadius: 8,
-          overflow: 'hidden',
-        }}
-      />
+      <div ref={containerRef} style={{ width: '100%', height: '100%', background: clearColor, overflow: 'hidden' }} />
 
-      {/* Loading overlay */}
       {loading && (
         <div style={{
           position: 'absolute', inset: 0, display: 'flex',
           flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(9,9,11,0.85)', borderRadius: 8, zIndex: 5,
+          background: 'rgba(9,9,11,0.85)', zIndex: 5,
         }}>
           <div style={{
             width: 36, height: 36, border: '3px solid #1E1E22',
@@ -170,15 +195,17 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
         </div>
       )}
 
-      {/* Error overlay */}
       {error && (
         <div style={{
           position: 'absolute', inset: 0, display: 'flex',
           flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(9,9,11,0.9)', borderRadius: 8, zIndex: 5,
+          background: 'rgba(9,9,11,0.9)', zIndex: 5,
         }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>⚠️</div>
-          <div style={{ color: '#FF6B6B', fontSize: 13, fontFamily: 'Syne', textAlign: 'center', maxWidth: 280 }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" strokeWidth="2" strokeLinecap="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div style={{ color: '#FF6B6B', fontSize: 13, fontFamily: 'Syne', textAlign: 'center', maxWidth: 280, marginTop: 8 }}>
             {error}
           </div>
         </div>
