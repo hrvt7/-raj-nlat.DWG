@@ -456,6 +456,15 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
     drawOverlay()
   }, [calibDialog, calibInput, calibUnit, drawOverlay])
 
+  // ── Measurement category reassignment (retroactive tagging of existing measurements) ──
+  const handleMeasureCategoryChange = useCallback((idx, category) => {
+    if (idx >= 0 && idx < measuresRef.current.length) {
+      measuresRef.current[idx] = { ...measuresRef.current[idx], category: category || undefined }
+      setRenderTick(t => t + 1)
+      drawOverlay()
+    }
+  }, [drawOverlay])
+
   // ── Fit view ──
   const handleFitView = useCallback(() => {
     if (!containerRef.current) return
@@ -662,6 +671,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
             onAssignmentsChange={setAssignments}
             quoteOverrides={quoteOverrides}
             onQuoteOverridesChange={setQuoteOverrides}
+            onMeasureCategoryChange={handleMeasureCategoryChange}
             onCreateQuote={(data) => {
               onCreateQuote?.({ ...data, planId, markers: [...markersRef.current], measurements: [...measuresRef.current], scale })
             }}

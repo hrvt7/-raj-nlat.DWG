@@ -32,6 +32,8 @@ export default function EstimationPanel({
   onAssignmentsChange,
   quoteOverrides = {},
   onQuoteOverridesChange,
+  // Callback to retroactively assign cable tray category to an existing measurement by index
+  onMeasureCategoryChange,
 }) {
   const [tab, setTab] = useState('summary')
 
@@ -231,7 +233,7 @@ export default function EstimationPanel({
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {tab === 'summary' && (
-          <SummaryTab countByCategory={countByCategory} totalMarkers={totalMarkers} measurements={measurements} scale={scale} cableData={cableData} panelMarker={panelMarker} />
+          <SummaryTab countByCategory={countByCategory} totalMarkers={totalMarkers} measurements={measurements} scale={scale} cableData={cableData} panelMarker={panelMarker} onMeasureCategoryChange={onMeasureCategoryChange} />
         )}
         {tab === 'cables' && (
           <CablesTab
@@ -283,7 +285,7 @@ export default function EstimationPanel({
 
 // ─── Summary Tab ────────────────────────────────────────────────────────────
 
-function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableData, panelMarker }) {
+function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableData, panelMarker, onMeasureCategoryChange }) {
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
@@ -339,45 +341,67 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
 
       {measurements.length > 0 && scale.calibrated && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginTop: 16 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 4 }}>
             Mérések ({measurements.length})
           </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 10 }}>
+            Minden méréshez rendelj kábeltálca típust — a kalkuláció automatikusan összesíti.
+          </div>
 
-          {/* ── Cable tray measurements grouped by category ── */}
-          {COUNT_CATEGORIES.filter(c => c.isCableTray).map(c => {
-            const linked = measurements.filter(m => m.category === c.key)
-            if (!linked.length) return null
-            const totalM = linked.reduce((sum, m) => sum + m.dist * scale.factor, 0)
+          {/* ── All measurements with per-row category selector ── */}
+          {measurements.map((m, idx) => {
+            const distM = (m.dist * scale.factor).toFixed(2)
+            const catDef = m.category ? COUNT_CATEGORIES.find(c => c.key === m.category) : null
+            const rowColor = catDef ? CABLE_TRAY_COLOR : C.muted
             return (
-              <div key={c.key} style={{ marginBottom: 10 }}>
-                {/* Category total row */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid rgba(255,170,0,0.2)` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={CABLE_TRAY_COLOR} strokeWidth="2.5">
-                      <rect x="2" y="7" width="20" height="10" rx="1"/>
-                      <path d="M6 7v10M10 7v10M14 7v10M18 7v10"/>
-                    </svg>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: CABLE_TRAY_COLOR, fontWeight: 700 }}>{c.label}</span>
-                  </div>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: CABLE_TRAY_COLOR, fontWeight: 700 }}>{totalM.toFixed(2)} m</span>
-                </div>
-                {/* Individual segments */}
-                {linked.map((m, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0 3px 14px' }}>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>#{i + 1}</span>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>{(m.dist * scale.factor).toFixed(2)} m</span>
-                  </div>
-                ))}
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
+                {/* Index + distance */}
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: rowColor, minWidth: 28, fontWeight: catDef ? 700 : 400 }}>
+                  #{idx + 1}
+                </span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: rowColor, fontWeight: catDef ? 700 : 400, minWidth: 56 }}>
+                  {distM} m
+                </span>
+                {/* Category selector */}
+                <select
+                  value={m.category || ''}
+                  onChange={e => onMeasureCategoryChange?.(idx, e.target.value || undefined)}
+                  style={{
+                    flex: 1, padding: '3px 5px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono',
+                    background: catDef ? 'rgba(255,170,0,0.08)' : C.bgCard,
+                    border: `1px solid ${catDef ? CABLE_TRAY_COLOR + '60' : C.border}`,
+                    color: catDef ? CABLE_TRAY_COLOR : C.muted,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">— Nincs kategória —</option>
+                  {COUNT_CATEGORIES.filter(c => c.isCableTray).map(c => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
               </div>
             )
           })}
 
-          {/* ── Uncategorized (generic) measurements ── */}
-          {measurements.filter(m => !m.category).length > 0 && (
-            <div style={{ marginTop: measurements.some(m => m.category) ? 8 : 0, paddingTop: measurements.some(m => m.category) ? 8 : 0, borderTop: measurements.some(m => m.category) ? `1px solid ${C.border}` : 'none' }}>
-              {measurements.filter(m => !m.category).map((m, i) => (
-                <StatRow key={i} label={`Mérés #${i + 1}`} value={`${(m.dist * scale.factor).toFixed(2)} m`} />
-              ))}
+          {/* ── Per-category totals summary ── */}
+          {measurements.some(m => m.category) && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Összesítés</div>
+              {COUNT_CATEGORIES.filter(c => c.isCableTray).map(c => {
+                const linked = measurements.filter(m => m.category === c.key)
+                if (!linked.length) return null
+                const totalM = linked.reduce((sum, m) => sum + m.dist * scale.factor, 0)
+                return (
+                  <div key={c.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: 1, background: CABLE_TRAY_COLOR, opacity: 0.8 }} />
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: CABLE_TRAY_COLOR }}>{c.label}</span>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>({linked.length}×)</span>
+                    </div>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: CABLE_TRAY_COLOR, fontWeight: 700 }}>{totalM.toFixed(2)} m</span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
