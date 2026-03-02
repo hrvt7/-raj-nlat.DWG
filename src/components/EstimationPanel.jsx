@@ -78,7 +78,12 @@ export default function EstimationPanel({
     if (!scale.calibrated || !scale.factor) return null
     if (!panelMarker) return null
 
-    const devices = markers.filter(m => m.category !== 'panel')
+    // Cable trays are structural elements — they don't get individual cable runs from the panel
+    const devices = markers.filter(m => {
+      if (m.category === 'panel') return false
+      const catDef = COUNT_CATEGORIES.find(c => c.key === m.category)
+      return !catDef?.isCableTray
+    })
     if (devices.length === 0) return null
 
     let totalHorizontal = 0, totalVertical = 0
@@ -154,13 +159,25 @@ export default function EstimationPanel({
       const asm = assemblies.find(a => a.id === asgn.assemblyId)
       if (!asm) continue
 
-      const qty        = countByCategory[cat]
-      const ov         = quoteOverrides[cat]
-      const matPerUnit = ov?.matPerUnit != null ? ov.matPerUnit : (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm))
-      const labPerUnit = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm)
+      const catDef = COUNT_CATEGORIES.find(c => c.key === cat)
+      const qty    = countByCategory[cat]
+      const ov     = quoteOverrides[cat]
 
-      totalMaterial     += matPerUnit * qty
-      totalLaborMinutes += labPerUnit * qty
+      if (catDef?.isCableTray) {
+        // ── Cable tray: length-based calculation (meters, not pieces) ──
+        const lengthPerUnit = ov?.lengthPerUnit ?? 1        // m per piece
+        const totalMeters   = qty * lengthPerUnit
+        const matPerM  = ov?.matPerUnit != null ? ov.matPerUnit : getAsmMaterialCost(asm)
+        const labPerM  = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm)
+        totalMaterial     += matPerM * totalMeters
+        totalLaborMinutes += labPerM * totalMeters
+      } else {
+        // ── Regular: piece-based calculation ──
+        const matPerUnit = ov?.matPerUnit != null ? ov.matPerUnit : (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm))
+        const labPerUnit = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm)
+        totalMaterial     += matPerUnit * qty
+        totalLaborMinutes += labPerUnit * qty
+      }
     }
 
     // Cable cost: 800 Ft/m default (NYM-J 3×2.5 rough)
@@ -582,10 +599,21 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
             const defaultMat   = getAsmMaterialCost(asm)
             const defaultLabor = getAsmLaborMinutes(asm)
             const ov           = quoteOverrides[c.key] || {}
-            const matPerUnit   = ov.matPerUnit != null ? ov.matPerUnit : defaultMat
-            const laborMin     = ov.laborMin   != null ? ov.laborMin   : defaultLabor
-            const matOverridden = ov.matPerUnit != null
-            const labOverridden = ov.laborMin   != null
+            const matPerUnit   = ov.matPerUnit   != null ? ov.matPerUnit   : defaultMat
+            const laborMin     = ov.laborMin     != null ? ov.laborMin     : defaultLabor
+            const matOverridden = ov.matPerUnit  != null
+            const labOverridden = ov.laborMin    != null
+
+            // Cable tray: length-based logic
+            const isCT          = !!c.isCableTray
+            const lengthPerUnit = ov.lengthPerUnit ?? 1          // m per piece
+            const totalMeters   = count * lengthPerUnit
+            const lenOverridden = ov.lengthPerUnit != null
+
+            // Effective unit cost (cable tray = Ft/m; regular = Ft/db)
+            const unitTotal = isCT
+              ? (matPerUnit * totalMeters)
+              : (matPerUnit * count)
 
             return (
               <div key={c.key} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
@@ -593,16 +621,39 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 8, height: 8, borderRadius: c.isCableTray ? 2 : '50%', background: c.color }} />
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: c.color, fontWeight: 700 }}>{c.label} × {count}</span>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: c.color, fontWeight: 700 }}>
+                      {c.label} × {count} db{isCT ? ` = ${totalMeters.toFixed(1)} m` : ''}
+                    </span>
                   </div>
                   <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{asm.name}</span>
                 </div>
 
+                {/* Cable tray: length per piece input */}
+                {isCT && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 9, color: CABLE_TRAY_COLOR, fontFamily: 'DM Mono', marginBottom: 2 }}>Hossz/db (m)</div>
+                    <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                      <input
+                        type="number" min={0.1} step={0.5}
+                        value={lengthPerUnit}
+                        onChange={e => setCatOverride(c.key, 'lengthPerUnit', parseFloat(e.target.value) || 1)}
+                        style={{ width: 80, padding: '4px 6px', borderRadius: 4, background: C.bgCard, border: `1px solid ${lenOverridden ? CABLE_TRAY_COLOR : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                      />
+                      <span style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono' }}>m/db → összesen: {totalMeters.toFixed(1)} m</span>
+                      {lenOverridden && (
+                        <button onClick={() => resetCatOverride(c.key, 'lengthPerUnit')} title="Visszaállítás 1 m/db-re" style={{ padding: '2px 5px', borderRadius: 3, background: 'none', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', fontSize: 9, flexShrink: 0 }}>↩</button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Price inputs */}
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {/* Material cost per unit */}
+                  {/* Material cost per unit/meter */}
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>Anyag (Ft/db)</div>
+                    <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>
+                      {isCT ? 'Anyag (Ft/m)' : 'Anyag (Ft/db)'}
+                    </div>
                     <div style={{ display: 'flex', gap: 3 }}>
                       <input
                         type="number" min={0} step={50}
@@ -616,9 +667,11 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
                     </div>
                   </div>
 
-                  {/* Labor minutes per unit */}
+                  {/* Labor minutes per unit/meter */}
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>Norma (perc/db)</div>
+                    <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>
+                      {isCT ? 'Norma (perc/m)' : 'Norma (perc/db)'}
+                    </div>
                     <div style={{ display: 'flex', gap: 3 }}>
                       <input
                         type="number" min={0} step={5}
@@ -636,7 +689,7 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
                     <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>Összesen</div>
                     <div style={{ padding: '4px 6px', borderRadius: 4, background: 'rgba(0,229,160,0.07)', border: `1px solid rgba(0,229,160,0.18)`, fontSize: 11, fontFamily: 'DM Mono', color: C.accent, fontWeight: 700 }}>
-                      {(matPerUnit * count).toLocaleString('hu-HU')} Ft
+                      {unitTotal.toLocaleString('hu-HU')} Ft
                     </div>
                   </div>
                 </div>
@@ -669,7 +722,7 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
 
       {/* Action */}
       <button
-        onClick={() => onCreateQuote?.({ countByCategory, assignments, cableData, costEstimate })}
+        onClick={() => onCreateQuote?.({ countByCategory, assignments, quoteOverrides, cableData, costEstimate })}
         style={{
           width: '100%', padding: '13px 16px', borderRadius: 8, cursor: 'pointer',
           background: C.accent, border: 'none', color: C.bg,

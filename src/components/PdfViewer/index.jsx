@@ -40,6 +40,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
   const [activeTool, setActiveTool] = useState(null)
   const [activeCategory, setActiveCategory] = useState('socket')
 
+  // ── Page rotation ──
+  const [rotation, setRotation] = useState(0) // 0, 90, 180, 270
+  const rotationRef = useRef(0)
+  useEffect(() => { rotationRef.current = rotation }, [rotation])
+
   // ── Scale calibration ──
   const [scale, setScale] = useState({ factor: null, calibrated: false })
   const scaleRef = useRef(scale)
@@ -91,6 +96,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
         setQuoteOverrides(ann.quoteOverrides)
         quoteOverridesRef.current = ann.quoteOverrides
       }
+      if (ann.rotation != null) setRotation(ann.rotation)
     })
   }, [planId])
 
@@ -107,6 +113,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
         switchHeight,
         assignments: assignmentsRef.current,
         quoteOverrides: quoteOverridesRef.current,
+        rotation: rotationRef.current,
       })
     }
   }, [planId, ceilingHeight, socketHeight, switchHeight])
@@ -149,7 +156,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
     if (!doc || !pdfCanvasRef.current) return
     try {
       const page = await doc.getPage(num)
-      const viewport = page.getViewport({ scale: 2 }) // hi-dpi
+      const viewport = page.getViewport({ scale: 2, rotation: rotationRef.current }) // hi-dpi + rotation
       const canvas = pdfCanvasRef.current
       canvas.width = viewport.width
       canvas.height = viewport.height
@@ -179,6 +186,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
   useEffect(() => {
     if (pdfDoc && pageNum > 0) renderPage(pdfDoc, pageNum)
   }, [pdfDoc, pageNum, renderPage])
+
+  // Re-render page when rotation changes
+  useEffect(() => {
+    rotationRef.current = rotation
+    if (pdfDoc && pageNum > 0) renderPage(pdfDoc, pageNum)
+  }, [rotation, pdfDoc, pageNum, renderPage])
 
   // ── Coordinate conversion ──
   const screenToPdf = useCallback((sx, sy) => {
@@ -237,6 +250,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
         const pp = proj(panel.x, panel.y)
         for (const m of allMarkers) {
           if (m.category === 'panel') continue
+          // Cable trays are structural — don't draw individual cable runs for them
+          const mCatDef = COUNT_CATEGORIES.find(c => c.key === m.category)
+          if (mCatDef?.isCableTray) continue
           const mp = proj(m.x, m.y)
           ctx.save()
           ctx.strokeStyle = (m.color || C.accent) + '60'
@@ -489,6 +505,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
         estimationOpen={estimationOpen}
         showCableRoutes={showCableRoutes}
         onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlay, 50) }}
+        rotation={rotation}
+        onRotateLeft={() => setRotation(r => (r - 90 + 360) % 360)}
+        onRotateRight={() => setRotation(r => (r + 90) % 360)}
       />
 
       {/* Main area */}
@@ -708,6 +727,7 @@ function PdfToolbar({
   pageNum, numPages, onPrevPage, onNextPage,
   onToggleEstimation, estimationOpen,
   showCableRoutes, onToggleCableRoutes,
+  rotation, onRotateLeft, onRotateRight,
 }) {
   const TOOLS = [
     { id: 'count', label: 'Számlálás', key: 'C' },
@@ -790,6 +810,15 @@ function PdfToolbar({
           Kalkuláció
         </button>
       )}
+
+      {/* Rotation controls */}
+      <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }} title="Terv forgatása">
+        <TinyBtn onClick={onRotateLeft} title="Forgatás balra (−90°)">↶</TinyBtn>
+        {rotation !== 0 && (
+          <span style={{ fontSize: 9, fontFamily: 'DM Mono', color: C.muted, padding: '4px 3px', alignSelf: 'center' }}>{rotation}°</span>
+        )}
+        <TinyBtn onClick={onRotateRight} title="Forgatás jobbra (+90°)">↷</TinyBtn>
+      </div>
 
       {/* Zoom controls */}
       <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }}>
