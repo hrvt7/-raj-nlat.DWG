@@ -250,28 +250,33 @@ export default function EstimationPanel({
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: C.bgCard, borderLeft: `1px solid ${C.border}` }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: C.bgCard }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text }}>Kalkuláció</div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18, padding: 4, lineHeight: 1 }}>✕</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 17, color: C.text }}>Kalkuláció</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, padding: '2px 8px', background: C.bg, borderRadius: 4, border: `1px solid ${C.border}` }}>
+            {markers.length} pont
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', fontSize: 16, padding: '4px 10px', lineHeight: 1, borderRadius: 6, fontFamily: 'Syne' }}>✕ Bezár</button>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}` }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, padding: '9px 6px', cursor: 'pointer',
-            background: 'none', border: 'none', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
+            flex: 1, padding: '12px 8px', cursor: 'pointer',
+            background: 'none', border: 'none', fontSize: 13, fontFamily: 'Syne', fontWeight: 700,
             color: tab === t.id ? C.accent : C.muted,
             borderBottom: tab === t.id ? `2px solid ${C.accent}` : '2px solid transparent',
-            transition: 'all 0.15s',
+            transition: 'all 0.15s', letterSpacing: '0.02em',
           }}>{t.label}</button>
         ))}
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
         {tab === 'summary' && (
           <SummaryTab countByCategory={countByCategory} totalMarkers={totalMarkers} measurements={measurements} scale={scale} cableData={cableData} panelMarker={panelMarker} onMeasureCategoryChange={onMeasureCategoryChange} />
         )}

@@ -634,28 +634,44 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
         </div>
       </div>
 
-      {/* ── Estimation panel slide-over ── */}
+      {/* ── Estimation modal overlay ── */}
       {estimationOpen && (
-        <div style={{
-          position: 'absolute', top: 0, right: 0, bottom: 0,
-          width: 360, zIndex: 50,
-          boxShadow: '-4px 0 24px rgba(0,0,0,0.3)',
-        }}>
-          <EstimationPanel
-            markers={[...markersRef.current]}
-            measurements={[...measuresRef.current]}
-            scale={scale}
-            ceilingHeight={ceilingHeight}
-            switchHeight={switchHeight}
-            socketHeight={socketHeight}
-            onCeilingHeightChange={setCeilingHeight}
-            onSwitchHeightChange={setSwitchHeight}
-            onSocketHeightChange={setSocketHeight}
-            onClose={() => setEstimationOpen(false)}
-            onCreateQuote={(data) => {
-              onCreateQuote?.({ ...data, planId, markers: [...markersRef.current], measurements: [...measuresRef.current], scale })
+        <div
+          onClick={() => setEstimationOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.78)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: 'min(940px, 96vw)',
+              height: 'min(90vh, 880px)',
+              borderRadius: 14,
+              overflow: 'hidden',
+              boxShadow: '0 32px 96px rgba(0,0,0,0.65)',
+              display: 'flex',
+              flexDirection: 'column',
             }}
-          />
+          >
+            <EstimationPanel
+              markers={[...markersRef.current]}
+              measurements={[...measuresRef.current]}
+              scale={scale}
+              ceilingHeight={ceilingHeight}
+              switchHeight={switchHeight}
+              socketHeight={socketHeight}
+              onCeilingHeightChange={setCeilingHeight}
+              onSwitchHeightChange={setSwitchHeight}
+              onSocketHeightChange={setSocketHeight}
+              onClose={() => setEstimationOpen(false)}
+              onCreateQuote={(data) => {
+                onCreateQuote?.({ ...data, planId, markers: [...markersRef.current], measurements: [...measuresRef.current], scale })
+              }}
+            />
+          </div>
         </div>
       )}
     </div>
