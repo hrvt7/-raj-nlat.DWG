@@ -1,5 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES } from '../DxfViewer/DxfToolbar.jsx'
+import EstimationPanel from '../EstimationPanel.jsx'
+import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -18,7 +20,7 @@ function formatDist(m) {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -55,8 +57,38 @@ export default function PdfViewerPanel({ file, style }) {
   const mousePdfRef = useRef(null) // { x, y } mouse in pdf coords
   const [renderTick, setRenderTick] = useState(0)
 
-  // ── Count panel ──
+  // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
+  const [estimationOpen, setEstimationOpen] = useState(false)
+  const [ceilingHeight, setCeilingHeight] = useState(3.0)
+  const [socketHeight, setSocketHeight] = useState(0.3)
+  const [showCableRoutes, setShowCableRoutes] = useState(false)
+
+  // ── Load saved annotations on mount ──
+  useEffect(() => {
+    if (!planId) return
+    getPlanAnnotations(planId).then(ann => {
+      if (ann.markers?.length) { markersRef.current = ann.markers; setRenderTick(t => t + 1) }
+      if (ann.measurements?.length) { measuresRef.current = ann.measurements }
+      if (ann.scale?.calibrated) { setScale(ann.scale) }
+      if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
+      if (ann.socketHeight) setSocketHeight(ann.socketHeight)
+    })
+  }, [planId])
+
+  // ── Auto-save annotations on unmount ──
+  useEffect(() => {
+    return () => {
+      if (!planId) return
+      savePlanAnnotations(planId, {
+        markers: markersRef.current,
+        measurements: measuresRef.current,
+        scale: scaleRef.current,
+        ceilingHeight,
+        socketHeight,
+      })
+    }
+  }, [planId, ceilingHeight, socketHeight])
 
   // ── Load PDF ──
   useEffect(() => {
@@ -176,6 +208,29 @@ export default function PdfViewerPanel({ file, style }) {
       ctx.restore()
     }
 
+    // ── Cable routes (Manhattan L-shaped lines) ──
+    if (showCableRoutes) {
+      const allMarkers = markersRef.current
+      const panel = allMarkers.find(m => m.category === 'panel')
+      if (panel) {
+        const pp = proj(panel.x, panel.y)
+        for (const m of allMarkers) {
+          if (m.category === 'panel') continue
+          const mp = proj(m.x, m.y)
+          ctx.save()
+          ctx.strokeStyle = (m.color || C.accent) + '60'
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([6, 4])
+          ctx.beginPath()
+          ctx.moveTo(pp.x, pp.y)
+          ctx.lineTo(mp.x, pp.y)
+          ctx.lineTo(mp.x, mp.y)
+          ctx.stroke()
+          ctx.restore()
+        }
+      }
+    }
+
     // ── Markers ──
     for (const m of markersRef.current) {
       const s = proj(m.x, m.y)
@@ -215,7 +270,7 @@ export default function PdfViewerPanel({ file, style }) {
       ctx.moveTo(0, s.y); ctx.lineTo(cw, s.y)
       ctx.stroke()
     }
-  }, [activeTool, pdfToScreen, screenToPdf])
+  }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes])
 
   // ── Mouse handlers ──
   const handleMouseDown = useCallback((e) => {
@@ -409,6 +464,10 @@ export default function PdfViewerPanel({ file, style }) {
         pageNum={pageNum} numPages={numPages}
         onPrevPage={() => setPageNum(p => Math.max(1, p - 1))}
         onNextPage={() => setPageNum(p => Math.min(numPages, p + 1))}
+        onToggleEstimation={() => setEstimationOpen(p => !p)}
+        estimationOpen={estimationOpen}
+        showCableRoutes={showCableRoutes}
+        onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlay, 50) }}
       />
 
       {/* Main area */}
@@ -533,6 +592,29 @@ export default function PdfViewerPanel({ file, style }) {
           </div>
         </div>
       )}
+
+      {/* ── Estimation panel ── */}
+      {estimationOpen && (
+        <div style={{
+          position: 'absolute', top: 0, right: 0, bottom: 0,
+          width: 360, zIndex: 50,
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.3)',
+        }}>
+          <EstimationPanel
+            markers={[...markersRef.current]}
+            measurements={[...measuresRef.current]}
+            scale={scale}
+            ceilingHeight={ceilingHeight}
+            socketHeight={socketHeight}
+            onCeilingHeightChange={setCeilingHeight}
+            onSocketHeightChange={setSocketHeight}
+            onClose={() => setEstimationOpen(false)}
+            onCreateQuote={(data) => {
+              onCreateQuote?.({ ...data, planId, markers: [...markersRef.current], measurements: [...measuresRef.current], scale })
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -597,6 +679,8 @@ function PdfToolbar({
   onUndo, onClearAll,
   onToggleCountPanel, countPanelOpen,
   pageNum, numPages, onPrevPage, onNextPage,
+  onToggleEstimation, estimationOpen,
+  showCableRoutes, onToggleCableRoutes,
 }) {
   const [catOpen, setCatOpen] = useState(false)
   const catRef = useRef(null)
@@ -693,6 +777,27 @@ function PdfToolbar({
       {/* Count panel */}
       {markerCount > 0 && (
         <TinyBtn onClick={onToggleCountPanel} title="Összesítő" style={{ color: countPanelOpen ? C.accent : C.muted }}>∑</TinyBtn>
+      )}
+
+      {/* Cable routes toggle */}
+      {markerCount > 0 && (
+        <TinyBtn onClick={onToggleCableRoutes} title="Kábelútvonalak" style={{
+          color: showCableRoutes ? C.yellow : C.muted,
+          background: showCableRoutes ? C.yellow + '20' : undefined,
+        }}>⚡</TinyBtn>
+      )}
+
+      {/* Estimation button */}
+      {markerCount > 0 && (
+        <button onClick={onToggleEstimation} style={{
+          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+          fontFamily: 'Syne', fontWeight: 700,
+          background: estimationOpen ? C.accent : 'rgba(0,229,160,0.12)',
+          border: `1px solid ${estimationOpen ? C.accent : 'rgba(0,229,160,0.3)'}`,
+          color: estimationOpen ? C.bg : C.accent,
+        }}>
+          Kalkuláció
+        </button>
       )}
 
       {/* Zoom controls */}

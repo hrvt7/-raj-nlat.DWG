@@ -3,6 +3,8 @@ import * as three from 'three'
 import DxfViewerCanvas from './DxfViewerCanvas.jsx'
 import DxfToolbar, { COUNT_CATEGORIES } from './DxfToolbar.jsx'
 import DxfLayerPanel from './DxfLayerPanel.jsx'
+import EstimationPanel from '../EstimationPanel.jsx'
+import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -20,7 +22,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false }) {
+export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote }) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -32,7 +34,13 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
   const [layerVisibility, setLayerVisibility] = useState({})
   const [layersPanelOpen, setLayersPanelOpen] = useState(false)
   const [countPanelOpen, setCountPanelOpen] = useState(false)
+  const [estimationOpen, setEstimationOpen] = useState(false)
   const [renderTick, setRenderTick] = useState(0) // force re-render for counts
+  const [ceilingHeight, setCeilingHeight] = useState(3.0)
+  const [socketHeight, setSocketHeight] = useState(0.3)
+  const [showCableRoutes, setShowCableRoutes] = useState(false)
+  const showCableRoutesRef = useRef(false)
+  useEffect(() => { showCableRoutesRef.current = showCableRoutes }, [showCableRoutes])
 
   // ── Scale calibration ──
   const [scale, setScale] = useState({
@@ -56,6 +64,32 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
   const mouseScreenRef = useRef(null) // {x,y} current mouse in screen coords
   const activeToolRef = useRef(null)
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
+
+  // ── Load saved annotations on mount ──
+  useEffect(() => {
+    if (!planId) return
+    getPlanAnnotations(planId).then(ann => {
+      if (ann.markers?.length) { markersRef.current = ann.markers; setRenderTick(t => t + 1) }
+      if (ann.measurements?.length) { measuresRef.current = ann.measurements }
+      if (ann.scale?.calibrated) { setScale(ann.scale) }
+      if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
+      if (ann.socketHeight) setSocketHeight(ann.socketHeight)
+    })
+  }, [planId])
+
+  // ── Auto-save annotations on unmount ──
+  useEffect(() => {
+    return () => {
+      if (!planId) return
+      savePlanAnnotations(planId, {
+        markers: markersRef.current,
+        measurements: measuresRef.current,
+        scale: scaleRef.current,
+        ceilingHeight,
+        socketHeight,
+      })
+    }
+  }, [planId, ceilingHeight, socketHeight])
 
   // ── Coordinate projection helper ──
   const project = useCallback((sx, sy) => {
@@ -124,8 +158,33 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
         drawMeasureLine(ctx, p1, p2, label, true)
       }
 
-      // ── Count markers ──
+      // ── Cable routes (Manhattan L-shaped lines from panel to each device) ──
       const markers = markersRef.current
+      if (showCableRoutesRef.current) {
+        const panel = markers.find(m => m.category === 'panel')
+        if (panel) {
+          const pp = proj(panel.x, panel.y)
+          for (const m of markers) {
+            if (m.category === 'panel') continue
+            const mp = proj(m.x, m.y)
+            // Draw L-shaped Manhattan route: horizontal first, then vertical
+            const midX = mp.x
+            const midY = pp.y
+            ctx.save()
+            ctx.strokeStyle = m.color + '60'
+            ctx.lineWidth = 1.5
+            ctx.setLineDash([6, 4])
+            ctx.beginPath()
+            ctx.moveTo(pp.x, pp.y)
+            ctx.lineTo(midX, midY)
+            ctx.lineTo(mp.x, mp.y)
+            ctx.stroke()
+            ctx.restore()
+          }
+        }
+      }
+
+      // ── Count markers ──
       for (let i = 0; i < markers.length; i++) {
         const m = markers[i]
         const p = proj(m.x, m.y)
@@ -543,12 +602,57 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
             : `${layers.length} réteg  •  Billentyűk: I C M S  •  Görgő: zoom  •  Húzás: mozgatás`
           }
         </span>
-        {scale.calibrated && (
-          <span style={{ color: C.blue }}>
-            Skála kalibrálva ✓
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {scale.calibrated && (
+            <span style={{ color: C.blue }}>Skála ✓</span>
+          )}
+          {markersRef.current.length > 0 && (
+            <>
+              <button onClick={() => setShowCableRoutes(p => !p)} style={{
+                padding: '2px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 10,
+                fontFamily: 'DM Mono', fontWeight: 600,
+                background: showCableRoutes ? C.yellow + '20' : 'transparent',
+                border: `1px solid ${showCableRoutes ? C.yellow + '60' : C.border}`,
+                color: showCableRoutes ? C.yellow : C.muted,
+              }}>
+                {showCableRoutes ? '⚡ Kábelek' : '⚡'}
+              </button>
+              <button onClick={() => setEstimationOpen(p => !p)} style={{
+                padding: '2px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 10,
+                fontFamily: 'Syne', fontWeight: 700,
+                background: estimationOpen ? C.accent : 'rgba(0,229,160,0.12)',
+                border: `1px solid ${estimationOpen ? C.accent : 'rgba(0,229,160,0.3)'}`,
+                color: estimationOpen ? C.bg : C.accent,
+              }}>
+                Kalkuláció →
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* ── Estimation panel slide-over ── */}
+      {estimationOpen && (
+        <div style={{
+          position: 'absolute', top: 0, right: 0, bottom: 0,
+          width: 360, zIndex: 50,
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.3)',
+        }}>
+          <EstimationPanel
+            markers={[...markersRef.current]}
+            measurements={[...measuresRef.current]}
+            scale={scale}
+            ceilingHeight={ceilingHeight}
+            socketHeight={socketHeight}
+            onCeilingHeightChange={setCeilingHeight}
+            onSocketHeightChange={setSocketHeight}
+            onClose={() => setEstimationOpen(false)}
+            onCreateQuote={(data) => {
+              onCreateQuote?.({ ...data, planId, markers: [...markersRef.current], measurements: [...measuresRef.current], scale })
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }

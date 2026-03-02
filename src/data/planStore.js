@@ -2,14 +2,27 @@
 // Stores large DXF/DWG plan files in IndexedDB to handle 10+ MB files
 // Metadata (name, date, units, etc.) in localStorage for quick access
 // File blobs in localforage (IndexedDB) for large binary storage
+// Plan annotations (markers, measurements, scale) persist per plan
 
 import localforage from 'localforage'
 
-// Configure localforage instance for plan files
+// Configure localforage instances
 const planFileStore = localforage.createInstance({
   name: 'takeoffpro',
   storeName: 'plan_files',
-  description: 'DXF/DWG plan file binary storage',
+  description: 'DXF/DWG/PDF plan file binary storage',
+})
+
+const planThumbStore = localforage.createInstance({
+  name: 'takeoffpro',
+  storeName: 'plan_thumbnails',
+  description: 'PDF/DXF plan thumbnail image data URLs',
+})
+
+const planAnnotStore = localforage.createInstance({
+  name: 'takeoffpro',
+  storeName: 'plan_annotations',
+  description: 'Plan markers, measurements, scale calibration',
 })
 
 const LS_KEY = 'takeoffpro_plans_meta'
@@ -88,4 +101,74 @@ export async function deletePlan(planId) {
  */
 export function getPlanMeta(planId) {
   return loadPlansMeta().find(p => p.id === planId) || null
+}
+
+// ─── Thumbnail management ──────────────────────────────────────────────────
+
+/**
+ * Save a thumbnail data URL for a plan
+ * @param {string} planId
+ * @param {string} dataUrl - base64 data URL (image/png)
+ */
+export async function savePlanThumbnail(planId, dataUrl) {
+  await planThumbStore.setItem(planId, dataUrl)
+}
+
+/**
+ * Get a plan thumbnail data URL
+ * @param {string} planId
+ * @returns {Promise<string|null>}
+ */
+export async function getPlanThumbnail(planId) {
+  return await planThumbStore.getItem(planId)
+}
+
+// ─── Annotation management (markers, measurements, scale) ──────────────────
+
+/**
+ * Save plan annotations
+ * @param {string} planId
+ * @param {Object} annotations - { markers: [], measurements: [], scale: {}, cableRoutes: [] }
+ */
+export async function savePlanAnnotations(planId, annotations) {
+  await planAnnotStore.setItem(planId, annotations)
+  // Update plan meta to reflect counts
+  const meta = loadPlansMeta()
+  const idx = meta.findIndex(p => p.id === planId)
+  if (idx >= 0) {
+    meta[idx].markerCount = annotations.markers?.length || 0
+    meta[idx].measureCount = annotations.measurements?.length || 0
+    meta[idx].hasScale = !!annotations.scale?.calibrated
+    savePlansMeta(meta)
+  }
+}
+
+/**
+ * Get plan annotations
+ * @param {string} planId
+ * @returns {Promise<Object|null>}
+ */
+export async function getPlanAnnotations(planId) {
+  return await planAnnotStore.getItem(planId) || {
+    markers: [],
+    measurements: [],
+    scale: { factor: null, calibrated: false },
+    cableRoutes: [],
+    ceilingHeight: 3.0,
+    socketHeight: 0.3,
+  }
+}
+
+/**
+ * Update plan metadata
+ * @param {string} planId
+ * @param {Object} updates - partial plan object
+ */
+export function updatePlanMeta(planId, updates) {
+  const meta = loadPlansMeta()
+  const idx = meta.findIndex(p => p.id === planId)
+  if (idx >= 0) {
+    meta[idx] = { ...meta[idx], ...updates }
+    savePlansMeta(meta)
+  }
 }

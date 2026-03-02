@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { C, Button, Badge } from '../components/ui.jsx'
 import DxfViewerPanel from '../components/DxfViewer/index.jsx'
 import PdfViewerPanel from '../components/PdfViewer/index.jsx'
-import { loadPlans, savePlan, getPlanFile, deletePlan, generatePlanId } from '../data/planStore.js'
+import MergePlansView from '../components/MergePlansView.jsx'
+import { loadPlans, savePlan, getPlanFile, deletePlan, generatePlanId, savePlanThumbnail, getPlanThumbnail } from '../data/planStore.js'
 
 const fmtSize = (bytes) => {
   if (bytes < 1024) return bytes + ' B'
@@ -30,16 +31,57 @@ function getFileType(filename) {
   return 'dxf'
 }
 
+async function generatePdfThumbnail(file, planId) {
+  try {
+    const pdfjsLib = await import('pdfjs-dist')
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+    const arrayBuffer = await file.arrayBuffer()
+    const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    const page = await doc.getPage(1)
+    const vp = page.getViewport({ scale: 0.5 })
+    const canvas = document.createElement('canvas')
+    canvas.width = vp.width
+    canvas.height = vp.height
+    const ctx = canvas.getContext('2d')
+    await page.render({ canvasContext: ctx, viewport: vp }).promise
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.6)
+    await savePlanThumbnail(planId, dataUrl)
+    return dataUrl
+  } catch (err) {
+    console.warn('Thumbnail generation failed:', err)
+    return null
+  }
+}
+
 export default function Plans() {
   const [plans, setPlans] = useState([])
   const [activePlan, setActivePlan] = useState(null)
   const [activeFile, setActiveFile] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [thumbnails, setThumbnails] = useState({}) // { planId: dataUrl }
+  const [mergeMode, setMergeMode] = useState(false)
   const inputRef = useRef()
 
+  // Load plans + thumbnails on mount
   useEffect(() => {
     setPlans(loadPlans())
   }, [])
+
+  // Load thumbnails for all plans
+  useEffect(() => {
+    if (plans.length === 0) return
+    const pdfPlans = plans.filter(p => p.fileType === 'pdf')
+    Promise.all(pdfPlans.map(async p => {
+      const thumb = await getPlanThumbnail(p.id)
+      return { id: p.id, thumb }
+    })).then(results => {
+      const map = {}
+      for (const r of results) {
+        if (r.thumb) map[r.id] = r.thumb
+      }
+      setThumbnails(prev => ({ ...prev, ...map }))
+    })
+  }, [plans])
 
   const handleUpload = useCallback(async (fileList) => {
     const files = Array.from(fileList)
@@ -58,6 +100,13 @@ export default function Plans() {
         createdAt: new Date().toISOString(),
       }
       await savePlan(plan, file)
+
+      // Generate thumbnail for PDFs
+      if (fileType === 'pdf') {
+        generatePdfThumbnail(file, id).then(dataUrl => {
+          if (dataUrl) setThumbnails(prev => ({ ...prev, [id]: dataUrl }))
+        }).catch(() => {})
+      }
     }
 
     setPlans(loadPlans())
@@ -85,6 +134,17 @@ export default function Plans() {
   }, [])
 
   const [dragging, setDragging] = useState(false)
+
+  // ─── Merge mode ──────────────────────────────────────────────────────────
+  if (mergeMode) {
+    return (
+      <MergePlansView
+        plans={plans}
+        onClose={() => setMergeMode(false)}
+        onCreateQuote={(data) => { console.log('Merged quote:', data); setMergeMode(false) }}
+      />
+    )
+  }
 
   // ─── Full-screen viewer mode ─────────────────────────────────────────────
   if (activePlan) {
@@ -118,12 +178,19 @@ export default function Plans() {
         {/* Viewer */}
         <div style={{ flex: 1, minHeight: 0 }}>
           {isPdf ? (
-            <PdfViewerPanel file={activeFile} style={{ height: '100%' }} />
+            <PdfViewerPanel
+              file={activeFile}
+              planId={activePlan.id}
+              onCreateQuote={(data) => console.log('Quote from PDF:', data)}
+              style={{ height: '100%' }}
+            />
           ) : (
             <DxfViewerPanel
               file={activeFile}
               unitFactor={activePlan.units?.factor}
               unitName={activePlan.units?.name}
+              planId={activePlan.id}
+              onCreateQuote={(data) => console.log('Quote from DXF:', data)}
               style={{ height: '100%' }}
             />
           )}
@@ -136,13 +203,24 @@ export default function Plans() {
   return (
     <div>
       {/* Page header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-          Tervrajzok
-        </h1>
-        <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>
-          DXF, DWG és PDF tervrajzok kezelése — mérés, számlálás, kalibráció
-        </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}>
+            Tervrajzok
+          </h1>
+          <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>
+            DXF, DWG és PDF tervrajzok kezelése — mérés, számlálás, kalibráció
+          </p>
+        </div>
+        {plans.length >= 2 && (
+          <button onClick={() => setMergeMode(true)} style={{
+            padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+            background: 'rgba(76,201,240,0.1)', border: `1px solid rgba(76,201,240,0.3)`,
+            color: '#4CC9F0', fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
+          }}>
+            Tervek összevonása
+          </button>
+        )}
       </div>
 
       {/* Upload area */}
@@ -225,16 +303,47 @@ export default function Plans() {
                   e.currentTarget.style.boxShadow = 'none'
                 }}
               >
-                {/* Preview placeholder */}
+                {/* Preview / thumbnail */}
                 <div style={{
-                  height: 110, background: C.bg,
+                  height: 120, background: C.bg,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   borderBottom: `1px solid ${C.border}`, flexDirection: 'column', gap: 6,
+                  overflow: 'hidden', position: 'relative',
                 }}>
-                  <PlanIcon type={plan.fileType} />
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, letterSpacing: '0.08em' }}>
-                    {ftInfo.label} terv
-                  </span>
+                  {thumbnails[plan.id] ? (
+                    <img
+                      src={thumbnails[plan.id]}
+                      alt={plan.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }}
+                    />
+                  ) : (
+                    <>
+                      <PlanIcon type={plan.fileType} />
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, letterSpacing: '0.08em' }}>
+                        {ftInfo.label} terv
+                      </span>
+                    </>
+                  )}
+                  {/* Badge overlay */}
+                  {(plan.markerCount > 0 || plan.hasScale) && (
+                    <div style={{
+                      position: 'absolute', bottom: 6, left: 6,
+                      display: 'flex', gap: 4,
+                    }}>
+                      {plan.markerCount > 0 && (
+                        <span style={{
+                          padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono',
+                          background: 'rgba(0,229,160,0.2)', color: C.accent, backdropFilter: 'blur(4px)',
+                        }}>{plan.markerCount} elem</span>
+                      )}
+                      {plan.hasScale && (
+                        <span style={{
+                          padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono',
+                          background: 'rgba(76,201,240,0.2)', color: C.blue, backdropFilter: 'blur(4px)',
+                        }}>Kalibrálva</span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Info */}
