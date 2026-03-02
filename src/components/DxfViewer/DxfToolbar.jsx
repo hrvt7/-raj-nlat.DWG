@@ -6,6 +6,29 @@ const C = {
   text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
 }
 
+export const CABLE_TRAY_COLOR = '#78909C'
+
+export const CABLE_TRAY_SIZES = [
+  { key: 'kt_50_35',   width: 50,  height: 35,  label: 'KT 50×35 mm' },
+  { key: 'kt_50_50',   width: 50,  height: 50,  label: 'KT 50×50 mm' },
+  { key: 'kt_100_35',  width: 100, height: 35,  label: 'KT 100×35 mm' },
+  { key: 'kt_100_50',  width: 100, height: 50,  label: 'KT 100×50 mm' },
+  { key: 'kt_100_60',  width: 100, height: 60,  label: 'KT 100×60 mm' },
+  { key: 'kt_150_35',  width: 150, height: 35,  label: 'KT 150×35 mm' },
+  { key: 'kt_150_50',  width: 150, height: 50,  label: 'KT 150×50 mm' },
+  { key: 'kt_150_60',  width: 150, height: 60,  label: 'KT 150×60 mm' },
+  { key: 'kt_150_100', width: 150, height: 100, label: 'KT 150×100 mm' },
+  { key: 'kt_200_50',  width: 200, height: 50,  label: 'KT 200×50 mm' },
+  { key: 'kt_200_60',  width: 200, height: 60,  label: 'KT 200×60 mm' },
+  { key: 'kt_200_100', width: 200, height: 100, label: 'KT 200×100 mm' },
+  { key: 'kt_300_60',  width: 300, height: 60,  label: 'KT 300×60 mm' },
+  { key: 'kt_300_100', width: 300, height: 100, label: 'KT 300×100 mm' },
+  { key: 'kt_400_60',  width: 400, height: 60,  label: 'KT 400×60 mm' },
+  { key: 'kt_400_100', width: 400, height: 100, label: 'KT 400×100 mm' },
+  { key: 'kt_500_100', width: 500, height: 100, label: 'KT 500×100 mm' },
+  { key: 'kt_600_100', width: 600, height: 100, label: 'KT 600×100 mm' },
+]
+
 export const COUNT_CATEGORIES = [
   { key: 'socket',   label: 'Dugalj',      color: '#FF8C42' },
   { key: 'switch',   label: 'Kapcsoló',    color: '#A78BFA' },
@@ -13,8 +36,86 @@ export const COUNT_CATEGORIES = [
   { key: 'panel',    label: 'Elosztó',     color: '#FF6B6B' },
   { key: 'junction', label: 'Kötődoboz',   color: '#4CC9F0' },
   { key: 'conduit',  label: 'Cső/Védőcs.', color: '#06B6D4' },
+  ...CABLE_TRAY_SIZES.map(s => ({
+    key: s.key, label: s.label, color: CABLE_TRAY_COLOR,
+    isCableTray: true, cableTrayWidth: s.width, cableTrayHeight: s.height,
+  })),
   { key: 'other',    label: 'Egyéb',       color: '#71717A' },
 ]
+
+// Shared grouped category dropdown — used by both DxfToolbar and PdfViewer
+export function CategoryDropdown({ activeCategory, onCategoryChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
+  const regularCats = COUNT_CATEGORIES.filter(c => !c.isCableTray && c.key !== 'other')
+  const cableTrayCATS = COUNT_CATEGORIES.filter(c => c.isCableTray)
+  const otherCat = COUNT_CATEGORIES.find(c => c.key === 'other')
+
+  const CatBtn = ({ c }) => (
+    <button key={c.key} onClick={() => { onCategoryChange(c.key); setOpen(false) }} style={{
+      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+      padding: '6px 10px', borderRadius: 5, cursor: 'pointer',
+      background: c.key === activeCategory ? `${c.color}18` : 'transparent',
+      border: 'none', color: c.key === activeCategory ? c.color : '#B0B8C8',
+      fontSize: 12, fontFamily: 'DM Mono', fontWeight: c.key === activeCategory ? 700 : 500, textAlign: 'left',
+    }}>
+      <div style={{ width: 8, height: 8, borderRadius: c.isCableTray ? 2 : '50%', background: c.color, flexShrink: 0 }} />
+      {c.label}
+      {c.key === activeCategory && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
+    </button>
+  )
+
+  return (
+    <div ref={ref} style={{ position: 'relative', marginLeft: 2 }}>
+      <button onClick={() => setOpen(!open)} style={{
+        padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: `${cat.color}18`, border: `1px solid ${cat.color}40`, color: cat.color,
+      }}>
+        <div style={{ width: 8, height: 8, borderRadius: cat.isCableTray ? 2 : '50%', background: cat.color }} />
+        {cat.label} <span style={{ fontSize: 9, opacity: 0.6 }}>▼</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#111113',
+          border: `1px solid #1E1E22`, borderRadius: 8, padding: 4, zIndex: 50, minWidth: 170,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+        }}>
+          {/* Regular categories */}
+          {regularCats.map(c => <CatBtn key={c.key} c={c} />)}
+
+          {/* Cable tray group */}
+          <div style={{ margin: '4px 0', borderTop: '1px solid #1E1E22', paddingTop: 4 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 2px',
+              fontSize: 10, fontFamily: 'Syne', fontWeight: 700, color: CABLE_TRAY_COLOR, letterSpacing: '0.05em', textTransform: 'uppercase',
+            }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={CABLE_TRAY_COLOR} strokeWidth="2.5"><rect x="2" y="7" width="20" height="10" rx="1"/><path d="M6 7v10M10 7v10M14 7v10M18 7v10"/></svg>
+              Kábeltálca
+            </div>
+            <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+              {cableTrayCATS.map(c => <CatBtn key={c.key} c={c} />)}
+            </div>
+          </div>
+
+          {/* Egyéb */}
+          <div style={{ borderTop: '1px solid #1E1E22', paddingTop: 4, marginTop: 0 }}>
+            {otherCat && <CatBtn c={otherCat} />}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function ToolIcon({ id, size = 15, color }) {
   const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
@@ -40,18 +141,6 @@ export default function DxfToolbar({
   scale, markerCount, measureCount,
   onUndo, onClearAll,
 }) {
-  const [catOpen, setCatOpen] = useState(false)
-  const catRef = useRef(null)
-
-  useEffect(() => {
-    if (!catOpen) return
-    const h = (e) => { if (catRef.current && !catRef.current.contains(e.target)) setCatOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [catOpen])
-
-  const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
-
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', background: C.bgCard, borderBottom: `1px solid ${C.border}` }}>
       {TOOLS.map(t => {
@@ -75,36 +164,7 @@ export default function DxfToolbar({
 
       {/* Category picker when counting */}
       {activeTool === 'count' && (
-        <div ref={catRef} style={{ position: 'relative', marginLeft: 2 }}>
-          <button onClick={() => setCatOpen(!catOpen)} style={{
-            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: `${cat.color}18`, border: `1px solid ${cat.color}40`, color: cat.color,
-          }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color }} />
-            {cat.label} <span style={{ fontSize: 9, opacity: 0.6 }}>▼</span>
-          </button>
-          {catOpen && (
-            <div style={{
-              position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#111113',
-              border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, zIndex: 50, minWidth: 160,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-            }}>
-              {COUNT_CATEGORIES.map(c => (
-                <button key={c.key} onClick={() => { onCategoryChange(c.key); setCatOpen(false) }} style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 10px', borderRadius: 5, cursor: 'pointer',
-                  background: c.key === activeCategory ? `${c.color}15` : 'transparent',
-                  border: 'none', color: c.color, fontSize: 12, fontFamily: 'DM Mono', fontWeight: 600, textAlign: 'left',
-                }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
-                  {c.label}
-                  {c.key === activeCategory && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
       <div style={{ flex: 1 }} />

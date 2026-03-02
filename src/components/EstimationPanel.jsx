@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react'
-import { COUNT_CATEGORIES } from './DxfViewer/DxfToolbar.jsx'
+import { COUNT_CATEGORIES, CABLE_TRAY_COLOR } from './DxfViewer/DxfToolbar.jsx'
 import { loadAssemblies, loadMaterials, loadWorkItems } from '../data/store.js'
 
 const C = {
@@ -263,7 +263,8 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
       {totalMarkers > 0 && (
         <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Eszközök ({totalMarkers})</div>
-          {COUNT_CATEGORIES.filter(c => countByCategory[c.key]).map(c => (
+          {/* Regular non-cable-tray categories */}
+          {COUNT_CATEGORIES.filter(c => !c.isCableTray && countByCategory[c.key]).map(c => (
             <div key={c.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color }} />
@@ -272,6 +273,24 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
               <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: c.color }}>{countByCategory[c.key]}</span>
             </div>
           ))}
+          {/* Cable tray group */}
+          {COUNT_CATEGORIES.filter(c => c.isCableTray && countByCategory[c.key]).length > 0 && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={CABLE_TRAY_COLOR} strokeWidth="2.5"><rect x="2" y="7" width="20" height="10" rx="1"/><path d="M6 7v10M10 7v10M14 7v10M18 7v10"/></svg>
+                <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 11, color: CABLE_TRAY_COLOR, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kábeltálca</span>
+              </div>
+              {COUNT_CATEGORIES.filter(c => c.isCableTray && countByCategory[c.key]).map(c => (
+                <div key={c.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 4px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 2, background: CABLE_TRAY_COLOR, opacity: 0.7 }} />
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: CABLE_TRAY_COLOR }}>{c.label}</span>
+                  </div>
+                  <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 13, color: CABLE_TRAY_COLOR }}>{countByCategory[c.key]} db</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -403,7 +422,7 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverr
             {/* Category header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color }} />
+                <div style={{ width: 10, height: 10, borderRadius: c.isCableTray ? 2 : '50%', background: c.color }} />
                 <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: c.color }}>{c.label}</span>
               </div>
               <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>{count} db</span>

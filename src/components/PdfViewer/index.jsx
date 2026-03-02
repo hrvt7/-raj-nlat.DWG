@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { COUNT_CATEGORIES } from '../DxfViewer/DxfToolbar.jsx'
+import { COUNT_CATEGORIES, CategoryDropdown } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
 
@@ -687,18 +687,6 @@ function PdfToolbar({
   onToggleEstimation, estimationOpen,
   showCableRoutes, onToggleCableRoutes,
 }) {
-  const [catOpen, setCatOpen] = useState(false)
-  const catRef = useRef(null)
-
-  useEffect(() => {
-    if (!catOpen) return
-    const h = (e) => { if (catRef.current && !catRef.current.contains(e.target)) setCatOpen(false) }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [catOpen])
-
-  const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
-
   const TOOLS = [
     { id: 'count', label: 'Számlálás', key: 'C' },
     { id: 'measure', label: 'Mérés', key: 'M' },
@@ -737,36 +725,7 @@ function PdfToolbar({
 
       {/* Category picker */}
       {activeTool === 'count' && (
-        <div ref={catRef} style={{ position: 'relative', marginLeft: 2 }}>
-          <button onClick={() => setCatOpen(!catOpen)} style={{
-            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: `${cat.color}18`, border: `1px solid ${cat.color}40`, color: cat.color,
-          }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color }} />
-            {cat.label} <span style={{ fontSize: 9, opacity: 0.6 }}>▼</span>
-          </button>
-          {catOpen && (
-            <div style={{
-              position: 'absolute', top: '100%', left: 0, marginTop: 4, background: C.bgCard,
-              border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, zIndex: 50, minWidth: 160,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-            }}>
-              {COUNT_CATEGORIES.map(c => (
-                <button key={c.key} onClick={() => { onCategoryChange(c.key); setCatOpen(false) }} style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 10px', borderRadius: 5, cursor: 'pointer',
-                  background: c.key === activeCategory ? `${c.color}15` : 'transparent',
-                  border: 'none', color: c.color, fontSize: 12, fontFamily: 'DM Mono', fontWeight: 600, textAlign: 'left',
-                }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
-                  {c.label}
-                  {c.key === activeCategory && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
       <div style={{ flex: 1 }} />
