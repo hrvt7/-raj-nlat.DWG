@@ -12,6 +12,7 @@ import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuote, generateQuoteId, loadAssemblies } from './data/store.js'
 import { WORK_ITEMS_DEFAULT as WORK_ITEMS_DB, CONTEXT_FACTORS } from './data/workItemsDb.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
+import { COUNT_CATEGORIES } from './components/DxfViewer/DxfToolbar.jsx'
 import { parseDxfFile, parseDxfText } from './dxfParser.js'
 import { extractGeometry, estimateCablesFallback } from './cableAgent.js'
 import SuccessPage from './pages/Success.jsx'
@@ -1870,10 +1871,40 @@ function buildGeometryFromBlocks(reviewData) {
 }
 
 // ─── New Quote Wizard (full) ───────────────────────────────────────────────────
-function NewQuoteWizard({ settings, materials, onSaved, onCancel }) {
-  const [step, setStep] = useState(0)
+// ─── Build reviewData-compatible object from EstimationPanel output ──────────
+function buildReviewDataFromPlan(planData) {
+  const { countByCategory = {}, assignments = {}, cableData = {} } = planData
+
+  // Build blocks: one entry per device category that has markers
+  const blocks = []
+  const blockMappings = {}
+  COUNT_CATEGORIES.forEach(cat => {
+    const count = countByCategory[cat.key] || 0
+    if (count === 0) return
+    blocks.push({ name: cat.label, count })
+    const asgn = assignments[cat.key]
+    if (asgn?.assemblyId) {
+      // Map category label → assemblyId so expandItem() can expand components
+      blockMappings[cat.label] = asgn.assemblyId
+    }
+  })
+
+  // Build cable lengths from estimation
+  const lengths = []
+  const lengthMappings = {}
+  const totalCable = cableData?.totalCable || 0
+  if (totalCable > 0) {
+    lengths.push({ layer: 'NYM-J kábel', length: Math.round(totalCable) })
+    // Leave unmapped so it shows up as a manual line item in PricingStep
+  }
+
+  return { blocks, blockMappings, lengths, lengthMappings, fromPlan: true }
+}
+
+function NewQuoteWizard({ settings, materials, onSaved, onCancel, prefillData = null }) {
+  const [step, setStep] = useState(prefillData ? 3 : 0)
   const [parsedFiles, setParsedFiles] = useState([])
-  const [reviewData, setReviewData] = useState(null)
+  const [reviewData, setReviewData] = useState(() => prefillData ? buildReviewDataFromPlan(prefillData) : null)
   const [cableEstimate, setCableEstimate] = useState(null)
   const [context, setContext] = useState({
     wall_material: 'brick', access: 'empty', project_type: 'renovation', height: 'normal',
@@ -1882,6 +1913,27 @@ function NewQuoteWizard({ settings, materials, onSaved, onCancel }) {
 
   return (
     <div style={{ maxWidth: 780 }}>
+      {/* Info banner when coming from a plan */}
+      {prefillData && (
+        <div style={{
+          background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.25)',
+          borderRadius: 10, padding: '12px 16px', marginBottom: 20,
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <span style={{ fontSize: 18 }}>📐</span>
+          <div>
+            <div style={{ color: C.accent, fontWeight: 700, fontSize: 13, fontFamily: 'Syne' }}>
+              Terv alapú ajánlat
+            </div>
+            <div style={{ color: C.textSub, fontSize: 12, marginTop: 2 }}>
+              {Object.values(prefillData.countByCategory || {}).reduce((s, v) => s + v, 0)} db eszköz és{' '}
+              {Math.round(prefillData.cableData?.totalCable || 0)} m kábel importálva a kalkulációból.
+              Add meg a körülményeket, majd ellenőrizd az árazást.
+            </div>
+          </div>
+        </div>
+      )}
+
       <WizardStepBar step={step} />
       {step === 0 && (
         <UploadStep onParsed={files => { setParsedFiles(files); setStep(1) }} />
@@ -1898,7 +1950,9 @@ function NewQuoteWizard({ settings, materials, onSaved, onCancel }) {
         />
       )}
       {step === 3 && (
-        <ContextStep context={context} onChange={setContext} settings={settings} onNext={() => setStep(4)} onBack={() => setStep(2)} />
+        <ContextStep context={context} onChange={setContext} settings={settings}
+          onNext={() => setStep(4)}
+          onBack={() => prefillData ? onCancel() : setStep(2)} />
       )}
       {step === 4 && (
         <PricingStep reviewData={reviewData} context={context} settings={settings} materials={materials} cableEstimate={cableEstimate}
@@ -2023,6 +2077,7 @@ function SaaSShell() {
   const [materials, setMaterials] = useState(loadMaterials)
   const [quotes, setQuotes] = useState(loadQuotes)
   const [viewingQuote, setViewingQuote] = useState(null)
+  const [prefillData, setPrefillData] = useState(null)
 
   // ── Auth state ─────────────────────────────────────────────────────────────
   const [session, setSession] = useState(null)
@@ -2184,13 +2239,15 @@ function SaaSShell() {
             // (!session) ? <LoginWall /> :
             // (!subStatus.active && subStatus.plan !== 'free') ? <UpgradeWall /> :
             <NewQuoteWizard settings={settings} materials={materials}
-              onSaved={handleQuoteSaved} onCancel={() => setPage('quotes')} />
+              prefillData={prefillData}
+              onSaved={() => { setPrefillData(null); handleQuoteSaved() }}
+              onCancel={() => { setPrefillData(null); setPage('quotes') }} />
           ) : page === 'work-items' ? (
             <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} />
           ) : page === 'materials' ? (
             <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} />
           ) : page === 'plans' ? (
-            <PlansPage onNavigate={p => setPage(p)} />
+            <PlansPage onNavigate={(p, data) => { if (data) setPrefillData(data); setPage(p) }} />
           ) : page === 'assemblies' ? (
             <AssembliesPage />
           ) : page === 'settings' ? (

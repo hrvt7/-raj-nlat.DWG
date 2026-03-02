@@ -141,7 +141,7 @@ export default function Plans({ onNavigate }) {
       <MergePlansView
         plans={plans}
         onClose={() => setMergeMode(false)}
-        onCreateQuote={(data) => { setMergeMode(false); onNavigate?.('new-quote') }}
+        onCreateQuote={(data) => { setMergeMode(false); onNavigate?.('new-quote', data) }}
       />
     )
   }
@@ -181,7 +181,7 @@ export default function Plans({ onNavigate }) {
             <PdfViewerPanel
               file={activeFile}
               planId={activePlan.id}
-              onCreateQuote={(data) => { onNavigate?.('new-quote') }}
+              onCreateQuote={(data) => { onNavigate?.('new-quote', data) }}
               style={{ height: '100%' }}
             />
           ) : (
@@ -190,7 +190,7 @@ export default function Plans({ onNavigate }) {
               unitFactor={activePlan.units?.factor}
               unitName={activePlan.units?.name}
               planId={activePlan.id}
-              onCreateQuote={(data) => { onNavigate?.('new-quote') }}
+              onCreateQuote={(data) => { onNavigate?.('new-quote', data) }}
               style={{ height: '100%' }}
             />
           )}
