@@ -65,6 +65,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
   const [switchHeight, setSwitchHeight] = useState(1.2)
   const [showCableRoutes, setShowCableRoutes] = useState(false)
 
+  // ── Lifted estimation state (persisted with plan annotations) ──
+  const [assignments, setAssignments] = useState({})
+  const [quoteOverrides, setQuoteOverrides] = useState({})
+  const assignmentsRef = useRef({})
+  const quoteOverridesRef = useRef({})
+  useEffect(() => { assignmentsRef.current = assignments }, [assignments])
+  useEffect(() => { quoteOverridesRef.current = quoteOverrides }, [quoteOverrides])
+
   // ── Load saved annotations on mount ──
   useEffect(() => {
     if (!planId) return
@@ -75,6 +83,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
       if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
+      if (ann.assignments && typeof ann.assignments === 'object') {
+        setAssignments(ann.assignments)
+        assignmentsRef.current = ann.assignments
+      }
+      if (ann.quoteOverrides && typeof ann.quoteOverrides === 'object') {
+        setQuoteOverrides(ann.quoteOverrides)
+        quoteOverridesRef.current = ann.quoteOverrides
+      }
     })
   }, [planId])
 
@@ -89,6 +105,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
         ceilingHeight,
         socketHeight,
         switchHeight,
+        assignments: assignmentsRef.current,
+        quoteOverrides: quoteOverridesRef.current,
       })
     }
   }, [planId, ceilingHeight, socketHeight, switchHeight])
@@ -614,6 +632,10 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
             onSocketHeightChange={setSocketHeight}
             onSwitchHeightChange={setSwitchHeight}
             onClose={() => setEstimationOpen(false)}
+            assignments={assignments}
+            onAssignmentsChange={setAssignments}
+            quoteOverrides={quoteOverrides}
+            onQuoteOverridesChange={setQuoteOverrides}
             onCreateQuote={(data) => {
               onCreateQuote?.({ ...data, planId, markers: [...markersRef.current], measurements: [...measuresRef.current], scale })
             }}

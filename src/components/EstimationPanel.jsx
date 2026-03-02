@@ -27,11 +27,13 @@ export default function EstimationPanel({
   cableRoutes = [],
   onClose,
   onCreateQuote,
+  // Lifted state: assignments + quoteOverrides from parent (PdfViewer) for persistence
+  assignments = {},
+  onAssignmentsChange,
+  quoteOverrides = {},
+  onQuoteOverridesChange,
 }) {
   const [tab, setTab] = useState('summary')
-
-  // assignments: { [category]: { assemblyId: string, materialOverride: null|number, laborRateOverride: null|number } }
-  const [assignments, setAssignments] = useState({})
 
   // Load data stores
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
@@ -129,18 +131,18 @@ export default function EstimationPanel({
 
   // ── Assignment handlers ──
   const handleAssign = useCallback((category, assemblyId) => {
-    setAssignments(prev => ({
+    onAssignmentsChange?.(prev => ({
       ...prev,
       [category]: { ...(prev[category] || {}), assemblyId: assemblyId || null },
     }))
-  }, [])
+  }, [onAssignmentsChange])
 
   const handleOverride = useCallback((category, field, value) => {
-    setAssignments(prev => ({
+    onAssignmentsChange?.(prev => ({
       ...prev,
       [category]: { ...(prev[category] || {}), [field]: value },
     }))
-  }, [])
+  }, [onAssignmentsChange])
 
   // ── Cost estimate ──
   const costEstimate = useMemo(() => {
@@ -152,24 +154,26 @@ export default function EstimationPanel({
       const asm = assemblies.find(a => a.id === asgn.assemblyId)
       if (!asm) continue
 
-      const qty         = countByCategory[cat]
-      const matPerUnit  = asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm)
-      const labPerUnit  = getAsmLaborMinutes(asm)
+      const qty        = countByCategory[cat]
+      const ov         = quoteOverrides[cat]
+      const matPerUnit = ov?.matPerUnit != null ? ov.matPerUnit : (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm))
+      const labPerUnit = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm)
 
-      totalMaterial    += matPerUnit * qty
+      totalMaterial     += matPerUnit * qty
       totalLaborMinutes += labPerUnit * qty
     }
 
     // Cable cost: 800 Ft/m default (NYM-J 3×2.5 rough)
     const cableTotal   = cableData?.totalWithWaste ?? 0
-    const cableCost    = cableTotal * 800
+    const cableCostPm  = quoteOverrides._cablePricePerM ?? 800
+    const cableCost    = cableTotal * cableCostPm
     const laborHours   = totalLaborMinutes / 60
-    const laborRate    = 9000 // Ft/óra
+    const laborRate    = quoteOverrides._laborRate ?? 9000
     const laborCost    = laborHours * laborRate
     const grandTotal   = totalMaterial + cableCost + laborCost
 
-    return { materialCost: totalMaterial, cableCost, laborMinutes: totalLaborMinutes, laborHours, laborRate, laborCost, totalCable: cableTotal, grandTotal }
-  }, [assignments, countByCategory, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes])
+    return { materialCost: totalMaterial, cableCost, laborMinutes: totalLaborMinutes, laborHours, laborRate, laborCost, totalCable: cableTotal, grandTotal, cableCostPm }
+  }, [assignments, quoteOverrides, countByCategory, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes])
 
   const TABS = [
     { id: 'summary', label: 'Összesítő' },
@@ -240,6 +244,8 @@ export default function EstimationPanel({
             cableData={cableData}
             getAsmMaterialCost={getAsmMaterialCost}
             getAsmLaborMinutes={getAsmLaborMinutes}
+            quoteOverrides={quoteOverrides}
+            onQuoteOverridesChange={onQuoteOverridesChange}
             onCreateQuote={onCreateQuote}
           />
         )}
@@ -511,17 +517,146 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverr
 
 // ─── Quote/Calculation Tab ──────────────────────────────────────────────────
 
-function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes, onCreateQuote }) {
+function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cableData, getAsmMaterialCost, getAsmLaborMinutes, quoteOverrides, onQuoteOverridesChange, onCreateQuote }) {
   const hasAssignments = Object.values(assignments).some(v => v?.assemblyId)
+
+  const setOverride = (key, value) => {
+    onQuoteOverridesChange?.(prev => ({ ...prev, [key]: value }))
+  }
+
+  const setCatOverride = (catKey, field, value) => {
+    onQuoteOverridesChange?.(prev => ({
+      ...prev,
+      [catKey]: { ...(prev[catKey] || {}), [field]: value },
+    }))
+  }
+
+  const resetCatOverride = (catKey, field) => {
+    onQuoteOverridesChange?.(prev => {
+      const catOv = { ...(prev[catKey] || {}) }
+      delete catOv[field]
+      return { ...prev, [catKey]: catOv }
+    })
+  }
+
+  const cablePricePerM = quoteOverrides._cablePricePerM ?? 800
+  const laborRate      = quoteOverrides._laborRate ?? 9000
 
   return (
     <div>
-      {/* Cost breakdown */}
+      {/* Global rate settings */}
+      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Általános díjak</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Kábel ár (Ft/m)</div>
+            <input
+              type="number" min={0} step={50}
+              value={cablePricePerM}
+              onChange={e => setOverride('_cablePricePerM', parseFloat(e.target.value) || 0)}
+              style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bgCard, border: `1px solid ${quoteOverrides._cablePricePerM != null ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Munkadíj (Ft/óra)</div>
+            <input
+              type="number" min={0} step={500}
+              value={laborRate}
+              onChange={e => setOverride('_laborRate', parseFloat(e.target.value) || 0)}
+              style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bgCard, border: `1px solid ${quoteOverrides._laborRate != null ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Per-category editable prices */}
+      {hasAssignments ? (
+        <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Kategóriánkénti árak</div>
+          {COUNT_CATEGORIES.filter(c => countByCategory[c.key] && assignments[c.key]?.assemblyId).map(c => {
+            const count = countByCategory[c.key]
+            const asgn  = assignments[c.key]
+            const asm   = assemblies.find(a => a.id === asgn.assemblyId)
+            if (!asm) return null
+
+            const defaultMat   = getAsmMaterialCost(asm)
+            const defaultLabor = getAsmLaborMinutes(asm)
+            const ov           = quoteOverrides[c.key] || {}
+            const matPerUnit   = ov.matPerUnit != null ? ov.matPerUnit : defaultMat
+            const laborMin     = ov.laborMin   != null ? ov.laborMin   : defaultLabor
+            const matOverridden = ov.matPerUnit != null
+            const labOverridden = ov.laborMin   != null
+
+            return (
+              <div key={c.key} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
+                {/* Category header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: c.isCableTray ? 2 : '50%', background: c.color }} />
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: c.color, fontWeight: 700 }}>{c.label} × {count}</span>
+                  </div>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{asm.name}</span>
+                </div>
+
+                {/* Price inputs */}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {/* Material cost per unit */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>Anyag (Ft/db)</div>
+                    <div style={{ display: 'flex', gap: 3 }}>
+                      <input
+                        type="number" min={0} step={50}
+                        value={matPerUnit}
+                        onChange={e => setCatOverride(c.key, 'matPerUnit', parseFloat(e.target.value) || 0)}
+                        style={{ flex: 1, padding: '4px 6px', borderRadius: 4, background: C.bgCard, border: `1px solid ${matOverridden ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box', minWidth: 0 }}
+                      />
+                      {matOverridden && (
+                        <button onClick={() => resetCatOverride(c.key, 'matPerUnit')} title="Visszaállítás assembly alapárra" style={{ padding: '2px 5px', borderRadius: 3, background: 'none', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', fontSize: 9, flexShrink: 0 }}>↩</button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Labor minutes per unit */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>Norma (perc/db)</div>
+                    <div style={{ display: 'flex', gap: 3 }}>
+                      <input
+                        type="number" min={0} step={5}
+                        value={laborMin}
+                        onChange={e => setCatOverride(c.key, 'laborMin', parseFloat(e.target.value) || 0)}
+                        style={{ flex: 1, padding: '4px 6px', borderRadius: 4, background: C.bgCard, border: `1px solid ${labOverridden ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box', minWidth: 0 }}
+                      />
+                      {labOverridden && (
+                        <button onClick={() => resetCatOverride(c.key, 'laborMin')} title="Visszaállítás assembly normaórára" style={{ padding: '2px 5px', borderRadius: 3, background: 'none', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', fontSize: 9, flexShrink: 0 }}>↩</button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row total */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                    <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 2 }}>Összesen</div>
+                    <div style={{ padding: '4px 6px', borderRadius: 4, background: 'rgba(0,229,160,0.07)', border: `1px solid rgba(0,229,160,0.18)`, fontSize: 11, fontFamily: 'DM Mono', color: C.accent, fontWeight: 700 }}>
+                      {(matPerUnit * count).toLocaleString('hu-HU')} Ft
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 22, marginBottom: 6 }}>🔗</div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: 'DM Mono' }}>Rendelj assembly-ket az "Assemblyk" fülön az árak automatikus betöltéséhez</div>
+        </div>
+      )}
+
+      {/* Grand total summary */}
       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 12 }}>Költségbecslés</div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 12 }}>Összefoglaló</div>
         <StatRow label="Anyagköltség" value={`${costEstimate.materialCost.toLocaleString('hu-HU')} Ft`} />
-        <StatRow label={`Kábel (${costEstimate.totalCable.toFixed(0)} m × 800 Ft)`} value={`${costEstimate.cableCost.toLocaleString('hu-HU')} Ft`} />
-        <StatRow label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra × ${costEstimate.laborRate.toLocaleString('hu-HU')} Ft)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
+        <StatRow label={`Kábel (${costEstimate.totalCable.toFixed(0)} m × ${cablePricePerM.toLocaleString('hu-HU')} Ft/m)`} value={`${costEstimate.cableCost.toLocaleString('hu-HU')} Ft`} />
+        <StatRow label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra × ${laborRate.toLocaleString('hu-HU')} Ft/óra)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
         <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
           <span style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 800, color: C.accent }}>{costEstimate.grandTotal.toLocaleString('hu-HU')} Ft</span>
@@ -531,32 +666,6 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{(costEstimate.grandTotal * 1.27).toLocaleString('hu-HU')} Ft</span>
         </div>
       </div>
-
-      {/* Per-category cost */}
-      {hasAssignments && (
-        <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Részletes bontás</div>
-          {COUNT_CATEGORIES.filter(c => countByCategory[c.key] && assignments[c.key]?.assemblyId).map(c => {
-            const count = countByCategory[c.key]
-            const asgn  = assignments[c.key]
-            const asm   = assemblies.find(a => a.id === asgn.assemblyId)
-            if (!asm) return null
-            const matPerUnit  = asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm)
-            const laborMin    = asgn.laborMinOverride != null ? asgn.laborMinOverride  : getAsmLaborMinutes(asm)
-            return (
-              <div key={c.key} style={{ padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: c.color }}>{c.label} ({count}×)</span>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 700 }}>{(matPerUnit * count).toLocaleString('hu-HU')} Ft</span>
-                </div>
-                <div style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono', marginTop: 2 }}>
-                  {asm.name} · {matPerUnit.toLocaleString('hu-HU')} Ft/db · {laborMin.toFixed(0)} perc/db
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
 
       {/* Action */}
       <button
@@ -569,12 +678,6 @@ function QuoteTab({ costEstimate, countByCategory, assignments, assemblies, cabl
       >
         Ajánlat létrehozása →
       </button>
-
-      {!hasAssignments && (
-        <div style={{ fontSize: 11, color: C.muted, fontFamily: 'DM Mono', textAlign: 'center', marginTop: 4 }}>
-          Rendelj assembly-ket az "Assemblyk" fülön a pontos kalkulációhoz
-        </div>
-      )}
     </div>
   )
 }
