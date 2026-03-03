@@ -183,6 +183,14 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-001', itemType: 'workitem', name: 'Dugalj 2P+F (alap) szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
+    variants: [
+      { key: 'alap', label: 'Alap 2P+F', isDefault: true, description: 'Standard fehér süllyesztett dugalj' },
+      { key: 'ip44', label: 'IP44 nedves', isDefault: false, description: 'Fürdőszoba, konyha, kültéri', refId: 'ASM-004' },
+      { key: 'dupla', label: 'Dupla (2×2P+F)', isDefault: false, description: 'Kettős dugalj egy keretben', refId: 'ASM-005' },
+      { key: 'cee_16a', label: 'CEE 16A (1F)', isDefault: false, description: 'Ipari egyfázisú', refId: 'ASM-011' },
+      { key: 'cee_32a', label: 'CEE 32A (3F)', isDefault: false, description: 'Ipari háromfázisú', refId: 'ASM-012' },
+    ],
+    tags: ['dugalj', 'szerelvény', 'lakás', 'alap'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -199,6 +207,14 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-004', itemType: 'workitem', name: 'Kapcsoló 1G szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
+    variants: [
+      { key: '1g', label: '1 gangos', isDefault: true, description: 'Egygangos nyomókapcsoló' },
+      { key: '2g', label: '2 gangos', isDefault: false, description: 'Kétgangos (2 kör)', refId: 'ASM-006' },
+      { key: 'valto', label: 'Váltó (2 helyes)', isDefault: false, description: '2 helyes kapcsolás', refId: 'ASM-007' },
+      { key: 'mozgas', label: 'Mozgásérzékelős', isDefault: false, description: 'PIR szenzoros', refId: 'ASM-008' },
+      { key: 'termostat', label: 'Termosztát', isDefault: false, description: 'Digitális programozható', refId: 'ASM-010' },
+    ],
+    tags: ['kapcsoló', 'szerelvény', 'lakás'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -215,6 +231,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-002', itemType: 'workitem', name: 'Dugalj 2P+F IP44 szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
+    variantOf: 'ASM-001',
+    tags: ['dugalj', 'IP44', 'nedves'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -231,6 +249,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 3, sortOrder: 4 },
       { itemCode: 'SZE-001', itemType: 'workitem', name: 'Dugalj 2P+F szerelése', unit: 'db', qty: 2, sortOrder: 5 },
     ],
+    variantOf: 'ASM-001',
+    tags: ['dugalj', 'dupla', 'keret'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -247,6 +267,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 3, sortOrder: 4 },
       { itemCode: 'SZE-005', itemType: 'workitem', name: 'Kapcsoló 2G szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
+    variantOf: 'ASM-002',
+    tags: ['kapcsoló', '2G', 'dupla'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -263,6 +285,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 4, sortOrder: 4 },
       { itemCode: 'SZE-006', itemType: 'workitem', name: 'Váltókapcsoló szerelése', unit: 'db', qty: 2, sortOrder: 5 },
     ],
+    variantOf: 'ASM-002',
+    tags: ['kapcsoló', 'váltó', 'lépcsőház'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -279,6 +303,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-008', itemType: 'workitem', name: 'Mozgásérzékelő szerelése+beállítása', unit: 'db', qty: 1, sortOrder: 5 },
     ],
+    variantOf: 'ASM-002',
+    tags: ['kapcsoló', 'mozgásérzékelő', 'PIR'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -295,6 +321,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 4 },
       { itemCode: 'SZE-009', itemType: 'workitem', name: 'Csengő/ajtóhívó szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
+    tags: ['csengő', 'ajtóhívó', 'bejárat'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -310,6 +337,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 3 },
       { itemCode: 'SZE-007', itemType: 'workitem', name: 'Termosztát bekötés+programozás', unit: 'db', qty: 1, sortOrder: 4 },
     ],
+    variantOf: 'ASM-002',
+    tags: ['termosztát', 'fűtés', 'hőszabályozás'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -325,6 +354,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-004', itemType: 'material', name: 'Kötődoboz 100×100mm', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'SZE-003', itemType: 'workitem', name: 'Ipari dugalj szerelése', unit: 'db', qty: 1, sortOrder: 4 },
     ],
+    variantOf: 'ASM-001',
+    tags: ['dugalj', 'CEE', 'ipari', '16A'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -340,6 +371,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-004', itemType: 'material', name: 'Kötődoboz 100×100mm', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'SZE-003', itemType: 'workitem', name: 'Ipari dugalj szerelése', unit: 'db', qty: 1, sortOrder: 4 },
     ],
+    variantOf: 'ASM-001',
+    tags: ['dugalj', 'CEE', 'ipari', '32A', '3F'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -358,6 +391,15 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 3, sortOrder: 2 },
       { itemCode: 'VIL-001', itemType: 'workitem', name: 'Lámpatest mennyezeti bekötése', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    variants: [
+      { key: 'mennyezeti', label: 'Mennyezeti', isDefault: true, description: 'Mennyezeti lámpatest bekötés' },
+      { key: 'sullyesztett', label: 'Süllyesztett', isDefault: false, description: 'GK downlight', refId: 'ASM-013' },
+      { key: 'fali', label: 'Fali', isDefault: false, description: 'Fali lámpatest', refId: 'ASM-014' },
+      { key: 'led_szalag', label: 'LED szalag (5m)', isDefault: false, description: 'LED szalag rendszer', refId: 'ASM-015' },
+      { key: 'vesz', label: 'Vészvilágítás', isDefault: false, description: 'Vészvilágítás egység', refId: 'ASM-016' },
+      { key: 'kulteri', label: 'Kültéri reflektor', isDefault: false, description: 'IP44 reflektor', refId: 'ASM-017' },
+    ],
+    tags: ['lámpa', 'világítás', 'bekötés'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -371,6 +413,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 1 },
       { itemCode: 'VIL-002', itemType: 'workitem', name: 'Lámpatest süllyesztett (GK) szerelése', unit: 'db', qty: 1, sortOrder: 2 },
     ],
+    variantOf: 'ASM-003',
+    tags: ['lámpa', 'downlight', 'süllyesztett'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -385,6 +429,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 2 },
       { itemCode: 'VIL-003', itemType: 'workitem', name: 'Lámpatest fali bekötése', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    variantOf: 'ASM-003',
+    tags: ['lámpa', 'fali', 'folyosó'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -401,6 +447,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-003', itemType: 'material', name: 'Kötődoboz 80×80mm', unit: 'db', qty: 1, sortOrder: 4 },
       { itemCode: 'VIL-005', itemType: 'workitem', name: 'LED szalag felszerelése', unit: 'm', qty: 5, sortOrder: 5 },
     ],
+    variantOf: 'ASM-003',
+    tags: ['LED', 'szalag', 'rejtett'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -415,6 +463,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 2 },
       { itemCode: 'VIL-006', itemType: 'workitem', name: 'Vészvilágítás rögzítés+bekötés+teszt', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    variantOf: 'ASM-003',
+    tags: ['vészvilágítás', 'biztonság'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -430,6 +480,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 3 },
       { itemCode: 'VIL-004', itemType: 'workitem', name: 'Reflektor (kültéri/ipari) szerelése', unit: 'db', qty: 1, sortOrder: 4 },
     ],
+    variantOf: 'ASM-003',
+    tags: ['reflektor', 'kültéri', 'IP44'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -453,6 +505,12 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-002', itemType: 'workitem', name: 'FI-relé beépítés', unit: 'db', qty: 1, sortOrder: 7 },
       { itemCode: 'ELO-001', itemType: 'workitem', name: 'Kismegszakító beépítés', unit: 'db', qty: 4, sortOrder: 8 },
     ],
+    variants: [
+      { key: '12m', label: '12M (4 kör)', isDefault: true, description: 'Kisebb lakásrész' },
+      { key: '24m', label: '24M (8 kör)', isDefault: false, description: 'Kisebb lakás teljes', refId: 'ASM-019' },
+      { key: '36m', label: '36M+ (12 kör)', isDefault: false, description: 'Nagyobb lakás / iroda', refId: 'ASM-020' },
+    ],
+    tags: ['elosztó', 'tábla', 'védelem'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -473,6 +531,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-002', itemType: 'workitem', name: 'FI-relé beépítés', unit: 'db', qty: 2, sortOrder: 8 },
       { itemCode: 'ELO-001', itemType: 'workitem', name: 'Kismegszakító beépítés', unit: 'db', qty: 8, sortOrder: 9 },
     ],
+    variantOf: 'ASM-018',
+    tags: ['elosztó', '24M', 'lakás'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -494,6 +554,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-002', itemType: 'workitem', name: 'FI-relé beépítés', unit: 'db', qty: 3, sortOrder: 9 },
       { itemCode: 'ELO-001', itemType: 'workitem', name: 'Kismegszakító beépítés', unit: 'db', qty: 12, sortOrder: 10 },
     ],
+    variantOf: 'ASM-018',
+    tags: ['elosztó', '36M', 'nagy'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -508,6 +570,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-001', itemType: 'workitem', name: 'Kismegszakító beépítés', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'ELO-006', itemType: 'workitem', name: 'Táblán belüli kábel bekötés', unit: 'db', qty: 2, sortOrder: 3 },
     ],
+    tags: ['bővítés', 'MCB', 'elosztó'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -522,6 +585,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-002', itemType: 'workitem', name: 'FI-relé beépítés', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'ELO-006', itemType: 'workitem', name: 'Táblán belüli kábel bekötés', unit: 'db', qty: 4, sortOrder: 3 },
     ],
+    tags: ['FI-relé', 'bővítés', 'RCD'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -541,6 +605,12 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-084', itemType: 'material', name: 'Rugós bilincs 20mm', unit: 'db', qty: 20, sortOrder: 3 },
       { itemCode: 'TAL-001', itemType: 'workitem', name: 'Kábeltálca 100×60 szerelése', unit: 'm', qty: 10, sortOrder: 4 },
     ],
+    variants: [
+      { key: '100mm', label: '100mm', isDefault: true, description: 'Irodai / könnyű' },
+      { key: '200mm', label: '200mm', isDefault: false, description: 'Szerver terem / gépészet', refId: 'ASM-024' },
+      { key: '300mm', label: '300mm', isDefault: false, description: 'Ipari / fő ágak', refId: 'ASM-025' },
+    ],
+    tags: ['kábeltálca', 'ipari', 'tálca'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -556,6 +626,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-084', itemType: 'material', name: 'Rugós bilincs 20mm', unit: 'db', qty: 25, sortOrder: 3 },
       { itemCode: 'TAL-002', itemType: 'workitem', name: 'Kábeltálca 200×60 szerelése', unit: 'm', qty: 10, sortOrder: 4 },
     ],
+    variantOf: 'ASM-023',
+    tags: ['kábeltálca', '200mm', 'szerver'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -571,6 +643,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-084', itemType: 'material', name: 'Rugós bilincs 20mm', unit: 'db', qty: 30, sortOrder: 3 },
       { itemCode: 'TAL-003', itemType: 'workitem', name: 'Kábeltálca 300×60 szerelése', unit: 'm', qty: 10, sortOrder: 4 },
     ],
+    variantOf: 'ASM-023',
+    tags: ['kábeltálca', '300mm', 'ipari'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -590,6 +664,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-074', itemType: 'material', name: 'Adatkábel Cat6 UTP', unit: 'm', qty: 0.3, sortOrder: 3 },
       { itemCode: 'GYE-002', itemType: 'workitem', name: 'Adataljzat RJ45 szerelés+patchelés', unit: 'db', qty: 1, sortOrder: 4 },
     ],
+    tags: ['adataljzat', 'RJ45', 'Cat6'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -604,6 +679,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'GYE-004', itemType: 'workitem', name: 'TV aljzat szerelése', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    tags: ['TV', 'koax', 'antenna'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -618,6 +694,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 2 },
       { itemCode: 'GYE-006', itemType: 'workitem', name: 'Füstérzékelő rögzítés+bekötés', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    tags: ['füstérzékelő', 'tűzvédelem'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -632,6 +709,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'GYE-005', itemType: 'workitem', name: 'Kaputelefon egység szerelése+tesztelése', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    tags: ['kaputelefon', 'beléptetés'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -654,6 +732,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'SZE-003', itemType: 'workitem', name: 'Ipari dugalj szerelése', unit: 'db', qty: 1, sortOrder: 6 },
       { itemCode: 'ELO-001', itemType: 'workitem', name: 'Kismegszakító beépítés', unit: 'db', qty: 1, sortOrder: 7 },
     ],
+    tags: ['tűzhely', '3F', 'CEE'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -671,6 +750,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-001', itemType: 'workitem', name: 'Kismegszakító beépítés', unit: 'db', qty: 1, sortOrder: 5 },
       { itemCode: 'KOT-003', itemType: 'workitem', name: 'Kötődoboz bekötés', unit: 'db', qty: 1, sortOrder: 6 },
     ],
+    tags: ['bojler', 'vízmelegítő', 'dedikált'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -689,6 +769,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-001', itemType: 'workitem', name: 'Kismegszakító beépítés', unit: 'db', qty: 1, sortOrder: 6 },
       { itemCode: 'KOT-001', itemType: 'workitem', name: 'Kábelvégkészítés (1.5–4)', unit: 'db', qty: 4, sortOrder: 7 },
     ],
+    tags: ['klíma', 'légkondicionáló'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -710,6 +791,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'SZE-001', itemType: 'workitem', name: 'Dugalj 2P+F szerelése', unit: 'db', qty: 5, sortOrder: 5 },
       { itemCode: 'KOT-003', itemType: 'workitem', name: 'Kötődoboz bekötés (2 ér)', unit: 'db', qty: 4, sortOrder: 6 },
     ],
+    tags: ['dugaljkör', 'tipikus', '5db'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -728,6 +810,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'SZE-004', itemType: 'workitem', name: 'Kapcsoló 1G szerelése', unit: 'db', qty: 1, sortOrder: 6 },
       { itemCode: 'KOT-003', itemType: 'workitem', name: 'Kötődoboz bekötés (2 ér)', unit: 'db', qty: 3, sortOrder: 7 },
     ],
+    tags: ['fénykör', 'tipikus', 'lámpa'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -746,6 +829,11 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MER-003', itemType: 'workitem', name: 'FI érzékenységi mérés', unit: 'db', qty: 3, sortOrder: 2 },
       { itemCode: 'MER-004', itemType: 'workitem', name: 'Mérési dokumentáció (jkv.)', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    variants: [
+      { key: 'kis', label: 'Kis (10 kör)', isDefault: true, description: 'Érintésvédelem 10 körig' },
+      { key: 'nagy', label: 'Nagy (25 kör + átadás)', isDefault: false, description: 'Teljes átadási csomag', refId: 'ASM-036' },
+    ],
+    tags: ['mérés', 'érintésvédelem', 'dokumentáció'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -760,6 +848,8 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MER-003', itemType: 'workitem', name: 'FI érzékenységi mérés', unit: 'db', qty: 6, sortOrder: 2 },
       { itemCode: 'MER-004', itemType: 'workitem', name: 'Mérési dokumentáció + átadási jkv.', unit: 'db', qty: 1, sortOrder: 3 },
     ],
+    variantOf: 'ASM-035',
+    tags: ['mérés', 'átadás', 'nagy'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
@@ -810,4 +900,92 @@ export const CONTEXT_FACTORS = {
       { key: 'scaffold',  label: 'Állvány (4m+)',   factor: 1.7,  icon: '🔴' },
     ]
   }
+}
+
+// ─── Variant System helpers ──────────────────────────────────────────────────
+// Enterprise-level assembly variant management
+
+/**
+ * Get active components for an assembly considering variant selection
+ * @param {Object} assembly - The assembly object
+ * @param {string} [variantKey] - Optional variant key; if omitted uses default
+ * @returns {Array} components array
+ */
+export function getAssemblyComponents(assembly, variantKey) {
+  if (!assembly.variants || assembly.variants.length === 0) {
+    return assembly.components || []
+  }
+  if (variantKey) {
+    const variant = assembly.variants.find(v => v.key === variantKey)
+    if (variant) return variant.components
+  }
+  // Return default variant or first
+  const def = assembly.variants.find(v => v.isDefault) || assembly.variants[0]
+  return def ? def.components : (assembly.components || [])
+}
+
+/**
+ * Check assembly completeness (has both materials and workitems)
+ */
+export function getAssemblyCompleteness(assembly) {
+  const comps = assembly.components || []
+  const hasMaterials = comps.some(c => c.itemType === 'material')
+  const hasWorkitems = comps.some(c => c.itemType === 'workitem')
+  const hasName = !!assembly.name?.trim()
+  const hasDescription = !!assembly.description?.trim()
+  const hasCategory = !!assembly.category
+
+  const checks = [
+    { key: 'name', label: 'Név megadva', ok: hasName },
+    { key: 'description', label: 'Leírás megadva', ok: hasDescription },
+    { key: 'category', label: 'Kategória beállítva', ok: hasCategory },
+    { key: 'materials', label: 'Anyagok hozzáadva', ok: hasMaterials },
+    { key: 'workitems', label: 'Munkatételek hozzáadva', ok: hasWorkitems },
+    { key: 'components', label: 'Min. 2 komponens', ok: comps.length >= 2 },
+  ]
+  const score = checks.filter(c => c.ok).length
+  const total = checks.length
+  return { checks, score, total, percent: Math.round((score / total) * 100) }
+}
+
+/**
+ * Assembly variant group definitions - maps which assemblies are related
+ */
+export const ASSEMBLY_VARIANT_GROUPS = {
+  dugalj: {
+    label: 'Dugalj variánsok',
+    description: 'Dugalj típusok: alap, IP44, dupla, ipari',
+    parentId: 'ASM-001',
+    variantIds: ['ASM-001', 'ASM-004', 'ASM-005', 'ASM-011', 'ASM-012'],
+  },
+  kapcsolo: {
+    label: 'Kapcsoló variánsok',
+    description: 'Kapcsoló típusok: 1G, 2G, váltó, mozgásérzékelős, termosztát',
+    parentId: 'ASM-002',
+    variantIds: ['ASM-002', 'ASM-006', 'ASM-007', 'ASM-008', 'ASM-010'],
+  },
+  lampatest: {
+    label: 'Lámpatest variánsok',
+    description: 'Lámpatest bekötés típusok: mennyezeti, süllyesztett, fali, LED, vész, kültéri',
+    parentId: 'ASM-003',
+    variantIds: ['ASM-003', 'ASM-013', 'ASM-014', 'ASM-015', 'ASM-016', 'ASM-017'],
+  },
+  eloszto: {
+    label: 'Elosztó tábla variánsok',
+    description: 'Elosztó tábla méretek: 12M, 24M, 36M+',
+    parentId: 'ASM-018',
+    variantIds: ['ASM-018', 'ASM-019', 'ASM-020'],
+  },
+  kabeltalca: {
+    label: 'Kábeltálca variánsok',
+    description: 'Kábeltálca szélességek: 100mm, 200mm, 300mm',
+    parentId: 'ASM-023',
+    variantIds: ['ASM-023', 'ASM-024', 'ASM-025'],
+  },
+  meres: {
+    label: 'Mérési csomag variánsok',
+    description: 'Mérési csomagok: kis (10 kör), nagy (25 kör)',
+    parentId: 'ASM-035',
+    variantIds: ['ASM-035', 'ASM-036'],
+  },
 }

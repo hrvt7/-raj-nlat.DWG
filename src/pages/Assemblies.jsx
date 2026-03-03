@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
-import { WORK_ITEM_CATEGORIES, generateAssemblyId } from '../data/workItemsDb.js'
-import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings } from '../data/store.js'
+import { WORK_ITEM_CATEGORIES, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId, getAssemblyCompleteness, getAssemblyComponents } from '../data/workItemsDb.js'
+import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount, trackAsmUsage } from '../data/store.js'
 
 // ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
 
@@ -10,6 +10,10 @@ export default function AssembliesPage() {
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('all')
+  const [hideVariants, setHideVariants] = useState(true) // Hide child variants by default
+  const [tagFilter, setTagFilter] = useState(null)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiHistory, setAiHistory] = useState([])
 
   const selected = assemblies.find(a => a.id === selectedId) || null
 
@@ -18,12 +22,31 @@ export default function AssembliesPage() {
     saveAssemblies(updated)
   }, [])
 
-  const filtered = assemblies.filter(a => {
+  const filtered = useMemo(() => assemblies.filter(a => {
     const matchCat = catFilter === 'all' || a.category === catFilter
     const matchSearch = !search || a.name.toLowerCase().includes(search.toLowerCase()) ||
-      a.description?.toLowerCase().includes(search.toLowerCase())
-    return matchCat && matchSearch
-  })
+      a.description?.toLowerCase().includes(search.toLowerCase()) ||
+      a.tags?.some(t => t.toLowerCase().includes(search.toLowerCase()))
+    const matchVariant = !hideVariants || !a.variantOf
+    const matchTag = !tagFilter || a.tags?.includes(tagFilter)
+    return matchCat && matchSearch && matchVariant && matchTag
+  }), [assemblies, catFilter, search, hideVariants, tagFilter])
+
+  // Collect all unique tags
+  const allTags = useMemo(() => {
+    const tags = new Set()
+    assemblies.forEach(a => a.tags?.forEach(t => tags.add(t)))
+    return [...tags].sort()
+  }, [assemblies])
+
+  // AI chat handler
+  const handleAiSubmit = () => {
+    if (!aiPrompt.trim()) return
+    setAiHistory(prev => [...prev, { role: 'user', text: aiPrompt, ts: Date.now() }])
+    // TODO: AI logic integration
+    setAiHistory(prev => [...prev, { role: 'ai', text: 'AI Assembly Builder hamarosan elérhető...', ts: Date.now() }])
+    setAiPrompt('')
+  }
 
   const handleCreate = () => {
     const id = generateAssemblyId(assemblies)
@@ -80,6 +103,38 @@ export default function AssembliesPage() {
         <Button size="sm" onClick={handleCreate} icon="＋">Új assembly</Button>
       </div>
 
+      {/* AI Assembly Builder */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(0,229,160,0.06) 0%, rgba(56,189,248,0.06) 100%)',
+        border: `1px solid rgba(0,229,160,0.15)`,
+        borderRadius: 12, padding: '12px 16px', marginBottom: 16,
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>✦</span>
+        <input
+          value={aiPrompt}
+          onChange={e => setAiPrompt(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleAiSubmit() }}
+          placeholder="Assembly építése AI-val... pl. 'Hozz létre egy 3 fázisú ipari dugalj csomagot'"
+          style={{
+            flex: 1, background: 'transparent', border: 'none',
+            fontFamily: 'DM Mono', fontSize: 12, color: C.text, outline: 'none',
+          }}
+        />
+        <button
+          onClick={handleAiSubmit}
+          disabled={!aiPrompt.trim()}
+          style={{
+            padding: '6px 14px', borderRadius: 8, cursor: aiPrompt.trim() ? 'pointer' : 'default',
+            background: aiPrompt.trim() ? C.accent : C.bgHover,
+            border: 'none', color: aiPrompt.trim() ? '#09090B' : C.textMuted,
+            fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
+            opacity: aiPrompt.trim() ? 1 : 0.5,
+            transition: 'all 0.15s',
+          }}
+        >Generálás</button>
+      </div>
+
       {/* Search + Filter */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 200px', maxWidth: 300 }}>
@@ -91,6 +146,19 @@ export default function AssembliesPage() {
             <FilterChip key={c.key} label={c.label} active={catFilter === c.key}
               onClick={() => setCatFilter(c.key)} />
           ))}
+        </div>
+
+        {/* Variant toggle + tag filter */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+          <button onClick={() => setHideVariants(!hideVariants)} style={{
+            padding: '4px 10px', borderRadius: 14, cursor: 'pointer', fontSize: 10,
+            fontFamily: 'Syne', fontWeight: 700,
+            background: hideVariants ? C.accentDim : C.bgCard,
+            color: hideVariants ? C.accent : C.textSub,
+            border: `1px solid ${hideVariants ? C.accentBorder : C.border}`,
+          }}>
+            {hideVariants ? '◆ Csoportosított' : '◇ Összes variáns'}
+          </button>
         </div>
       </div>
 
@@ -171,6 +239,12 @@ function AssemblyGridCard({ assembly, onClick }) {
   const displayPrice = assembly.priceOverride != null ? assembly.priceOverride : pricing.total
   const [hovered, setHovered] = useState(false)
 
+  // Completeness and usage data
+  const completeness = getAssemblyCompleteness(assembly)
+  const usageCount = getAssemblyUsageCount(assembly.id)
+  const variantCount = (assembly.variants || []).length
+  const hasVariants = variantCount > 0
+
   return (
     <div
       onClick={onClick}
@@ -183,8 +257,21 @@ function AssemblyGridCard({ assembly, onClick }) {
         transition: 'all 0.18s',
         transform: hovered ? 'translateY(-2px)' : 'none',
         boxShadow: hovered ? '0 8px 32px rgba(0,0,0,0.35)' : 'none',
+        position: 'relative',
       }}
     >
+      {/* Variant badge */}
+      {hasVariants && (
+        <div style={{
+          position: 'absolute', top: 10, right: 10,
+          background: 'rgba(56,189,248,0.15)', border: `1px solid ${C.blue}25`,
+          borderRadius: 12, padding: '2px 8px', fontSize: 9,
+          fontFamily: 'Syne', fontWeight: 700, color: C.blue,
+        }}>
+          {variantCount} variáns
+        </div>
+      )}
+
       {/* Category badge + ID */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         {cat ? (
@@ -206,12 +293,59 @@ function AssemblyGridCard({ assembly, onClick }) {
       {/* Description */}
       {assembly.description && (
         <div style={{
-          fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, marginBottom: 14,
+          fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, marginBottom: 12,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {assembly.description}
         </div>
       )}
+
+      {/* Tags */}
+      {assembly.tags && assembly.tags.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
+          {assembly.tags.slice(0, 3).map(tag => (
+            <span key={tag} style={{
+              background: 'rgba(56,189,248,0.1)', border: `1px solid ${C.blue}25`,
+              borderRadius: 10, padding: '2px 8px', fontSize: 9, color: C.blue,
+              fontFamily: 'DM Mono',
+            }}>
+              {tag}
+            </span>
+          ))}
+          {assembly.tags.length > 3 && (
+            <span style={{
+              background: C.bgHover, border: `1px solid ${C.border}`,
+              borderRadius: 10, padding: '2px 8px', fontSize: 9, color: C.textMuted,
+              fontFamily: 'DM Mono',
+            }}>
+              +{assembly.tags.length - 3}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Completeness progress bar */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 4,
+        }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase' }}>
+            Kész
+          </span>
+          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 11, color: C.accent }}>
+            {Math.round(completeness * 100)}%
+          </span>
+        </div>
+        <div style={{
+          height: 4, background: C.bgHover, borderRadius: 2, overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%', background: C.accent,
+            width: `${completeness * 100}%`, transition: 'width 0.2s',
+          }} />
+        </div>
+      </div>
 
       {/* Price */}
       <div style={{
@@ -231,21 +365,21 @@ function AssemblyGridCard({ assembly, onClick }) {
       <div style={{ height: 1, background: C.border, marginBottom: 12 }} />
 
       {/* Stats row */}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 11, fontFamily: 'DM Mono' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
           </svg>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{materialComps.length} anyag</span>
+          <span style={{ color: C.textSub }}>{materialComps.length}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2.5" strokeLinecap="round">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{workItemComps.length} munka</span>
+          <span style={{ color: C.textSub }}>{workItemComps.length}</span>
         </div>
-        <div style={{ marginLeft: 'auto', fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent }}>
-          {compCount} elem
+        <div style={{ marginLeft: 'auto', color: C.textMuted }}>
+          {usageCount} felhasználás
         </div>
       </div>
     </div>
@@ -945,6 +1079,35 @@ function MenuBtn({ label, onClick, danger }) {
         color: danger ? C.red : C.text, fontFamily: 'DM Mono', fontSize: 12,
         textAlign: 'left',
       }}>{label}</button>
+  )
+}
+
+function CompletenessBar({ assembly, label = 'Kész' }) {
+  const completeness = getAssemblyCompleteness(assembly)
+  const percent = Math.round(completeness * 100)
+
+  return (
+    <div>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 6,
+      }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, textTransform: 'uppercase' }}>
+          {label}
+        </span>
+        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.accent }}>
+          {percent}%
+        </span>
+      </div>
+      <div style={{
+        height: 6, background: C.bgHover, borderRadius: 3, overflow: 'hidden',
+      }}>
+        <div style={{
+          height: '100%', background: C.accent,
+          width: `${percent}%`, transition: 'width 0.3s ease-out',
+        }} />
+      </div>
+    </div>
   )
 }
 

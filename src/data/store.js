@@ -2,7 +2,7 @@
 // localStorage-alapú beállítás kezelés
 // Minden céges adat itt tárolódik
 
-import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT, generateAssemblyId } from './workItemsDb.js'
+import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId } from './workItemsDb.js'
 
 const LS_KEYS = {
   SETTINGS:   'takeoffpro_settings',
@@ -10,6 +10,8 @@ const LS_KEYS = {
   ASSEMBLIES: 'takeoffpro_assemblies',
   MATERIALS:  'takeoffpro_materials',
   QUOTES:     'takeoffpro_quotes',
+  TEMPLATES:  'takeoffpro_templates',
+  ASM_STATS:  'takeoffpro_asm_stats',
 }
 
 // ─── Default settings ────────────────────────────────────────────────────────
@@ -215,15 +217,41 @@ export function loadAssemblies() {
   const stored = load(LS_KEYS.ASSEMBLIES, null)
   // Ha még nincs semmi mentve → adjuk vissza az összes alapértelmezett assembly-t
   if (!stored) return ASSEMBLIES_DEFAULT
-  // Migráció: ha meglévő felhasználónak hiányoznak az újabb alapértelmezett
-  // assembly-k (pl. ASM-018..ASM-036), hozzáfűzzük a hiányzókat a listájához
+
+  let needsSave = false
+  const defaultMap = new Map(ASSEMBLIES_DEFAULT.map(a => [a.id, a]))
+
+  // 1) Migráció: hiányzó assembly-k hozzáadása
   const storedIds = new Set(stored.map(a => a.id))
   const missing = ASSEMBLIES_DEFAULT.filter(a => !storedIds.has(a.id))
   if (missing.length > 0) {
-    const merged = [...stored, ...missing]
-    save(LS_KEYS.ASSEMBLIES, merged)
-    return merged
+    stored.push(...missing)
+    missing.forEach(a => storedIds.add(a.id))
+    needsSave = true
   }
+
+  // 2) Variáns/tags migráció: meglévő assembly-khez hozzáadjuk az új mezőket
+  for (const asm of stored) {
+    const def = defaultMap.get(asm.id)
+    if (!def) continue
+    // Tags migráció
+    if (!asm.tags && def.tags) {
+      asm.tags = [...def.tags]
+      needsSave = true
+    }
+    // Variáns migráció
+    if (!asm.variants && def.variants) {
+      asm.variants = JSON.parse(JSON.stringify(def.variants))
+      needsSave = true
+    }
+    // variantOf migráció
+    if (!asm.variantOf && def.variantOf) {
+      asm.variantOf = def.variantOf
+      needsSave = true
+    }
+  }
+
+  if (needsSave) save(LS_KEYS.ASSEMBLIES, stored)
   return stored
 }
 export function saveAssemblies(assemblies) {
@@ -262,4 +290,101 @@ export function generateQuoteId() {
   const yearQuotes = quotes.filter(q => q.id?.startsWith(`QT-${year}`))
   const num = String(yearQuotes.length + 1).padStart(3, '0')
   return `QT-${year}-${num}`
+}
+
+// ─── Project Template System ──────────────────────────────────────────────────
+// Teljes projekt sablon: assembly konfiguráció snapshot mentés/visszaállítás
+
+export function loadTemplates() {
+  return load(LS_KEYS.TEMPLATES, [])
+}
+
+export function saveTemplate(template) {
+  const templates = loadTemplates()
+  const now = new Date().toISOString()
+  const existing = templates.findIndex(t => t.id === template.id)
+
+  if (existing >= 0) {
+    templates[existing] = { ...template, updatedAt: now }
+  } else {
+    templates.unshift({
+      id: template.id || `TPL-${Date.now()}`,
+      name: template.name,
+      description: template.description || '',
+      category: template.category || 'general', // residential, commercial, industrial
+      assemblies: template.assemblies, // assembly id lista + quantity + variantKey
+      settings: template.settings || {}, // context defaults, labor overrides
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+  save(LS_KEYS.TEMPLATES, templates)
+  return templates[existing >= 0 ? existing : 0]
+}
+
+export function deleteTemplate(templateId) {
+  const templates = loadTemplates().filter(t => t.id !== templateId)
+  save(LS_KEYS.TEMPLATES, templates)
+  return templates
+}
+
+export function createTemplateFromQuote(quote, name) {
+  // Árajánlatból sablon generálás – a hozzárendelt assembly-ket snapshotolja
+  const assemblies = (quote.rooms || []).flatMap(room =>
+    (room.items || []).map(item => ({
+      assemblyId: item.assemblyId,
+      variantKey: item.variantKey || null,
+      quantity: item.quantity || 1,
+      roomType: room.name || '',
+    }))
+  )
+  return saveTemplate({
+    name: name || `${quote.client_name || 'Projekt'} sablon`,
+    description: `Generálva: ${quote.id || 'ismeretlen'} árajánlatból`,
+    category: quote.project_type || 'general',
+    assemblies,
+    settings: {
+      context: quote.context || {},
+    },
+  })
+}
+
+// ─── Assembly Statistics ──────────────────────────────────────────────────────
+// Használati statisztika: melyik assembly-t hányszor rendelték hozzá
+
+export function loadAsmStats() {
+  return load(LS_KEYS.ASM_STATS, {})
+}
+
+export function trackAsmUsage(assemblyId, variantKey = null) {
+  const stats = loadAsmStats()
+  const key = variantKey ? `${assemblyId}::${variantKey}` : assemblyId
+
+  if (!stats[key]) {
+    stats[key] = { count: 0, lastUsed: null, firstUsed: new Date().toISOString() }
+  }
+  stats[key].count += 1
+  stats[key].lastUsed = new Date().toISOString()
+
+  save(LS_KEYS.ASM_STATS, stats)
+  return stats[key]
+}
+
+export function getTopAssemblies(limit = 10) {
+  const stats = loadAsmStats()
+  return Object.entries(stats)
+    .map(([key, data]) => {
+      const [assemblyId, variantKey] = key.split('::')
+      return { assemblyId, variantKey: variantKey || null, ...data }
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+}
+
+export function getAssemblyUsageCount(assemblyId) {
+  const stats = loadAsmStats()
+  // Összesíti az assembly összes variánsának használatát
+  return Object.entries(stats)
+    .filter(([key]) => key === assemblyId || key.startsWith(`${assemblyId}::`))
+    .reduce((sum, [, data]) => sum + data.count, 0)
 }

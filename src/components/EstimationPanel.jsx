@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { COUNT_CATEGORIES, CABLE_TRAY_COLOR } from './DxfViewer/DxfToolbar.jsx'
-import { loadAssemblies, loadMaterials, loadWorkItems, loadSettings } from '../data/store.js'
+import { loadAssemblies, loadMaterials, loadWorkItems, loadSettings, trackAsmUsage } from '../data/store.js'
+import { getAssemblyComponents } from '../data/workItemsDb.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -735,6 +736,33 @@ function AssignTab({ countByCategory, assemblies, assignments, onAssign, onOverr
                 </optgroup>
               )}
             </select>
+
+            {/* Variant picker — when selected assembly has variants */}
+            {selectedAsm?.variants?.length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>
+                  Variáns ({selectedAsm.variants.length} opció)
+                </div>
+                <select
+                  value={asgn.variantKey || selectedAsm.variants.find(v => v.isDefault)?.key || ''}
+                  onChange={e => {
+                    onOverride(c.key, 'variantKey', e.target.value || null)
+                    trackAsmUsage(selectedId, e.target.value)
+                  }}
+                  style={{
+                    width: '100%', padding: '6px 10px', borderRadius: 6, background: C.bgCard,
+                    border: `1px solid rgba(56,189,248,0.3)`,
+                    color: C.text, fontSize: 11, fontFamily: 'DM Mono',
+                  }}
+                >
+                  {selectedAsm.variants.map(v => (
+                    <option key={v.key} value={v.key}>
+                      {v.isDefault ? '★ ' : ''}{v.label} — {v.description || ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Empty assembly warning (when suggestion is exhausted or not found) */}
             {isEmpty && !suggestion && (
