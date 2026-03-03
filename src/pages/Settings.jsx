@@ -1,13 +1,15 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, Input, SectionHeader } from '../components/ui.jsx'
 import { saveSettings, saveMaterials, DEFAULT_MATERIALS } from '../data/store.js'
+import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 
 const TABS = [
-  { key: 'company',   label: 'Cégadatok' },
-  { key: 'labor',     label: '⏱ Óradíjak' },
-  { key: 'materials', label: 'Anyagárlista' },
-  { key: 'overhead',  label: '🚗 Overhead' },
-  { key: 'quote',     label: '📄 Ajánlat' },
+  { key: 'company',      label: 'Cégadatok' },
+  { key: 'labor',        label: '⏱ Óradíjak' },
+  { key: 'productivity', label: '📊 Produktivitás' },
+  { key: 'materials',    label: 'Anyagárlista' },
+  { key: 'overhead',     label: '🚗 Overhead' },
+  { key: 'quote',        label: '📄 Ajánlat' },
 ]
 
 export default function SettingsPage({ settings, onSettingsChange, materials, onMaterialsChange }) {
@@ -58,6 +60,9 @@ export default function SettingsPage({ settings, onSettingsChange, materials, on
       {activeTab === 'materials' && (
         <MaterialsTab materials={materials} onMaterialsChange={onMaterialsChange} />
       )}
+      {activeTab === 'productivity' && (
+        <ProductivityTab settings={settings} update={updateSettings} />
+      )}
       {activeTab === 'overhead' && (
         <OverheadTab settings={settings} update={updateSettings} />
       )}
@@ -104,28 +109,39 @@ function LaborTab({ settings, update }) {
   const l = settings.labor
   const hrFt = parseFloat(l.hourly_rate) || 0
   const minFt = hrFt / 60
+  const markupPct  = parseFloat(l.markup_percent) || 15
+  const markupType = l.markup_type || 'markup'
+  const vatPct     = parseFloat(l.vat_percent) || 27
+
+  // Live comparison: same subtotal shown with markup vs margin math
+  const DEMO = 100000
+  const markupResult = Math.round(DEMO * (1 + markupPct / 100))
+  const marginResult = markupPct >= 100 ? '∞' : Math.round(DEMO / (1 - markupPct / 100)).toLocaleString('hu-HU')
+
+  const DIFFICULTY_OPTIONS = [
+    { key: 'normal',       label: 'Normál',        desc: 'NECA p50 idők (átlagos körülmény)',     icon: '🟢' },
+    { key: 'difficult',    label: 'Nehéz',          desc: 'p50–p90 átlag (nehezebb projekt)',      icon: '🟡' },
+    { key: 'very_difficult', label: 'Nagyon nehéz', desc: 'NECA p90 idők (max. nehézség)',         icon: '🔴' },
+  ]
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div style={{ maxWidth: 680 }}>
+      {/* --- Alapóradíj ---------------------------------------------------- */}
       <Card style={{ padding: 28, marginBottom: 18 }}>
         <SectionHeader title="Alapóradíj" />
         <FieldGroup>
           <Field label="Nettó óradíj (Ft/óra)">
             <Input value={l.hourly_rate} onChange={v => update('labor.hourly_rate', parseFloat(v) || 0)} type="number" suffix="Ft/ó" />
           </Field>
-          <Field label="Árrés szorzó">
-            <Input value={l.default_margin} onChange={v => update('labor.default_margin', parseFloat(v) || 1)} type="number" placeholder="1.15" />
-          </Field>
           <Field label="ÁFA kulcs">
-            <Input value={l.vat_percent} onChange={v => update('labor.vat_percent', parseFloat(v) || 27)} type="number" suffix="%" />
+            <Input value={vatPct} onChange={v => update('labor.vat_percent', parseFloat(v) || 27)} type="number" suffix="%" />
           </Field>
-          <div /> {/* spacer */}
         </FieldGroup>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 8 }}>
           {[
-            { label: 'Ft/perc', value: minFt.toFixed(1) },
-            { label: 'Nettó óradíj', value: `${fmt(hrFt)} Ft` },
-            { label: 'Bruttó óradíj', value: `${fmt(hrFt * (1 + l.vat_percent/100))} Ft` },
+            { label: 'Ft/perc',       value: minFt.toFixed(1) },
+            { label: 'Nettó óradíj',  value: `${fmt(hrFt)} Ft` },
+            { label: 'Bruttó óradíj', value: `${fmt(hrFt * (1 + vatPct / 100))} Ft` },
           ].map(stat => (
             <div key={stat.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
               <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.accent }}>{stat.value}</div>
@@ -135,19 +151,80 @@ function LaborTab({ settings, update }) {
         </div>
       </Card>
 
+      {/* --- Markup vs Margin ------------------------------------------------ */}
+      <Card style={{ padding: 28, marginBottom: 18 }}>
+        <SectionHeader title="Árrés kalkuláció (Markup vs. Margin)" />
+        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.7, marginBottom: 16,
+          padding: '10px 14px', background: C.bg, borderRadius: 8, border: `1px solid ${C.border}` }}>
+          <strong style={{ color: C.text }}>Markup</strong>: nettó × (1 + x%) → az összköltségre rakod rá az árrést.<br/>
+          <strong style={{ color: C.text }}>Margin</strong>: nettó ÷ (1 − x%) → az eladási ár hány %-a a te bevételed.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+          <Field label="Árrés mértéke (%)">
+            <Input value={markupPct} onChange={v => update('labor.markup_percent', parseFloat(v) || 0)} type="number" suffix="%" style={{ maxWidth: 140 }} />
+          </Field>
+          <Field label="Kalkulációs módszer">
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[
+                { key: 'markup', label: 'Markup', tip: 'cost × (1+x%)' },
+                { key: 'margin', label: 'Margin', tip: 'cost ÷ (1−x%)' },
+              ].map(opt => (
+                <button key={opt.key} onClick={() => update('labor.markup_type', opt.key)} title={opt.tip} style={{
+                  padding: '8px 18px', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 13,
+                  border: `1px solid ${markupType === opt.key ? C.accent : C.border}`,
+                  background: markupType === opt.key ? C.accentDim : C.bg,
+                  color: markupType === opt.key ? C.accent : C.textSub,
+                  transition: 'all 0.15s',
+                }}>{opt.label}</button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        {/* Live comparison table */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {[
+            { mtype: 'markup', label: 'Markup eredmény', val: `${markupResult.toLocaleString('hu-HU')} Ft`, active: markupType === 'markup', formula: `100 000 × ${1 + markupPct/100}` },
+            { mtype: 'margin', label: 'Margin eredmény',  val: `${marginResult} Ft`, active: markupType === 'margin',  formula: `100 000 ÷ ${1 - markupPct/100}` },
+          ].map(c => (
+            <div key={c.mtype} style={{ padding: '12px 16px', borderRadius: 8,
+              background: c.active ? C.accentDim : C.bg,
+              border: `1px solid ${c.active ? C.accent : C.border}`,
+            }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: c.active ? C.accent : C.textSub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.label}</div>
+              <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: c.active ? C.accent : C.textMuted }}>{c.val}</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, marginTop: 4 }}>{c.formula}</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>100 000 Ft nettó esetén</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* --- Nehézségi szint (NECA p50/p90) ---------------------------------- */}
       <Card style={{ padding: 28 }}>
-        <SectionHeader title="Szorzók" />
-        <FieldGroup>
-          <Field label="Túlóra szorzó">
-            <Input value={l.overtime_multiplier} onChange={v => update('labor.overtime_multiplier', parseFloat(v) || 1.3)} type="number" />
-          </Field>
-          <Field label="Hétvégi szorzó">
-            <Input value={l.weekend_multiplier} onChange={v => update('labor.weekend_multiplier', parseFloat(v) || 1.5)} type="number" />
-          </Field>
-        </FieldGroup>
-        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, lineHeight: 1.8 }}>
-          ℹ️ Ezek a szorzók az ajánlati varázslóban alkalmazhatók speciális projektekhez.
-          Az alap kalkuláció az alap óradíjjal és a kontextus szorzókkal számol.
+        <SectionHeader title="Normaidő nehézségi szint (NECA)" />
+        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.7, marginBottom: 16,
+          padding: '10px 14px', background: C.bg, borderRadius: 8, border: `1px solid ${C.border}` }}>
+          A NECA normaidők tartalmazzák a <strong style={{ color: C.text }}>p50</strong> (normál körülmény) és
+          <strong style={{ color: C.text }}> p90</strong> (nehéz körülmény) oszlopokat.
+          Ez a beállítás határozza meg, melyiket alkalmazza a kalkulátor.
+          A produktivitási szorzók (<a onClick={() => {}} style={{ color: C.accent, cursor: 'pointer' }}>Produktivitás tab</a>) ezt tovább módosítják.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          {DIFFICULTY_OPTIONS.map(opt => {
+            const active = (l.difficulty_mode || 'normal') === opt.key
+            return (
+              <button key={opt.key} onClick={() => update('labor.difficulty_mode', opt.key)} style={{
+                padding: '14px 16px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                background: active ? C.accentDim : C.bg,
+                border: `1px solid ${active ? C.accent : C.border}`,
+                outline: 'none', transition: 'all 0.15s',
+              }}>
+                <div style={{ fontSize: 18, marginBottom: 6 }}>{opt.icon}</div>
+                <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: active ? C.accent : C.text, marginBottom: 4 }}>{opt.label}</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, lineHeight: 1.6 }}>{opt.desc}</div>
+              </button>
+            )
+          })}
         </div>
       </Card>
     </div>
@@ -363,6 +440,110 @@ function MaterialModal({ item, onSave, onClose }) {
   )
 }
 const lS = { display: 'block', fontSize: 10, color: C.textSub, fontFamily: 'DM Mono', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }
+
+
+function ProductivityTab({ settings, update }) {
+  const ctx = settings.context_defaults || {}
+
+  // Group factors by their group key
+  const GROUPS = [
+    { key: 'helyszin', label: 'Helyszíni körülmények' },
+    { key: 'projekt',  label: 'Projekt komplexitás' },
+    { key: 'munka',    label: 'Munkakörülmények' },
+    { key: 'tervezes', label: 'Tapasztalat & tervezés' },
+  ]
+
+  // Calculate combined multiplier
+  let combined = 1.0
+  for (const [factorKey, factorDef] of Object.entries(CONTEXT_FACTORS)) {
+    const selectedKey = ctx[factorKey] ?? factorDef.defaultKey
+    const opt = factorDef.options.find(o => o.key === selectedKey)
+    if (opt) combined *= opt.factor
+  }
+  const combinedPct = ((combined - 1) * 100).toFixed(1)
+  const combinedColor = combined <= 1.0 ? '#4ade80' : combined <= 1.3 ? C.yellow : C.red
+
+  return (
+    <div style={{ maxWidth: 760 }}>
+      {/* Combined multiplier header */}
+      <div style={{ padding: '18px 24px', marginBottom: 20, borderRadius: 12,
+        background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Kombinált NECA produktivitási szorzó
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.6 }}>
+            Az összes tényező szorzata – ez módosítja a normaidőket a kalkulációban.<br/>
+            1.00 = NECA alap, &gt;1.00 = lassabb (nehezebb), &lt;1.00 = gyorsabb (könnyebb).
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 24 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 40, color: combinedColor, lineHeight: 1 }}>
+            ×{combined.toFixed(3)}
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, marginTop: 4 }}>
+            {combined > 1 ? `+${combinedPct}%` : combinedPct + '%'} az alap normaidőhöz képest
+          </div>
+        </div>
+      </div>
+
+      {GROUPS.map(group => {
+        const groupFactors = Object.entries(CONTEXT_FACTORS).filter(([, fd]) => fd.group === group.key)
+        return (
+          <Card key={group.key} style={{ padding: 24, marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 16,
+              paddingBottom: 10, borderBottom: `1px solid ${C.border}` }}>
+              {group.label}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {groupFactors.map(([factorKey, factorDef]) => {
+                const selectedKey = ctx[factorKey] ?? factorDef.defaultKey
+                const selectedOpt = factorDef.options.find(o => o.key === selectedKey) || factorDef.options[0]
+                return (
+                  <div key={factorKey}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>{factorDef.label}</div>
+                        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, marginTop: 2 }}>{factorDef.desc}</div>
+                      </div>
+                      <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: selectedOpt.factor === 1.0 ? C.textSub : selectedOpt.factor < 1 ? '#4ade80' : C.yellow,
+                        background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 10px', flexShrink: 0, marginLeft: 12 }}>
+                        ×{selectedOpt.factor.toFixed(2)}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {factorDef.options.map(opt => {
+                        const active = opt.key === selectedKey
+                        return (
+                          <button key={opt.key}
+                            onClick={() => update(`context_defaults.${factorKey}`, opt.key)}
+                            title={opt.desc}
+                            style={{
+                              flex: 1, minWidth: 100, padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
+                              textAlign: 'left', border: 'none', outline: 'none', transition: 'all 0.15s',
+                              background: active ? C.accentDim : C.bg,
+                              border: `1px solid ${active ? C.accent : C.border}`,
+                            }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                              <span style={{ fontSize: 13 }}>{opt.icon}</span>
+                              <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: active ? C.accent : C.text }}>{opt.label}</span>
+                            </div>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, lineHeight: 1.5 }}>{opt.desc}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
 
 function OverheadTab({ settings, update }) {
   const o = settings.overhead

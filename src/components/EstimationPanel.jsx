@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { COUNT_CATEGORIES, CABLE_TRAY_COLOR } from './DxfViewer/DxfToolbar.jsx'
 import { loadAssemblies, loadMaterials, loadWorkItems, loadSettings, trackAsmUsage } from '../data/store.js'
-import { getAssemblyComponents } from '../data/workItemsDb.js'
+import { getAssemblyComponents, calcProductivityFactor, getComponentQty } from '../data/workItemsDb.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -46,23 +46,36 @@ export default function EstimationPanel({
   const settings   = useMemo(() => { try { return loadSettings()   } catch { return {} } }, [])
 
   // ── Assembly cost helpers (uses actual components structure) ──
-  const getAsmMaterialCost = useCallback((asm) => {
+  const getAsmMaterialCost = useCallback((asm, vars = {}) => {
+    // 1.3 Hulladékfaktor: waste_pct per component increases order quantity
     return (asm.components || [])
       .filter(c => c.itemType === 'material')
       .reduce((sum, c) => {
         const mat = materials.find(m => m.code === c.itemCode)
-        return sum + (c.qty || 0) * (mat?.price || 0)
+        if (!mat) return sum
+        const baseQty  = getComponentQty(c, vars)                          // 1.2 formula
+        const wasteMul = 1 + (c.waste_pct || 0) / 100                     // 1.3 waste
+        const finalPrice = mat.price * (1 - (mat.discount || 0) / 100)    // discount applied
+        return sum + baseQty * wasteMul * finalPrice
       }, 0)
   }, [materials])
 
-  const getAsmLaborMinutes = useCallback((asm) => {
+  const getAsmLaborMinutes = useCallback((asm, vars = {}, productivityFactor = 1) => {
+    // 1.1 Per-item normaóra: p50 (normál) vagy p90 (nehéz) a difficulty_mode alapján
+    const diffMode = settings?.labor?.difficulty_mode || 'normal'
     return (asm.components || [])
       .filter(c => c.itemType === 'workitem')
       .reduce((sum, c) => {
         const wi = workItems.find(w => w.code === c.itemCode)
-        return sum + (c.qty || 0) * (wi?.p50 || 0)
+        if (!wi) return sum
+        // Select base labor column
+        const baseMinutes = diffMode === 'very_difficult' ? (wi.p90 || wi.p50 || 0)
+                          : diffMode === 'difficult'       ? Math.round(((wi.p50 || 0) + (wi.p90 || wi.p50 || 0)) / 2)
+                          : (wi.p50 || 0)
+        const qty = getComponentQty(c, vars)                               // 1.2 formula
+        return sum + qty * baseMinutes * productivityFactor                // 1.5 NECA factor
       }, 0)
-  }, [workItems])
+  }, [workItems, settings])
 
   const getAsmMaterialCount = useCallback((asm) => {
     return (asm.components || []).filter(c => c.itemType === 'material').length
@@ -190,6 +203,10 @@ export default function EstimationPanel({
 
   // ── Cost estimate ──
   const costEstimate = useMemo(() => {
+    // ── 1.5 NECA Produktivitási faktor kiszámítása ──
+    const contextDefaults = settings?.context_defaults || {}
+    const productivityFactor = calcProductivityFactor(contextDefaults)
+
     let totalMaterial = 0, totalLaborMinutes = 0
     const categoryDetails = [] // per-category breakdown for summary
 
@@ -203,6 +220,8 @@ export default function EstimationPanel({
       const catDef = COUNT_CATEGORIES.find(c => c.key === cat)
       const qty    = countByCategory[cat]
       const ov     = quoteOverrides[cat]
+      // Pass COUNT var for formula evaluation (1.2)
+      const formulaVars = { COUNT: qty, METER: 0 }
 
       if (catDef?.isCableTray) {
         const linkedMeasures = measurements.filter(m => m.category === cat)
@@ -213,16 +232,17 @@ export default function EstimationPanel({
           const lengthPerUnit = ov?.lengthPerUnit ?? 1
           totalMeters = qty * lengthPerUnit
         }
-        const matPerM  = ov?.matPerUnit != null ? ov.matPerUnit : getAsmMaterialCost(asm)
-        const labPerM  = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm)
+        const ctVars   = { COUNT: qty, METER: totalMeters }
+        const matPerM  = ov?.matPerUnit != null ? ov.matPerUnit : getAsmMaterialCost(asm, ctVars)
+        const labPerM  = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm, ctVars, productivityFactor)
         const matCost  = matPerM * totalMeters
         const labMin   = labPerM * totalMeters
         totalMaterial     += matCost
         totalLaborMinutes += labMin
         categoryDetails.push({ key: cat, label: catDef.label, color: catDef.color, qty, matCost, labMin, isCT: true, totalMeters })
       } else {
-        const matPerUnit = ov?.matPerUnit != null ? ov.matPerUnit : (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm))
-        const labPerUnit = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm)
+        const matPerUnit = ov?.matPerUnit != null ? ov.matPerUnit : (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm, formulaVars))
+        const labPerUnit = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm, formulaVars, productivityFactor)
         const matCost    = matPerUnit * qty
         const labMin     = labPerUnit * qty
         totalMaterial     += matCost
@@ -240,16 +260,30 @@ export default function EstimationPanel({
     const laborRate    = quoteOverrides._laborRate ?? defaultLaborRate
     const laborCost    = laborHours * laborRate
 
-    // Overhead (from settings)
-    const marginPercent = quoteOverrides._marginPercent ?? ((settings?.labor?.default_margin || 1.15) - 1) * 100
-    const subtotal     = totalMaterial + cableCost + laborCost
-    const overheadCost = subtotal * (marginPercent / 100)
-    const grandTotal   = subtotal + overheadCost
+    // ── 1.4 Markup vs Margin kalkuláció ──────────────────────────────────────
+    // markup: grandTotal = subtotal × (1 + pct/100)
+    // margin: grandTotal = subtotal / (1 − pct/100)
+    const markupPercent = quoteOverrides._markupPercent ?? (settings?.labor?.markup_percent ?? 15)
+    const markupType    = quoteOverrides._markupType    ?? (settings?.labor?.markup_type    ?? 'markup')
+    const subtotal      = totalMaterial + cableCost + laborCost
+    let grandTotal
+    if (markupType === 'margin') {
+      const marginRatio = markupPercent / 100
+      grandTotal = marginRatio >= 1 ? subtotal * 10 : subtotal / (1 - marginRatio)
+    } else {
+      grandTotal = subtotal * (1 + markupPercent / 100)
+    }
+    const markupAmount = grandTotal - subtotal
 
     return {
       materialCost: totalMaterial, cableCost, laborMinutes: totalLaborMinutes,
       laborHours, laborRate, laborCost, totalCable: cableTotal, cableCostPm,
-      marginPercent, overheadCost, subtotal, grandTotal, categoryDetails,
+      // 1.4 Markup/margin
+      markupPercent, markupType, markupAmount, subtotal, grandTotal, categoryDetails,
+      // 1.5 Productivity
+      productivityFactor,
+      // Legacy compat aliases
+      marginPercent: markupPercent, overheadCost: markupAmount,
     }
   }, [assignments, quoteOverrides, countByCategory, assemblies, cableData, measurements, scale, settings, getAsmMaterialCost, getAsmLaborMinutes])
 
@@ -941,15 +975,56 @@ function QuoteTab({
             />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Rezsi/árrés (%)</div>
+            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Feláras % (árrés)</div>
             <input
-              type="number" min={0} max={100} step={1}
-              value={costEstimate.marginPercent}
-              onChange={e => setOverride('_marginPercent', parseFloat(e.target.value) || 0)}
-              style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bgCard, border: `1px solid ${quoteOverrides._marginPercent != null ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+              type="number" min={0} max={99} step={1}
+              value={costEstimate.markupPercent}
+              onChange={e => setOverride('_markupPercent', parseFloat(e.target.value) || 0)}
+              style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bgCard, border: `1px solid ${quoteOverrides._markupPercent != null ? C.yellow : C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
             />
           </div>
         </div>
+
+        {/* 1.4 Markup vs Margin toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono' }}>Számítási mód:</div>
+          {[
+            { key: 'markup', label: 'Markup', tip: `Cost × (1+${costEstimate.markupPercent}%)` },
+            { key: 'margin', label: 'Margin', tip: `Cost ÷ (1−${costEstimate.markupPercent}%)` },
+          ].map(opt => (
+            <button key={opt.key}
+              title={opt.tip}
+              onClick={() => setOverride('_markupType', opt.key)}
+              style={{
+                padding: '3px 10px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono',
+                border: `1px solid ${costEstimate.markupType === opt.key ? C.accent : C.border}`,
+                background: costEstimate.markupType === opt.key ? 'rgba(0,229,160,0.12)' : 'transparent',
+                color: costEstimate.markupType === opt.key ? C.accent : C.muted,
+                cursor: 'pointer',
+              }}>{opt.label}</button>
+          ))}
+          <span style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginLeft: 4 }}>
+            +{Math.round(costEstimate.markupAmount).toLocaleString('hu-HU')} Ft
+          </span>
+        </div>
+
+        {/* Productivity factor badge */}
+        {costEstimate.productivityFactor !== 1.0 && (
+          <div style={{ marginTop: 8, padding: '5px 10px', borderRadius: 6,
+            background: costEstimate.productivityFactor > 1.2 ? 'rgba(255,107,107,0.1)' : 'rgba(255,209,102,0.1)',
+            border: `1px solid ${costEstimate.productivityFactor > 1.2 ? 'rgba(255,107,107,0.3)' : 'rgba(255,209,102,0.3)'}`,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono' }}>NECA produktivitás:</span>
+            <span style={{ fontSize: 10, fontFamily: 'DM Mono', fontWeight: 700,
+              color: costEstimate.productivityFactor > 1.2 ? '#FF6B6B' : '#FFD166' }}>
+              ×{costEstimate.productivityFactor.toFixed(2)}
+            </span>
+            <span style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono' }}>
+              ({costEstimate.productivityFactor > 1 ? '+' : ''}{Math.round((costEstimate.productivityFactor - 1) * 100)}% a normaidőre)
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Per-category editable prices ── */}

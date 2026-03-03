@@ -8,6 +8,7 @@ import DxfViewerCanvas from './DxfViewer/DxfViewerCanvas.jsx'
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { estimateCablesFallback } from '../cableAgent.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
+import { calcProductivityFactor } from '../data/workItemsDb.js'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -58,21 +59,8 @@ function recognizeBlock(blockName) {
 }
 
 // ─── Pricing computation ──────────────────────────────────────────────────────
-const CONTEXT_FACTORS = {
-  wall_material: { brick: 1.0, concrete: 1.3, gypsum: 0.85, wood: 0.9 },
-  access: { empty: 1.0, furnished: 1.3, cluttered: 1.6 },
-  project_type: { new_build: 0.9, renovation: 1.15, extension: 1.1 },
-  height: { normal: 1.0, high: 1.3, low: 0.95 },
-}
-
 function computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate }) {
-  const cf = {
-    wall: CONTEXT_FACTORS.wall_material[context.wall_material] || 1,
-    access: CONTEXT_FACTORS.access[context.access] || 1,
-    project: CONTEXT_FACTORS.project_type[context.project_type] || 1,
-    height: CONTEXT_FACTORS.height[context.height] || 1,
-  }
-  const ctxMultiplier = cf.wall * cf.access * cf.project
+  const ctxMultiplier = calcProductivityFactor(context)
 
   let materialCost = 0, laborHours = 0
   const lines = []
@@ -86,7 +74,7 @@ function computePricing({ takeoffRows, assemblies, workItems, materials, context
       const compQty = comp.qty * qty
       if (comp.itemType === 'workitem') {
         const wi = workItems.find(w => w.code === comp.itemCode) || workItems.find(w => w.name === comp.name)
-        const normMin = wi ? wi.p50 * ctxMultiplier * (wi.heightFactor ? cf.height : 1) : 0
+        const normMin = wi ? wi.p50 * ctxMultiplier : 0
         const hours = (normMin * compQty) / 60
         laborHours += hours
         lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
@@ -382,8 +370,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [qtyOverrides, setQtyOverrides] = useState({})       // asmId → qty
 
   // ── Project context ───────────────────────────────────────────────────────
-  const [context, setContext] = useState({ wall_material: 'brick', access: 'empty', project_type: 'renovation', height: 'normal' })
-  const [markup, setMarkup] = useState(settings?.labor?.default_margin ? settings.labor.default_margin / 100 : 0.15)
+  const [context, setContext] = useState(settings?.context_defaults || { wall_material: 'brick', access: 'empty', project_type: 'renovation', height: 'normal' })
+  const [markup, setMarkup] = useState(settings?.labor?.markup_percent != null ? settings.labor.markup_percent / 100 : 0.15)
   const [hourlyRate, setHourlyRate] = useState(settings?.labor?.hourly_rate || 8500)
   const [quoteName, setQuoteName] = useState('')
   const [clientName, setClientName] = useState('')
@@ -1041,10 +1029,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 </div>
 
                 {[
-                  { key: 'wall_material', label: 'Falazat', options: [['brick','Tégla'], ['concrete','Beton'], ['gypsum','Gipszkarton'], ['wood','Fa']] },
-                  { key: 'access', label: 'Hozzáférhetőség', options: [['empty','Üres'],['furnished','Bebútorozott'],['cluttered','Zsúfolt']] },
-                  { key: 'project_type', label: 'Projekt típus', options: [['new_build','Új építés'],['renovation','Felújítás'],['extension','Bővítés']] },
-                  { key: 'height', label: 'Belmagasság', options: [['normal','Standard'],['high','Magas'],['low','Alacsony']] },
+                  { key: 'wall_material', label: 'Falazat', options: [['drywall','Gipszkarton'], ['ytong','Ytong'], ['brick','Tégla'], ['concrete','Vasbeton']] },
+                  { key: 'access', label: 'Hozzáférhetőség', options: [['empty','Üres'],['occupied','Berendezett'],['restricted','Korl. hozzáférés']] },
+                  { key: 'project_type', label: 'Projekt típus', options: [['new_build','Új építés'],['renovation','Felújítás'],['industrial','Ipari']] },
+                  { key: 'height', label: 'Munkavégzési magasság', options: [['normal','Normál (≤2.5m)'],['ladder','Létra (2.5–4m)'],['scaffold','Állvány (4m+)']] },
                 ].map(({ key, label, options }) => (
                   <div key={key} style={{ marginBottom: 14 }}>
                     <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 6 }}>{label}</div>

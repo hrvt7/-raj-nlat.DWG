@@ -179,7 +179,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-001', itemType: 'material', name: 'Szerelvénydoboz 65mm (mélyített)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-010', itemType: 'material', name: 'Dugalj 2P+F (fehér, alap)', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.3, sortOrder: 3 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.3, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-001', itemType: 'workitem', name: 'Dugalj 2P+F (alap) szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
@@ -203,7 +203,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-012', itemType: 'material', name: 'Kapcsoló 1G (fehér)', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.3, sortOrder: 3 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.3, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-004', itemType: 'workitem', name: 'Kapcsoló 1G szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
@@ -226,7 +226,7 @@ export const ASSEMBLIES_DEFAULT = [
     components: [
       { itemCode: 'MAT-001', itemType: 'material', name: 'Szerelvénydoboz 65mm (mélyített)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-011', itemType: 'material', name: 'Dugalj 2P+F IP44', unit: 'db', qty: 1, sortOrder: 1 },
-      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.3, sortOrder: 2 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.3, waste_pct: 15, sortOrder: 2 },
       { itemCode: 'MAT-083', itemType: 'material', name: 'Kábeltömítő M20', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-002', itemType: 'workitem', name: 'Dugalj 2P+F IP44 szerelése', unit: 'db', qty: 1, sortOrder: 5 },
@@ -245,7 +245,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-001', itemType: 'material', name: 'Szerelvénydoboz 65mm (mélyített)', unit: 'db', qty: 2, sortOrder: 0 },
       { itemCode: 'MAT-010', itemType: 'material', name: 'Dugalj 2P+F (fehér, alap)', unit: 'db', qty: 2, sortOrder: 1 },
       { itemCode: 'MAT-095', itemType: 'material', name: 'Dupla dugalj keret (2×2P+F)', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.5, sortOrder: 3 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 3, sortOrder: 4 },
       { itemCode: 'SZE-001', itemType: 'workitem', name: 'Dugalj 2P+F szerelése', unit: 'db', qty: 2, sortOrder: 5 },
     ],
@@ -263,7 +263,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-013', itemType: 'material', name: 'Kapcsoló 2G (fehér)', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, sortOrder: 3 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 3, sortOrder: 4 },
       { itemCode: 'SZE-005', itemType: 'workitem', name: 'Kapcsoló 2G szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
@@ -281,7 +281,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 2, sortOrder: 0 },
       { itemCode: 'MAT-014', itemType: 'material', name: 'Váltókapcsoló (fehér)', unit: 'db', qty: 2, sortOrder: 1 },
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 2, sortOrder: 2 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 1.0, sortOrder: 3 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 1.0, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 4, sortOrder: 4 },
       { itemCode: 'SZE-006', itemType: 'workitem', name: 'Váltókapcsoló szerelése', unit: 'db', qty: 2, sortOrder: 5 },
     ],
@@ -299,7 +299,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-001', itemType: 'material', name: 'Szerelvénydoboz 65mm (mélyített)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-090', itemType: 'material', name: 'Mozgásérzékelős kapcsoló 230V', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.3, sortOrder: 3 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.3, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 4 },
       { itemCode: 'SZE-008', itemType: 'workitem', name: 'Mozgásérzékelő szerelése+beállítása', unit: 'db', qty: 1, sortOrder: 5 },
     ],
@@ -317,7 +317,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-092', itemType: 'material', name: 'Csengő nyomógomb (fehér)', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-093', itemType: 'material', name: 'Elektronikus csengő 230V', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-094', itemType: 'material', name: 'Kábel 2×0.75mm² (csengőkábel)', unit: 'm', qty: 5, sortOrder: 3 },
+      { itemCode: 'MAT-094', itemType: 'material', name: 'Kábel 2×0.75mm² (csengőkábel)', unit: 'm', qty: 5, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 4 },
       { itemCode: 'SZE-009', itemType: 'workitem', name: 'Csengő/ajtóhívó szerelése', unit: 'db', qty: 1, sortOrder: 5 },
     ],
@@ -333,7 +333,7 @@ export const ASSEMBLIES_DEFAULT = [
     components: [
       { itemCode: 'MAT-001', itemType: 'material', name: 'Szerelvénydoboz 65mm (mélyített)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-091', itemType: 'material', name: 'Digitális programozható termosztát 230V', unit: 'db', qty: 1, sortOrder: 1 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.3, sortOrder: 2 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.3, waste_pct: 15, sortOrder: 2 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 3 },
       { itemCode: 'SZE-007', itemType: 'workitem', name: 'Termosztát bekötés+programozás', unit: 'db', qty: 1, sortOrder: 4 },
     ],
@@ -349,7 +349,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Ipari CEE 16A egyfázisú dugalj: IP44 CEE szerelvény, bekötés. Garázsok, műhelyek, mosógép-mosogatógép körök.',
     components: [
       { itemCode: 'MAT-050', itemType: 'material', name: 'CEE dugalj 1P+N+F 16A (IP44)', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.5, sortOrder: 1 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-083', itemType: 'material', name: 'Kábeltömítő M20', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'MAT-004', itemType: 'material', name: 'Kötődoboz 100×100mm', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'SZE-003', itemType: 'workitem', name: 'Ipari dugalj szerelése', unit: 'db', qty: 1, sortOrder: 4 },
@@ -366,7 +366,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Háromfázisú ipari CEE 32A dugalj: IP44, 5-pólusú. Villanytűzhely, nagy gépek, ipari berendezések.',
     components: [
       { itemCode: 'MAT-053', itemType: 'material', name: 'CEE dugalj 3P+N+F 32A (IP44)', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-023', itemType: 'material', name: 'NYY-J 5×2.5', unit: 'm', qty: 0.5, sortOrder: 1 },
+      { itemCode: 'MAT-023', itemType: 'material', name: 'NYY-J 5×2.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-083', itemType: 'material', name: 'Kábeltömítő M20', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'MAT-004', itemType: 'material', name: 'Kötődoboz 100×100mm', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'SZE-003', itemType: 'workitem', name: 'Ipari dugalj szerelése', unit: 'db', qty: 1, sortOrder: 4 },
@@ -387,7 +387,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Mennyezeti lámpatest bekötés: kötődoboz, kábel ráhagyás, WAGO kötők. Ár a lámpatestet NEM tartalmazza.',
     components: [
       { itemCode: 'MAT-003', itemType: 'material', name: 'Kötődoboz 80×80mm', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, sortOrder: 1 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 3, sortOrder: 2 },
       { itemCode: 'VIL-001', itemType: 'workitem', name: 'Lámpatest mennyezeti bekötése', unit: 'db', qty: 1, sortOrder: 3 },
     ],
@@ -409,7 +409,7 @@ export const ASSEMBLIES_DEFAULT = [
     category: 'vilagitas',
     description: 'GK-ba süllyesztett downlight: lyukkör vágás, rugós rögzítés, bekötés. Ár a lámpatestet NEM tartalmazza.',
     components: [
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.4, sortOrder: 0 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.4, waste_pct: 15, sortOrder: 0 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 1 },
       { itemCode: 'VIL-002', itemType: 'workitem', name: 'Lámpatest süllyesztett (GK) szerelése', unit: 'db', qty: 1, sortOrder: 2 },
     ],
@@ -425,7 +425,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Fali lámpatest bekötés: kötődoboz, kábel ráhagyás, WAGO. Folyosó, hálószoba, fürdő.',
     components: [
       { itemCode: 'MAT-003', itemType: 'material', name: 'Kötődoboz 80×80mm', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.4, sortOrder: 1 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.4, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 2 },
       { itemCode: 'VIL-003', itemType: 'workitem', name: 'Lámpatest fali bekötése', unit: 'db', qty: 1, sortOrder: 3 },
     ],
@@ -443,7 +443,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-100', itemType: 'material', name: 'LED szalag 4000K 14W/m IP20', unit: 'm', qty: 5, sortOrder: 0 },
       { itemCode: 'MAT-102', itemType: 'material', name: 'LED szalag alumínium profil', unit: 'm', qty: 5, sortOrder: 1 },
       { itemCode: 'MAT-101', itemType: 'material', name: 'LED szalag tápegység 60W 24V', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 1.0, sortOrder: 3 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 1.0, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'MAT-003', itemType: 'material', name: 'Kötődoboz 80×80mm', unit: 'db', qty: 1, sortOrder: 4 },
       { itemCode: 'VIL-005', itemType: 'workitem', name: 'LED szalag felszerelése', unit: 'm', qty: 5, sortOrder: 5 },
     ],
@@ -459,7 +459,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Önálló vészvilágítás: egység rögzítése, bekötés, funkcionális teszt. MSZ EN 1838 követelmény szerint.',
     components: [
       { itemCode: 'MAT-103', itemType: 'material', name: 'Vészvilágítás egység 1h önálló', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, sortOrder: 1 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 2 },
       { itemCode: 'VIL-006', itemType: 'workitem', name: 'Vészvilágítás rögzítés+bekötés+teszt', unit: 'db', qty: 1, sortOrder: 3 },
     ],
@@ -475,7 +475,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Kültéri vagy ipari reflektor felszerelése: tartórögzítés, tömített bekötés, IP44. Ár a reflektort NEM tartalmazza.',
     components: [
       { itemCode: 'MAT-004', itemType: 'material', name: 'Kötődoboz 100×100mm', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.5, sortOrder: 1 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-083', itemType: 'material', name: 'Kábeltömítő M20', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 3 },
       { itemCode: 'VIL-004', itemType: 'workitem', name: 'Reflektor (kültéri/ipari) szerelése', unit: 'db', qty: 1, sortOrder: 4 },
@@ -661,7 +661,7 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-070', itemType: 'material', name: 'Adataljzat RJ45 Cat6 (fehér)', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-015', itemType: 'material', name: 'Fedőlap (fehér)', unit: 'db', qty: 1, sortOrder: 2 },
-      { itemCode: 'MAT-074', itemType: 'material', name: 'Adatkábel Cat6 UTP', unit: 'm', qty: 0.3, sortOrder: 3 },
+      { itemCode: 'MAT-074', itemType: 'material', name: 'Adatkábel Cat6 UTP', unit: 'm', qty: 0.3, waste_pct: 15, sortOrder: 3 },
       { itemCode: 'GYE-002', itemType: 'workitem', name: 'Adataljzat RJ45 szerelés+patchelés', unit: 'db', qty: 1, sortOrder: 4 },
     ],
     tags: ['adataljzat', 'RJ45', 'Cat6'],
@@ -690,7 +690,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Optikai füstérzékelő bekötés 230V hálózatra: mennyezeti rögzítés, bekötés, teszt. MSZ EN 54 szerint.',
     components: [
       { itemCode: 'MAT-072', itemType: 'material', name: 'Füstérzékelő 230V (optikai)', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, sortOrder: 1 },
+      { itemCode: 'MAT-020', itemType: 'material', name: 'NYM-J 3×1.5', unit: 'm', qty: 0.5, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-080', itemType: 'material', name: 'WAGO 222-413 (3-pólusú)', unit: 'db', qty: 2, sortOrder: 2 },
       { itemCode: 'GYE-006', itemType: 'workitem', name: 'Füstérzékelő rögzítés+bekötés', unit: 'db', qty: 1, sortOrder: 3 },
     ],
@@ -705,7 +705,7 @@ export const ASSEMBLIES_DEFAULT = [
     description: 'Kaputelefon komplett szett: kültéri + beltéri egység szerelése, bekötés, beállítás, teszt.',
     components: [
       { itemCode: 'MAT-073', itemType: 'material', name: 'Kaputelefon szett (beltéri + kültéri)', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-094', itemType: 'material', name: 'Kábel 2×0.75mm² (csengőkábel)', unit: 'm', qty: 8, sortOrder: 1 },
+      { itemCode: 'MAT-094', itemType: 'material', name: 'Kábel 2×0.75mm² (csengőkábel)', unit: 'm', qty: 8, waste_pct: 15, sortOrder: 1 },
       { itemCode: 'MAT-002', itemType: 'material', name: 'Szerelvénydoboz 65mm (normál)', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'GYE-005', itemType: 'workitem', name: 'Kaputelefon egység szerelése+tesztelése', unit: 'db', qty: 1, sortOrder: 3 },
     ],
@@ -723,7 +723,7 @@ export const ASSEMBLIES_DEFAULT = [
     category: 'kabelezes',
     description: 'Háromfázisú villanytűzhely dedikált kör: NYY-J 5×2.5, CEE 32A 3F dugalj, MCB 3P 32A. ~10m kábellel számolva.',
     components: [
-      { itemCode: 'MAT-023', itemType: 'material', name: 'NYY-J 5×2.5', unit: 'm', qty: 10, sortOrder: 0 },
+      { itemCode: 'MAT-023', itemType: 'material', name: 'NYY-J 5×2.5', unit: 'm', qty: 10, waste_pct: 15, sortOrder: 0 },
       { itemCode: 'MAT-053', itemType: 'material', name: 'CEE dugalj 3P+N+F 32A (IP44)', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-048', itemType: 'material', name: 'Kismegszakító 3P 32A', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'MAT-004', itemType: 'material', name: 'Kötődoboz 100×100mm', unit: 'db', qty: 1, sortOrder: 3 },
@@ -742,7 +742,7 @@ export const ASSEMBLIES_DEFAULT = [
     category: 'kabelezes',
     description: 'Villanybojler dedikált kör: NYM-J 3×2.5, MCB 1P 20A, végpontnál WAGO kötés. ~6m kábellel számolva.',
     components: [
-      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 6, sortOrder: 0 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 6, waste_pct: 15, sortOrder: 0 },
       { itemCode: 'MAT-045', itemType: 'material', name: 'Kismegszakító 1P 20A', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-003', itemType: 'material', name: 'Kötődoboz 80×80mm', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'MAT-081', itemType: 'material', name: 'WAGO 222-415 (5-pólusú)', unit: 'db', qty: 2, sortOrder: 3 },
@@ -760,7 +760,7 @@ export const ASSEMBLIES_DEFAULT = [
     category: 'kabelezes',
     description: 'Klímaberendezés dedikált kör: NYM-J 3×2.5, MCB 1P 16A, kültéri+beltéri egység kábelvég. ~8m kábellel.',
     components: [
-      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 8, sortOrder: 0 },
+      { itemCode: 'MAT-021', itemType: 'material', name: 'NYM-J 3×2.5', unit: 'm', qty: 8, waste_pct: 15, sortOrder: 0 },
       { itemCode: 'MAT-041', itemType: 'material', name: 'Kismegszakító 1P 16A', unit: 'db', qty: 1, sortOrder: 1 },
       { itemCode: 'MAT-004', itemType: 'material', name: 'Kötődoboz 100×100mm', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'MAT-083', itemType: 'material', name: 'Kábeltömítő M20', unit: 'db', qty: 2, sortOrder: 3 },
@@ -865,45 +865,200 @@ export function generateAssemblyId(assemblies) {
   return `ASM-${String(next).padStart(3, '0')}`
 }
 
-// ─── Kontextus szorzók ───────────────────────────────────────────────────────
+// ─── NECA 24 Produktivitási Faktor – Magyar villanyszerelő adaptáció ─────────
+// Forrás: NECA Manual of Labor Units + Trimble/McCormick/Sage enterprise rendszerek
+// 12 faktor, 4 csoport – szorzatuk adja a végső produktivitási tényezőt
+// Alap (minden factor = default opció): szorzó = 1.0
 export const CONTEXT_FACTORS = {
+
+  // ── Csoport 1: Helyszíni körülmények ──────────────────────────────────────
   wall_material: {
     label: 'Falanyag',
+    group: 'helyszin',
+    groupLabel: 'Helyszíni körülmények',
+    desc: 'A szerelési felület anyaga befolyásolja a vésési/rögzítési időt.',
+    defaultKey: 'brick',
     options: [
-      { key: 'drywall',  label: 'Gipszkarton',  factor: 0.8,  icon: '🟡' },
-      { key: 'brick',    label: 'Tégla',         factor: 1.0,  icon: '🟠' },
-      { key: 'concrete', label: 'Beton',         factor: 1.4,  icon: '🔴' },
-      { key: 'ytong',    label: 'Ytong',         factor: 0.9,  icon: '🟡' },
+      { key: 'drywall',  label: 'Gipszkarton',         factor: 0.80, icon: '🟢', desc: 'Legkönnyebb vágás, rögzítés' },
+      { key: 'ytong',    label: 'Ytong / pórusbeton',   factor: 0.90, icon: '🟡', desc: 'Könnyű vésés, befogadó anyag' },
+      { key: 'brick',    label: 'Tégla',                factor: 1.00, icon: '🟠', desc: 'Alap referencia – normál nehézség' },
+      { key: 'concrete', label: 'Vasbeton',             factor: 1.45, icon: '🔴', desc: 'Magfúrás, gyémánt vágó szükséges' },
     ]
   },
   access: {
-    label: 'Hozzáférhetőség',
+    label: 'Hozzáférhetőség / berendezettség',
+    group: 'helyszin',
+    groupLabel: 'Helyszíni körülmények',
+    desc: 'Mennyire kell a felszerelés körül dolgozni, helyet csinálni.',
+    defaultKey: 'empty',
     options: [
-      { key: 'empty',      label: 'Üres helyiség',    factor: 1.0,  icon: '🟢' },
-      { key: 'occupied',   label: 'Berendezett',       factor: 1.15, icon: '🟡' },
-      { key: 'restricted', label: 'Nehéz hozzáférés', factor: 1.3,  icon: '🔴' },
+      { key: 'empty',      label: 'Üres helyiség',      factor: 1.00, icon: '🟢', desc: 'Nincs akadályozó bútorzat' },
+      { key: 'occupied',   label: 'Berendezett',         factor: 1.15, icon: '🟡', desc: 'Bútorzat körül kell dolgozni' },
+      { key: 'restricted', label: 'Nehéz hozzáférés',   factor: 1.30, icon: '🔴', desc: 'Szűk tér, gépek, korlátozott mozgás' },
     ]
   },
   project_type: {
     label: 'Projekt típus',
+    group: 'helyszin',
+    groupLabel: 'Helyszíni körülmények',
+    desc: 'Az épület állapota és a feladat jellege.',
+    defaultKey: 'renovation',
     options: [
-      { key: 'new_build',   label: 'Új építés',     factor: 0.9,  icon: '🟢' },
-      { key: 'renovation',  label: 'Felújítás',     factor: 1.35, icon: '🟡' },
-      { key: 'industrial',  label: 'Ipari',         factor: 1.5,  icon: '🔴' },
+      { key: 'new_build',  label: 'Új építés',          factor: 0.90, icon: '🟢', desc: 'Tiszta nyomvonalak, koordinált munkafázis' },
+      { key: 'renovation', label: 'Felújítás',           factor: 1.35, icon: '🟡', desc: 'Meglévő szerkezetek, váratlan akadályok' },
+      { key: 'industrial', label: 'Ipari / üzemi',       factor: 1.50, icon: '🔴', desc: 'Erős szerkezeti elvárások, IP fokozat' },
     ]
   },
   height: {
     label: 'Munkavégzési magasság',
+    group: 'helyszin',
+    groupLabel: 'Helyszíni körülmények',
+    desc: 'Magasabb munka lassabb – létra, állvány állandó felszerelés.',
+    defaultKey: 'normal',
     options: [
-      { key: 'normal',    label: 'Normál (< 2.5m)', factor: 1.0,  icon: '🟢' },
-      { key: 'ladder',    label: 'Létra (2.5-4m)',  factor: 1.35, icon: '🟡' },
-      { key: 'scaffold',  label: 'Állvány (4m+)',   factor: 1.7,  icon: '🔴' },
+      { key: 'normal',   label: 'Normál (≤ 2.5m)',      factor: 1.00, icon: '🟢', desc: 'Kézzel elérhető, nincs segédeszköz' },
+      { key: 'ladder',   label: 'Létra (2.5–4m)',        factor: 1.35, icon: '🟡', desc: 'Anyagmozgatás létrán/állványon' },
+      { key: 'scaffold', label: 'Állvány (4m felett)',   factor: 1.70, icon: '🔴', desc: 'Állványszerelés + felszedés is benne' },
     ]
+  },
+
+  // ── Csoport 2: Projekt komplexitás ────────────────────────────────────────
+  layout_complexity: {
+    label: 'Elrendezés összetettsége',
+    group: 'projekt',
+    groupLabel: 'Projekt komplexitás',
+    desc: 'Mennyire egységes / standard az épület és a kért elrendezés.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'simple',  label: 'Egyszerű / szabályos',  factor: 0.95, icon: '🟢', desc: 'Ismétlődő minták, rövid nyomvonalak' },
+      { key: 'normal',  label: 'Normál',                 factor: 1.00, icon: '🟠', desc: 'Vegyes helyiségek, standard igények' },
+      { key: 'complex', label: 'Komplex / egyedi',       factor: 1.25, icon: '🔴', desc: 'Egyedi nyomvonalak, sok ügyfélkérés' },
+    ]
+  },
+  concurrent_trades: {
+    label: 'Párhuzamos szakmák száma',
+    group: 'projekt',
+    groupLabel: 'Projekt komplexitás',
+    desc: 'Minél több szakma dolgozik egyszerre, annál több a koordináció.',
+    defaultKey: 'none',
+    options: [
+      { key: 'none', label: 'Csak mi dolgozunk',   factor: 1.00, icon: '🟢', desc: 'Kizárólagos munkaterület' },
+      { key: 'few',  label: '1-2 párhuzamos',      factor: 1.10, icon: '🟡', desc: 'Burkoló, festő, stb.' },
+      { key: 'many', label: '3+ párhuzamos',       factor: 1.25, icon: '🔴', desc: 'Teli munkaterület, állandó koordináció' },
+    ]
+  },
+  prefabrication: {
+    label: 'Előregyártottság szintje',
+    group: 'projekt',
+    groupLabel: 'Projekt komplexitás',
+    desc: 'Ha az assembly komponensek előre össze vannak készítve, helyszíni idő csökken.',
+    defaultKey: 'standard',
+    options: [
+      { key: 'high',     label: 'Magas (előre elkészítve)', factor: 0.85, icon: '🟢', desc: 'Előre csoportosított dobozok, tálcák' },
+      { key: 'standard', label: 'Normál helyszíni szerelés', factor: 1.00, icon: '🟠', desc: 'Standard kivitelezési folyamat' },
+      { key: 'none',     label: 'Semmi előkészítés',         factor: 1.15, icon: '🔴', desc: 'Minden helyszínen kerül össze' },
+    ]
+  },
+
+  // ── Csoport 3: Munkakörülmények ───────────────────────────────────────────
+  overtime: {
+    label: 'Munkaidő / túlóra',
+    group: 'munka',
+    groupLabel: 'Munkakörülmények',
+    desc: 'Hosszabb munkanapokon és éjjel a teljesítmény csökken.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'normal',   label: 'Normál munkaidő (8h)',  factor: 1.00, icon: '🟢', desc: '8 óra/nap, nincs tartós túlóra' },
+      { key: 'overtime', label: 'Rendszeres túlóra',     factor: 1.15, icon: '🟡', desc: '10-12 óra/nap, hétvégi műszakok' },
+      { key: 'night',    label: 'Éjszakai műszak',       factor: 1.25, icon: '🔴', desc: 'Csökkent látás és koordináció' },
+    ]
+  },
+  weather_environment: {
+    label: 'Időjárás / hőmérséklet',
+    group: 'munka',
+    groupLabel: 'Munkakörülmények',
+    desc: 'Extrém hőmérséklet vagy kültéri körülmény lassít.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'normal',   label: 'Normál (15-25°C)',           factor: 1.00, icon: '🟢', desc: 'Beltéri, kellemes hőmérséklet' },
+      { key: 'hot_cold', label: 'Kellemetlenül meleg/hideg',  factor: 1.10, icon: '🟡', desc: '0°C alatt vagy 30°C felett' },
+      { key: 'extreme',  label: 'Extrém időjárás / kültér',  factor: 1.25, icon: '🔴', desc: 'Téli kültér, fűtetlen csarnok' },
+    ]
+  },
+
+  // ── Csoport 4: Tapasztalat / tervezési minőség ────────────────────────────
+  engineering_changes: {
+    label: 'Tervmódosítások',
+    group: 'tervezes',
+    groupLabel: 'Tapasztalat & tervezés',
+    desc: 'Tervváltások a kivitelezés során növelik az újragyártási időt.',
+    defaultKey: 'none',
+    options: [
+      { key: 'none',       label: 'Terv végleges',         factor: 1.00, icon: '🟢', desc: 'Stabil tervdokumentáció' },
+      { key: 'occasional', label: 'Alkalmi módosítások',   factor: 1.10, icon: '🟡', desc: '1-2 körülmény megváltozik' },
+      { key: 'frequent',   label: 'Folyamatos változások', factor: 1.30, icon: '🔴', desc: 'Heti szintű terv revíziók' },
+    ]
+  },
+  crew_experience: {
+    label: 'Szerelői tapasztalat / tanulási görbe',
+    group: 'tervezes',
+    groupLabel: 'Tapasztalat & tervezés',
+    desc: 'Mennyire ismeri a csapat ezt az épületet / munkafajtát.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'experienced', label: 'Tapasztalt, ismert helyszín', factor: 0.95, icon: '🟢', desc: 'Ismételt munka, jó csapatmemória' },
+      { key: 'normal',      label: 'Normál tapasztalat',          factor: 1.00, icon: '🟠', desc: 'Átlagos gyakorlat' },
+      { key: 'new',         label: 'Új jellegű munka',            factor: 1.20, icon: '🔴', desc: 'Tanulási görbe, ismeretlen rendszer' },
+    ]
+  },
+}
+
+// ─── Összetett produktivitási szorzó számítása ──────────────────────────────
+// context_defaults alapján kiszámolja a kombinált szorzót
+export function calcProductivityFactor(contextDefaults = {}) {
+  let combined = 1.0
+  for (const [factorKey, factorDef] of Object.entries(CONTEXT_FACTORS)) {
+    const selectedKey = contextDefaults[factorKey] ?? factorDef.defaultKey
+    const opt = factorDef.options.find(o => o.key === selectedKey)
+    if (opt) combined *= opt.factor
   }
+  return combined
 }
 
 // ─── Variant System helpers ──────────────────────────────────────────────────
 // Enterprise-level assembly variant management
+
+
+// ─── Assembly component formula evaluátor ──────────────────────────────────
+// qty_formula: string like "COUNT * 0.3 + 2", "METER * 0.1"
+// Variables: COUNT (device/takeoff count), METER (cable meters or 0)
+// Returns evaluated qty or fallback to component.qty
+export function evalQtyFormula(formula, vars = {}) {
+  if (!formula || typeof formula !== 'string') return null
+  try {
+    const { COUNT = 1, METER = 0, FLOOR = 1 } = vars
+    // Safe eval: only allow numbers, operators, parens, and our variables
+    const safe = formula
+      .replace(/COUNT/g, String(COUNT))
+      .replace(/METER/g, String(METER))
+      .replace(/FLOOR/g, String(FLOOR))
+      .replace(/[^0-9.+\-*/()\s]/g, '')
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict"; return (' + safe + ')')()
+    return typeof result === 'number' && isFinite(result) ? result : null
+  } catch {
+    return null
+  }
+}
+
+// Get effective qty for a component (formula takes priority over fixed qty)
+export function getComponentQty(component, vars = {}) {
+  if (component.qty_formula) {
+    const result = evalQtyFormula(component.qty_formula, vars)
+    if (result !== null) return result
+  }
+  return component.qty || 0
+}
 
 /**
  * Get active components for an assembly considering variant selection

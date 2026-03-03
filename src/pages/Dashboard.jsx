@@ -205,7 +205,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
               {fmt(settings.labor.hourly_rate)} Ft<span style={{ fontSize: 14, color: C.textSub }}>/ó</span>
             </div>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, marginTop: 6 }}>
-              Árrés: {Math.round((settings.labor.default_margin - 1) * 100)}% · ÁFA: {settings.labor.vat_percent}%
+              Árrés: {settings.labor.markup_percent ?? 15}% {settings.labor.markup_type === "margin" ? "(margin)" : "(markup)"} · ÁFA: {settings.labor.vat_percent}%
             </div>
           </Card>
 

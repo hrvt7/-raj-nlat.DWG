@@ -29,8 +29,14 @@ export const DEFAULT_SETTINGS = {
     hourly_rate: 9000,       // Ft/óra
     overtime_multiplier: 1.3,
     weekend_multiplier: 1.5,
-    default_margin: 1.15,
+    // Markup vs Margin distinction (Phase 1.4)
+    // markup_type: 'markup'  →  grandTotal = subtotal × (1 + pct/100)
+    // markup_type: 'margin'  →  grandTotal = subtotal / (1 − pct/100)
+    markup_percent: 15,
+    markup_type: 'markup',   // 'markup' | 'margin'
     vat_percent: 27,
+    // Labor difficulty mode: affects p50/p90 column selection + productivity multiplier
+    difficulty_mode: 'normal',  // 'normal' | 'difficult' | 'very_difficult'
   },
   overhead: {
     visits: 2,
@@ -38,10 +44,21 @@ export const DEFAULT_SETTINGS = {
     travel_cost_per_visit: 3500, // Ft
   },
   context_defaults: {
-    wall_material: 'brick',
-    access: 'empty',
-    project_type: 'renovation',
-    height: 'normal',
+    // Group 1: Helyszíni körülmények
+    wall_material:  'brick',
+    access:         'empty',
+    project_type:   'renovation',
+    height:         'normal',
+    // Group 2: Projekt komplexitás
+    layout_complexity: 'normal',
+    concurrent_trades: 'none',
+    prefabrication:    'standard',
+    // Group 3: Munkakörülmények
+    overtime:           'normal',
+    weather_environment:'normal',
+    // Group 4: Tapasztalat & tervezés
+    engineering_changes:'none',
+    crew_experience:    'normal',
   },
   quote: {
     validity_days: 30,
@@ -200,7 +217,34 @@ function save(key, value) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function loadSettings() {
-  return { ...DEFAULT_SETTINGS, ...load(LS_KEYS.SETTINGS, {}) }
+  const stored = load(LS_KEYS.SETTINGS, {})
+  const merged = { ...DEFAULT_SETTINGS, ...stored }
+
+  // ── Migration: default_margin (multiplier) → markup_percent + markup_type ──
+  if (stored?.labor?.default_margin != null && stored?.labor?.markup_percent == null) {
+    const old = parseFloat(stored.labor.default_margin) || 1.15
+    merged.labor = {
+      ...merged.labor,
+      markup_percent: Math.round((old - 1) * 100),
+      markup_type: 'markup',
+    }
+    delete merged.labor.default_margin
+    // Persist migration immediately
+    saveSettings(merged)
+  }
+
+  // ── Deep-merge labor sub-object to avoid losing new fields ──
+  if (stored?.labor) {
+    merged.labor = { ...DEFAULT_SETTINGS.labor, ...stored.labor }
+    if (stored.labor.default_margin != null) delete merged.labor.default_margin
+  }
+
+  // ── Deep-merge context_defaults so new NECA factors get their defaults ──
+  if (stored?.context_defaults) {
+    merged.context_defaults = { ...DEFAULT_SETTINGS.context_defaults, ...stored.context_defaults }
+  }
+
+  return merged
 }
 export function saveSettings(settings) {
   save(LS_KEYS.SETTINGS, settings)
