@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import DxfViewerCanvas from './DxfViewer/DxfViewerCanvas.jsx'
-import { parseDxfFile } from '../dxfParser.js'
+import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { estimateCablesFallback } from '../cableAgent.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
 
@@ -397,11 +397,23 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
 
+  // ── DWG conversion state ───────────────────────────────────────────────────
+  const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
+  const [viewerFile, setViewerFile] = useState(null)  // synthetic DXF File for DxfViewerCanvas
+
   // ── Data ──────────────────────────────────────────────────────────────────
   const canvasRef = useRef(null)
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
   const workItems = useMemo(() => { try { return loadWorkItems() } catch { return [] } }, [])
   const materials = useMemo(() => materialsProp || loadMaterials(), [materialsProp])
+
+  // ── Helper: File → base64 string ──────────────────────────────────────────
+  const fileToBase64 = useCallback((file) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result.split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  }), [])
 
   // ── Parse file on drop ────────────────────────────────────────────────────
   const handleFile = useCallback(async (f) => {
@@ -412,17 +424,63 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setQtyOverrides({})
     setVariantOverrides({})
     setCableEstimate(null)
+    setDwgStatus(null)
+    setViewerFile(null)
 
-    if (!f.name.toLowerCase().endsWith('.dxf') && !f.name.toLowerCase().endsWith('.dwg')) {
-      // PDF or DWG — no block data, skip recognition
+    const ext = f.name.toLowerCase().split('.').pop()
+
+    if (ext !== 'dxf' && ext !== 'dwg') {
+      // PDF — no block data, skip recognition
       setParsedDxf({ success: false, _noDxf: true })
       return
     }
 
     setParsePending(true)
     setParseProgress(0)
+
     try {
-      const result = await parseDxfFile(f, pct => setParseProgress(pct))
+      let result
+
+      if (ext === 'dwg') {
+        // ── CloudConvert DWG → DXF conversion ──────────────────────────────
+        setDwgStatus('converting')
+        let dxfText = null
+        try {
+          const base64 = await fileToBase64(f)
+          const apiUrl = import.meta.env.VITE_API_URL || ''
+          const res = await fetch(`${apiUrl}/api/convert-dwg`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: f.name, data: base64 }),
+          })
+          if (!res.ok) throw new Error(`CloudConvert API error: ${res.status}`)
+          const json = await res.json()
+          if (json.dxfText) {
+            dxfText = json.dxfText
+          } else if (json.dxf) {
+            dxfText = atob(json.dxf)
+          } else {
+            throw new Error('No DXF data returned from conversion')
+          }
+        } catch (convErr) {
+          console.warn('DWG → DXF conversion failed:', convErr)
+          setDwgStatus('failed')
+          setParsedDxf({ success: false, _dwgFailed: true })
+          return
+        }
+
+        setDwgStatus('done')
+        // Create synthetic DXF file for the viewer and parse for recognition
+        const syntheticFile = new File([dxfText], f.name.replace(/\.dwg$/i, '.dxf'), { type: 'text/plain' })
+        setViewerFile(syntheticFile)
+        result = parseDxfText(dxfText)
+
+      } else {
+        // ── Native DXF parse ───────────────────────────────────────────────
+        setViewerFile(f)
+        result = await parseDxfFile(f, pct => setParseProgress(pct))
+      }
+
       setParsedDxf(result)
 
       // Run recognition on all unique block types
@@ -437,15 +495,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       }).sort((a, b) => b.confidence - a.confidence || b.qty - a.qty)
 
       setRecognizedItems(items)
-      // Start on the recognition tab if there are recognized items
       if (items.length) setRightTab('recognize')
     } catch (err) {
-      console.error('DXF parse error:', err)
+      console.error('Parse error:', err)
       setParsedDxf({ success: false, error: err.message })
     } finally {
       setParsePending(false)
     }
-  }, [])
+  }, [fileToBase64])
 
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
   const takeoffRows = useMemo(() => {
@@ -584,24 +641,40 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     )
   }
 
-  // ── Render: parsing ───────────────────────────────────────────────────────
+  // ── Render: parsing / DWG converting ─────────────────────────────────────
   if (parsePending) {
+    const isDwgConverting = dwgStatus === 'converting'
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 20 }}>
-        <div style={{ fontFamily: 'DM Mono', fontSize: 14, color: C.textSub }}>Tervrajz feldolgozása...</div>
-        <div style={{ width: 300, height: 4, background: C.border, borderRadius: 2 }}>
-          <div style={{ height: '100%', width: `${parseProgress}%`, background: C.accent, borderRadius: 2, transition: 'width 0.3s' }} />
-        </div>
-        <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{parseProgress}%</div>
+        {isDwgConverting ? (
+          <>
+            <div style={{ fontSize: 32 }}>🔄</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 14, color: C.textSub }}>DWG → DXF konverzió (CloudConvert)...</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Ez néhány másodpercet vesz igénybe</div>
+            <div style={{ width: 240, height: 3, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: '40%', background: C.accent, borderRadius: 2, animation: 'slideProgress 1.2s ease-in-out infinite' }} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 14, color: C.textSub }}>Tervrajz feldolgozása...</div>
+            <div style={{ width: 300, height: 4, background: C.border, borderRadius: 2 }}>
+              <div style={{ height: '100%', width: `${parseProgress}%`, background: C.accent, borderRadius: 2, transition: 'width 0.3s' }} />
+            </div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{parseProgress}%</div>
+          </>
+        )}
       </div>
     )
   }
 
-  const isDxf = file.name.toLowerCase().endsWith('.dxf')
+  // isDxf = native DXF file, OR DWG that was successfully converted to DXF
+  const isDxf = file.name.toLowerCase().endsWith('.dxf') || dwgStatus === 'done'
 
   // ── Render: main workspace ────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <style>{`@keyframes slideProgress { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }`}</style>
 
       {/* ── Sticky pricing bar ─────────────────────────────────────────────── */}
       <div style={{
@@ -664,10 +737,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
         {/* ── LEFT: DXF Viewer ──────────────────────────────────────────────── */}
         <div style={{ flex: '0 0 58%', position: 'relative', background: '#050507', borderRight: `1px solid ${C.border}` }}>
-          {isDxf && (
+          {isDxf && viewerFile && (
             <DxfViewerCanvas
               ref={canvasRef}
-              file={file}
+              file={viewerFile}
               clearColor="#050507"
               style={{ width: '100%', height: '100%' }}
             />
@@ -686,12 +759,41 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             />
           )}
 
-          {/* No DXF viewer fallback (PDF/DWG) */}
+          {/* No DXF viewer fallback — PDF or failed DWG conversion */}
           {!isDxf && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: C.muted }}>
-              <div style={{ fontSize: 48 }}>📄</div>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 13 }}>PDF/DWG nézegető hamarosan</div>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Adj meg eszközöket manuálisan →</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 32 }}>
+              {dwgStatus === 'failed' ? (
+                <>
+                  <div style={{ fontSize: 40 }}>⚠️</div>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.yellow, textAlign: 'center' }}>
+                    DWG konverzió sikertelen
+                  </div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, textAlign: 'center', maxWidth: 340, lineHeight: 1.7 }}>
+                    A CloudConvert API nem tudta konvertálni a fájlt.<br />
+                    Exportáld DXF formátumban, majd töltsd fel újra:
+                  </div>
+                  <div style={{
+                    background: C.bgCard, border: `1px solid ${C.borderLight}`, borderRadius: 10,
+                    padding: '16px 20px', maxWidth: 360, width: '100%',
+                  }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, lineHeight: 2 }}>
+                      <div><span style={{ color: C.accent }}>AutoCAD:</span> File → Export → DXF</div>
+                      <div><span style={{ color: C.accent }}>LibreCAD:</span> File → Export as → .dxf</div>
+                      <div><span style={{ color: C.accent }}>FreeCAD:</span> File → Export → .dxf</div>
+                      <div><span style={{ color: C.accent }}>BricsCAD:</span> Save As → .dxf (R2010)</div>
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
+                    Ajánlott DXF verzió: AutoCAD 2010 (R18) vagy újabb
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 40 }}>📄</div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.muted }}>PDF nézegető hamarosan</div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Adj meg eszközöket manuálisan →</div>
+                </>
+              )}
             </div>
           )}
 
@@ -752,8 +854,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               <div>
                 {recognizedItems.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-                    {parsedDxf?._noDxf
-                      ? 'PDF/DWG fájl nem tartalmaz block adatot. Adj hozzá elemeket manuálisan a Takeoff fülön.'
+                    {parsedDxf?._dwgFailed
+                      ? 'DWG konverzió sikertelen. Exportáld DXF-ként és töltsd fel újra.'
+                      : parsedDxf?._noDxf
+                      ? 'PDF fájl nem tartalmaz block adatot. Adj hozzá elemeket manuálisan a Takeoff fülön.'
                       : 'Nem találtunk block-okat a DXF-ben.'}
                   </div>
                 ) : (
