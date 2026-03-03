@@ -237,22 +237,68 @@ export default function Plans({ onNavigate }) {
           marginBottom: 24,
         }}
       >
-        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={dragging ? '#00E5A0' : C.textSub} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        {/* Animated scanner SVG */}
+        <div style={{ width: 96, height: 96, margin: '0 auto 12px' }}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+            <style>{`
+              .pl-grid-bg { stroke: rgba(255,255,255,0.18); stroke-width: 1; opacity: 0.3; }
+              .pl-doc-outline { stroke: #17C7FF; stroke-width: 2.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+              .pl-doc-inner { stroke: rgba(255,255,255,0.18); stroke-width: 2; fill: none; stroke-dasharray: 4 6; stroke-linecap: round; }
+              .pl-scan-line { stroke: #21F3A3; stroke-width: 2; filter: url(#pl-glow-scan); }
+              .pl-scanner-group { animation: pl-scan-move 3s ease-in-out infinite; }
+              @keyframes pl-scan-move {
+                0%, 100% { transform: translateY(120px); }
+                50% { transform: translateY(380px); }
+              }
+            `}</style>
+            <defs>
+              <pattern id="pl-grid2" width="16" height="16" patternUnits="userSpaceOnUse">
+                <path d="M 16 0 L 0 0 0 16" className="pl-grid-bg" fill="none"/>
+              </pattern>
+              <filter id="pl-glow-scan" x="-20%" y="-50%" width="140%" height="200%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+              <linearGradient id="pl-scan-trail" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stopColor="#21F3A3" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#21F3A3" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <rect width="512" height="512" fill="url(#pl-grid2)" />
+            <path d="M 176 112 L 288 112 L 336 160 L 336 400 L 176 400 Z" className="pl-doc-outline" />
+            <path d="M 288 112 L 288 160 L 336 160" className="pl-doc-outline" />
+            <line x1="208" y1="208" x2="304" y2="208" className="pl-doc-inner" />
+            <line x1="208" y1="256" x2="304" y2="256" className="pl-doc-inner" />
+            <line x1="208" y1="304" x2="272" y2="304" className="pl-doc-inner" />
+            <path d="M 160 112 L 192 112 M 176 96 L 176 128" stroke="#17C7FF" strokeWidth="1"/>
+            <path d="M 160 400 L 192 400 M 176 384 L 176 416" stroke="#17C7FF" strokeWidth="1"/>
+            <path d="M 320 400 L 352 400 M 336 384 L 336 416" stroke="#17C7FF" strokeWidth="1"/>
+            <g className="pl-scanner-group">
+              <rect x="156" y="-30" width="200" height="30" fill="url(#pl-scan-trail)" />
+              <line x1="156" y1="0" x2="356" y2="0" className="pl-scan-line" />
+              <polygon points="156,0 150,-5 150,5" fill="#21F3A3" />
+              <polygon points="356,0 362,-5 362,5" fill="#21F3A3" />
+            </g>
           </svg>
         </div>
-        <div style={{ color: C.text, fontSize: 14, fontWeight: 600, fontFamily: 'Syne' }}>
+        {/* Title */}
+        <div style={{
+          fontSize: 14, fontWeight: 700, fontFamily: 'Syne',
+          background: 'linear-gradient(90deg, #21F3A3 0%, #17C7FF 100%)',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+        }}>
           Tervrajz feltöltése
         </div>
-        <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
+        <div style={{ color: '#17C7FF', fontSize: 12, marginTop: 4, opacity: 0.65, fontFamily: 'DM Mono', letterSpacing: '0.03em' }}>
           DXF / DWG / PDF fájlok — húzd ide vagy kattints
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
           {['DXF', 'DWG', 'PDF'].map(ext => (
             <span key={ext} style={{
               padding: '2px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono',
-              background: C.bg, border: `1px solid ${C.border}`, color: C.textSub,
+              background: 'rgba(33,243,163,0.07)',
+              border: '1px solid rgba(33,243,163,0.25)',
+              color: '#21F3A3',
             }}>{ext}</span>
           ))}
         </div>
