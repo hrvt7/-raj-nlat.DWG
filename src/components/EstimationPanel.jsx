@@ -78,6 +78,9 @@ export default function EstimationPanel({
   const panelMarker  = markers.find(m => m.category === 'panel')
 
   // ── Cable calculations ──
+  // Device connection allowance: extra cable needed at the device end (not in floor plan distance)
+  const DEVICE_CABLE_ALLOWANCE_M = { switch: 0.3, socket: 0.3 }
+
   const cableData = useMemo(() => {
     if (!scale.calibrated || !scale.factor) return null
     if (!panelMarker) return null
@@ -90,7 +93,7 @@ export default function EstimationPanel({
     })
     if (devices.length === 0) return null
 
-    let totalHorizontal = 0, totalVertical = 0
+    let totalHorizontal = 0, totalVertical = 0, totalAllowance = 0
     const routes = []
 
     for (const dev of devices) {
@@ -106,24 +109,31 @@ export default function EstimationPanel({
       else if (dev.category === 'conduit')  deviceHeight = ceilingHeight - 0.1
       else if (dev.category === 'panel')    deviceHeight = ceilingHeight * 0.5
 
-      const verticalRun = (ceilingHeight - deviceHeight) + (ceilingHeight - 0.1)
+      const verticalRun  = (ceilingHeight - deviceHeight) + (ceilingHeight - 0.1)
+      // Extra connection allowance per device (e.g. 0.3m for switch/socket junction box tail)
+      const allowance    = DEVICE_CABLE_ALLOWANCE_M[dev.category] || 0
 
       totalHorizontal += realDist
       totalVertical   += verticalRun
+      totalAllowance  += allowance
       routes.push({
         fromX: panelMarker.x, fromY: panelMarker.y,
         toX: dev.x, toY: dev.y,
         horizontal: realDist,
         vertical:   verticalRun,
-        total:      realDist + verticalRun,
+        allowance,
+        total:      realDist + verticalRun + allowance,
         category:   dev.category,
       })
     }
 
     const totalCable     = totalHorizontal + totalVertical
     const wastePercent   = 15
-    const totalWithWaste = totalCable * (1 + wastePercent / 100)
-    return { routes, totalHorizontal, totalVertical, totalCable, wastePercent, totalWithWaste, deviceCount: devices.length }
+    const totalWithWaste = (totalCable + totalAllowance) * (1 + wastePercent / 100)
+    return {
+      routes, totalHorizontal, totalVertical, totalAllowance,
+      totalCable, wastePercent, totalWithWaste, deviceCount: devices.length,
+    }
   }, [markers, scale, panelMarker, ceilingHeight, switchHeight, socketHeight])
 
   // ── Cable by category ──
@@ -383,7 +393,10 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Kábel összesítő</div>
           <StatRow label="Vízszintes" value={`${cableData.totalHorizontal.toFixed(1)} m`} />
           <StatRow label="Függőleges" value={`${cableData.totalVertical.toFixed(1)} m`} />
-          <StatRow label="Összesen" value={`${cableData.totalCable.toFixed(1)} m`} accent />
+          {(cableData.totalAllowance || 0) > 0 && (
+            <StatRow label="Ráhagyás (kapcs./dugalj)" value={`+ ${(cableData.totalAllowance || 0).toFixed(1)} m`} />
+          )}
+          <StatRow label="Összesen" value={`${(cableData.totalCable + (cableData.totalAllowance || 0)).toFixed(1)} m`} accent />
           <StatRow label={`+ ${cableData.wastePercent}% hulladék`} value={`${cableData.totalWithWaste.toFixed(1)} m`} />
         </div>
       )}
@@ -505,6 +518,12 @@ function CablesTab({ cableData, cableByCategory, scale, panelMarker, countByCate
             </div>
           )
         })}
+        {(cableData.totalAllowance || 0) > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.orange }}>Ráhagyás (kapcs./dugalj 0.3m/db)</span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.orange, fontWeight: 700 }}>+ {(cableData.totalAllowance || 0).toFixed(1)} m</span>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: 4 }}>
           <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: C.accent }}>Összesen (+ hulladék)</span>
           <span style={{ fontFamily: 'DM Mono', fontSize: 13, fontWeight: 700, color: C.accent }}>{cableData.totalWithWaste.toFixed(1)} m</span>
@@ -546,10 +565,35 @@ const CATEGORY_ASM_MAP = {
 }
 // Cable trays → 'kabeltálca'
 
+// Keyword filter within a category — ensures switch→kapcsoló, socket→dugalj, etc.
+const CATEGORY_KEYWORDS_MAP = {
+  switch:   ['kapcsoló', 'váltó', 'mozgás', 'érzékelő', 'dimmer'],
+  socket:   ['dugalj', 'aljzat', 'cee', 'ipari'],
+  light:    ['lámpa', 'lámpatest', 'downlight', 'fali', 'led', 'vész', 'reflektor', 'spot'],
+  junction: ['kötő', 'doboz', 'elosztó doboz'],
+  panel:    ['elosztó', 'tábla', 'szekrény'],
+}
+
 function getRecommendedAssemblies(catKey, isCableTray, assemblies) {
   const asmCat = isCableTray ? 'kabeltálca' : (CATEGORY_ASM_MAP[catKey] || null)
   if (!asmCat) return []
-  return assemblies.filter(a => a.category === asmCat && (a.components || []).length > 0)
+
+  const categoryAssemblies = assemblies.filter(
+    a => a.category === asmCat && (a.components || []).length > 0
+  )
+
+  // Keyword-based relevance filter within the broad category
+  // (e.g. within 'szerelveny', show only kapcsoló-related for switch category)
+  const keywords = CATEGORY_KEYWORDS_MAP[catKey]
+  if (!keywords || keywords.length === 0) return categoryAssemblies
+
+  const relevant = categoryAssemblies.filter(a => {
+    const nameLower = a.name.toLowerCase()
+    return keywords.some(kw => nameLower.includes(kw))
+  })
+
+  // Fall back to full category list if no keyword match (user's custom assemblies may differ)
+  return relevant.length > 0 ? relevant : categoryAssemblies
 }
 
 // ─── Assembly Assignment Tab ────────────────────────────────────────────────
