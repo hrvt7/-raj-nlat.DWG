@@ -38,10 +38,10 @@ export default function SettingsPage({ settings, onSettingsChange, materials, on
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 28 }}>
+      <div style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${C.border}`, marginBottom: 28, overflowX: 'auto', flexShrink: 0 }}>
         {TABS.map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
-            padding: '10px 18px', background: 'transparent', border: 'none',
+            padding: '10px 12px', background: 'transparent', border: 'none',
             borderBottom: activeTab === tab.key ? `2px solid ${C.accent}` : '2px solid transparent',
             color: activeTab === tab.key ? C.accent : C.textSub,
             fontFamily: 'Syne', fontWeight: 700, fontSize: 13, cursor: 'pointer',
@@ -286,14 +286,14 @@ function MaterialsTab({ materials, onMaterialsChange }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: C.text, marginBottom: 4 }}>Anyagárlista</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub }}>
             {materials.length} tétel · Egyszer beállítod, minden ajánlatban ebből számol
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button variant="ghost" size="sm" onClick={resetMaterials}>⟳ Alap</Button>
           <Button variant="secondary" size="sm" onClick={() => bulkDiscount(15)}>15% ked. mindenkire</Button>
           <Button size="sm" onClick={() => setEditItem({ _isNew: true, code: '', name: '', unit: 'db', price: 0, discount: 0, category: 'egyeb' })} icon="＋">Új anyag</Button>
@@ -521,7 +521,7 @@ function ProductivityTab({ settings, update }) {
                             title={opt.desc}
                             style={{
                               flex: 1, minWidth: 100, padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
-                              textAlign: 'left', border: 'none', outline: 'none', transition: 'all 0.15s',
+                              textAlign: 'left', outline: 'none', transition: 'all 0.15s',
                               background: active ? C.accentDim : C.bg,
                               border: `1px solid ${active ? C.accent : C.border}`,
                             }}>

@@ -565,35 +565,43 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     if (!pricing || !takeoffRows.length) return
     setSaving(true); setSaveError(null)
     try {
-      const allWI = workItems
-      const items = []
-      for (const row of takeoffRows) {
-        const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
-        if (!asm) continue
-        for (const comp of (asm.components || [])) {
-          const compQty = comp.qty * row.qty
-          items.push({ name: comp.name, qty: compQty, unit: comp.unit, type: comp.itemType })
-        }
-      }
+      // Map computed lines to items with unitPrice + hours for QuoteView
+      const items = (pricing.lines || []).map(line => ({
+        name:        line.name,
+        qty:         line.qty,
+        unit:        line.unit,
+        type:        line.type,
+        unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
+        hours:       line.hours || 0,
+        materialCost: line.materialCost || 0,
+      }))
 
+      const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
       const quote = {
-        id: generateQuoteId(),
-        name: quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`,
+        id:           generateQuoteId(),
+        projectName:  displayName,   // QuoteView (App.jsx) reads projectName
+        project_name: displayName,   // Quotes.jsx list reads project_name
+        name:         displayName,   // compat alias
         clientName,
-        createdAt: new Date().toISOString(),
+        client_name:  clientName,    // Quotes.jsx list reads client_name
+        createdAt:    new Date().toISOString(),
+        created_at:   new Date().toISOString(),  // Quotes.jsx list reads created_at
+        status:      'draft',
+        // Top-level fields QuoteView reads directly
+        gross:          Math.round(pricing.total),
+        totalMaterials: Math.round(pricing.materialCost),
+        totalLabor:     Math.round(pricing.laborCost),
+        totalHours:     pricing.laborHours,
+        // Summary for Quotes list view (q.summary?.grandTotal)
+        summary: {
+          grandTotal:     Math.round(pricing.total),
+          totalWorkHours: pricing.laborHours,
+        },
+        pricingData: { hourlyRate, markup_pct: markup },
         items,
         context,
-        pricing: {
-          materialCost: pricing.materialCost,
-          laborCost: pricing.laborCost,
-          laborHours: pricing.laborHours,
-          markup: pricing.markup,
-          total: pricing.total,
-          hourlyRate,
-          markup_pct: markup,
-        },
         cableEstimate,
-        source: 'takeoff-workspace',
+        source:   'takeoff-workspace',
         fileName: file?.name,
       }
       saveQuote(quote)
@@ -671,8 +679,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         zIndex: 20,
       }}>
         {/* File name */}
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             📐 {file.name}
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
@@ -808,10 +816,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0 }}>
             {[
-              { id: 'recognize', label: `🔍 Felismerés`, badge: recognizedItems.length },
-              { id: 'takeoff',   label: `📋 Takeoff`,    badge: takeoffRows.length },
-              { id: 'cable',     label: `🔌 Kábel` },
-              { id: 'context',   label: `⚙️ Kontextus` },
+              { id: 'recognize', label: '🔍 Felism.', badge: recognizedItems.length },
+              { id: 'takeoff',   label: '📋 Takeoff',  badge: takeoffRows.length },
+              { id: 'cable',     label: '🔌 Kábel' },
+              { id: 'context',   label: '⚙️ Kontextus' },
             ].map(tab => (
               <button
                 key={tab.id}

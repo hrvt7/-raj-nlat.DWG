@@ -88,7 +88,8 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
         />
       ) : (
         <Card style={{ overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
               <tr style={{ background: C.bgCard }}>
                 {['Azonosító', 'Projekt neve', 'Megrendelő', 'Összeg (bruttó)', 'Munkaóra', 'Dátum', 'Státusz', ''].map(h => (
@@ -156,6 +157,7 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
               ))}
             </tbody>
           </table>
+        </div>
         </Card>
       )}
     </div>

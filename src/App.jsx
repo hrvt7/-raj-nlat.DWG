@@ -88,7 +88,8 @@ function QuoteView({ quote, onBack, onStatusChange }) {
       {(quote.items || []).length > 0 && (
         <div>
           <div style={{ color: C.text, fontWeight: 600, marginBottom: 12 }}>Tételek</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 500 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                 {['Megnevezés', 'Menny.', 'Anyag', 'Munkadíj', 'Összesen'].map(h => (
@@ -113,6 +114,7 @@ function QuoteView({ quote, onBack, onStatusChange }) {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
