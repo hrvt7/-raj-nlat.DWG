@@ -217,29 +217,35 @@ export function estimateCablesFallback(geometry) {
   const { devices, panels, polylines, scale, bounds } = geometry
   const uf = scale.factor || 0.001  // to meters
 
-  // Ha PDF vektoros elemzésből jön és már vannak kábelhosszak (_cable_m, _tray_m),
+  // Ha block adatokból jön (DXF/DWG/PDF) és már vannak kábelhosszak (_cable_m, _tray_m),
   // azokat közvetlenül felhasználjuk Manhattan becslés helyett
   if (geometry._from_blocks && (geometry._cable_m > 0 || geometry._tray_m > 0)) {
     const cableM = geometry._cable_m || 0
     const trayM = geometry._tray_m || 0
     const totalM = cableM + trayM
     const hasAnyData = totalM > 0 || devices.length > 0
+    // Intelligens elosztás ha van eszköz adat
+    const socketDevices = devices.filter(d => d.type === 'socket').length
+    const lightDevices = devices.filter(d => d.type === 'light').length
+    const totalDevices = socketDevices + lightDevices || 1
+    const socketRatio = socketDevices / totalDevices || 0.5
+    const lightRatio = lightDevices / totalDevices || 0.3
     return {
       success: true,
-      _source: 'pdf_vector_direct',
+      _source: 'block_data_direct',
       cable_total_m: Math.round(totalM),
       cable_by_type: {
-        socket_m: Math.round(cableM * 0.7),   // 70% dugalj körök (erőátviteli tervnél)
-        light_m: 0,
+        socket_m: Math.round(cableM * socketRatio),
+        light_m: Math.round(cableM * lightRatio),
         switch_m: 0,
-        other_m: Math.round(cableM * 0.3 + trayM),
+        other_m: Math.round(cableM * (1 - socketRatio - lightRatio) + trayM),
       },
       circuits: [],
       confidence: hasAnyData ? 0.72 : 0.25,
-      method: 'PDF vektoros elemzés (piros vonalak mérése)',
+      method: 'Tervrajz elemzés (kábelhossz rétegekből)',
       warnings: [
-        ...(trayM === 0 ? ['Kábeltálca hossz nem azonosítható a PDF-ből'] : []),
-        ...(!devices.length ? ['Eszközök nem számolhatók – PDF szimbólum detektálás korlátozott'] : []),
+        ...(trayM === 0 ? ['Kábeltálca hossz nem azonosítható a tervből'] : []),
+        ...(!devices.length ? ['Eszközök nem számolhatók – szimbólum detektálás korlátozott'] : []),
       ],
       panels_found: panels.map(p => ({ name: p.name, layer: p.layer })),
     }

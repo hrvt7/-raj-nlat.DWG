@@ -37,12 +37,40 @@ const ITEM_SUGGESTIONS = [
   'Kismegszakító', 'FI relé', 'Szekrény', 'Konduit cső', 'Flexibilis cső',
 ]
 
-// Build assembly suggestions (prefixed with 📦)
+// Build assembly suggestions (prefixed with 📦) — parent assemblies first, then variants
 function getAssemblySuggestions() {
   try {
     const assemblies = loadAssemblies()
-    return assemblies.map(a => ({ id: a.id, label: `📦 ${a.name}`, name: a.name }))
+    // Sort: parents first (no variantOf), then variants
+    const parents = assemblies.filter(a => !a.variantOf)
+    const variants = assemblies.filter(a => a.variantOf)
+    return [...parents, ...variants].map(a => ({
+      id: a.id,
+      label: `📦 ${a.name}${a.variantOf ? ' ↳' : ''}`,
+      name: a.name,
+      category: a.category,
+      tags: a.tags || [],
+    }))
   } catch { return [] }
+}
+
+// ─── Auto-assign DXF block name → assembly ID ──────────────────────────────
+const BLOCK_ASM_RULES = [
+  { patterns: ['LIGHT', 'LAMP', 'VILÁG', 'VILAG', 'LÁMPA', 'LAMPA', 'LED', 'SPOT', 'DOWNLIGHT', 'CEILING'], asmId: 'ASM-003' },
+  { patterns: ['SWITCH', 'KAPCS', 'KAPCSOL', 'DIMMER', 'TOGGLE'], asmId: 'ASM-002' },
+  { patterns: ['SOCKET', 'DUGALJ', 'ALJZAT', 'OUTLET', 'PLUG', 'CSATLAKOZ', 'RECEPT'], asmId: 'ASM-001' },
+  { patterns: ['PANEL', 'DB_PANEL', 'ELOSZTO', 'ELOSZTÓ', 'MDB', 'SZEKRÉNY', 'SZEKRENY', 'DISTRIBUTION', 'BOARD'], asmId: 'ASM-018' },
+  { patterns: ['SMOKE', 'FÜST', 'FUST', 'DETECTOR', 'ÉRZÉKEL', 'ERZEKEL'], asmId: null }, // no assembly yet
+]
+
+function autoAssignBlock(blockName) {
+  const up = (blockName || '').toUpperCase().replace(/[_\-\.]/g, ' ')
+  for (const rule of BLOCK_ASM_RULES) {
+    if (rule.asmId && rule.patterns.some(p => up.includes(p))) {
+      return rule.asmId
+    }
+  }
+  return null
 }
 
 // ─── WizardStepBar ─────────────────────────────────────────────────────────────
@@ -85,8 +113,15 @@ function InlineItemInput({ value, onChange, placeholder = 'Tétel neve...' }) {
 
   // Combine regular suggestions + assembly suggestions
   const asmSuggestions = getAssemblySuggestions()
-  const regularFiltered = ITEM_SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
-  const asmFiltered = asmSuggestions.filter(a => a.label.toLowerCase().includes(query.toLowerCase()) || a.id.toLowerCase().includes(query.toLowerCase())).slice(0, 4)
+  const regularFiltered = ITEM_SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+  // Show all matching assemblies (tags + name + id search), up to 20
+  const q = query.toLowerCase()
+  const asmFiltered = asmSuggestions.filter(a =>
+    a.label.toLowerCase().includes(q) ||
+    a.id.toLowerCase().includes(q) ||
+    a.tags?.some(t => t.toLowerCase().includes(q)) ||
+    a.category?.toLowerCase().includes(q)
+  ).slice(0, 20)
 
   const hasResults = regularFiltered.length > 0 || asmFiltered.length > 0
 
@@ -118,10 +153,13 @@ function InlineItemInput({ value, onChange, placeholder = 'Tétel neve...' }) {
               {asmFiltered.map(a => (
                 <div key={a.id} onMouseDown={() => { setQuery(a.id); onChange(a.id); setOpen(false) }}
                   style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, color: C.accent,
-                    borderBottom: `1px solid ${C.border}` }}
-                  onMouseEnter={e => e.target.style.background = C.bg}
-                  onMouseLeave={e => e.target.style.background = 'transparent'}
-                >{a.label} <span style={{ fontSize: 10, color: C.textMuted }}>{a.id}</span></div>
+                    borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.bg}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span>{a.label}</span>
+                  <span style={{ fontSize: 10, color: C.textMuted, fontFamily: 'monospace' }}>{a.id}</span>
+                </div>
               ))}
             </>
           )}
@@ -154,9 +192,9 @@ function FileProcessingAnimation({ status, filename }) {
   const isDone = status === 'done'
   const ext = filename?.split('.').pop()?.toLowerCase()
   const label = status === 'parsing' ? (
-    ext === 'pdf' ? 'PDF vektoros elemzés...' :
-    ext === 'dwg' ? 'DWG elemzés folyamatban...' :
-    'DXF elemzés folyamatban...'
+    ext === 'pdf' ? 'PDF tervrajz elemzés...' :
+    ext === 'dwg' ? 'DWG tervrajz elemzés...' :
+    'DXF tervrajz elemzés...'
   ) : 'Kész!'
   return (
     <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden',
@@ -776,10 +814,32 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
   const [merged, setMerged] = useState(false)
   const [blockMappings, setBlockMappings] = useState({})
   const [lengthMappings, setLengthMappings] = useState({})
+  const [autoAssigned, setAutoAssigned] = useState(false)
 
   const file = parsedFiles[activeFile] || parsedFiles[0]
   const blocks = file?.blocks || []
   const lengths = file?.lengths || []
+
+  // ── Auto-assign blocks to assemblies on first render ──
+  useEffect(() => {
+    if (autoAssigned) return
+    const allB = parsedFiles.flatMap(f => f.blocks || [])
+    const newMappings = {}
+    let anyAssigned = false
+    for (const b of allB) {
+      if (!blockMappings[b.name]) {
+        const asmId = autoAssignBlock(b.name)
+        if (asmId) {
+          newMappings[b.name] = asmId
+          anyAssigned = true
+        }
+      }
+    }
+    if (anyAssigned) {
+      setBlockMappings(prev => ({ ...prev, ...newMappings }))
+    }
+    setAutoAssigned(true)
+  }, [parsedFiles])
 
   // Merge all files
   const allBlocks = merged
@@ -831,8 +891,15 @@ function ReviewStep({ parsedFiles, onNext, onBack }) {
 
       {allBlocks.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ color: C.text, fontWeight: 600, marginBottom: 8, fontSize: 13 }}>
-            Blokkok ({allBlocks.length})
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ color: C.text, fontWeight: 600, fontSize: 13 }}>
+              Blokkok ({allBlocks.length})
+            </div>
+            {Object.keys(blockMappings).length > 0 && (
+              <div style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(0,229,160,0.12)', color: C.accent, fontFamily: 'DM Mono' }}>
+                ✓ {Object.keys(blockMappings).length} auto-hozzárendelve
+              </div>
+            )}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
@@ -995,9 +1062,9 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
   const [hourlyRate, setHourlyRate] = useState(settings.labor.hourly_rate)
   const [margin, setMargin] = useState(settings.labor.default_margin)
   const [vat, setVat] = useState(settings.labor.vat_percent)
-  const [items, setItems] = useState(() => buildInitialItems(reviewData, context, materials))
+  const [items, setItems] = useState(() => buildInitialItems(reviewData, context, materials, cableEstimate))
 
-  function buildInitialItems(rd, ctx, mats) {
+  function buildInitialItems(rd, ctx, mats, cableEst) {
     const result = []
     const allWI = loadWorkItems()
     const allAssemblies = loadAssemblies()
@@ -1074,6 +1141,68 @@ function PricingStep({ reviewData, context, settings, materials, cableEstimate, 
       const name = rd?.lengthMappings?.[l.layer] || l.layer
       expandItem(name, l.length, 'm', `l-${l.layer}`, 'length')
     })
+
+    // ── Cable estimate integration ──
+    // Ha van kábelbecslés (step 3), annak költségeit is beépítjük
+    if (cableEst && cableEst.cable_total_m > 0) {
+      const cableTypes = cableEst.cable_by_type || {}
+      const defaultCable = mats.find(m => m.code === 'MAT-021') || mats.find(m => m.name?.includes('NYM-J 3×2.5'))
+      const lightCable = mats.find(m => m.code === 'MAT-020') || mats.find(m => m.name?.includes('NYM-J 3×1.5'))
+      const cableWI = allWI.find(w => w.name?.includes('Kábel húzás') || w.name?.includes('Kábelfektetés'))
+      const cableNorm = cableWI?.p50 || 3 // 3 perc/m alapértelmezett normaidő
+
+      result.push({
+        id: 'cable-header',
+        name: '🔌 Kábel becslés',
+        qty: cableEst.cable_total_m, unit: 'm',
+        normMinutes: 0, hours: 0, unitPrice: 0,
+        type: 'cable-header', isGroupHeader: true,
+      })
+
+      // Dugalj körök (NYM-J 3×2.5)
+      if (cableTypes.socket_m > 0) {
+        const price = defaultCable?.price * (1 - (defaultCable?.discount || 0) / 100) || 450
+        result.push({
+          id: 'cable-socket',
+          name: '  ↳ Dugalj körök (NYM-J 3×2.5)', qty: cableTypes.socket_m, unit: 'm',
+          normMinutes: cableNorm, hours: (cableNorm * cableTypes.socket_m) / 60,
+          unitPrice: price, type: 'cable', assemblyId: 'cable-group',
+        })
+      }
+
+      // Lámpa körök (NYM-J 3×1.5)
+      if (cableTypes.light_m > 0) {
+        const price = lightCable?.price * (1 - (lightCable?.discount || 0) / 100) || 290
+        result.push({
+          id: 'cable-light',
+          name: '  ↳ Lámpa körök (NYM-J 3×1.5)', qty: cableTypes.light_m, unit: 'm',
+          normMinutes: cableNorm, hours: (cableNorm * cableTypes.light_m) / 60,
+          unitPrice: price, type: 'cable', assemblyId: 'cable-group',
+        })
+      }
+
+      // Kapcsoló körök (NYM-J 3×1.5)
+      if (cableTypes.switch_m > 0) {
+        const price = lightCable?.price * (1 - (lightCable?.discount || 0) / 100) || 290
+        result.push({
+          id: 'cable-switch',
+          name: '  ↳ Kapcsoló körök (NYM-J 3×1.5)', qty: cableTypes.switch_m, unit: 'm',
+          normMinutes: cableNorm, hours: (cableNorm * cableTypes.switch_m) / 60,
+          unitPrice: price, type: 'cable', assemblyId: 'cable-group',
+        })
+      }
+
+      // Egyéb (NYM-J 3×2.5)
+      if (cableTypes.other_m > 0) {
+        const price = defaultCable?.price * (1 - (defaultCable?.discount || 0) / 100) || 450
+        result.push({
+          id: 'cable-other',
+          name: '  ↳ Egyéb kábel', qty: cableTypes.other_m, unit: 'm',
+          normMinutes: cableNorm, hours: (cableNorm * cableTypes.other_m) / 60,
+          unitPrice: price, type: 'cable', assemblyId: 'cable-group',
+        })
+      }
+    }
 
     return result
   }
@@ -2456,7 +2585,7 @@ async function parsePdfBase64(base64, filename, legendContext, apiBase, scaleOve
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!vRes.ok) throw new Error('PDF vektoros elemzés sikertelen')
+  if (!vRes.ok) throw new Error('Tervrajz vektoros elemzés sikertelen')
   return await vRes.json()
 }
 
