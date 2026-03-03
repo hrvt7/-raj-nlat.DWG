@@ -869,22 +869,16 @@ export function generateAssemblyId(assemblies) {
 // Forrás: NECA Manual of Labor Units + Trimble/McCormick/Sage enterprise rendszerek
 // 12 faktor, 4 csoport – szorzatuk adja a végső produktivitási tényezőt
 // Alap (minden factor = default opció): szorzó = 1.0
+export const WALL_FACTORS = {
+  drywall:  0.80,   // Gipszkarton
+  ytong:    0.90,   // Ytong / pórusbeton
+  brick:    1.00,   // Tégla (referencia)
+  concrete: 1.45,   // Vasbeton
+}
+
 export const CONTEXT_FACTORS = {
 
-  // ── Csoport 1: Helyszíni körülmények ──────────────────────────────────────
-  wall_material: {
-    label: 'Falanyag',
-    group: 'helyszin',
-    groupLabel: 'Helyszíni körülmények',
-    desc: 'A szerelési felület anyaga befolyásolja a vésési/rögzítési időt.',
-    defaultKey: 'brick',
-    options: [
-      { key: 'drywall',  label: 'Gipszkarton',         factor: 0.80, icon: '🟢', desc: 'Legkönnyebb vágás, rögzítés' },
-      { key: 'ytong',    label: 'Ytong / pórusbeton',   factor: 0.90, icon: '🟡', desc: 'Könnyű vésés, befogadó anyag' },
-      { key: 'brick',    label: 'Tégla',                factor: 1.00, icon: '🟠', desc: 'Alap referencia – normál nehézség' },
-      { key: 'concrete', label: 'Vasbeton',             factor: 1.45, icon: '🔴', desc: 'Magfúrás, gyémánt vágó szükséges' },
-    ]
-  },
+  // ── Helyszíni körülmények (projekt szintű) ─────────────────────────────────
   access: {
     label: 'Hozzáférhetőség / berendezettség',
     group: 'helyszin',
@@ -922,95 +916,6 @@ export const CONTEXT_FACTORS = {
     ]
   },
 
-  // ── Csoport 2: Projekt komplexitás ────────────────────────────────────────
-  layout_complexity: {
-    label: 'Elrendezés összetettsége',
-    group: 'projekt',
-    groupLabel: 'Projekt komplexitás',
-    desc: 'Mennyire egységes / standard az épület és a kért elrendezés.',
-    defaultKey: 'normal',
-    options: [
-      { key: 'simple',  label: 'Egyszerű / szabályos',  factor: 0.95, icon: '🟢', desc: 'Ismétlődő minták, rövid nyomvonalak' },
-      { key: 'normal',  label: 'Normál',                 factor: 1.00, icon: '🟠', desc: 'Vegyes helyiségek, standard igények' },
-      { key: 'complex', label: 'Komplex / egyedi',       factor: 1.25, icon: '🔴', desc: 'Egyedi nyomvonalak, sok ügyfélkérés' },
-    ]
-  },
-  concurrent_trades: {
-    label: 'Párhuzamos szakmák száma',
-    group: 'projekt',
-    groupLabel: 'Projekt komplexitás',
-    desc: 'Minél több szakma dolgozik egyszerre, annál több a koordináció.',
-    defaultKey: 'none',
-    options: [
-      { key: 'none', label: 'Csak mi dolgozunk',   factor: 1.00, icon: '🟢', desc: 'Kizárólagos munkaterület' },
-      { key: 'few',  label: '1-2 párhuzamos',      factor: 1.10, icon: '🟡', desc: 'Burkoló, festő, stb.' },
-      { key: 'many', label: '3+ párhuzamos',       factor: 1.25, icon: '🔴', desc: 'Teli munkaterület, állandó koordináció' },
-    ]
-  },
-  prefabrication: {
-    label: 'Előregyártottság szintje',
-    group: 'projekt',
-    groupLabel: 'Projekt komplexitás',
-    desc: 'Ha az assembly komponensek előre össze vannak készítve, helyszíni idő csökken.',
-    defaultKey: 'standard',
-    options: [
-      { key: 'high',     label: 'Magas (előre elkészítve)', factor: 0.85, icon: '🟢', desc: 'Előre csoportosított dobozok, tálcák' },
-      { key: 'standard', label: 'Normál helyszíni szerelés', factor: 1.00, icon: '🟠', desc: 'Standard kivitelezési folyamat' },
-      { key: 'none',     label: 'Semmi előkészítés',         factor: 1.15, icon: '🔴', desc: 'Minden helyszínen kerül össze' },
-    ]
-  },
-
-  // ── Csoport 3: Munkakörülmények ───────────────────────────────────────────
-  overtime: {
-    label: 'Munkaidő / túlóra',
-    group: 'munka',
-    groupLabel: 'Munkakörülmények',
-    desc: 'Hosszabb munkanapokon és éjjel a teljesítmény csökken.',
-    defaultKey: 'normal',
-    options: [
-      { key: 'normal',   label: 'Normál munkaidő (8h)',  factor: 1.00, icon: '🟢', desc: '8 óra/nap, nincs tartós túlóra' },
-      { key: 'overtime', label: 'Rendszeres túlóra',     factor: 1.15, icon: '🟡', desc: '10-12 óra/nap, hétvégi műszakok' },
-      { key: 'night',    label: 'Éjszakai műszak',       factor: 1.25, icon: '🔴', desc: 'Csökkent látás és koordináció' },
-    ]
-  },
-  weather_environment: {
-    label: 'Időjárás / hőmérséklet',
-    group: 'munka',
-    groupLabel: 'Munkakörülmények',
-    desc: 'Extrém hőmérséklet vagy kültéri körülmény lassít.',
-    defaultKey: 'normal',
-    options: [
-      { key: 'normal',   label: 'Normál (15-25°C)',           factor: 1.00, icon: '🟢', desc: 'Beltéri, kellemes hőmérséklet' },
-      { key: 'hot_cold', label: 'Kellemetlenül meleg/hideg',  factor: 1.10, icon: '🟡', desc: '0°C alatt vagy 30°C felett' },
-      { key: 'extreme',  label: 'Extrém időjárás / kültér',  factor: 1.25, icon: '🔴', desc: 'Téli kültér, fűtetlen csarnok' },
-    ]
-  },
-
-  // ── Csoport 4: Tapasztalat / tervezési minőség ────────────────────────────
-  engineering_changes: {
-    label: 'Tervmódosítások',
-    group: 'tervezes',
-    groupLabel: 'Tapasztalat & tervezés',
-    desc: 'Tervváltások a kivitelezés során növelik az újragyártási időt.',
-    defaultKey: 'none',
-    options: [
-      { key: 'none',       label: 'Terv végleges',         factor: 1.00, icon: '🟢', desc: 'Stabil tervdokumentáció' },
-      { key: 'occasional', label: 'Alkalmi módosítások',   factor: 1.10, icon: '🟡', desc: '1-2 körülmény megváltozik' },
-      { key: 'frequent',   label: 'Folyamatos változások', factor: 1.30, icon: '🔴', desc: 'Heti szintű terv revíziók' },
-    ]
-  },
-  crew_experience: {
-    label: 'Szerelői tapasztalat / tanulási görbe',
-    group: 'tervezes',
-    groupLabel: 'Tapasztalat & tervezés',
-    desc: 'Mennyire ismeri a csapat ezt az épületet / munkafajtát.',
-    defaultKey: 'normal',
-    options: [
-      { key: 'experienced', label: 'Tapasztalt, ismert helyszín', factor: 0.95, icon: '🟢', desc: 'Ismételt munka, jó csapatmemória' },
-      { key: 'normal',      label: 'Normál tapasztalat',          factor: 1.00, icon: '🟠', desc: 'Átlagos gyakorlat' },
-      { key: 'new',         label: 'Új jellegű munka',            factor: 1.20, icon: '🔴', desc: 'Tanulási görbe, ismeretlen rendszer' },
-    ]
-  },
 }
 
 // ─── Összetett produktivitási szorzó számítása ──────────────────────────────

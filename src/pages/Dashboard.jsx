@@ -1,8 +1,15 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { C, fmt, StatCard, Card, QuoteStatusBadge, Button, EmptyState } from '../components/ui.jsx'
 import { loadWorkItems, loadMaterials, loadAssemblies } from '../data/store.js'
 
 export default function Dashboard({ quotes, settings, onNavigate }) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+
   const stats = useMemo(() => {
     const now = new Date()
     const thisMonth = quotes.filter(q => {
@@ -119,7 +126,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 280px', gap: 18 }}>
         {/* Recent quotes table */}
         <Card style={{ overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

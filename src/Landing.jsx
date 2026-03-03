@@ -59,7 +59,7 @@ const FEATURES = [
 const STEPS = [
   { n: '01', title: 'Terv feltöltés',    desc: 'Húzd be a DXF, DWG vagy PDF villamos terveket. Több emelet egyszerre – az app automatikusan összesíti.' },
   { n: '02', title: 'Mennyiség ellenőrzés', desc: 'Az app megszámolja a szerelvényeket és kábelhosszakat. Átnézed, javítod ha kell – 5 perc, nem 3 óra.' },
-  { n: '03', title: 'Normaidő kalkuláció', desc: 'Minden tételhez normaidő rendelve az adatbázisból. Fal anyaga, szerelési magasság – a motor mindent figyelembe vesz.' },
+  { n: '03', title: 'Normaidő kalkuláció', desc: 'Minden tételhez normaidő rendelve az adatbázisból. Tételenként állítható falanyag (GK / Ytong / Tégla / Beton), projekt szinten magasság és hozzáférhetőség – pontosan kalkulált munkadíj.' },
   { n: '04', title: 'Anyagárak és árrés',  desc: 'Saját anyagárlista, saját árrés százalék. Egységárak és összesítés automatikusan kalkulálva.' },
   { n: '05', title: 'PDF ajánlat letöltés', desc: 'Céglogós, tételes PDF egy kattintással. DXF feltöltéstől PDF-ig átlagosan 2 perc.' },
 ]
@@ -75,7 +75,7 @@ const FAQ = [
   { q: 'Milyen fájlformátumokat fogad el?', a: 'DXF natívan, korlátlan méretben. DWG direkt elemzéssel – nem kell konvertálni, az app kinyeri az adatokat a bináris fájlból is. A terv feltöltése után az alkalmazás automatikusan azonosítja a rétegeket és blokkokat. Minden esetben van review lépés, ahol ellenőrizheted az eredményt.' },
   { q: 'Mennyire pontos a mennyiségkimutatás?', a: 'DXF esetén 95%+ pontosság – a blokkok és vonalak gépi precizitással számolhatók. DWG esetén az adatok kinyerése a bináris formátumból közvetlen – a pontosság a terv struktúrájától függ. Minden esetben van review lépés, ahol javíthatsz mielőtt ajánlatot generálsz.' },
   { q: 'Kell AutoCAD a használathoz?', a: 'Nem. DXF-et a tervező exportál AutoCAD-ből, azt feltöltöd – kész. Ha csak DWG-d van, azt is feltöltheted közvetlenül. Az app böngészőben fut, nem kell semmit telepíteni.' },
-  { q: 'Mi van a normaidő-adatbázisban?', a: '60+ villamos szerelési normaidő-tétel, magyar szabványok alapján: dugalj, kapcsoló, lámpa, kismegszakító, kábeltálca, kábel fektetés és több. Módosítók: fal anyaga (tégla/beton), szerelési magasság. Az adatbázis az app beállításaiban szerkeszthető és bővíthető.' },
+  { q: 'Mi van a normaidő-adatbázisban?', a: '60+ villamos szerelési normaidő-tétel, magyar szabványok alapján: dugalj, kapcsoló, lámpa, kismegszakító, kábeltálca, kábel fektetés és több. A falanyag (GK / Ytong / Tégla / Beton) tételenként állítható be a Takeoff nézeten. Projekt szintű szorzók: hozzáférhetőség, magasság, projekt típus. Az adatbázis az app beállításaiban szerkeszthető és bővíthető.' },
   { q: 'Mennyit spórolok egy ajánlaton?', a: 'Egy átlagos közepes projekt ajánlata manuálisan 3-8 munkaóra. Az appban ugyanez 15-30 perc. Heti 2-3 ajánlatnál ez havi 20-50 munkaóra megtakarítás – vagyis a szoftver ára a megtakarítás töredéke.' },
   { q: 'Biztonságos a fájlfeltöltés?', a: 'A feltöltött terveket kizárólag az aktuális kalkulációhoz használjuk. A fájlok titkosított csatornán kerülnek feldolgozásra.' },
 ]
@@ -672,22 +672,22 @@ function NormTimeSection() {
           {/* Left: explanation */}
           <FadeIn>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>
-              Normaidő Motor
+              Normaidő Kalkuláció
             </div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(26px, 4vw, 42px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 20, lineHeight: 1.2 }}>
               Nem becsül –<br />
               <span style={{ color: '#00E5A0' }}>pontosan számol</span>
             </h2>
             <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', lineHeight: 1.85, marginBottom: 32 }}>
-              60+ normaidő-adat, tételenként. A motor figyelembe veszi a fal anyagát, a szerelési magasságot és a mennyiségi szorzókat – és P50/P90 becslést ad, nem egy sima átlagot.
+              60+ normaidő-adat, tételenként. Minden sorhoz beállítható a falanyag (GK / Ytong / Tégla / Beton) – a munkadíj pontosan tükrözi a valós beépítési körülményeket.
             </p>
 
             {/* Feature bullets */}
             {[
-              ['P50 / P90', 'Valószínűségi becslés, nem átlag – látod a kockázatot'],
-              ['Kontextus módosítók', 'Tégla vs. beton, normál vs. emelt magasság'],
+              ['Tételszintű falanyag', 'GK / Ytong / Tégla / Beton – soronként, nem globálisan'],
+              ['Projekt szorzók', 'Hozzáférhetőség, magasság, projekt típus – az egész projektre'],
               ['60+ tétel', 'Magyar elektromos normák alapján előre feltöltve'],
-              ['Saját normák', 'Pro csomagban szerkeszthető és bővíthető'],
+              ['Saját normák', 'Szerkeszthető és bővíthető a Beállításokban'],
             ].map(([title, desc], i) => (
               <div key={i} style={{ display: 'flex', gap: 14, marginBottom: 18, alignItems: 'flex-start' }}>
                 <div style={{ width: 20, height: 20, flexShrink: 0, marginTop: 1 }}>

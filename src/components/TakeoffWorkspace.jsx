@@ -8,7 +8,7 @@ import DxfViewerCanvas from './DxfViewer/DxfViewerCanvas.jsx'
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { estimateCablesFallback } from '../cableAgent.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
-import { calcProductivityFactor } from '../data/workItemsDb.js'
+import { calcProductivityFactor, WALL_FACTORS } from '../data/workItemsDb.js'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -60,7 +60,7 @@ function recognizeBlock(blockName) {
 
 // ─── Pricing computation ──────────────────────────────────────────────────────
 function computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate }) {
-  const ctxMultiplier = calcProductivityFactor(context)
+  const ctxMultiplier = calcProductivityFactor(context)  // height + access + project_type
 
   let materialCost = 0, laborHours = 0
   const lines = []
@@ -69,12 +69,14 @@ function computePricing({ takeoffRows, assemblies, workItems, materials, context
     const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
     if (!asm) continue
     const qty = row.qty
+    // Per-row wall factor (defaults to brick = 1.0)
+    const wallFactor = WALL_FACTORS[row.wallType || 'brick'] ?? 1.0
 
     for (const comp of (asm.components || [])) {
       const compQty = comp.qty * qty
       if (comp.itemType === 'workitem') {
         const wi = workItems.find(w => w.code === comp.itemCode) || workItems.find(w => w.name === comp.name)
-        const normMin = wi ? wi.p50 * ctxMultiplier : 0
+        const normMin = wi ? wi.p50 * ctxMultiplier * wallFactor : 0
         const hours = (normMin * compQty) / 60
         laborHours += hours
         lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
@@ -290,42 +292,57 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
 }
 
 // ─── Takeoff row ──────────────────────────────────────────────────────────────
-function TakeoffRow({ asmId, qty, variantId, assemblies, onQtyChange, onVariantChange, unitCost, isHighlighted }) {
+const WALL_OPTS = [
+  { key: 'drywall',  label: 'GK',    color: '#00E5A0' },
+  { key: 'ytong',    label: 'Ytong', color: '#FFD166' },
+  { key: 'brick',    label: 'Tégla', color: '#FF9A3C' },
+  { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
+]
+
+function TakeoffRow({ asmId, qty, variantId, wallType, assemblies, onQtyChange, onVariantChange, onWallChange, unitCost, isHighlighted }) {
   const asm = assemblies.find(a => a.id === asmId)
   const variant = variantId ? assemblies.find(a => a.id === variantId) : null
   const variants = assemblies.filter(a => a.variantOf === asmId)
-  const displayAsm = variant || asm
   const rule = BLOCK_ASM_RULES.find(r => r.asmId === asmId)
+  const activeWall = WALL_OPTS.find(w => w.key === (wallType || 'brick')) || WALL_OPTS[2]
 
   if (!asm) return null
 
   return (
     <div style={{
-      padding: '12px 14px', borderRadius: 8, marginBottom: 6,
+      padding: '10px 14px', borderRadius: 8, marginBottom: 6,
       background: isHighlighted ? 'rgba(0,229,160,0.06)' : C.bgCard,
       border: `1px solid ${isHighlighted ? C.accent + '60' : C.border}`,
-      display: 'flex', alignItems: 'center', gap: 10,
     }}>
-      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
-        {rule?.icon || '📦'}
-      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+          {rule?.icon || '📦'}
+        </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>{asm.name}</div>
-        {variants.length > 0 && (
-          <select
-            value={variantId || ''}
-            onChange={e => onVariantChange(asmId, e.target.value || null)}
-            style={{
-              marginTop: 2, background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 5,
-              color: C.textSub, fontSize: 11, padding: '2px 5px', fontFamily: 'DM Mono', cursor: 'pointer',
-            }}
-          >
-            <option value="">Standard</option>
-            {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
-        )}
-      </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{asm.name}</div>
+          <div style={{ display: 'flex', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+            {/* Wall type selector */}
+            {WALL_OPTS.map(w => (
+              <button key={w.key} onClick={() => onWallChange(asmId, w.key)}
+                style={{
+                  padding: '1px 7px', borderRadius: 4, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono',
+                  background: activeWall.key === w.key ? w.color + '22' : 'transparent',
+                  border: `1px solid ${activeWall.key === w.key ? w.color : C.border}`,
+                  color: activeWall.key === w.key ? w.color : C.textMuted,
+                  transition: 'all 0.12s',
+                }}
+              >{w.label}</button>
+            ))}
+            {variants.length > 0 && (
+              <select value={variantId || ''} onChange={e => onVariantChange(asmId, e.target.value || null)}
+                style={{ background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 4, color: C.textSub, fontSize: 10, padding: '1px 4px', fontFamily: 'DM Mono', cursor: 'pointer' }}>
+                <option value="">Standard</option>
+                {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            )}
+          </div>
+        </div>
 
       {/* Qty input */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -351,6 +368,7 @@ function TakeoffRow({ asmId, qty, variantId, assemblies, onQtyChange, onVariantC
       <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, minWidth: 70, textAlign: 'right' }}>
         {Math.round(unitCost * qty).toLocaleString('hu-HU')} Ft
       </div>
+      </div>
     </div>
   )
 }
@@ -368,9 +386,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [asmOverrides, setAsmOverrides] = useState({})       // blockName → asmId
   const [variantOverrides, setVariantOverrides] = useState({}) // asmId → variantId
   const [qtyOverrides, setQtyOverrides] = useState({})       // asmId → qty
+  const [wallOverrides, setWallOverrides] = useState({})     // asmId → wallType key
 
   // ── Project context ───────────────────────────────────────────────────────
-  const [context, setContext] = useState(settings?.context_defaults || { wall_material: 'brick', access: 'empty', project_type: 'renovation', height: 'normal' })
+  const [context, setContext] = useState(settings?.context_defaults || { access: 'empty', project_type: 'renovation', height: 'normal' })
   const [markup, setMarkup] = useState(settings?.labor?.markup_percent != null ? settings.labor.markup_percent / 100 : 0.15)
   const [hourlyRate, setHourlyRate] = useState(settings?.labor?.hourly_rate || 8500)
   const [quoteName, setQuoteName] = useState('')
@@ -384,6 +403,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [rightTab, setRightTab] = useState('recognize') // 'recognize' | 'takeoff' | 'cable' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
+  // ── Mobile responsive state ───────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+  const [showDxfOnMobile, setShowDxfOnMobile] = useState(false)
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
 
   // ── DWG conversion state ───────────────────────────────────────────────────
   const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
@@ -411,6 +438,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setAsmOverrides({})
     setQtyOverrides({})
     setVariantOverrides({})
+    setWallOverrides({})
     setCableEstimate(null)
     setDwgStatus(null)
     setViewerFile(null)
@@ -499,10 +527,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const asmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
       if (!asmId) continue
       const qty = qtyOverrides[asmId] !== undefined ? qtyOverrides[asmId] : (rowMap[asmId]?.qty || 0) + item.qty
-      rowMap[asmId] = { asmId, qty, variantId: variantOverrides[asmId] || null }
+      rowMap[asmId] = { asmId, qty, variantId: variantOverrides[asmId] || null, wallType: wallOverrides[asmId] || null }
     }
     return Object.values(rowMap)
-  }, [recognizedItems, asmOverrides, qtyOverrides, variantOverrides])
+  }, [recognizedItems, asmOverrides, qtyOverrides, variantOverrides, wallOverrides])
 
   // ── Auto-compute cable estimate when takeoff changes ──────────────────────
   useEffect(() => {
@@ -674,9 +702,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
       {/* ── Sticky pricing bar ─────────────────────────────────────────────── */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 0, padding: '12px 20px',
+        display: 'flex', alignItems: 'center', gap: 0, padding: isMobile ? '10px 14px' : '12px 20px',
         background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexShrink: 0,
-        zIndex: 20,
+        zIndex: 20, flexWrap: 'wrap', rowGap: 8,
       }}>
         {/* File name */}
         <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -687,6 +715,22 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {totalItems} elem · {takeoffRows.length} assembly · {cableEstimate ? `~${Math.round(cableEstimate.cable_total_m)} m kábel` : 'kábel: —'}
           </div>
         </div>
+
+        {/* Mobile: DXF viewer toggle button */}
+        {isMobile && isDxf && (
+          <button
+            onClick={() => setShowDxfOnMobile(p => !p)}
+            style={{
+              padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+              background: showDxfOnMobile ? C.accentDim : C.bgHover,
+              border: `1px solid ${showDxfOnMobile ? C.accent : C.border}`,
+              color: showDxfOnMobile ? C.accent : C.textSub,
+              fontFamily: 'Syne', fontWeight: 700, fontSize: 11, flexShrink: 0,
+            }}
+          >
+            {showDxfOnMobile ? '📋 Takeoff' : '📐 Terv'}
+          </button>
+        )}
 
         {/* Pricing summary */}
         {pricing ? (
@@ -732,7 +776,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* ── LEFT: DXF Viewer ──────────────────────────────────────────────── */}
-        <div style={{ flex: '0 0 58%', position: 'relative', background: '#050507', borderRight: `1px solid ${C.border}` }}>
+        <div style={{ flex: isMobile ? '0 0 100%' : '0 0 58%', position: 'relative', background: '#050507', borderRight: `1px solid ${C.border}`, display: (isMobile && !showDxfOnMobile) ? 'none' : undefined }}>
           {isDxf && viewerFile && (
             <DxfViewerCanvas
               ref={canvasRef}
@@ -811,7 +855,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         </div>
 
         {/* ── RIGHT: Takeoff Panel ──────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
+        <div style={{ flex: 1, display: (isMobile && showDxfOnMobile) ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
 
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0 }}>
@@ -959,10 +1003,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         asmId={row.asmId}
                         qty={row.qty}
                         variantId={row.variantId}
+                        wallType={row.wallType}
                         assemblies={assemblies}
                         isHighlighted={highlightBlock && recognizedItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onQtyChange={(id, qty) => setQtyOverrides(p => ({ ...p, [id]: qty }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
+                        onWallChange={(id, wt) => setWallOverrides(p => ({ ...p, [id]: wt }))}
                         unitCost={unitCostByAsm[row.asmId] || 0}
                       />
                     ))}
@@ -1036,8 +1082,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   ⚙️ Projekt körülmények
                 </div>
 
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, padding: '8px 10px', background: C.bgCard, borderRadius: 7, border: `1px solid ${C.border}` }}>
+                  💡 A falanyag tételenként állítható a Takeoff fülön (GK / Ytong / Tégla / Beton). Az alábbi beállítások az egész projektre vonatkoznak.
+                </div>
+
                 {[
-                  { key: 'wall_material', label: 'Falazat', options: [['drywall','Gipszkarton'], ['ytong','Ytong'], ['brick','Tégla'], ['concrete','Vasbeton']] },
                   { key: 'access', label: 'Hozzáférhetőség', options: [['empty','Üres'],['occupied','Berendezett'],['restricted','Korl. hozzáférés']] },
                   { key: 'project_type', label: 'Projekt típus', options: [['new_build','Új építés'],['renovation','Felújítás'],['industrial','Ipari']] },
                   { key: 'height', label: 'Munkavégzési magasság', options: [['normal','Normál (≤2.5m)'],['ladder','Létra (2.5–4m)'],['scaffold','Állvány (4m+)']] },
