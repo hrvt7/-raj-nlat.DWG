@@ -83,8 +83,14 @@ function parseDxfText(text) {
   const layerInfo     = {}
   const titleBlock    = {}
 
+  const insertPositions = []
+  const lineGeom        = []
+  const polylineGeom    = []
+  const MAX_LINES = 3000, MAX_POLYS = 800
+
   let entityType = null, entityLayer = 'DEFAULT', pts = [], ptX = null, ptY = null
   let closed = false, lineStart = null, textVal = null
+  let insName = null, insX = null, insY = null
 
   const flushPolyline = () => {
     if (entityType === 'LWPOLYLINE' && pts.length > 1) {
@@ -98,6 +104,20 @@ function parseDxfText(text) {
         L+=Math.sqrt(dx*dx+dy*dy)
       }
       lengthByLayer[entityLayer] = (lengthByLayer[entityLayer]||0) + L
+      if (polylineGeom.length < MAX_POLYS) {
+        const pointsCopy = [...pts]
+        if (ptX !== null) pointsCopy.push([ptX, ptY||0])
+        if (pointsCopy.length > 1) polylineGeom.push({ layer: entityLayer, points: pointsCopy, closed })
+      }
+    }
+  }
+
+  const flushInsert = () => {
+    if (entityType === 'INSERT' && insName !== null && insX !== null) {
+      const key = `${insName}||${entityLayer}`
+      blockCounts[key] = (blockCounts[key]||0) + 1
+      insertPositions.push({ name: insName, layer: entityLayer, x: insX, y: insY ?? 0 })
+      insName = null; insX = null; insY = null
     }
   }
 
@@ -106,12 +126,14 @@ function parseDxfText(text) {
 
   for (let i = 0; i < entityTokens.length; i++) {
     const [code, val] = entityTokens[i]
-    if (code === 0 && val === 'ENDSEC') break
+    if (code === 0 && val === 'ENDSEC') { flushPolyline(); flushInsert(); break }
 
     if (code === 0) {
       flushPolyline()
+      flushInsert()
       entityType = val; entityLayer = 'DEFAULT'; pts = []; ptX = null; ptY = null
       closed = false; lineStart = null; textVal = null
+      insName = null; insX = null; insY = null
       continue
     }
 
@@ -120,9 +142,10 @@ function parseDxfText(text) {
       if (!layerInfo[val]) { const info = parseLayerName(val); if (info) layerInfo[val] = info }
     }
 
-    if (entityType === 'INSERT' && code === 2) {
-      const key = `${val}||${entityLayer}`
-      blockCounts[key] = (blockCounts[key]||0) + 1
+    if (entityType === 'INSERT') {
+      if (code === 2) insName = val
+      if (code === 10) insX = parseFloat(val)
+      if (code === 20) insY = parseFloat(val)
     }
 
     if (entityType === 'LWPOLYLINE') {
@@ -140,6 +163,9 @@ function parseDxfText(text) {
         let ey = 0; if (next && next[0] === 21) { ey = parseFloat(next[1]); i++ }
         const dx=ex-lineStart[0], dy=ey-lineStart[1]
         lengthByLayer[entityLayer] = (lengthByLayer[entityLayer]||0) + Math.sqrt(dx*dx+dy*dy)
+        if (lineGeom.length < MAX_LINES) {
+          lineGeom.push({ layer: entityLayer, x1: lineStart[0], y1: lineStart[1], x2: ex, y2: ey })
+        }
         lineStart = null
       }
     }
@@ -158,6 +184,7 @@ function parseDxfText(text) {
     }
   }
   flushPolyline()
+  flushInsert()
   self.postMessage({ type: 'progress', pct: 96 })
 
   // ── Auto-detect units from raw lengths ─────────────────────────────────────
@@ -177,22 +204,43 @@ function parseDxfText(text) {
     .filter(([,v])=>v>0.01)
     .map(([layer,v])=>({
       layer,
-      length:     Math.round(v * unitFactor * 100000) / 100000,   // 5 decimal precision
-      length_raw: Math.round(v * 100000) / 100000,                // 5 decimal precision
+      length:     Math.round(v * unitFactor * 100000) / 100000,
+      length_raw: Math.round(v * 100000) / 100000,
       info: layerInfo[layer]||null,
     }))
     .sort((a,b)=>b.length-a.length)
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const ins of insertPositions) {
+    if (ins.x < minX) minX = ins.x; if (ins.x > maxX) maxX = ins.x
+    if (ins.y < minY) minY = ins.y; if (ins.y > maxY) maxY = ins.y
+  }
+  for (const l of lineGeom) {
+    if (l.x1 < minX) minX = l.x1; if (l.x1 > maxX) maxX = l.x1
+    if (l.x2 < minX) minX = l.x2; if (l.x2 > maxX) maxX = l.x2
+    if (l.y1 < minY) minY = l.y1; if (l.y1 > maxY) maxY = l.y1
+    if (l.y2 < minY) minY = l.y2; if (l.y2 > maxY) maxY = l.y2
+  }
+  const hasBounds = isFinite(minX)
+  const geomBounds = hasBounds
+    ? { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY }
+    : null
 
   return {
     success: true, blocks, lengths,
     layers: [...allLayers].sort(),
     units: { insunits, name: unitName, factor: unitFactor, auto_detected: true },
     title_block: titleBlock,
+    inserts: insertPositions,
+    lineGeom,
+    polylineGeom,
+    geomBounds,
     summary: {
       total_block_types: new Set(blocks.map(b=>b.name)).size,
       total_blocks: blocks.reduce((s,b)=>s+b.count,0),
       total_layers: allLayers.size,
       layers_with_lines: lengths.length,
+      total_inserts: insertPositions.length,
     },
     _source: 'browser',
   }
