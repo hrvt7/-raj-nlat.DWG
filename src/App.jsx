@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Landing from './Landing.jsx'
+import { generatePdf } from './utils/generatePdf.js'
 import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -24,23 +25,76 @@ const C = {
   bgHover: 'rgba(255,255,255,0.03)', redDim: 'rgba(255,107,107,0.08)',
 }
 
+// ─── PDF Detail Level Selector ────────────────────────────────────────────────
+const PDF_LEVELS = [
+  { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },
+  { key: 'summary',  label: 'Összesített',  icon: '▤', desc: '+ Munkacsoport-bontás' },
+  { key: 'detailed', label: 'Részletes',    icon: '▦', desc: '+ Minden tétel, anyagok, munka' },
+]
+
 // ─── QuoteView ────────────────────────────────────────────────────────────────
-function QuoteView({ quote, onBack, onStatusChange }) {
+function QuoteView({ quote, settings, onBack, onStatusChange }) {
   const statuses = ['draft', 'sent', 'won', 'lost']
   const statusLabels = { draft: 'Piszkozat', sent: 'Elküldve', won: 'Nyertes', lost: 'Elveszett' }
   const statusColors = { draft: C.muted, sent: C.blue, won: C.accent, lost: C.red }
+  const [pdfLevel, setPdfLevel] = useState('summary')
+  const [pdfGenerating, setPdfGenerating] = useState(false)
+
+  const handlePdf = () => {
+    setPdfGenerating(true)
+    try { generatePdf(quote, settings, pdfLevel) }
+    finally { setTimeout(() => setPdfGenerating(false), 1200) }
+  }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>←</button>
         <div>
           <div style={{ color: C.text, fontWeight: 700, fontSize: 20 }}>{quote.projectName}</div>
           <div style={{ color: C.muted, fontSize: 13 }}>{quote.id}</div>
         </div>
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <QuoteStatusBadge status={quote.status} />
         </div>
+      </div>
+
+      {/* ── PDF Export Panel ──────────────────────────────────────────────── */}
+      <div style={{
+        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12,
+        padding: '16px 20px', marginBottom: 24,
+        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 2 }}>PDF Árajánlat</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>Válaszd ki a részletezési szintet</div>
+        </div>
+        {/* Detail level buttons */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {PDF_LEVELS.map(lvl => (
+            <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} title={lvl.desc} style={{
+              padding: '7px 14px', borderRadius: 8, cursor: 'pointer', outline: 'none',
+              background: pdfLevel === lvl.key ? C.accentDim : C.bg,
+              border: `1px solid ${pdfLevel === lvl.key ? C.accentBorder : C.border}`,
+              color: pdfLevel === lvl.key ? C.accent : C.textSub,
+              fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              <span style={{ fontSize: 13 }}>{lvl.icon}</span> {lvl.label}
+            </button>
+          ))}
+        </div>
+        {/* Generate button */}
+        <button onClick={handlePdf} disabled={pdfGenerating} style={{
+          padding: '9px 20px', borderRadius: 8, cursor: pdfGenerating ? 'wait' : 'pointer',
+          background: pdfGenerating ? C.accentDim : C.accent,
+          border: 'none', color: '#09090B',
+          fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
+          display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+          opacity: pdfGenerating ? 0.7 : 1, marginLeft: 'auto',
+        }}>
+          {pdfGenerating ? '⏳' : '📄'} {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
+        </button>
       </div>
 
       <div style={{
@@ -391,7 +445,7 @@ function SaaSShell() {
           <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 14px' : '32px 28px' }}>
             <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
               {viewingQuote && page === 'quotes' ? (
-                <QuoteView quote={viewingQuote} onBack={() => setViewingQuote(null)}
+                <QuoteView quote={viewingQuote} settings={settings} onBack={() => setViewingQuote(null)}
                   onStatusChange={handleStatusChange} />
               ) : page === 'dashboard' ? (
                 <Dashboard quotes={quotes} settings={settings}

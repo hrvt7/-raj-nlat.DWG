@@ -87,9 +87,65 @@ function Field({ label, children, full }) {
 
 function CompanyTab({ settings, update }) {
   const c = settings.company
+  const logoRef = React.useRef(null)
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 500 * 1024) { alert('A logó mérete max. 500 KB lehet.'); return }
+    const reader = new FileReader()
+    reader.onload = ev => update('company.logo_base64', ev.target.result)
+    reader.readAsDataURL(file)
+  }
+
   return (
     <Card style={{ padding: 28, maxWidth: 640 }}>
       <SectionHeader title="Céges adatok (fejlécen megjelenik az ajánlatokon)" />
+
+      {/* ── Logo upload ──────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ display: 'block', fontSize: 11, color: C.textSub, fontFamily: 'DM Mono', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Céges logó (PDF fejlécen jelenik meg)
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          {/* Preview box */}
+          <div style={{
+            width: 160, height: 64, borderRadius: 8, border: `1.5px dashed ${c.logo_base64 ? C.accentBorder : C.border}`,
+            background: c.logo_base64 ? '#0A0A0F' : C.bg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden',
+          }}>
+            {c.logo_base64
+              ? <img src={c.logo_base64} alt="logó" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: 4 }} />
+              : <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>Nincs logó</span>
+            }
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              ref={logoRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              style={{ display: 'none' }}
+              onChange={handleLogoUpload}
+            />
+            <button onClick={() => logoRef.current?.click()} style={{
+              padding: '8px 16px', borderRadius: 7, cursor: 'pointer',
+              background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+              color: C.accent, fontFamily: 'DM Mono', fontSize: 12, fontWeight: 500,
+            }}>
+              {c.logo_base64 ? '🔄 Logó cseréje' : '📁 Logó feltöltése'}
+            </button>
+            {c.logo_base64 && (
+              <button onClick={() => update('company.logo_base64', '')} style={{
+                padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
+                background: C.redDim, border: '1px solid rgba(255,107,107,0.2)',
+                color: C.red, fontFamily: 'DM Mono', fontSize: 11,
+              }}>✕ Törlés</button>
+            )}
+            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>PNG / JPG / SVG · max 500 KB</span>
+          </div>
+        </div>
+      </div>
+
       <FieldGroup>
         <Field label="Cég neve" full><Input value={c.name} onChange={v => update('company.name', v)} placeholder="pl. Kovács Villanyszerelés Kft." /></Field>
         <Field label="Cím"><Input value={c.address} onChange={v => update('company.address', v)} placeholder="1234 Budapest, Fő utca 1." /></Field>

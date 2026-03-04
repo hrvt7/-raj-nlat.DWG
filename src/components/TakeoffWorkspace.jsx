@@ -706,6 +706,27 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         materialCost: line.materialCost || 0,
       }))
 
+      // Build per-assembly summary for PDF Összesített / Részletes views
+      const assemblySummary = takeoffRows.map(row => {
+        const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
+        const rowPricing = computePricing({
+          takeoffRows: [row],
+          assemblies, workItems, materials, context, markup, hourlyRate,
+          cableEstimate: null,
+        })
+        return {
+          id:            row.asmId,
+          name:          asm?.name || row.asmId,
+          category:      asm?.category || '',
+          qty:           row.qty,
+          wallSplits:    row.wallSplits || null,
+          totalPrice:    Math.round(rowPricing.total),
+          totalMaterials: Math.round(rowPricing.materialCost),
+          totalLabor:    Math.round(rowPricing.laborCost),
+          totalHours:    rowPricing.laborHours,
+        }
+      })
+
       const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
       const quote = {
         id:           generateQuoteId(),
@@ -729,6 +750,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         },
         pricingData: { hourlyRate, markup_pct: markup },
         items,
+        assemblySummary,   // per-assembly breakdown for PDF
         context,
         cableEstimate,
         source:   'takeoff-workspace',
