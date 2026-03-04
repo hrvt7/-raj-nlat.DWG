@@ -133,11 +133,32 @@ export function getTradeForMaterialCategory(materialCategory) {
   return null
 }
 
-// Szűrés: adott trade-hez tartozó + közös kategóriák
+// Szűrés: adott trade-hez tartozó + közös kategóriák (work item szinten)
 export function getCategoriesForTrade(tradeId) {
   const trade = getTradeById(tradeId)
   if (!trade) return []
   return [...new Set([...SHARED_CATEGORIES, ...trade.categories])]
+}
+
+/**
+ * Assembly szintű kategória szűrés – csak a trade kizárólagos kategóriái,
+ * SHARED kategóriák NEM szerepelnek (azok erősáram assembly-ket tartalmaznak).
+ * erosaram → saját összes kategória (ő "örökli" a shared assembly-ket)
+ * gyengaram → csak ['gyengaram']
+ * tuzjelzo  → csak ['tuzjelzo']
+ */
+export function getAssemblyCategoriesForTrade(tradeId) {
+  const trade = getTradeById(tradeId)
+  if (!trade) return []
+  if (tradeId === 'erosaram') {
+    // Erősáram: minden kategória KIVÉVE a más trade-ek kizárólagosait
+    const otherExclusive = TRADES
+      .filter(t => t.id !== 'erosaram')
+      .flatMap(t => t.categories.filter(c => !SHARED_CATEGORIES.includes(c)))
+    return trade.categories.filter(c => !otherExclusive.includes(c))
+  }
+  // Gyengeáram, tűzjelző: csak a saját kizárólagos kategóriák
+  return trade.categories.filter(c => !SHARED_CATEGORIES.includes(c))
 }
 
 export function getMaterialCategoriesForTrade(tradeId) {

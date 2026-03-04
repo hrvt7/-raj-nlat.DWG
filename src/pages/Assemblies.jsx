@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
 import { WORK_ITEM_CATEGORIES, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId, getAssemblyCompleteness, getAssemblyComponents } from '../data/workItemsDb.js'
 import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount, trackAsmUsage } from '../data/store.js'
-import { getCategoriesForTrade, SHARED_CATEGORIES } from '../data/trades.js'
+import { getAssemblyCategoriesForTrade, SHARED_CATEGORIES } from '../data/trades.js'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 
 // ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
@@ -18,10 +18,11 @@ export default function AssembliesPage({ activeTrade }) {
   const [aiHistory, setAiHistory] = useState([])
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_asm_view') || 'grid')
 
-  // Trade filtering: restrict assemblies to active trade's categories
+  // Trade filtering: restrict assemblies to ONLY exclusive categories of the active trade
+  // (shared categories like 'kabelezes' are excluded so e.g. Villanytűzhely doesn't appear in Tűzjelző)
   const tradeCategories = useMemo(() => {
     if (!activeTrade) return null // null = show all
-    return getCategoriesForTrade(activeTrade)
+    return getAssemblyCategoriesForTrade(activeTrade)
   }, [activeTrade])
 
   const selected = assemblies.find(a => a.id === selectedId) || null
@@ -158,10 +159,16 @@ export default function AssembliesPage({ activeTrade }) {
         </div>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <FilterChip label="Összes" active={catFilter === 'all'} onClick={() => setCatFilter('all')} />
-          {WORK_ITEM_CATEGORIES.filter(c => assemblies.some(a => a.category === c.key)).map(c => (
-            <FilterChip key={c.key} label={c.label} active={catFilter === c.key}
-              onClick={() => setCatFilter(c.key)} />
-          ))}
+          {WORK_ITEM_CATEGORIES
+            .filter(c => {
+              // Only show categories relevant to the active trade
+              if (tradeCategories && !tradeCategories.includes(c.key)) return false
+              return assemblies.some(a => a.category === c.key)
+            })
+            .map(c => (
+              <FilterChip key={c.key} label={c.label} active={catFilter === c.key}
+                onClick={() => setCatFilter(c.key)} />
+            ))}
         </div>
 
         {/* Variant toggle + tag filter */}

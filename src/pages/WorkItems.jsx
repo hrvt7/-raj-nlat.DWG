@@ -80,22 +80,24 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange, activeTrad
           fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
           border: `1px solid ${activeCategory === 'all' ? C.accent : C.border}`
         }}>Összes ({workItems.length})</button>
-        {WORK_ITEM_CATEGORIES.map(cat => {
-          const count = workItems.filter(wi => wi.category === cat.key).length
-          if (count === 0) return null
-          const isActive = activeCategory === cat.key
-          return (
-            <button key={cat.key} onClick={() => setActiveCategory(cat.key)} style={{
-              padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
-              background: isActive ? C.accentDim : C.bgCard,
-              color: isActive ? C.accent : C.textSub,
-              fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
-              border: `1px solid ${isActive ? C.accentBorder : C.border}`
-            }}>
-              {cat.label} ({count})
-            </button>
-          )
-        })}
+        {WORK_ITEM_CATEGORIES
+          .filter(cat => !tradeCategories || tradeCategories.includes(cat.key))
+          .map(cat => {
+            const count = workItems.filter(wi => wi.category === cat.key).length
+            if (count === 0) return null
+            const isActive = activeCategory === cat.key
+            return (
+              <button key={cat.key} onClick={() => setActiveCategory(cat.key)} style={{
+                padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
+                background: isActive ? C.accentDim : C.bgCard,
+                color: isActive ? C.accent : C.textSub,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
+                border: `1px solid ${isActive ? C.accentBorder : C.border}`
+              }}>
+                {cat.label} ({count})
+              </button>
+            )
+          })}
       </div>
 
       {/* Search */}

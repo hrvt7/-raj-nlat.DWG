@@ -183,7 +183,7 @@ export const WORK_ITEMS_DEFAULT = [
   { code: 'TUZ-003', category: 'tuzjelzo',     name: 'Multiszenzoros érzékelő',     unit: 'db',  p50: 18,  p90: 30,  heightFactor: true,  desc: 'Optikai+hő kombinált érzékelő, aljzat, cím' },
   { code: 'TUZ-004', category: 'tuzjelzo',     name: 'Kézi jelzésadó',              unit: 'db',  p50: 20,  p90: 35,  heightFactor: true,  desc: 'Falra, süllyesztett/falon kívüli, fedél, bekötés' },
   { code: 'TUZ-005', category: 'tuzjelzo',     name: 'Hang-fényjelző (sziréna)',    unit: 'db',  p50: 25,  p90: 40,  heightFactor: true,  desc: 'Címezhető hangjelző + villogó rögzítés, bekötés' },
-  { code: 'TUZ-006', category: 'tuzjelzo',     name: 'Tűzjelző hurok kábel (J-Y(St)Y)', unit: 'm', p50: 5, p90: 9, heightFactor: true,  desc: 'Tűzjelző kábel fektetés csőben/tálcán, hurok topológia' },
+  { code: 'TUZ-006', category: 'tuzjelzo',     name: 'Tűzjelző hurok kábel (JE-H(St)H E30)', unit: 'm', p50: 5, p90: 9, heightFactor: true,  desc: 'Tűzálló kábel fektetés csőben/tálcán, hurok topológia (OTSZ FE180/E30 kötelező)' },
   { code: 'TUZ-007', category: 'tuzjelzo',     name: 'Tűzjelző központ telepítés',  unit: 'db',  p50: 240, p90: 400, heightFactor: false, desc: 'Központ rögzítés, tápbekötés, akku, hurok bekötés, program' },
   { code: 'TUZ-008', category: 'tuzjelzo',     name: 'Tűzjelző tábla kezelő',      unit: 'db',  p50: 45,  p90: 75,  heightFactor: false, desc: 'Távkezelő panel rögzítés, RS485 bekötés, program' },
   { code: 'TUZ-009', category: 'tuzjelzo',     name: 'I/O modul (bemeneti/kimeneti)', unit: 'db', p50: 25, p90: 40,  heightFactor: false, desc: 'Hurok I/O modul, relé kimenet, felügyeleti jel' },
@@ -1241,13 +1241,13 @@ export const ASSEMBLIES_DEFAULT = [
     assemblyCode: 'FA-001',
     name: 'Optikai füstérzékelő pont (címezhető)',
     category: 'tuzjelzo',
-    description: 'Címezhető optikai füstérzékelő: aljzat + érzékelő fej, J-Y(St)Y kábel, cím beállítás.',
+    description: 'Címezhető optikai füstérzékelő: aljzat + érzékelő fej, JE-H(St)H E30 tűzálló kábel, cím beállítás.',
     overheadType: 'visit',
     symbolIds: ['SMOKE-DET', 'OPT-SMOKE', 'SD'],
     components: [
       { itemCode: 'MAT-FA-OPT-SMOKE', itemType: 'material', name: 'Optikai füstérzékelő (címezhető)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-FA-BASE', itemType: 'material', name: 'Érzékelő aljzat (standard)', unit: 'db', qty: 1, sortOrder: 1 },
-      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'J-Y(St)Y 2×2×0.8 tűzjelző kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 2 },
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 2 },
       { itemCode: 'TUZ-011', itemType: 'workitem', name: 'Érzékelő aljzat előkészítés', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'TUZ-001', itemType: 'workitem', name: 'Optikai füstérzékelő szerelés', unit: 'db', qty: 1, sortOrder: 4 },
       { itemCode: 'TUZ-006', itemType: 'workitem', name: 'Tűzjelző kábel fektetés', unit: 'm', qty: 20, sortOrder: 5 },
@@ -1267,7 +1267,7 @@ export const ASSEMBLIES_DEFAULT = [
     components: [
       { itemCode: 'MAT-FA-HEAT', itemType: 'material', name: 'Hőérzékelő fix/RoR (címezhető)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-FA-BASE', itemType: 'material', name: 'Érzékelő aljzat (standard)', unit: 'db', qty: 1, sortOrder: 1 },
-      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'J-Y(St)Y 2×2×0.8 tűzjelző kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 2 },
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 2 },
       { itemCode: 'TUZ-011', itemType: 'workitem', name: 'Érzékelő aljzat előkészítés', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'TUZ-002', itemType: 'workitem', name: 'Hőérzékelő szerelés', unit: 'db', qty: 1, sortOrder: 4 },
       { itemCode: 'TUZ-006', itemType: 'workitem', name: 'Tűzjelző kábel fektetés', unit: 'm', qty: 20, sortOrder: 5 },
@@ -1288,7 +1288,7 @@ export const ASSEMBLIES_DEFAULT = [
     components: [
       { itemCode: 'MAT-FA-MULTI', itemType: 'material', name: 'Multiszenzoros érzékelő (címezhető)', unit: 'db', qty: 1, sortOrder: 0 },
       { itemCode: 'MAT-FA-BASE', itemType: 'material', name: 'Érzékelő aljzat (standard)', unit: 'db', qty: 1, sortOrder: 1 },
-      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'J-Y(St)Y 2×2×0.8 tűzjelző kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 2 },
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 2 },
       { itemCode: 'TUZ-011', itemType: 'workitem', name: 'Érzékelő aljzat előkészítés', unit: 'db', qty: 1, sortOrder: 3 },
       { itemCode: 'TUZ-003', itemType: 'workitem', name: 'Multiszenzoros érzékelő szerelés', unit: 'db', qty: 1, sortOrder: 4 },
       { itemCode: 'TUZ-006', itemType: 'workitem', name: 'Tűzjelző kábel fektetés', unit: 'm', qty: 20, sortOrder: 5 },
@@ -1308,7 +1308,7 @@ export const ASSEMBLIES_DEFAULT = [
     symbolIds: ['MCP', 'MANUAL-CALL', 'PULL-STATION'],
     components: [
       { itemCode: 'MAT-FA-MCP', itemType: 'material', name: 'Kézi jelzésadó (címezhető, visszaállítható)', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'J-Y(St)Y 2×2×0.8 tűzjelző kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 1 },
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 20, waste_pct: 10, sortOrder: 1 },
       { itemCode: 'TUZ-004', itemType: 'workitem', name: 'Kézi jelzésadó szerelés', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'TUZ-006', itemType: 'workitem', name: 'Tűzjelző kábel fektetés', unit: 'm', qty: 20, sortOrder: 3 },
     ],
@@ -1326,7 +1326,7 @@ export const ASSEMBLIES_DEFAULT = [
     symbolIds: ['SOUNDER', 'BEACON', 'ALARM-BELL'],
     components: [
       { itemCode: 'MAT-FA-SOUNDER', itemType: 'material', name: 'Hang-fényjelző (címezhető)', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'J-Y(St)Y 2×2×0.8 tűzjelző kábel', unit: 'm', qty: 25, waste_pct: 10, sortOrder: 1 },
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 25, waste_pct: 10, sortOrder: 1 },
       { itemCode: 'TUZ-005', itemType: 'workitem', name: 'Hang-fényjelző szerelés', unit: 'db', qty: 1, sortOrder: 2 },
       { itemCode: 'TUZ-006', itemType: 'workitem', name: 'Tűzjelző kábel fektetés', unit: 'm', qty: 25, sortOrder: 3 },
     ],
@@ -1362,7 +1362,7 @@ export const ASSEMBLIES_DEFAULT = [
     symbolIds: ['FIRE-REPEATER'],
     components: [
       { itemCode: 'MAT-FA-REPEATER', itemType: 'material', name: 'Távkezelő/ismétlő panel', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'J-Y(St)Y 2×2×0.8 tűzjelző kábel', unit: 'm', qty: 30, waste_pct: 10, sortOrder: 1 },
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 30, waste_pct: 10, sortOrder: 1 },
       { itemCode: 'TUZ-008', itemType: 'workitem', name: 'Tűzjelző tábla kezelő', unit: 'db', qty: 1, sortOrder: 2 },
     ],
     tags: ['tűzjelző', 'távkezelő', 'ismétlő'],
@@ -1379,7 +1379,7 @@ export const ASSEMBLIES_DEFAULT = [
     symbolIds: ['IO-MODULE', 'RELAY-MODULE'],
     components: [
       { itemCode: 'MAT-FA-IO-MODULE', itemType: 'material', name: 'Címezhető I/O modul (1 be / 1 ki)', unit: 'db', qty: 1, sortOrder: 0 },
-      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'J-Y(St)Y 2×2×0.8 tűzjelző kábel', unit: 'm', qty: 15, waste_pct: 10, sortOrder: 1 },
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 15, waste_pct: 10, sortOrder: 1 },
       { itemCode: 'TUZ-009', itemType: 'workitem', name: 'I/O modul bekötés', unit: 'db', qty: 1, sortOrder: 2 },
     ],
     tags: ['tűzjelző', 'I/O', 'modul', 'relé'],
