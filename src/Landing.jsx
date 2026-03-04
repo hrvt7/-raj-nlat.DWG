@@ -1488,16 +1488,17 @@ function NormTimeAnimation() {
 }
 
 function NormTimeSection() {
+  const [active, setActive] = useState(0)
+  const trade = NT_TRADES[active]
   return (
     <section className="sec-100" style={{ padding: '100px 24px 80px', background: '#050505', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-      {/* Background glow */}
-      <div style={{ position: 'absolute', left: '50%', top: '30%', transform: 'translate(-50%,-50%)', width: 700, height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%,-50%)', width: 700, height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
 
         {/* ── Section header ── */}
         <FadeIn>
-          <div style={{ textAlign: 'center', marginBottom: 80 }}>
+          <div style={{ textAlign: 'center', marginBottom: 48 }}>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>
               Normaidő Kalkuláció
             </div>
@@ -1505,85 +1506,101 @@ function NormTimeSection() {
               Nem becsül –{' '}
               <span style={{ color: '#00E5A0' }}>pontosan számol</span>
             </h2>
-            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#666', lineHeight: 1.85, maxWidth: 560, margin: '0 auto' }}>
-              Minden szakterülethez saját normaidő-adatbázis. Tételenként beállítható falanyag és projekt szorzók – a munkadíj pontosan tükrözi a valós körülményeket.
+            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#666', lineHeight: 1.85, maxWidth: 540, margin: '0 auto' }}>
+              Minden szakterülethez saját normaidő-adatbázis. Tételenként beállítható falanyag és projekt szorzók.
             </p>
           </div>
         </FadeIn>
 
-        {/* ── Three trade rows ── */}
-        {NT_TRADES.map((trade, i) => (
-          <FadeIn key={trade.pfx} delay={i * 0.1}>
-            <div
-              className="normtime-grid"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 64,
-                alignItems: 'center',
-                paddingBottom: i < NT_TRADES.length - 1 ? 72 : 0,
-                marginBottom: i < NT_TRADES.length - 1 ? 72 : 0,
-                borderBottom: i < NT_TRADES.length - 1 ? '1px solid #111' : 'none',
-              }}
-            >
-              {/* Text column */}
-              <div className="nt-text" style={{ order: trade.reverse ? 2 : 1 }}>
-                <div style={{
-                  display: 'inline-block', marginBottom: 16,
-                  background: `${trade.color}14`, border: `1px solid ${trade.color}38`,
-                  borderRadius: 100, padding: '5px 16px',
-                  fontFamily: 'DM Mono', fontSize: 11, letterSpacing: '0.1em',
-                  color: trade.color, textTransform: 'uppercase',
-                }}>
-                  {trade.textBadge}
-                </div>
-                <h3 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 'clamp(20px, 2.8vw, 28px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 14, lineHeight: 1.25 }}>
-                  {trade.textTitle}
-                </h3>
-                <p style={{ fontFamily: 'DM Mono', fontSize: 13.5, color: '#777', lineHeight: 1.85, marginBottom: 28 }}>
-                  {trade.textDesc}
-                </p>
-                {trade.features.map(([title, desc], j) => (
-                  <div key={j} style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
-                    <div style={{ width: 18, height: 18, flexShrink: 0, marginTop: 2 }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={trade.color} strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M20 6L9 17l-5-5"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13.5, color: '#DDD', marginBottom: 3 }}>{title}</div>
-                      <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#666', lineHeight: 1.6 }}>{desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* ── Trade tabs ── */}
+        <FadeIn delay={0.1}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 52, flexWrap: 'wrap' }}>
+            {NT_TRADES.map((t, i) => (
+              <button
+                key={t.pfx}
+                onClick={() => setActive(i)}
+                style={{
+                  padding: '9px 24px',
+                  borderRadius: 100,
+                  border: `1px solid ${active === i ? t.color + '55' : '#1E1E1E'}`,
+                  background: active === i ? `${t.color}12` : 'transparent',
+                  color: active === i ? t.color : '#555',
+                  fontFamily: 'DM Mono',
+                  fontSize: 12,
+                  fontWeight: active === i ? 700 : 400,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  outline: 'none',
+                }}
+              >
+                {t.textBadge}
+              </button>
+            ))}
+          </div>
+        </FadeIn>
 
-              {/* SVG card column */}
-              <div className="nt-svg" style={{ order: trade.reverse ? 1 : 2 }}>
-                <div style={{
-                  borderRadius: 14,
-                  overflow: 'hidden',
-                  border: `1px solid ${trade.color}22`,
-                  boxShadow: `0 0 0 1px #0A0A0A, 0 24px 64px rgba(0,0,0,0.55), 0 0 40px ${trade.color}06`,
-                  background: '#060E0A',
-                  position: 'relative',
-                }}>
-                  {/* Corner accents */}
-                  {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h],ci) => (
-                    <div key={ci} style={{
-                      position:'absolute', [v]:0, [h]:0, width:14, height:14,
-                      [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]: `1.5px solid ${trade.color}`,
-                      [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]: `1.5px solid ${trade.color}`,
-                      borderRadius: ci===0?'4px 0 0 0':ci===1?'0 4px 0 0':ci===2?'0 0 0 4px':'0 0 4px 0',
-                      opacity: 0.45, zIndex: 2,
-                    }} />
-                  ))}
-                  <NtTradeSvg {...trade} />
+        {/* ── Active trade content ── */}
+        <div key={active} style={{ animation: 'nt-tab-in 0.32s ease' }}>
+          <div
+            className="normtime-grid"
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center' }}
+          >
+            {/* Text column */}
+            <div className="nt-text" style={{ order: trade.reverse ? 2 : 1 }}>
+              <div style={{
+                display: 'inline-block', marginBottom: 16,
+                background: `${trade.color}12`, border: `1px solid ${trade.color}35`,
+                borderRadius: 100, padding: '5px 16px',
+                fontFamily: 'DM Mono', fontSize: 11, letterSpacing: '0.1em',
+                color: trade.color, textTransform: 'uppercase',
+              }}>
+                {trade.textBadge}
+              </div>
+              <h3 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 'clamp(20px, 2.8vw, 28px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 14, lineHeight: 1.25 }}>
+                {trade.textTitle}
+              </h3>
+              <p style={{ fontFamily: 'DM Mono', fontSize: 13.5, color: '#777', lineHeight: 1.85, marginBottom: 28 }}>
+                {trade.textDesc}
+              </p>
+              {trade.features.map(([title, desc], j) => (
+                <div key={j} style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
+                  <div style={{ width: 18, height: 18, flexShrink: 0, marginTop: 2 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={trade.color} strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13.5, color: '#DDD', marginBottom: 3 }}>{title}</div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#666', lineHeight: 1.6 }}>{desc}</div>
+                  </div>
                 </div>
+              ))}
+            </div>
+
+            {/* SVG card column */}
+            <div className="nt-svg" style={{ order: trade.reverse ? 1 : 2 }}>
+              <div style={{
+                borderRadius: 14, overflow: 'hidden',
+                border: `1px solid ${trade.color}22`,
+                boxShadow: `0 0 0 1px #0A0A0A, 0 24px 64px rgba(0,0,0,0.55), 0 0 40px ${trade.color}06`,
+                background: '#060E0A', position: 'relative',
+              }}>
+                {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h],ci) => (
+                  <div key={ci} style={{
+                    position:'absolute', [v]:0, [h]:0, width:14, height:14,
+                    [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]: `1.5px solid ${trade.color}`,
+                    [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]: `1.5px solid ${trade.color}`,
+                    borderRadius: ci===0?'4px 0 0 0':ci===1?'0 4px 0 0':ci===2?'0 0 0 4px':'0 0 4px 0',
+                    opacity: 0.45, zIndex: 2,
+                  }} />
+                ))}
+                <NtTradeSvg {...trade} />
               </div>
             </div>
-          </FadeIn>
-        ))}
+          </div>
+        </div>
 
       </div>
     </section>
@@ -2115,6 +2132,12 @@ export default function Landing({ onStart }) {
         @media (max-width: 640px) {
           .ha-mobile  { display: block !important; }
           .ha-desktop { display: none !important; }
+        }
+
+        /* ─ NormTime tab-switch fade-slide animation ─ */
+        @keyframes nt-tab-in {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
 
         /* ─ hero subtext line break: visible only on wide screens ─ */
