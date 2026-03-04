@@ -27,10 +27,10 @@ function useInView(threshold = 0.12) {
   return [ref, visible]
 }
 
-function FadeIn({ children, delay = 0, style = {} }) {
+function FadeIn({ children, delay = 0, style = {}, className = '' }) {
   const [ref, visible] = useInView()
   return (
-    <div ref={ref} style={{
+    <div ref={ref} className={className} style={{
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0)' : 'translateY(28px)',
       transition: `opacity 0.65s ease ${delay}s, transform 0.65s ease ${delay}s`,
@@ -554,6 +554,166 @@ function HeroAnimation() {
   )
 }
 
+// ── Mobile hero animation – floor plan top, HUD panel below ─────────────────
+function HeroAnimationMobile() {
+  const ec = '#00E5A0'
+  const fc = '#FF6B6B'
+  const lc = '#4CC9F0'
+  const st = 'rgba(200,255,240,0.13)'
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 660"
+      preserveAspectRatio="xMidYMid meet" fill="none"
+      style={{ width: '100%', height: '100%', display: 'block' }}>
+      <defs>
+        <style>{`
+          @keyframes hm-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+          @keyframes hm-scan  { 0%{transform:translateX(-60px);opacity:0} 10%,90%{opacity:1} 100%{transform:translateX(560px);opacity:0} }
+          @keyframes hm-pec   { 0%,100%{opacity:.22} 50%{opacity:1;filter:drop-shadow(0 0 4px ${ec})} }
+          @keyframes hm-pfc   { 0%,100%{opacity:.22} 50%{opacity:1;filter:drop-shadow(0 0 4px ${fc})} }
+          @keyframes hm-plc   { 0%,100%{opacity:.22} 50%{opacity:1;filter:drop-shadow(0 0 4px ${lc})} }
+          @keyframes hm-cnt   { 0%,10%{opacity:0;transform:translateY(3px)} 20%,100%{opacity:1;transform:translateY(0)} }
+          @keyframes hm-chk   { 0%,80%{opacity:0;transform:scale(.5)} 90%{opacity:1;transform:scale(1.1)} 100%{opacity:1;transform:scale(1)} }
+          .hm-fp  { animation:hm-float 6s ease-in-out infinite }
+          .hm-sec { animation:hm-scan 8s linear infinite }
+          .hm-sfc { animation:hm-scan 8s linear infinite 2.6s; opacity:0 }
+          .hm-slc { animation:hm-scan 8s linear infinite 5.3s; opacity:0 }
+          .hm-iec { animation:hm-pec 8s ease-in-out infinite; opacity:.22 }
+          .hm-ifc { animation:hm-pfc 8s ease-in-out infinite 2.6s; opacity:.22 }
+          .hm-ilc { animation:hm-plc 8s ease-in-out infinite 5.3s; opacity:.22 }
+          .hm-nec { animation:hm-cnt 8s ease-out infinite; opacity:0 }
+          .hm-nfc { animation:hm-cnt 8s ease-out infinite 2.6s; opacity:0 }
+          .hm-nlc { animation:hm-cnt 8s ease-out infinite 5.3s; opacity:0 }
+          .hm-cec { stroke:${ec}; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; animation:hm-chk 8s infinite }
+          .hm-cfc { stroke:${fc}; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; animation:hm-chk 8s infinite 2.6s }
+          .hm-clc { stroke:${lc}; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; animation:hm-chk 8s infinite 5.3s }
+        `}</style>
+        <linearGradient id="hm-ge" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={ec} stopOpacity="0"/><stop offset="100%" stopColor={ec} stopOpacity="0.32"/>
+        </linearGradient>
+        <linearGradient id="hm-gf" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={fc} stopOpacity="0"/><stop offset="100%" stopColor={fc} stopOpacity="0.32"/>
+        </linearGradient>
+        <linearGradient id="hm-gl" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={lc} stopOpacity="0"/><stop offset="100%" stopColor={lc} stopOpacity="0.32"/>
+        </linearGradient>
+        <pattern id="hm-pg" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" stroke="rgba(0,255,170,0.04)" strokeWidth="1" fill="none"/>
+        </pattern>
+      </defs>
+
+      <rect width="520" height="660" fill="url(#hm-pg)"/>
+
+      {/* ── Alaprajz (top) ── */}
+      <g transform="translate(30,24)">
+        <g className="hm-fp">
+          <path d="M0,0 h460 v256 h-460 Z M220,0 v256 M360,0 v100 M360,156 v100 M0,128 h220"
+            stroke={st} strokeWidth="1.5" fill="none"/>
+          <path d="M80,0 v-8 M160,0 v-8 M380,256 v8 M420,256 v8"
+            stroke="rgba(200,255,240,0.07)" strokeWidth="1.5" fill="none"/>
+        </g>
+        {/* erősáram szimbólumok */}
+        <circle cx="70"  cy="50"  r="4" className="hm-iec" fill={ec}/>
+        <circle cx="70"  cy="90"  r="4" className="hm-iec" fill={ec}/>
+        <circle cx="180" cy="50"  r="4" className="hm-iec" fill={ec}/>
+        <rect   x="270"  y="70"  width="8" height="8" className="hm-iec" fill={ec}/>
+        <rect   x="270"  y="160" width="8" height="8" className="hm-iec" fill={ec}/>
+        {/* tűzjelző szimbólumok */}
+        <circle cx="310" cy="100" r="6" className="hm-ifc" fill="none" stroke={fc} strokeWidth="1.8"/>
+        <circle cx="110" cy="190" r="6" className="hm-ifc" fill="none" stroke={fc} strokeWidth="1.8"/>
+        <rect   x="390"  y="60"  width="12" height="12" className="hm-ifc" fill={fc}/>
+        <path   d="M240,220 l8,-8 h-16 z" className="hm-ifc" fill={fc}/>
+        {/* gyengeáram szimbólumok */}
+        <rect   x="380"  y="200" width="6" height="6" className="hm-ilc" fill={lc}/>
+        <circle cx="140" cy="70"  r="3"  className="hm-ilc" fill={lc}/>
+        <rect   x="420"  y="180" width="10" height="4" className="hm-ilc" fill={lc}/>
+        {/* szkenner – erősáram */}
+        <g className="hm-sec">
+          <rect x="0" y="0" width="55" height="280" fill="url(#hm-ge)" stroke="none"/>
+          <line x1="55" y1="0" x2="55" y2="280" stroke={ec} strokeWidth="1.8" fill="none"/>
+        </g>
+        {/* szkenner – tűzjelző */}
+        <g className="hm-sfc">
+          <rect x="0" y="0" width="55" height="280" fill="url(#hm-gf)" stroke="none"/>
+          <line x1="55" y1="0" x2="55" y2="280" stroke={fc} strokeWidth="1.8" fill="none"/>
+        </g>
+        {/* szkenner – gyengeáram */}
+        <g className="hm-slc">
+          <rect x="0" y="0" width="55" height="280" fill="url(#hm-gl)" stroke="none"/>
+          <line x1="55" y1="0" x2="55" y2="280" stroke={lc} strokeWidth="1.8" fill="none"/>
+        </g>
+      </g>
+
+      {/* összekötő szaggatott */}
+      <line x1="260" y1="300" x2="260" y2="318" stroke={ec} strokeWidth="1" strokeDasharray="4,3" opacity="0.12"/>
+
+      {/* ── HUD panel (bottom) – 3 trade columns ── */}
+      <g transform="translate(30,328)">
+        <rect width="460" height="308" rx="10" fill="rgba(5,12,8,0.95)" stroke={st} strokeWidth="1"/>
+        <rect width="460" height="2" rx="1" fill={ec} opacity="0.55"/>
+        <text x="20" y="30" fontFamily="'DM Mono',monospace" fontSize="11" fontWeight="bold" fill="#B8D0C4" letterSpacing="2">MENNYISÉGKIMUTATÁS</text>
+        <line x1="20" y1="44" x2="440" y2="44" stroke={st} strokeWidth="0.5"/>
+
+        {/* ─── erősáram col ─── */}
+        <g transform="translate(20,58)">
+          <circle cx="4" cy="4" r="4" fill={ec}>
+            <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <text x="14" y="9" fontFamily="'DM Mono',monospace" fontSize="9" fill={ec} letterSpacing="1.5">ERŐSÁRAM</text>
+          <text x="0"   y="32" fontFamily="'DM Mono',monospace" fontSize="11" fill="#3E5E4C">DUGALJ</text>
+          <text x="126" y="32" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="13" fill="#D4EDE4" className="hm-nec">12</text>
+          <text x="0"   y="52" fontFamily="'DM Mono',monospace" fontSize="11" fill="#3E5E4C">LÁMPA</text>
+          <text x="126" y="52" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="13" fill="#D4EDE4" className="hm-nec">18</text>
+          <path d="M108,0 l4,4 l8,-8" className="hm-cec" fill="none"/>
+        </g>
+
+        {/* ─── tűzjelző col ─── */}
+        <g transform="translate(170,58)">
+          <circle cx="4" cy="4" r="4" fill={fc}>
+            <animate attributeName="opacity" values="1;0.2;1" dur="2s" begin="2.6s" repeatCount="indefinite"/>
+          </circle>
+          <text x="14" y="9" fontFamily="'DM Mono',monospace" fontSize="9" fill={fc} letterSpacing="1.5">TŰZJELZŐ</text>
+          <text x="0"   y="32" fontFamily="'DM Mono',monospace" fontSize="11" fill="#3E5E4C">ÉRZÉKELŐ</text>
+          <text x="126" y="32" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="13" fill="#D4EDE4" className="hm-nfc">05</text>
+          <text x="0"   y="52" fontFamily="'DM Mono',monospace" fontSize="11" fill="#3E5E4C">SZIRÉNA</text>
+          <text x="126" y="52" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="13" fill="#D4EDE4" className="hm-nfc">02</text>
+          <path d="M108,0 l4,4 l8,-8" className="hm-cfc" fill="none"/>
+        </g>
+
+        {/* ─── gyengeáram col ─── */}
+        <g transform="translate(320,58)">
+          <circle cx="4" cy="4" r="4" fill={lc}>
+            <animate attributeName="opacity" values="1;0.2;1" dur="2s" begin="5.3s" repeatCount="indefinite"/>
+          </circle>
+          <text x="14" y="9" fontFamily="'DM Mono',monospace" fontSize="9" fill={lc} letterSpacing="1.5">GYENGEÁRAM</text>
+          <text x="0"   y="32" fontFamily="'DM Mono',monospace" fontSize="11" fill="#3E5E4C">ADATPONT</text>
+          <text x="126" y="32" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="13" fill="#D4EDE4" className="hm-nlc">06</text>
+          <text x="0"   y="52" fontFamily="'DM Mono',monospace" fontSize="11" fill="#3E5E4C">KAMERA</text>
+          <text x="126" y="52" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="13" fill="#D4EDE4" className="hm-nlc">03</text>
+          <path d="M108,0 l4,4 l8,-8" className="hm-clc" fill="none"/>
+        </g>
+
+        {/* divider */}
+        <line x1="20" y1="130" x2="440" y2="130" stroke="rgba(200,255,240,0.05)" strokeWidth="0.5"/>
+
+        {/* progress bar */}
+        <rect x="20" y="148" width="420" height="3" rx="2" fill="rgba(255,255,255,0.05)"/>
+        <rect x="20" y="148" width="0"   height="3" rx="2" fill={ec}>
+          <animate attributeName="width" values="0;420;0" dur="8s" repeatCount="indefinite"/>
+          <animate attributeName="fill" values={`${ec};${fc};${lc};${ec}`} dur="8s" repeatCount="indefinite"/>
+        </rect>
+
+        {/* összesítő */}
+        <text x="20"  y="185" fontFamily="'DM Mono',monospace" fontSize="10" fill="#1E3828" letterSpacing="2">ÖSSZES TÉTEL</text>
+        <text x="440" y="280" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="52"
+          fill={ec} style={{ filter: `drop-shadow(0 0 10px ${ec}55)` }}>
+          46
+          <animate attributeName="opacity" values="0;0;1" keyTimes="0;0.55;0.7" dur="8s" repeatCount="indefinite"/>
+        </text>
+      </g>
+    </svg>
+  )
+}
+
 function HeroSection({ onStart }) {
   return (
     <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '120px 48px 80px' }}>
@@ -623,7 +783,10 @@ function HeroSection({ onStart }) {
               { bottom:0, left:0, borderBottom:'1.5px solid #00E5A0', borderLeft:'1.5px solid #00E5A0', borderRadius:'0 0 0 4px' },
               { bottom:0, right:0, borderBottom:'1.5px solid #00E5A0', borderRight:'1.5px solid #00E5A0', borderRadius:'0 0 4px 0' },
             ].map((s,i) => <div key={i} style={{ position:'absolute', width:18, height:18, opacity:0.45, zIndex:2, ...s }} />)}
-            <HeroAnimation />
+            {/* Desktop: side-by-side scan + HUD */}
+            <div className="ha-desktop"><HeroAnimation /></div>
+            {/* Mobile: scan on top, HUD below */}
+            <div className="ha-mobile"><HeroAnimationMobile /></div>
           </div>
         </FadeIn>
 
@@ -926,13 +1089,13 @@ function TradeSupportSection({ onStart }) {
 
             {/* Text column – left for !reverse, right for reverse */}
             {!trade.reverse && (
-              <FadeIn delay={0.1}>
+              <FadeIn delay={0.1} className="trade-text-col">
                 <TradeTextBlock trade={trade} />
               </FadeIn>
             )}
 
             {/* SVG column */}
-            <FadeIn delay={0.2}>
+            <FadeIn delay={0.2} className="trade-svg-col">
               <div style={{
                 aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden',
                 background: '#080808',
@@ -948,7 +1111,7 @@ function TradeSupportSection({ onStart }) {
 
             {/* Text column – right side for reverse */}
             {trade.reverse && (
-              <FadeIn delay={0.1}>
+              <FadeIn delay={0.1} className="trade-text-col">
                 <TradeTextBlock trade={trade} />
               </FadeIn>
             )}
@@ -1364,7 +1527,7 @@ function NormTimeSection() {
               }}
             >
               {/* Text column */}
-              <div style={{ order: trade.reverse ? 2 : 1 }}>
+              <div className="nt-text" style={{ order: trade.reverse ? 2 : 1 }}>
                 <div style={{
                   display: 'inline-block', marginBottom: 16,
                   background: `${trade.color}14`, border: `1px solid ${trade.color}38`,
@@ -1396,7 +1559,7 @@ function NormTimeSection() {
               </div>
 
               {/* SVG card column */}
-              <div style={{ order: trade.reverse ? 1 : 2 }}>
+              <div className="nt-svg" style={{ order: trade.reverse ? 1 : 2 }}>
                 <div style={{
                   borderRadius: 14,
                   overflow: 'hidden',
@@ -1907,7 +2070,7 @@ function Footer() {
         </div>
         <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 15, color: '#F0F0F0' }}>Takeoff<span style={{ color: '#00E5A0' }}>Pro</span></span>
       </div>
-      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444' }}>© 2025 TakeoffPro · Villamossági árajánlat rendszer</span>
+      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444' }}>© 2026 TakeoffPro · Villamossági árajánlat rendszer</span>
     </footer>
   )
 }
@@ -1946,6 +2109,20 @@ export default function Landing({ onStart }) {
           .sec-100 { padding: 56px 16px !important; }
         }
 
+        /* ─ HERO animation: mobile = portrait SVG ─ */
+        .ha-mobile  { display: none; }
+        .ha-desktop { display: block; }
+        @media (max-width: 640px) {
+          .ha-mobile  { display: block !important; }
+          .ha-desktop { display: none !important; }
+        }
+
+        /* ─ hero subtext line break: visible only on wide screens ─ */
+        .hero-br { display: inline; }
+        @media (max-width: 600px) {
+          .hero-br { display: none !important; }
+        }
+
         /* ─ TWO-COLUMN grids ─ */
         @media (max-width: 900px) {
           .hero-grid        { grid-template-columns: 1fr !important; gap: 36px !important; }
@@ -1953,6 +2130,11 @@ export default function Landing({ onStart }) {
           .normtime-grid    { grid-template-columns: 1fr !important; gap: 36px !important; }
           .pdf-section-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
           .trade-block-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
+          /* always show text before SVG in single-column mode */
+          .trade-text-col   { order: 1 !important; }
+          .trade-svg-col    { order: 2 !important; }
+          .nt-text          { order: 1 !important; }
+          .nt-svg           { order: 2 !important; }
         }
         @media (max-width: 768px) {
           .ai-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
