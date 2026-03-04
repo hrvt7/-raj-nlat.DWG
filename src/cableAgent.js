@@ -19,14 +19,15 @@ export function extractGeometry(dxfText) {
   let inHeader = false, currentVar = null
   const INSUNITS_MAP = {
     0: ['unknown', null], 1: ['inches', 0.0254], 2: ['feet', 0.3048],
-    4: ['mm', 0.001], 5: ['cm', 0.01], 6: ['m', 1.0], 14: ['decimeters', 0.1],
+    3: ['miles', 1609.34], 4: ['mm', 0.001], 5: ['cm', 0.01], 6: ['m', 1.0],
+    7: ['km', 1000.0], 10: ['yards', 0.9144], 14: ['decimeters', 0.1],
   }
 
   for (let i = 0; i < tokens.length; i++) {
     const [code, val] = tokens[i]
     if (code === 0 && val === 'SECTION') inHeader = false
     if (code === 2 && val === 'HEADER') inHeader = true
-    if (code === 2 && val !== 'HEADER' && inHeader) currentVar = val
+    if (code === 9 && inHeader) currentVar = val  // DXF header variable names use group code 9
     if (inHeader) {
       if (currentVar === '$INSUNITS' && code === 70) insunits = parseInt(val, 10)
       if (currentVar === '$EXTMIN' && code === 10) extmin = [parseFloat(val), 0]

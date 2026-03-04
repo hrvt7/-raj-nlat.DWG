@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { C, Button, Badge } from '../components/ui.jsx'
-import DxfViewerPanel from '../components/DxfViewer/index.jsx'
-import PdfViewerPanel from '../components/PdfViewer/index.jsx'
+const DxfViewerPanel = lazy(() => import('../components/DxfViewer/index.jsx'))
+const PdfViewerPanel = lazy(() => import('../components/PdfViewer/index.jsx'))
 import MergePlansView from '../components/MergePlansView.jsx'
 import { loadPlans, savePlan, getPlanFile, deletePlan, generatePlanId, savePlanThumbnail, getPlanThumbnail } from '../data/planStore.js'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const fmtSize = (bytes) => {
   if (bytes < 1024) return bytes + ' B'
@@ -34,7 +35,7 @@ function getFileType(filename) {
 async function generatePdfThumbnail(file, planId) {
   try {
     const pdfjsLib = await import('pdfjs-dist')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
     const arrayBuffer = await file.arrayBuffer()
     const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
     const page = await doc.getPage(1)
@@ -177,23 +178,25 @@ export default function Plans({ onNavigate }) {
 
         {/* Viewer */}
         <div style={{ flex: 1, minHeight: 0 }}>
-          {isPdf ? (
-            <PdfViewerPanel
-              file={activeFile}
-              planId={activePlan.id}
-              onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
-              style={{ height: '100%' }}
-            />
-          ) : (
-            <DxfViewerPanel
-              file={activeFile}
-              unitFactor={activePlan.units?.factor}
-              unitName={activePlan.units?.name}
-              planId={activePlan.id}
-              onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
-              style={{ height: '100%' }}
-            />
-          )}
+          <Suspense fallback={<div style={{ height: '100%', background: C.bg }} />}>
+            {isPdf ? (
+              <PdfViewerPanel
+                file={activeFile}
+                planId={activePlan.id}
+                onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
+                style={{ height: '100%' }}
+              />
+            ) : (
+              <DxfViewerPanel
+                file={activeFile}
+                unitFactor={activePlan.units?.factor}
+                unitName={activePlan.units?.name}
+                planId={activePlan.id}
+                onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
+                style={{ height: '100%' }}
+              />
+            )}
+          </Suspense>
         </div>
       </div>
     )

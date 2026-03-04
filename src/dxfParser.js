@@ -7,10 +7,24 @@ const INSUNITS_MAP = {
   0:  ['unknown',     null],
   1:  ['inches',      0.0254],
   2:  ['feet',        0.3048],
+  3:  ['miles',       1609.34],
   4:  ['mm',          0.001],
   5:  ['cm',          0.01],
   6:  ['m',           1.0],
+  7:  ['km',          1000.0],
+  8:  ['microinches', 2.54e-8],
+  9:  ['mils',        2.54e-5],
+  10: ['yards',       0.9144],
+  11: ['angstroms',   1e-10],
+  12: ['nanometers',  1e-9],
+  13: ['microns',     1e-6],
   14: ['decimeters',  0.1],
+  15: ['decameters',  10.0],
+  16: ['hectometers', 100.0],
+  17: ['gigameters',  1e9],
+  18: ['AU',          1.496e11],
+  19: ['light-years', 9.461e15],
+  20: ['parsecs',     3.086e16],
 }
 
 function parseLayerName(layer) {
@@ -75,7 +89,7 @@ export function parseDxfText(text) {
   for (const [code, val] of tokens) {
     if (code === 0 && val === 'SECTION') { inHeader = false }
     if (code === 2 && val === 'HEADER')  { inHeader = true }
-    if (code === 2 && val !== 'HEADER' && inHeader) { currentVar = val }
+    if (code === 9 && inHeader) { currentVar = val }  // DXF header variable names use group code 9
     if (inHeader && currentVar === '$INSUNITS' && code === 70) { insunits = parseInt(val, 10); break }
   }
   let [unitName, unitFactor] = INSUNITS_MAP[insunits] || ['unknown', null]
@@ -190,12 +204,33 @@ export function parseDxfText(text) {
   flushPolyline()
   flushInsert()
 
-  // ── Auto-detect units from raw lengths ────────────────────────────────────
+  // ── Compute bounding box of all geometry ──────────────────────────────────
+  // NOTE: must be computed before unit auto-detection (hasBounds used below)
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const ins of insertPositions) {
+    if (ins.x < minX) minX = ins.x; if (ins.x > maxX) maxX = ins.x
+    if (ins.y < minY) minY = ins.y; if (ins.y > maxY) maxY = ins.y
+  }
+  for (const l of lineGeom) {
+    if (l.x1 < minX) minX = l.x1; if (l.x1 > maxX) maxX = l.x1
+    if (l.x2 < minX) minX = l.x2; if (l.x2 > maxX) maxX = l.x2
+    if (l.y1 < minY) minY = l.y1; if (l.y1 > maxY) maxY = l.y1
+    if (l.y2 < minY) minY = l.y2; if (l.y2 > maxY) maxY = l.y2
+  }
+  const hasBounds = isFinite(minX)
+  const geomBounds = hasBounds
+    ? { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY }
+    : null
+
+  // ── Auto-detect units from raw lengths + bounding box ────────────────────
   if (!unitFactor) {
     const maxRaw = Math.max(...Object.values(lengthByLayer), 0)
-    if      (maxRaw > 10000)  { unitName='mm (guessed)'; unitFactor=0.001 }
-    else if (maxRaw >= 100)   { unitName='cm (guessed)'; unitFactor=0.01 }
-    else                      { unitName='m (guessed)';  unitFactor=1.0 }
+    // Also check bounding box span for more reliable detection
+    const span = hasBounds ? Math.max(maxX - minX, maxY - minY) : 0
+    const ref = Math.max(maxRaw, span)
+    if      (ref > 10000)  { unitName='mm (guessed)'; unitFactor=0.001 }
+    else if (ref >= 100)   { unitName='cm (guessed)'; unitFactor=0.01 }
+    else                   { unitName='m (guessed)';  unitFactor=1.0 }
   }
   if (!unitFactor) unitFactor = 1.0   // last-resort safety
 
@@ -212,23 +247,6 @@ export function parseDxfText(text) {
       info: layerInfo[layer]||null,
     }))
     .sort((a,b)=>b.length-a.length)
-
-  // ── Compute bounding box of all geometry ──────────────────────────────────
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-  for (const ins of insertPositions) {
-    if (ins.x < minX) minX = ins.x; if (ins.x > maxX) maxX = ins.x
-    if (ins.y < minY) minY = ins.y; if (ins.y > maxY) maxY = ins.y
-  }
-  for (const l of lineGeom) {
-    if (l.x1 < minX) minX = l.x1; if (l.x1 > maxX) maxX = l.x1
-    if (l.x2 < minX) minX = l.x2; if (l.x2 > maxX) maxX = l.x2
-    if (l.y1 < minY) minY = l.y1; if (l.y1 > maxY) maxY = l.y1
-    if (l.y2 < minY) minY = l.y2; if (l.y2 > maxY) maxY = l.y2
-  }
-  const hasBounds = isFinite(minX)
-  const geomBounds = hasBounds
-    ? { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY }
-    : null
 
   return {
     success: true, blocks, lengths,

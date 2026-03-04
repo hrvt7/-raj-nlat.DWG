@@ -1,12 +1,12 @@
 // ─── TakeoffWorkspace ─────────────────────────────────────────────────────────
-// Enterprise-style DXF takeoff workspace. Replaces the old 6-step wizard.
-// Layout: Left = live DXF viewer, Right = recognition + takeoff + pricing.
-// Cable estimation runs automatically in the background.
+// Enterprise-style DXF/PDF takeoff workspace. Replaces the old 6-step wizard.
+// Layout: Left = live DXF/PDF viewer, Right = recognition + takeoff + pricing.
+// Cable estimation: MST-based for PDF, fallback multiplier for DXF.
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import DxfViewerCanvas from './DxfViewer/DxfViewerCanvas.jsx'
+import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
+const DxfViewerCanvas = lazy(() => import('./DxfViewer/DxfViewerCanvas.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
-import { estimateCablesFallback } from '../cableAgent.js'
+import { runPdfTakeoff } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
 import { calcProductivityFactor, WALL_FACTORS } from '../data/workItemsDb.js'
 
@@ -59,8 +59,10 @@ function recognizeBlock(blockName) {
 }
 
 // ─── Pricing computation ──────────────────────────────────────────────────────
-function computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate }) {
+function computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode }) {
   const ctxMultiplier = calcProductivityFactor(context)  // height + access + project_type
+  // difficulty_mode: 'normal' → p50, 'difficult' → avg(p50,p90), 'very_difficult' → p90
+  const mode = difficultyMode || 'normal'
 
   let materialCost = 0, laborHours = 0
   const lines = []
@@ -84,7 +86,13 @@ function computePricing({ takeoffRows, assemblies, workItems, materials, context
         const compQty = comp.qty * splitQty
         if (comp.itemType === 'workitem') {
           const wi = workItems.find(w => w.code === comp.itemCode) || workItems.find(w => w.name === comp.name)
-          const normMin = wi ? wi.p50 * ctxMultiplier * wallFactor : 0
+          // Select norm time based on difficulty mode
+          const baseNorm = wi
+            ? (mode === 'very_difficult' ? wi.p90
+              : mode === 'difficult' ? (wi.p50 + wi.p90) / 2
+              : wi.p50)
+            : 0
+          const normMin = baseNorm * ctxMultiplier * wallFactor
           const hours = (normMin * compQty) / 60
           laborHours += hours
           lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
@@ -116,9 +124,9 @@ function computePricing({ takeoffRows, assemblies, workItems, materials, context
       materialCost += cost
       lines.push({ name: c.fallback, qty: Math.round(c.m), unit: 'm', hours: 0, materialCost: cost, type: 'cable' })
     }
-    // Cable labor
+    // Cable labor (apply context multiplier for consistency with assembly labor)
     const cableNormMin = 3 // min/m average
-    const cableHours = (cableEstimate.cable_total_m * cableNormMin) / 60
+    const cableHours = (cableEstimate.cable_total_m * cableNormMin * ctxMultiplier) / 60
     laborHours += cableHours
   }
 
@@ -131,7 +139,7 @@ function computePricing({ takeoffRows, assemblies, workItems, materials, context
 }
 
 // ─── SVG Overlay for block positions ─────────────────────────────────────────
-function DxfBlockOverlay({ inserts, geomBounds, asmOverrides, recognizedItems, highlightBlock, onBlockClick, canvasRef }) {
+function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems, highlightBlock, onBlockClick, canvasRef }) {
   const svgRef = useRef(null)
   const [screenPositions, setScreenPositions] = useState([])
 
@@ -307,7 +315,6 @@ function DropZone({ onFile }) {
 
 // ─── Recognition row ──────────────────────────────────────────────────────────
 function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, isHighlighted, onHover }) {
-  const [editOpen, setEditOpen] = useState(false)
   const asmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
   const asm = assemblies.find(a => a.id === asmId)
   const rule = BLOCK_ASM_RULES.find(r => r.asmId === asmId)
@@ -487,11 +494,34 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [context, setContext] = useState(settings?.context_defaults || { access: 'empty', project_type: 'renovation', height: 'normal' })
   const [markup, setMarkup] = useState(settings?.labor?.markup_percent != null ? settings.labor.markup_percent / 100 : 0.15)
   const [hourlyRate, setHourlyRate] = useState(settings?.labor?.hourly_rate || 8500)
+  const difficultyMode = settings?.labor?.difficulty_mode || 'normal'
   const [quoteName, setQuoteName] = useState('')
   const [clientName, setClientName] = useState('')
 
+  // ── Unit override ────────────────────────────────────────────────────────
+  const [unitOverride, setUnitOverride] = useState(null) // null = auto, or 'mm'|'cm'|'m'|'inches'|'feet'
+
   // ── Cable estimate (auto) ─────────────────────────────────────────────────
   const [cableEstimate, setCableEstimate] = useState(null)
+
+  // ── Effective units (auto or manual override) ────────────────────────────
+  const UNIT_FACTORS = { mm: 0.001, cm: 0.01, m: 1.0, inches: 0.0254, feet: 0.3048 }
+  const effectiveParsedDxf = useMemo(() => {
+    if (!parsedDxf || !parsedDxf.success) return parsedDxf
+    if (!unitOverride) return parsedDxf // auto — use as-is
+    const newFactor = UNIT_FACTORS[unitOverride]
+    if (!newFactor) return parsedDxf
+    // Recalculate lengths using length_raw * newFactor
+    const newLengths = (parsedDxf.lengths || []).map(l => ({
+      ...l,
+      length: Math.round(l.length_raw * newFactor * 100000) / 100000,
+    }))
+    return {
+      ...parsedDxf,
+      lengths: newLengths,
+      units: { ...parsedDxf.units, name: unitOverride + ' (override)', factor: newFactor, auto_detected: false },
+    }
+  }, [parsedDxf, unitOverride])
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
@@ -533,15 +563,39 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setAsmOverrides({})
     setQtyOverrides({})
     setVariantOverrides({})
-    setWallOverrides({})
+    setWallSplits({})
     setCableEstimate(null)
     setDwgStatus(null)
     setViewerFile(null)
+    setUnitOverride(null)
 
     const ext = f.name.toLowerCase().split('.').pop()
 
+    if (ext === 'pdf') {
+      // ── PDF Takeoff Pipeline ─────────────────────────────────────────
+      // Calls Vision AI + vector analysis → MST cable estimation → recognizedItems
+      setParsePending(true)
+      setParseProgress(0)
+      try {
+        const result = await runPdfTakeoff(f, pct => setParseProgress(pct))
+        setParsedDxf(result.parsedDxf)
+        setRecognizedItems(result.recognizedItems)
+        setCableEstimate(result.cableEstimate)
+        if (result.recognizedItems.length) setRightTab('recognize')
+        if (result.warnings?.length) {
+          console.warn('PDF takeoff warnings:', result.warnings)
+        }
+      } catch (err) {
+        console.error('PDF takeoff error:', err)
+        setParsedDxf({ success: false, error: err.message, _pdfError: true })
+      } finally {
+        setParsePending(false)
+      }
+      return
+    }
+
     if (ext !== 'dxf' && ext !== 'dwg') {
-      // PDF — no block data, skip recognition
+      // Unknown format — skip
       setParsedDxf({ success: false, _noDxf: true })
       return
     }
@@ -564,14 +618,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: f.name, data: base64 }),
           })
-          if (!res.ok) throw new Error(`CloudConvert API error: ${res.status}`)
           const json = await res.json()
-          if (json.dxfText) {
+          if (!res.ok || !json.success) throw new Error(json.error || `CloudConvert API error: ${res.status}`)
+          if (json.data) {
+            dxfText = atob(json.data)
+          } else if (json.dxfText) {
             dxfText = json.dxfText
           } else if (json.dxf) {
             dxfText = atob(json.dxf)
           } else {
-            throw new Error('No DXF data returned from conversion')
+            throw new Error('A konverzió nem adott vissza DXF adatot.')
           }
         } catch (convErr) {
           console.warn('DWG → DXF conversion failed:', convErr)
@@ -631,11 +687,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return Object.values(rowMap)
   }, [recognizedItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
 
-  // ── Auto-compute cable estimate when takeoff changes ──────────────────────
+  // ── Auto-compute cable estimate for DXF when takeoff changes ────────────
+  // PDF pipeline sets cableEstimate directly (MST-based), so skip if already set by PDF.
   useEffect(() => {
-    if (!takeoffRows.length) { setCableEstimate(null); return }
+    if (!takeoffRows.length) {
+      // Only clear if not already set by PDF pipeline
+      if (cableEstimate?._source !== 'pdf_takeoff') setCableEstimate(null)
+      return
+    }
+    // Don't overwrite PDF-provided cable estimate
+    if (cableEstimate?._source === 'pdf_takeoff') return
 
-    // Build a synthetic geometry from takeoff counts
+    // DXF fallback: simple per-device multipliers
     const lightQty = takeoffRows.filter(r => r.asmId === 'ASM-003').reduce((s, r) => s + r.qty, 0)
     const socketQty = takeoffRows.filter(r => r.asmId === 'ASM-001').reduce((s, r) => s + r.qty, 0)
     const switchQty = takeoffRows.filter(r => r.asmId === 'ASM-002').reduce((s, r) => s + r.qty, 0)
@@ -643,10 +706,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
     if (!total) { setCableEstimate(null); return }
 
-    // Cable lengths per device type (empirical estimates in m)
-    const lightM = lightQty * 8   // ~8m per lamp circuit
-    const socketM = socketQty * 6 // ~6m per socket
-    const switchM = switchQty * 4 // ~4m per switch
+    const lightM = lightQty * 8
+    const socketM = socketQty * 6
+    const switchM = switchQty * 4
 
     setCableEstimate({
       cable_total_m: lightM + socketM + switchM,
@@ -659,8 +721,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Derived: pricing ──────────────────────────────────────────────────────
   const pricing = useMemo(() => {
     if (!takeoffRows.length) return null
-    return computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate })
-  }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate])
+    return computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode })
+  }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode])
 
   // ── Per-assembly unit cost ────────────────────────────────────────────────
   // Compute unit cost for each assembly × each wall type (for per-split pricing display in TakeoffRow)
@@ -671,13 +733,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       for (const wallKey of Object.keys(WALL_FACTORS)) {
         const single = computePricing({
           takeoffRows: [{ asmId: row.asmId, qty: 1, variantId: row.variantId, wallSplits: null, wallType: wallKey }],
-          assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate: null,
+          assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate: null, difficultyMode,
         })
         map[row.asmId][wallKey] = single.total
       }
     }
     return map
-  }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate])
+  }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, difficultyMode])
 
   // ── Accept all high-confidence ────────────────────────────────────────────
   const acceptAllHighConf = () => {
@@ -712,7 +774,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         const rowPricing = computePricing({
           takeoffRows: [row],
           assemblies, workItems, materials, context, markup, hourlyRate,
-          cableEstimate: null,
+          cableEstimate: null, difficultyMode,
         })
         return {
           id:            row.asmId,
@@ -902,19 +964,20 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         {/* ── LEFT: DXF Viewer ──────────────────────────────────────────────── */}
         <div style={{ flex: isMobile ? '0 0 100%' : '0 0 58%', position: 'relative', background: '#050507', borderRight: `1px solid ${C.border}`, display: (isMobile && !showDxfOnMobile) ? 'none' : undefined }}>
           {isDxf && viewerFile && (
-            <DxfViewerCanvas
-              ref={canvasRef}
-              file={viewerFile}
-              clearColor="#050507"
-              style={{ width: '100%', height: '100%' }}
-            />
+            <Suspense fallback={<div style={{ width: '100%', height: '100%', background: '#050507' }} />}>
+              <DxfViewerCanvas
+                ref={canvasRef}
+                file={viewerFile}
+                clearColor="#050507"
+                style={{ width: '100%', height: '100%' }}
+              />
+            </Suspense>
           )}
 
           {/* SVG overlay with block position dots */}
-          {isDxf && parsedDxf?.inserts?.length > 0 && (
+          {isDxf && effectiveParsedDxf?.inserts?.length > 0 && (
             <DxfBlockOverlay
-              inserts={parsedDxf.inserts}
-              geomBounds={parsedDxf.geomBounds}
+              inserts={effectiveParsedDxf.inserts}
               asmOverrides={asmOverrides}
               recognizedItems={recognizedItems}
               highlightBlock={highlightBlock}
@@ -1235,6 +1298,44 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     </div>
                   </div>
                 ))}
+
+                {/* ── Unit override ────────────────────────────────────── */}
+                {parsedDxf?.units && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 6 }}>
+                      Mértékegység {parsedDxf.units.name?.includes('guessed') ? '⚠️ (becsült)' : `(DXF: ${parsedDxf.units.name})`}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[
+                        [null, 'Auto'],
+                        ['mm', 'mm'],
+                        ['cm', 'cm'],
+                        ['m', 'm'],
+                        ['inches', 'inch'],
+                        ['feet', 'feet'],
+                      ].map(([val, lbl]) => (
+                        <button
+                          key={val ?? 'auto'}
+                          onClick={() => setUnitOverride(val)}
+                          style={{
+                            padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+                            background: unitOverride === val ? C.yellowDim : C.bgCard,
+                            border: `1px solid ${unitOverride === val ? C.yellow : C.border}`,
+                            color: unitOverride === val ? C.yellow : C.textSub,
+                            fontFamily: 'Syne', fontWeight: 700, fontSize: 12, transition: 'all 0.15s',
+                          }}
+                        >
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                    {unitOverride && (
+                      <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.yellow, marginTop: 4 }}>
+                        Manuális override aktív — az összes hossz {unitOverride}-ben lesz értelmezve
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ height: 1, background: C.border, margin: '16px 0' }} />
 
