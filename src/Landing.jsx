@@ -473,6 +473,385 @@ function HeroSection({ onStart }) {
   )
 }
 
+// ─── Trade Support Section ─────────────────────────────────────────────────────
+
+function GyengeAramSvg() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+      <style>{`
+        .ga-grid-line { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
+        .ga-cable-path { stroke: rgba(255,255,255,0.12); stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
+        .ga-endpoint-node { fill: none; stroke: rgba(255,255,255,0.12); stroke-width: 2; }
+        .ga-data-packet { fill: #4CC9F0; filter: url(#ga-glow); }
+        .ga-endpoint-label { fill: #93C5FD; font-family: 'Segoe UI', Roboto, monospace; font-size: 12px; font-weight: 600; opacity: 0; letter-spacing: 1px; }
+        .ga-status-led { fill: #4CC9F0; animation: ga-blink 1.5s step-end infinite; }
+        @keyframes ga-blink { 50% { opacity: 0.3; } }
+        .ga-label-1 { animation: ga-lf1 3.5s cubic-bezier(0.4,0,0.2,1) infinite; }
+        .ga-label-2 { animation: ga-lf2 3.5s cubic-bezier(0.4,0,0.2,1) infinite; }
+        .ga-label-3 { animation: ga-lf3 3.5s cubic-bezier(0.4,0,0.2,1) infinite; }
+        @keyframes ga-lf1 { 0%,85%{opacity:0} 90%,95%{opacity:1} 100%{opacity:0} }
+        @keyframes ga-lf2 { 0%,85%{opacity:0} 90%,95%{opacity:1} 100%{opacity:0} }
+        @keyframes ga-lf3 { 0%,85%{opacity:0} 90%,95%{opacity:1} 100%{opacity:0} }
+        @media (prefers-reduced-motion: reduce) {
+          .ga-endpoint-label { animation: none; opacity: 0.7; }
+        }
+      `}</style>
+      <defs>
+        <filter id="ga-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="5" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        <pattern id="ga-grid" width="50" height="50" patternUnits="userSpaceOnUse">
+          <path d="M 50 0 L 0 0 0 50" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>
+        </pattern>
+      </defs>
+      <rect width="1200" height="700" fill="url(#ga-grid)" />
+      {/* Rack */}
+      <g transform="translate(100, 300)">
+        <rect x="0" y="0" width="80" height="120" rx="4" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
+        <rect x="10" y="20" width="60" height="4" rx="2" fill="rgba(255,255,255,0.12)" />
+        <rect x="10" y="40" width="60" height="4" rx="2" fill="rgba(255,255,255,0.12)" />
+        <rect x="10" y="60" width="60" height="4" rx="2" fill="rgba(255,255,255,0.06)" />
+        <circle cx="15" cy="100" r="3" className="ga-status-led" />
+        <text x="10" y="-15" fill="rgba(255,255,255,0.2)" fontFamily="monospace" fontSize="10">CORE_RACK_01</text>
+      </g>
+      {/* Cable paths */}
+      <path id="ga-p1" d="M 180 320 L 400 320 L 500 150 L 800 150" className="ga-cable-path" />
+      <path id="ga-p2" d="M 180 350 L 600 350 L 700 450 L 950 450" className="ga-cable-path" />
+      <path id="ga-p3" d="M 180 380 L 400 380 L 550 580 L 750 580" className="ga-cable-path" />
+      {/* Animated data packets via animateMotion */}
+      <circle r="5" className="ga-data-packet">
+        <animateMotion dur="3.5s" repeatCount="indefinite" begin="0s">
+          <mpath href="#ga-p1"/>
+        </animateMotion>
+      </circle>
+      <circle r="5" className="ga-data-packet">
+        <animateMotion dur="3.5s" repeatCount="indefinite" begin="1.2s">
+          <mpath href="#ga-p2"/>
+        </animateMotion>
+      </circle>
+      <circle r="5" className="ga-data-packet">
+        <animateMotion dur="3.5s" repeatCount="indefinite" begin="2.3s">
+          <mpath href="#ga-p3"/>
+        </animateMotion>
+      </circle>
+      {/* Endpoint 1 – RJ45 */}
+      <g transform="translate(800, 150)">
+        <rect x="-15" y="-15" width="30" height="30" rx="2" className="ga-endpoint-node" stroke="#4CC9F0" />
+        <circle r="4" fill="#4CC9F0" opacity="0.6" />
+        <text x="24" y="5" className="ga-endpoint-label ga-label-1">RJ45 × 24  (CAT6A)</text>
+      </g>
+      {/* Endpoint 2 – CCTV */}
+      <g transform="translate(950, 450)">
+        <circle r="15" className="ga-endpoint-node" stroke="#4CC9F0" />
+        <circle r="5" fill="#4CC9F0" opacity="0.5" />
+        <text x="24" y="5" className="ga-endpoint-label ga-label-2">CCTV × 8  (PoE)</text>
+      </g>
+      {/* Endpoint 3 – Access reader */}
+      <g transform="translate(750, 580)">
+        <rect x="-12" y="-18" width="24" height="36" rx="2" className="ga-endpoint-node" stroke="#93C5FD" />
+        <circle r="4" fill="#93C5FD" opacity="0.5" cy="-2" />
+        <text x="24" y="5" className="ga-endpoint-label ga-label-3">ENTRY_READER × 4</text>
+      </g>
+      {/* Corner decorations */}
+      <path d="M 50 50 L 150 50 M 50 50 L 50 150" stroke="rgba(255,255,255,0.08)" fill="none" strokeWidth="1" />
+      <path d="M 1150 650 L 1050 650 M 1150 650 L 1150 550" stroke="rgba(255,255,255,0.08)" fill="none" strokeWidth="1" />
+    </svg>
+  )
+}
+
+function TuzjelzoSvg() {
+  const ac = '#FF6B6B'
+  const ac2 = '#FFAA6B'
+  const wall = 'rgba(255,255,255,0.22)'
+  const muted = 'rgba(255,255,255,0.13)'
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="100%" height="100%">
+      <style>{`
+        .tz-scan { animation: tz-scan 4s linear infinite; }
+        @keyframes tz-scan { 0%{transform:translateX(0px)} 100%{transform:translateX(1200px)} }
+        .tz-ping-1 { animation: tz-p1 4s linear infinite; transform-origin: 300px 225px; }
+        .tz-ping-2 { animation: tz-p2 4s linear infinite; transform-origin: 600px 475px; }
+        .tz-ping-3 { animation: tz-p3 4s linear infinite; transform-origin: 900px 225px; }
+        .tz-hud-1  { animation: tz-h1 4s linear infinite; }
+        .tz-hud-2  { animation: tz-h2 4s linear infinite; }
+        .tz-hud-3  { animation: tz-h3 4s linear infinite; }
+        @keyframes tz-p1 { 0%,22%,35%,100%{opacity:0.3;transform:scale(1)} 25%{opacity:1;transform:scale(1.18);filter:url(#tz-glow)} }
+        @keyframes tz-p2 { 0%,47%,60%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.18);filter:url(#tz-glow)} }
+        @keyframes tz-p3 { 0%,72%,85%,100%{opacity:0.3;transform:scale(1)} 75%{opacity:1;transform:scale(1.18);filter:url(#tz-glow)} }
+        @keyframes tz-h1 { 0%,22%,35%,100%{opacity:0} 25%,32%{opacity:1} }
+        @keyframes tz-h2 { 0%,47%,60%,100%{opacity:0} 50%,57%{opacity:1} }
+        @keyframes tz-h3 { 0%,72%,85%,100%{opacity:0} 75%,82%{opacity:1} }
+        @media (prefers-reduced-motion: reduce) {
+          .tz-scan { display: none; }
+          .tz-ping-1,.tz-ping-2,.tz-ping-3 { animation: none; opacity: 0.85; filter: url(#tz-glow); }
+          .tz-hud-1,.tz-hud-2,.tz-hud-3 { animation: none; opacity: 1; }
+        }
+      `}</style>
+      <defs>
+        <pattern id="tz-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="1"/>
+        </pattern>
+        <filter id="tz-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="6" result="blur"/>
+          <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+        </filter>
+        <linearGradient id="tz-scan-grad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={ac} stopOpacity="0"/>
+          <stop offset="100%" stopColor={ac} stopOpacity="0.12"/>
+        </linearGradient>
+      </defs>
+      <rect width="1200" height="700" fill="url(#tz-grid)" />
+      {/* Blueprint walls */}
+      <g>
+        <path d="M 150 100 L 1050 100 L 1050 600 L 150 600 Z" fill="none" stroke={wall} strokeWidth="2" strokeLinecap="square"/>
+        <path d="M 450 100 L 450 250 M 450 350 L 450 600" fill="none" stroke={wall} strokeWidth="2"/>
+        <path d="M 750 100 L 750 300 M 750 400 L 750 600" fill="none" stroke={wall} strokeWidth="2"/>
+        <path d="M 150 350 L 300 350 M 400 350 L 450 350" fill="none" stroke={wall} strokeWidth="2"/>
+        <path d="M 750 350 L 900 350 M 1000 350 L 1050 350" fill="none" stroke={wall} strokeWidth="2"/>
+        {/* Corner marks */}
+        <path d="M 130 80 L 170 80 M 150 60 L 150 100" stroke={ac2} strokeWidth="1" opacity="0.4"/>
+        <path d="M 1030 80 L 1070 80 M 1050 60 L 1050 100" stroke={ac2} strokeWidth="1" opacity="0.4"/>
+        <path d="M 130 620 L 170 620 M 150 600 L 150 640" stroke={ac2} strokeWidth="1" opacity="0.4"/>
+        <path d="M 1030 620 L 1070 620 M 1050 600 L 1050 640" stroke={ac2} strokeWidth="1" opacity="0.4"/>
+        {/* Room labels */}
+        <text x="170" y="130" fill={muted} fontFamily="monospace" fontSize="13" letterSpacing="2">LOBBY</text>
+        <text x="470" y="130" fill={muted} fontFamily="monospace" fontSize="13" letterSpacing="2">SERVER</text>
+        <text x="770" y="130" fill={muted} fontFamily="monospace" fontSize="13" letterSpacing="2">OFFICE</text>
+        <text x="470" y="380" fill={muted} fontFamily="monospace" fontSize="11" letterSpacing="2">FOLYOSÓ</text>
+      </g>
+      {/* Node 1 – Smoke detector */}
+      <g className="tz-ping-1">
+        <circle cx="300" cy="225" r="22" fill="none" stroke={ac} strokeWidth="2"/>
+        <circle cx="300" cy="225" r="10" fill="none" stroke={ac} strokeWidth="2"/>
+        <circle cx="300" cy="225" r="2" fill={ac}/>
+        <path d="M 300 195 L 300 203 M 300 247 L 300 255 M 270 225 L 278 225 M 322 225 L 330 225" fill="none" stroke={ac} strokeWidth="2"/>
+      </g>
+      <g className="tz-hud-1">
+        <line x1="315" y1="205" x2="340" y2="185" stroke={ac} strokeWidth="1"/>
+        <rect x="340" y="170" width="148" height="28" rx="4" fill={`${ac}18`} stroke={ac} strokeWidth="1"/>
+        <text x="350" y="189" fill={ac} fontFamily="monospace" fontSize="12" fontWeight="bold">SMOKE DET: ACTIVE</text>
+      </g>
+      {/* Node 2 – Manual call point */}
+      <g className="tz-ping-2">
+        <rect x="576" y="451" width="48" height="48" rx="6" fill="none" stroke={ac} strokeWidth="2"/>
+        <rect x="584" y="459" width="32" height="32" rx="3" fill="none" stroke={ac} strokeWidth="2"/>
+        <circle cx="600" cy="475" r="6" fill={ac}/>
+      </g>
+      <g className="tz-hud-2">
+        <line x1="615" y1="455" x2="640" y2="435" stroke={ac} strokeWidth="1"/>
+        <rect x="640" y="420" width="148" height="28" rx="4" fill={`${ac}18`} stroke={ac} strokeWidth="1"/>
+        <text x="650" y="439" fill={ac} fontFamily="monospace" fontSize="12" fontWeight="bold">MCP: STANDBY</text>
+      </g>
+      {/* Node 3 – Siren */}
+      <g className="tz-ping-3">
+        <path d="M 885 215 L 895 215 L 905 200 L 905 250 L 895 235 L 885 235 Z" fill="none" stroke={ac} strokeWidth="2"/>
+        <path d="M 915 210 Q 925 225 915 240" fill="none" stroke={ac} strokeWidth="2"/>
+        <path d="M 922 200 Q 936 225 922 250" fill="none" stroke={ac} strokeWidth="2"/>
+      </g>
+      <g className="tz-hud-3">
+        <line x1="915" y1="205" x2="940" y2="185" stroke={ac} strokeWidth="1"/>
+        <rect x="940" y="170" width="148" height="28" rx="4" fill={`${ac}18`} stroke={ac} strokeWidth="1"/>
+        <text x="950" y="189" fill={ac} fontFamily="monospace" fontSize="12" fontWeight="bold">SIREN: ALARM</text>
+      </g>
+      {/* Scanner sweep */}
+      <g className="tz-scan">
+        <rect x="-200" y="50" width="200" height="600" fill="url(#tz-scan-grad)"/>
+        <line x1="0" y1="50" x2="0" y2="650" stroke={ac} strokeWidth="2.5" style={{ filter: 'url(#tz-glow)' }}/>
+      </g>
+    </svg>
+  )
+}
+
+const TRADE_BLOCKS = [
+  {
+    id: 'erosaram',
+    icon: '⚡',
+    badge: 'Erősáram',
+    color: '#FFD166',
+    colorDim: 'rgba(255,209,102,0.1)',
+    colorBorder: 'rgba(255,209,102,0.22)',
+    title: 'DXF tervből tételes\nvillamos ajánlat percek alatt',
+    desc: 'Importáld a villamossági tervet – az app automatikusan megszámolja a szerelvényeket, megméri a kábelhosszakat, és normaidővel, anyagköltséggel együtt kalkulál.',
+    features: [
+      'Dugaljak, kapcsolók, lámpák automatikus felismerése és számlálása',
+      'Kábeltálca és nyomvonalak hosszmérése réteg szerint',
+      '60+ normaidő GK, Ytong, tégla, beton falanyagokra kalibrálva',
+      'Tételes PDF árajánlat céglogóval, egy kattintással',
+    ],
+    svgKey: 'erosaram',
+    reverse: false,
+  },
+  {
+    id: 'gyengaram',
+    icon: '📡',
+    badge: 'Gyengeáram',
+    color: '#4CC9F0',
+    colorDim: 'rgba(76,201,240,0.1)',
+    colorBorder: 'rgba(76,201,240,0.22)',
+    title: 'Hálózat, CCTV és beléptető\nrendszer – egy platformon',
+    desc: 'Strukturált hálózat, IP kamera rendszer és beléptető kalkuláció – iparági normaidőkkel, kategorizált anyaglistával és tételes PDF ajánlattal.',
+    features: [
+      'Cat6A hálózati pontok, patchpanel, managed switch normaidőkkel',
+      'IP kamera rendszer PoE táplálással, rögzítő, bel- és kültéri szerelés',
+      'Beléptető: RFID olvasó, elektromos zár, vezérlőegység',
+      'PA rendszer, kaputelefon – teljes gyengeáram szakterület',
+    ],
+    svgKey: 'gyengaram',
+    reverse: true,
+  },
+  {
+    id: 'tuzjelzo',
+    icon: '🔥',
+    badge: 'Tűzjelző',
+    color: '#FF6B6B',
+    colorDim: 'rgba(255,107,107,0.1)',
+    colorBorder: 'rgba(255,107,107,0.22)',
+    title: 'OTSZ-kompatibilis tűzjelző\nkalkuláció automatikusan',
+    desc: 'Optikai érzékelőktől a tűzjelző központig – az MSZ EN 54 és OTSZ előírásainak megfelelő JE-H(St)H E30 tűzálló kábellel kalkulálva.',
+    features: [
+      'Optikai, hő- és multiszenzoros érzékelők normaidőkkel',
+      'JE-H(St)H E30 tűzálló kábel – OTSZ FE180/E30 kötelező',
+      'Tűzjelző központ, kezelőpanel, I/O modul telepítés',
+      'Tűzgátló tömítések, rendszerprogramozás – teljes ajánlat',
+    ],
+    svgKey: 'tuzjelzo',
+    reverse: false,
+  },
+]
+
+function TradeSupportSection({ onStart }) {
+  return (
+    <section id="trades" style={{ background: '#050505', position: 'relative', zIndex: 1, paddingBottom: 0 }}>
+      {/* ── Section header ── */}
+      <div style={{ textAlign: 'center', padding: '100px 24px 80px' }}>
+        <FadeIn>
+          <div style={{
+            display: 'inline-block', marginBottom: 20,
+            background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.18)',
+            borderRadius: 100, padding: '6px 18px',
+            fontFamily: 'DM Mono', fontSize: 11, letterSpacing: '0.12em',
+            color: '#00E5A0', textTransform: 'uppercase',
+          }}>
+            Szakterületek
+          </div>
+          <h2 style={{
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 'clamp(28px, 5vw, 52px)',
+            color: '#F0F0F0', lineHeight: 1.1, letterSpacing: '-0.03em',
+            marginBottom: 20,
+          }}>
+            Három szakterület,<br />
+            <span style={{ color: '#00E5A0' }}>egy ajánlatkészítő</span> platform
+          </h2>
+          <p style={{
+            fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.8vw, 16px)', lineHeight: 1.8,
+            color: '#555', maxWidth: 620, margin: '0 auto',
+          }}>
+            Villamos kivitelező, gyengeáram- és tűzjelző-szerelő csapatok számára – minden szakterületnek saját normaidő-adatbázis, assembly könyvtár és anyaglista.
+          </p>
+        </FadeIn>
+      </div>
+
+      {/* ── Trade blocks ── */}
+      {TRADE_BLOCKS.map((trade, i) => (
+        <div key={trade.id} style={{
+          borderTop: '1px solid #111',
+          background: i % 2 === 0 ? '#050505' : '#060606',
+        }}>
+          <div style={{
+            maxWidth: 1280, margin: '0 auto', padding: '80px 48px',
+            display: 'grid',
+            gridTemplateColumns: trade.reverse ? '1fr 1fr' : '1fr 1fr',
+            gap: 72, alignItems: 'center',
+          }} className="trade-block-grid">
+
+            {/* Text column – left for !reverse, right for reverse */}
+            {!trade.reverse && (
+              <FadeIn delay={0.1}>
+                <TradeTextBlock trade={trade} />
+              </FadeIn>
+            )}
+
+            {/* SVG column */}
+            <FadeIn delay={0.2}>
+              <div style={{
+                aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden',
+                background: '#080808',
+                border: `1px solid ${trade.colorBorder}`,
+                boxShadow: `0 0 60px ${trade.colorDim}`,
+                position: 'relative',
+              }}>
+                {trade.svgKey === 'erosaram' && <TakeoffAnimation />}
+                {trade.svgKey === 'gyengaram' && <GyengeAramSvg />}
+                {trade.svgKey === 'tuzjelzo' && <TuzjelzoSvg />}
+              </div>
+            </FadeIn>
+
+            {/* Text column – right side for reverse */}
+            {trade.reverse && (
+              <FadeIn delay={0.1}>
+                <TradeTextBlock trade={trade} />
+              </FadeIn>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function TradeTextBlock({ trade }) {
+  return (
+    <div>
+      {/* Badge */}
+      <div style={{ marginBottom: 22 }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          background: trade.colorDim, border: `1px solid ${trade.colorBorder}`,
+          borderRadius: 100, padding: '7px 16px',
+          fontFamily: 'Syne', fontWeight: 700, fontSize: 13,
+          color: trade.color, letterSpacing: '0.02em',
+        }}>
+          {trade.icon} {trade.badge}
+        </span>
+      </div>
+      {/* Headline */}
+      <h3 style={{
+        fontFamily: 'Syne', fontWeight: 800, fontSize: 'clamp(22px, 3vw, 36px)',
+        lineHeight: 1.15, color: '#F0F0F0', marginBottom: 20,
+        letterSpacing: '-0.025em', whiteSpace: 'pre-line',
+      }}>
+        {trade.title}
+      </h3>
+      {/* Description */}
+      <p style={{
+        fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.4vw, 15px)', lineHeight: 1.75,
+        color: '#555', marginBottom: 36, maxWidth: 480,
+      }}>
+        {trade.desc}
+      </p>
+      {/* Feature list */}
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {trade.features.map((f, i) => (
+          <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{
+              flexShrink: 0, marginTop: 2, width: 18, height: 18,
+              borderRadius: '50%', background: trade.colorDim,
+              border: `1px solid ${trade.colorBorder}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 10, color: trade.color, fontWeight: 800,
+            }}>✓</span>
+            <span style={{
+              fontFamily: 'DM Mono', fontSize: 'clamp(12px, 1.2vw, 14px)',
+              color: '#888', lineHeight: 1.55,
+            }}>{f}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function FeaturesSection() {
   return (
     <section id="features" className="sec-100" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1 }}>
@@ -1258,6 +1637,7 @@ export default function Landing({ onStart }) {
           .two-col-grid     { grid-template-columns: 1fr !important; gap: 36px !important; }
           .normtime-grid    { grid-template-columns: 1fr !important; gap: 36px !important; }
           .pdf-section-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
+          .trade-block-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
         }
         @media (max-width: 768px) {
           .ai-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
@@ -1313,6 +1693,7 @@ export default function Landing({ onStart }) {
       <GlobalMouseGlow />
       <NavBar onStart={onStart} />
       <HeroSection onStart={onStart} />
+      <TradeSupportSection onStart={onStart} />
       <NormTimeSection />
       <AISection />
       <PDFOutputSection />
