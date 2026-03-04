@@ -716,7 +716,7 @@ function HeroAnimationMobile() {
 
 function HeroSection({ onStart }) {
   return (
-    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '88px 48px 48px' }}>
+    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '72px 48px 32px' }}>
 
       {/* Subtle grid bg */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.025, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
@@ -726,31 +726,30 @@ function HeroSection({ onStart }) {
 
       <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
 
-        {/* ── Headline ── */}
+        {/* ── Headline – block spans = guaranteed 2 lines ── */}
         <FadeIn>
-          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(32px, 4.2vw, 62px)', color: '#F0F0F0', marginBottom: 16, letterSpacing: '-0.03em' }}>
-            DXF-ből profi árajánlat<br />
-            <span style={{ color: '#00E5A0', textShadow: '0 0 50px rgba(0,229,160,0.35)' }}>2 perc alatt</span>
+          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(22px, 3.2vw, 46px)', color: '#F0F0F0', marginBottom: 12, letterSpacing: '-0.03em' }}>
+            <span style={{ display: 'block', whiteSpace: 'nowrap' }}>DXF-ből profi árajánlat</span>
+            <span style={{ display: 'block', color: '#00E5A0', textShadow: '0 0 50px rgba(0,229,160,0.35)' }}>2 perc alatt</span>
           </h1>
         </FadeIn>
 
         {/* ── Subtext ── */}
         <FadeIn delay={0.08}>
-          <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.4vw, 15px)', color: '#999', lineHeight: 1.85, maxWidth: 520, margin: '0 auto 28px' }}>
-            Töltsd fel a villamossági tervet, az alkalmazás automatikusan megszámolja<br className="hero-br" />
-            a szerelvényeket, és generál egy profi PDF ajánlatot.
+          <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(12px, 1.3vw, 14px)', color: '#999', lineHeight: 1.75, maxWidth: 500, margin: '0 auto 20px' }}>
+            Töltsd fel a villamossági tervet, az alkalmazás automatikusan megszámolja a szerelvényeket, és generál egy profi PDF ajánlatot.
           </p>
         </FadeIn>
 
         {/* ── CTAs ── */}
         <FadeIn delay={0.15}>
-          <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 40 }}>
-            <button onClick={onStart} style={{ padding: '14px 34px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 15, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
+          <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 28 }}>
+            <button onClick={onStart} style={{ padding: '12px 28px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 14, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
               onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.55)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
               onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
               Próbáld ki 14 napig →
             </button>
-            <a href="#how" style={{ padding: '14px 30px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
+            <a href="#how" style={{ padding: '12px 24px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor='#252525'; e.currentTarget.style.color='#999' }}>
               Hogyan működik?
@@ -758,14 +757,18 @@ function HeroSection({ onStart }) {
           </div>
         </FadeIn>
 
-        {/* ── Animated hero frame ── */}
+        {/* ── Animated hero frame ──
+            width = min(780px, (100vh − 354px) × 16/9)
+            so SVG height = width × 9/16 ≤ (100vh − 354px)
+            → frame always fits inside the viewport ── */}
         <FadeIn delay={0.22}>
           <div style={{
             position: 'relative', borderRadius: 16, overflow: 'hidden',
             border: '1px solid rgba(0,229,160,0.1)',
             boxShadow: '0 0 0 1px #090909, 0 40px 100px rgba(0,0,0,0.7), 0 0 60px rgba(0,229,160,0.04)',
             background: '#040A06',
-            maxWidth: 820, margin: '0 auto',
+            width: 'min(780px, calc((100vh - 354px) * 16 / 9))',
+            margin: '0 auto',
           }}>
             {/* corner accents */}
             {[
