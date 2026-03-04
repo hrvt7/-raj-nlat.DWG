@@ -389,6 +389,117 @@ function TakeoffAnimation() {
   )
 }
 
+// ─── Hero Trade Animation Cards ───────────────────────────────────────────────
+
+const HERO_TRADES = [
+  {
+    id: 'es', color: '#FFD166', bg: '#06050A',
+    badge: 'ERŐSÁRAM', filename: 'elosztas.dxf',
+    rows: [
+      { label: 'DUGALJ (DB)', val: '12', d: 0.6 },
+      { label: 'KAPCSOLÓ (DB)', val: '07', d: 1.2 },
+      { label: 'LÁMPA (DB)', val: '18', d: 1.8 },
+    ],
+    total: '37',
+  },
+  {
+    id: 'ga', color: '#4CC9F0', bg: '#02070D',
+    badge: 'GYENGEÁRAM', filename: 'gyengaram.dxf',
+    rows: [
+      { label: 'ADATPONT (DB)', val: '08', d: 0.6 },
+      { label: 'KAMERA (DB)', val: '04', d: 1.2 },
+      { label: 'BELÉPTETŐRENDSZER', val: '03', d: 1.8 },
+    ],
+    total: '15',
+  },
+  {
+    id: 'tz', color: '#FF6B6B', bg: '#090304',
+    badge: 'TŰZJELZŐ', filename: 'tuzjelzo.dxf',
+    rows: [
+      { label: 'ÉRZÉKELŐ (DB)', val: '14', d: 0.6 },
+      { label: 'KÉZ. JELZÉSADÓ', val: '03', d: 1.2 },
+      { label: 'SZIRÉNA (DB)', val: '06', d: 1.8 },
+    ],
+    total: '23',
+  },
+]
+
+function HeroTradeCard({ id, color, bg, badge, filename, rows, total }) {
+  const corners = [
+    { top: 0, left: 0, borderTop: `1.5px solid ${color}`, borderLeft: `1.5px solid ${color}`, borderRadius: '4px 0 0 0' },
+    { top: 0, right: 0, borderTop: `1.5px solid ${color}`, borderRight: `1.5px solid ${color}`, borderRadius: '0 4px 0 0' },
+    { bottom: 0, left: 0, borderBottom: `1.5px solid ${color}`, borderLeft: `1.5px solid ${color}`, borderRadius: '0 0 0 4px' },
+    { bottom: 0, right: 0, borderBottom: `1.5px solid ${color}`, borderRight: `1.5px solid ${color}`, borderRadius: '0 0 4px 0' },
+  ]
+  return (
+    <div style={{
+      position: 'relative', borderRadius: 12, overflow: 'hidden',
+      border: `1px solid ${color}20`, background: bg,
+      boxShadow: `0 0 0 1px #090909, 0 8px 32px rgba(0,0,0,0.55), 0 0 28px ${color}08`,
+    }}>
+      {corners.map((s, i) => (
+        <div key={i} style={{ position: 'absolute', width: 14, height: 14, opacity: 0.55, zIndex: 2, ...s }} />
+      ))}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 180"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', display: 'block' }}>
+        <rect width="1600" height="3" fill={color} opacity="0.75" />
+        <pattern id={`hg-${id}`} width="80" height="80" patternUnits="userSpaceOnUse">
+          <path d="M 80 0 L 0 0 0 80" fill="none" stroke={color} strokeWidth="0.5" opacity="0.03"/>
+        </pattern>
+        <rect width="1600" height="180" fill={`url(#hg-${id})`} />
+        <circle cx="44" cy="42" r="5.5" fill={color}>
+          <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite" />
+        </circle>
+        <text x="62" y="49" fontFamily="'DM Mono',monospace" fontSize="20" fontWeight="bold"
+          fill="#B8CAC0" letterSpacing="2.5">{badge}</text>
+        <text x="340" y="49" fontFamily="'DM Mono',monospace" fontSize="14"
+          fill={color} opacity="0.32" letterSpacing="2">SCANNING...</text>
+        <rect x="1310" y="24" width="252" height="30" rx="5"
+          fill={color} fillOpacity="0.07" stroke={color} strokeOpacity="0.18" strokeWidth="1" />
+        <text x="1436" y="45" textAnchor="middle" fontFamily="'DM Mono',monospace" fontSize="14"
+          fill={color} opacity="0.6" letterSpacing="1">{filename}</text>
+        <line x1="44" y1="68" x2="1556" y2="68" stroke={color} strokeWidth="0.5" opacity="0.14" />
+        {rows.map((row, i) => (
+          <g key={i} transform={`translate(${44 + i * 510}, 86)`}>
+            <text fontFamily="'DM Mono',monospace" fontSize="20" fill="#2C4838"
+              letterSpacing="1.5" y="0">{row.label}</text>
+            <text fontFamily="'DM Mono',monospace" fontSize="54" fill="#162A1C" y="76">
+              00
+              <animate attributeName="opacity" values="1;0" dur="7s"
+                begin={`${row.d}s`} fill="freeze" repeatCount="indefinite" />
+            </text>
+            <text fontFamily="'DM Mono',monospace" fontSize="54" fill={color} y="76" opacity="0">
+              {row.val}
+              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.86;1"
+                dur="7s" begin={`${row.d}s`} fill="freeze" repeatCount="indefinite" />
+            </text>
+          </g>
+        ))}
+        <g transform="translate(1380, 86)">
+          <text fontFamily="'DM Mono',monospace" fontSize="16" fill="#1E3828"
+            letterSpacing="2" y="0">ÖSSZES TÉTEL</text>
+          <text fontFamily="'DM Mono',monospace" fontSize="48" fill={color} y="76" opacity="0"
+            style={{ filter: `drop-shadow(0 0 12px ${color}70)` }}>
+            {total}
+            <animate attributeName="opacity" values="0;0;1;1;0"
+              keyTimes="0;0.35;0.48;0.88;1" dur="7s" begin="0s" repeatCount="indefinite" />
+          </text>
+        </g>
+        <line x1="44" y1="170" x2="1556" y2="170" stroke={color} strokeWidth="0.5" opacity="0.07" />
+      </svg>
+    </div>
+  )
+}
+
+function HeroTradeStack() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 880, margin: '0 auto' }}>
+      {HERO_TRADES.map(t => <HeroTradeCard key={t.id} {...t} />)}
+    </div>
+  )
+}
+
 function HeroSection({ onStart }) {
   return (
     <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '120px 48px 80px' }}>
@@ -442,30 +553,9 @@ function HeroSection({ onStart }) {
           </div>
         </FadeIn>
 
-        {/* ── Animated SVG below ── */}
+        {/* ── Trade result cards – all 3 specialties ── */}
         <FadeIn delay={0.25}>
-          <div className="anim-frame-169" style={{
-            position: 'relative',
-            borderRadius: 16,
-            overflow: 'hidden',
-            border: '1px solid #0E2018',
-            boxShadow: '0 0 0 1px #0A1A12, 0 40px 100px rgba(0,0,0,0.7), 0 0 80px rgba(0,229,160,0.05)',
-            aspectRatio: '16/9',
-            background: '#050E08',
-            maxWidth: 880,
-            margin: '0 auto',
-          }}>
-            {/* Corner accents */}
-            <div style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, borderTop: '1.5px solid #00E5A0', borderLeft: '1.5px solid #00E5A0', borderRadius: '4px 0 0 0', opacity: 0.6, zIndex: 2 }} />
-            <div style={{ position: 'absolute', top: 0, right: 0, width: 20, height: 20, borderTop: '1.5px solid #00E5A0', borderRight: '1.5px solid #00E5A0', borderRadius: '0 4px 0 0', opacity: 0.6, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, width: 20, height: 20, borderBottom: '1.5px solid #00E5A0', borderLeft: '1.5px solid #00E5A0', borderRadius: '0 0 0 4px', opacity: 0.6, zIndex: 2 }} />
-            <div style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderBottom: '1.5px solid #00E5A0', borderRight: '1.5px solid #00E5A0', borderRadius: '0 0 4px 0', opacity: 0.6, zIndex: 2 }} />
-            {/* File badge */}
-            <div style={{ position: 'absolute', top: 12, left: 28, zIndex: 3, background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.18)', borderRadius: 5, padding: '3px 10px', fontFamily: 'DM Mono', fontSize: 10, color: '#00E5A0', letterSpacing: '0.1em' }}>
-              alaprajz_1.dxf
-            </div>
-            <TakeoffAnimation />
-          </div>
+          <HeroTradeStack />
         </FadeIn>
 
       </div>
