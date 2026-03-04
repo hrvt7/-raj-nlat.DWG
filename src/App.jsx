@@ -505,6 +505,7 @@ function AuthModal({ onAuth }) {
 // ─── SaaS Shell ────────────────────────────────────────────────────────────────
 function SaaSShell() {
   const [page, setPage] = useState('dashboard')
+  const [activeTrade, setActiveTrade] = useState(null) // which trade section is active
   const [settings, setSettings] = useState(loadSettings)
   const [materials, setMaterials] = useState(loadMaterials)
   const [quotes, setQuotes] = useState(loadQuotes)
@@ -547,10 +548,32 @@ function SaaSShell() {
     setSubStatus({ plan: 'free', active: false })
   }
 
-  const pageTitles = {
-    dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
-    plans: 'Tervek', 'work-items': 'Munkatételek', materials: 'Anyagok',
-    assemblies: 'Assemblyk', settings: 'Beállítások',
+  // Trade-specifikus oldal navigáció: "assemblies-erosaram" → page='assemblies', activeTrade='erosaram'
+  const handleNavigate = (key, tradeId) => {
+    setViewingQuote(null)
+    // Parse trade-specific keys like "assemblies-erosaram"
+    const tradeMatch = key.match(/^(assemblies|work-items|materials)-(.+)$/)
+    if (tradeMatch) {
+      setPage(tradeMatch[1])
+      setActiveTrade(tradeMatch[2])
+    } else {
+      setPage(key)
+      if (!['assemblies', 'work-items', 'materials'].includes(key)) {
+        setActiveTrade(null)
+      }
+    }
+  }
+
+  const getPageTitle = () => {
+    const TRADE_LABELS = { erosaram: 'Erősáram', gyengaram: 'Gyengeáram', tuzjelzo: 'Tűzjelző' }
+    const tradeLabel = activeTrade ? TRADE_LABELS[activeTrade] : null
+    const baseTitles = {
+      dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
+      plans: 'Tervek', 'work-items': 'Munkatételek', materials: 'Anyagok',
+      assemblies: 'Assemblyk', settings: 'Beállítások',
+    }
+    const base = baseTitles[page] || page
+    return tradeLabel ? `${base} — ${tradeLabel}` : base
   }
 
   const [workItems, setWorkItems] = useState(loadWorkItems)
@@ -594,8 +617,9 @@ function SaaSShell() {
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
       {showAuth && <AuthModal onAuth={() => setShowAuth(false)} />}
       <Sidebar
-        active={page}
-        onNavigate={p => { setViewingQuote(null); setPage(p) }}
+        active={activeTrade ? `${page}-${activeTrade}` : page}
+        activeTrade={activeTrade}
+        onNavigate={handleNavigate}
         mobileOpen={sidebarMobileOpen}
         onMobileClose={() => setSidebarMobileOpen(false)}
       />
@@ -620,7 +644,7 @@ function SaaSShell() {
               </button>
             )}
             <div style={{ color: C.text, fontWeight: 600, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {viewingQuote ? viewingQuote.projectName : pageTitles[page] || page}
+              {viewingQuote ? viewingQuote.projectName : getPageTitle()}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -679,13 +703,13 @@ function SaaSShell() {
                   onNavigate={p => setPage(p)}
                   onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
               ) : page === 'work-items' ? (
-                <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} />
+                <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} activeTrade={activeTrade} />
               ) : page === 'materials' ? (
-                <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} />
+                <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
               ) : page === 'plans' ? (
                 <PlansPage onNavigate={(p, data) => { if (data) setPrefillData(data); setPage(p) }} />
               ) : page === 'assemblies' ? (
-                <AssembliesPage />
+                <AssembliesPage activeTrade={activeTrade} />
               ) : page === 'settings' ? (
                 <Settings settings={settings} materials={materials}
                   onSettingsChange={handleSettingsChange}

@@ -129,3 +129,49 @@ export async function isSubscribed() {
     return false
   }
 }
+
+// ── Trade Subscriptions ──────────────────────────────────────────────────────
+// Per-trade hozzáférés kezelés (dormant – test módban nem használjuk)
+
+/**
+ * Felhasználó trade előfizetéseinek lekérdezése
+ * @returns {{ erosaram: boolean, gyengaram: boolean, tuzjelzo: boolean }}
+ */
+export async function loadTradeSubscriptionsRemote() {
+  const { data, error } = await supabase
+    .from('trade_subscriptions')
+    .select('trade_id, status')
+  if (error && error.code !== 'PGRST116') throw error
+  const result = { erosaram: false, gyengaram: false, tuzjelzo: false }
+  if (data) {
+    for (const row of data) {
+      if (row.status === 'active' || row.status === 'trial') {
+        result[row.trade_id] = true
+      }
+    }
+  }
+  return result
+}
+
+/**
+ * Trade aktiválása/deaktiválása
+ */
+export async function setTradeSubscriptionRemote(tradeId, active) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  if (active) {
+    const { error } = await supabase.from('trade_subscriptions').upsert({
+      user_id: user.id,
+      trade_id: tradeId,
+      status: 'active',
+      activated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,trade_id' })
+    if (error) throw error
+  } else {
+    const { error } = await supabase.from('trade_subscriptions')
+      .update({ status: 'inactive', updated_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('trade_id', tradeId)
+    if (error) throw error
+  }
+}

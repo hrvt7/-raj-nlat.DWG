@@ -199,6 +199,48 @@ export const DEFAULT_MATERIALS = [
   // Ipari kiegészítés
   { code: 'MAT-056', name: 'CEE dugalj 3P+N+F 63A (IP44)', unit: 'db', price: 10500, discount: 0, category: 'ipari' },
   { code: 'MAT-057', name: 'Ipari elosztó (mobil, 4×16A+2×32A)', unit: 'db', price: 60000, discount: 0, category: 'ipari' },
+
+  // ── Gyengeáram – Strukturált hálózat ──────────────────────────────────────
+  { code: 'MAT-WE-CAT6A-JACK',  name: 'Cat6A keystone jack (árnyékolt)',       unit: 'db', price: 2800,  discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-CAT6A-CABLE', name: 'Cat6A S/FTP kábel (m)',                 unit: 'm',  price: 420,   discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-FIBER-CABLE', name: 'Optikai kábel OM3 4-szálas (m)',        unit: 'm',  price: 650,   discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-FIBER-PANEL', name: 'Optikai patch panel 12 portos',         unit: 'db', price: 18000, discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-FIBER-PIGTAIL',name:'Optikai pigtail SC/APC (db)',           unit: 'db', price: 1200,  discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-AP-BRACKET',  name: 'WiFi AP mennyezeti tartó',              unit: 'db', price: 3500,  discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-PATCH24',     name: 'Patch panel 24 port Cat6A',             unit: 'db', price: 22000, discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-SWITCH24',    name: 'Hálózati switch 24 port PoE managed',   unit: 'db', price: 185000,discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-UPS-RACK',    name: 'Rack UPS 1500VA online',                unit: 'db', price: 145000,discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-RACK',        name: '19" szerver szekrény 22U',              unit: 'db', price: 95000, discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-PSU-DIN24',   name: 'DIN tápegység 24V/2.5A',               unit: 'db', price: 12000, discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-PSU-12V',     name: 'Tápegység 12V/5A dobozos',             unit: 'db', price: 8500,  discount: 0, category: 'gyengaram_halozat' },
+
+  // ── Gyengeáram – Biztonságtechnika ────────────────────────────────────────
+  { code: 'MAT-WE-CAM-BRACKET', name: 'Kameratartó konzol (fali/mennyezeti)',  unit: 'db', price: 4500,  discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-ALARM-CABLE', name: 'Riasztó kábel 2×0.75+4×0.22 (m)',      unit: 'm',  price: 280,   discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-ALARM-BATT',  name: 'Riasztó központ akkumulátor 12V/7Ah',   unit: 'db', price: 6500,  discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-ALARM-SIREN', name: 'Kültéri sziréna LED villogóval',        unit: 'db', price: 14000, discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-REED',        name: 'Nyitásérzékelő reed kontakt (felületi)',unit: 'db', price: 2200,  discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-READER',      name: 'Proximity kártyaolvasó (MIFARE)',       unit: 'db', price: 25000, discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-ACCESS-CTRL', name: 'Beléptető vezérlő 2 ajtós',            unit: 'db', price: 65000, discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-PA-SPEAKER',  name: 'Mennyezeti PA hangszóró 6W',            unit: 'db', price: 12000, discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-INTERCOM',    name: 'IP kaputelefon kültéri egység',         unit: 'db', price: 85000, discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-INTERCOM-IN', name: 'IP kaputelefon beltéri monitor 7"',     unit: 'db', price: 55000, discount: 0, category: 'gyengaram_biztonsag' },
+
+  // ── Tűzjelző – Érzékelők ─────────────────────────────────────────────────
+  { code: 'MAT-FA-OPT-SMOKE',   name: 'Címezhető optikai füstérzékelő',       unit: 'db', price: 18000, discount: 0, category: 'tuzjelzo_erzekelo' },
+  { code: 'MAT-FA-HEAT',        name: 'Címezhető hőérzékelő',                 unit: 'db', price: 16000, discount: 0, category: 'tuzjelzo_erzekelo' },
+  { code: 'MAT-FA-MULTI',       name: 'Címezhető multiszenzoros érzékelő',     unit: 'db', price: 28000, discount: 0, category: 'tuzjelzo_erzekelo' },
+  { code: 'MAT-FA-BASE',        name: 'Érzékelő aljzat (univerzális)',         unit: 'db', price: 3500,  discount: 0, category: 'tuzjelzo_erzekelo' },
+  { code: 'MAT-FA-MCP',         name: 'Kézi jelzésadó (címezhető)',            unit: 'db', price: 22000, discount: 0, category: 'tuzjelzo_erzekelo' },
+  { code: 'MAT-FA-SOUNDER',     name: 'Hang-fényjelző (piros, címezhető)',     unit: 'db', price: 35000, discount: 0, category: 'tuzjelzo_erzekelo' },
+
+  // ── Tűzjelző – Központ & rendszer ─────────────────────────────────────────
+  { code: 'MAT-FA-JYSTY',       name: 'JE-H(St)H E30 2×2×0.8 tűzjelző kábel (m)', unit: 'm',  price: 520,   discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-PANEL',       name: 'Tűzjelző központ 2 hurkos',             unit: 'db', price: 380000,discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-BATT',        name: 'Központ akkumulátor 12V/24Ah',          unit: 'db', price: 18000, discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-REPEATER',    name: 'Kezelőegység (távoli kijelző)',          unit: 'db', price: 120000,discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-IO-MODULE',   name: 'Címezhető I/O modul (relés)',           unit: 'db', price: 32000, discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-FIRESTOP',    name: 'Tűzgátló habarcs készlet (1 áttörés)',  unit: 'db', price: 8500,  discount: 0, category: 'tuzjelzo_kozpont' },
 ]
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
@@ -303,7 +345,17 @@ export function saveAssemblies(assemblies) {
 }
 
 export function loadMaterials() {
-  return load(LS_KEYS.MATERIALS, DEFAULT_MATERIALS)
+  const stored = load(LS_KEYS.MATERIALS, null)
+  if (!stored) return DEFAULT_MATERIALS
+
+  // Migráció: új default anyagok hozzáadása (pl. gyengeáram/tűzjelző bővítés)
+  const storedCodes = new Set(stored.map(m => m.code))
+  const missing = DEFAULT_MATERIALS.filter(m => !storedCodes.has(m.code))
+  if (missing.length > 0) {
+    stored.push(...missing)
+    save(LS_KEYS.MATERIALS, stored)
+  }
+  return stored
 }
 export function saveMaterials(materials) {
   save(LS_KEYS.MATERIALS, materials)

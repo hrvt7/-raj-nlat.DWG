@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { C, fmt, Button, Badge, Input } from '../components/ui.jsx'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { saveMaterials } from '../data/store.js'
+import { getMaterialCategoriesForTrade } from '../data/trades.js'
 
 // ─── Material categories ────────────────────────────────────────────────────
 export const MATERIAL_CATEGORIES = [
@@ -15,19 +16,28 @@ export const MATERIAL_CATEGORIES = [
   { key: 'gyengaram',   label: 'Gyengeáram',    color: '#06B6D4' },
   { key: 'seged',       label: 'Segédanyag',    color: '#71717A' },
   { key: 'vilagitas',   label: 'Világítás',     color: '#FBBF24' },
+  // New trade-specific categories
+  { key: 'gyengaram_halozat',   label: 'Hálózat (GY)',      color: '#22D3EE' },
+  { key: 'gyengaram_biztonsag', label: 'Biztonság (GY)',     color: '#0EA5E9' },
+  { key: 'tuzjelzo_erzekelo',   label: 'Érzékelők (TŰZ)',   color: '#EF4444' },
+  { key: 'tuzjelzo_kozpont',    label: 'Központ (TŰZ)',      color: '#DC2626' },
 ]
 
-export default function MaterialsPage({ materials, onMaterialsChange }) {
+export default function MaterialsPage({ materials, onMaterialsChange, activeTrade }) {
   const [activeCategory, setActiveCategory] = useState('all')
   const [search, setSearch] = useState('')
   const [editItem, setEditItem] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_mat_view') || 'grid')
 
+  // Trade filtering
+  const tradeMaterialCategories = activeTrade ? getMaterialCategoriesForTrade(activeTrade) : null
+
   const filtered = materials.filter(m => {
+    const matchTrade = !tradeMaterialCategories || tradeMaterialCategories.includes(m.category)
     const matchCat = activeCategory === 'all' || m.category === activeCategory
     const matchSearch = !search || [m.name, m.code].some(v => v?.toLowerCase().includes(search.toLowerCase()))
-    return matchCat && matchSearch
+    return matchTrade && matchCat && matchSearch
   })
 
   const drag = useDraggableOrder(filtered, 'tpro_mat_order', m => m.code)

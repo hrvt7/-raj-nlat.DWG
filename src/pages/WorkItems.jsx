@@ -3,18 +3,23 @@ import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '.
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { WORK_ITEM_CATEGORIES } from '../data/workItemsDb.js'
 import { saveWorkItems } from '../data/store.js'
+import { getCategoriesForTrade } from '../data/trades.js'
 
-export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
+export default function WorkItemsPage({ workItems, onWorkItemsChange, activeTrade }) {
   const [activeCategory, setActiveCategory] = useState('all')
   const [search, setSearch] = useState('')
   const [editItem, setEditItem] = useState(null) // null | item object
   const [showAdd, setShowAdd] = useState(false)
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_wi_view') || 'grid')
 
+  // Trade filtering
+  const tradeCategories = activeTrade ? getCategoriesForTrade(activeTrade) : null
+
   const filtered = workItems.filter(wi => {
+    const matchTrade = !tradeCategories || tradeCategories.includes(wi.category)
     const matchCat = activeCategory === 'all' || wi.category === activeCategory
     const matchSearch = !search || [wi.name, wi.code].some(v => v?.toLowerCase().includes(search.toLowerCase()))
-    return matchCat && matchSearch
+    return matchTrade && matchCat && matchSearch
   })
 
   const getKey = wi => wi.code

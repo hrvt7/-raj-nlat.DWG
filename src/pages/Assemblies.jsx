@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
 import { WORK_ITEM_CATEGORIES, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId, getAssemblyCompleteness, getAssemblyComponents } from '../data/workItemsDb.js'
 import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount, trackAsmUsage } from '../data/store.js'
+import { getCategoriesForTrade, SHARED_CATEGORIES } from '../data/trades.js'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 
 // ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
 
-export default function AssembliesPage() {
+export default function AssembliesPage({ activeTrade }) {
   const [assemblies, setAssemblies] = useState(loadAssemblies)
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
@@ -17,6 +18,12 @@ export default function AssembliesPage() {
   const [aiHistory, setAiHistory] = useState([])
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_asm_view') || 'grid')
 
+  // Trade filtering: restrict assemblies to active trade's categories
+  const tradeCategories = useMemo(() => {
+    if (!activeTrade) return null // null = show all
+    return getCategoriesForTrade(activeTrade)
+  }, [activeTrade])
+
   const selected = assemblies.find(a => a.id === selectedId) || null
 
   const persist = useCallback((updated) => {
@@ -25,14 +32,16 @@ export default function AssembliesPage() {
   }, [])
 
   const filtered = useMemo(() => assemblies.filter(a => {
+    // Trade filter
+    const matchTrade = !tradeCategories || tradeCategories.includes(a.category)
     const matchCat = catFilter === 'all' || a.category === catFilter
     const matchSearch = !search || a.name.toLowerCase().includes(search.toLowerCase()) ||
       a.description?.toLowerCase().includes(search.toLowerCase()) ||
       a.tags?.some(t => t.toLowerCase().includes(search.toLowerCase()))
     const matchVariant = !hideVariants || !a.variantOf
     const matchTag = !tagFilter || a.tags?.includes(tagFilter)
-    return matchCat && matchSearch && matchVariant && matchTag
-  }), [assemblies, catFilter, search, hideVariants, tagFilter])
+    return matchTrade && matchCat && matchSearch && matchVariant && matchTag
+  }), [assemblies, catFilter, search, hideVariants, tagFilter, tradeCategories])
 
   const drag = useDraggableOrder(filtered, 'tpro_asm_order', a => a.id)
 
