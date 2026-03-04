@@ -1043,24 +1043,24 @@ const TRADE_BLOCKS = [
 ]
 
 function TradeSupportSection({ onStart }) {
+  const [active, setActive] = useState(0)
+  const trade = TRADE_BLOCKS[active]
   return (
-    <section id="trades" style={{ background: '#050505', position: 'relative', zIndex: 1, paddingBottom: 0 }}>
+    <section id="trades" className="sec-100" style={{ background: '#050505', position: 'relative', zIndex: 1 }}>
+
       {/* ── Section header ── */}
-      <div style={{ textAlign: 'center', padding: '100px 24px 80px' }}>
-        <FadeIn>
+      <FadeIn>
+        <div style={{ textAlign: 'center', marginBottom: 52 }}>
           <div style={{
             display: 'inline-block', marginBottom: 20,
             background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.18)',
             borderRadius: 100, padding: '6px 18px',
             fontFamily: 'DM Mono', fontSize: 11, letterSpacing: '0.12em',
             color: '#00E5A0', textTransform: 'uppercase',
-          }}>
-            Szakterületek
-          </div>
+          }}>Szakterületek</div>
           <h2 style={{
             fontFamily: 'Syne', fontWeight: 800, fontSize: 'clamp(28px, 5vw, 52px)',
-            color: '#F0F0F0', lineHeight: 1.1, letterSpacing: '-0.03em',
-            marginBottom: 20,
+            color: '#F0F0F0', lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: 20,
           }}>
             Három szakterület,<br />
             <span style={{ color: '#00E5A0' }}>egy ajánlatkészítő</span> platform
@@ -1071,53 +1071,58 @@ function TradeSupportSection({ onStart }) {
           }}>
             Villamos kivitelező, gyengeáram- és tűzjelző-szerelő csapatok számára – minden szakterületnek saját normaidő-adatbázis, assembly könyvtár és anyaglista.
           </p>
-        </FadeIn>
-      </div>
+        </div>
+      </FadeIn>
 
-      {/* ── Trade blocks ── */}
-      {TRADE_BLOCKS.map((trade, i) => (
-        <div key={trade.id} style={{
-          borderTop: '1px solid #111',
-          background: i % 2 === 0 ? '#050505' : '#060606',
-        }}>
-          <div style={{
-            maxWidth: 1280, margin: '0 auto', padding: '80px 48px',
-            display: 'grid',
-            gridTemplateColumns: trade.reverse ? '1fr 1fr' : '1fr 1fr',
+      {/* ── Tab pills ── */}
+      <FadeIn delay={0.1}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 52, flexWrap: 'wrap' }}>
+          {TRADE_BLOCKS.map((t, i) => (
+            <button key={t.id} onClick={() => setActive(i)} style={{
+              padding: '9px 24px', borderRadius: 100,
+              border: `1px solid ${active === i ? t.color + '55' : '#1E1E1E'}`,
+              background: active === i ? `${t.color}12` : 'transparent',
+              color: active === i ? t.color : '#555',
+              fontFamily: 'DM Mono', fontSize: 12,
+              fontWeight: active === i ? 700 : 400,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              cursor: 'pointer', transition: 'all 0.2s', outline: 'none',
+            }}>
+              {t.icon} {t.badge}
+            </button>
+          ))}
+        </div>
+      </FadeIn>
+
+      {/* ── Active trade content ── */}
+      <div key={active} style={{ animation: 'nt-tab-in 0.32s ease' }}>
+        <div
+          className="trade-block-grid"
+          style={{
+            maxWidth: 1280, margin: '0 auto', padding: '0 48px 20px',
+            display: 'grid', gridTemplateColumns: '1fr 1fr',
             gap: 72, alignItems: 'center',
-          }} className="trade-block-grid">
-
-            {/* Text column – left for !reverse, right for reverse */}
-            {!trade.reverse && (
-              <FadeIn delay={0.1} className="trade-text-col">
-                <TradeTextBlock trade={trade} />
-              </FadeIn>
-            )}
-
-            {/* SVG column */}
-            <FadeIn delay={0.2} className="trade-svg-col">
-              <div style={{
-                aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden',
-                background: '#080808',
-                border: `1px solid ${trade.colorBorder}`,
-                boxShadow: `0 0 60px ${trade.colorDim}`,
-                position: 'relative',
-              }}>
-                {trade.svgKey === 'erosaram' && <TakeoffAnimation />}
-                {trade.svgKey === 'gyengaram' && <GyengeAramSvg />}
-                {trade.svgKey === 'tuzjelzo' && <TuzjelzoSvg />}
-              </div>
-            </FadeIn>
-
-            {/* Text column – right side for reverse */}
-            {trade.reverse && (
-              <FadeIn delay={0.1} className="trade-text-col">
-                <TradeTextBlock trade={trade} />
-              </FadeIn>
-            )}
+          }}
+        >
+          <div className="nt-text" style={{ order: trade.reverse ? 2 : 1 }}>
+            <TradeTextBlock trade={trade} />
+          </div>
+          <div className="nt-svg" style={{ order: trade.reverse ? 1 : 2 }}>
+            <div style={{
+              aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden',
+              background: '#080808',
+              border: `1px solid ${trade.colorBorder}`,
+              boxShadow: `0 0 60px ${trade.colorDim}`,
+              position: 'relative',
+            }}>
+              {trade.svgKey === 'erosaram' && <TakeoffAnimation />}
+              {trade.svgKey === 'gyengaram' && <GyengeAramSvg />}
+              {trade.svgKey === 'tuzjelzo' && <TuzjelzoSvg />}
+            </div>
           </div>
         </div>
-      ))}
+      </div>
+
     </section>
   )
 }
