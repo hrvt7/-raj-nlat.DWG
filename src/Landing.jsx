@@ -1044,6 +1044,132 @@ function FeaturesSection() {
   )
 }
 
+// ── Compact per-trade normaidő card ────────────────────────────────────────
+function NtTradeSvg({ pfx, color, tradeName, items, modifier, total }) {
+  const barLen = 220
+  const off0 = Math.round(barLen * (1 - items[0].pct))
+  const off1 = Math.round(barLen * (1 - items[1].pct))
+  const off2 = Math.round(barLen * (1 - items[2].pct))
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 255"
+      style={{ width: '100%', height: 'auto', display: 'block' }}>
+      <defs>
+        <style>{`
+          @keyframes ${pfx}b0 { 0%,8%{stroke-dashoffset:${barLen}} 62%,90%{stroke-dashoffset:${off0}} 100%{stroke-dashoffset:${barLen}} }
+          @keyframes ${pfx}b1 { 0%,8%{stroke-dashoffset:${barLen}} 62%,90%{stroke-dashoffset:${off1}} 100%{stroke-dashoffset:${barLen}} }
+          @keyframes ${pfx}b2 { 0%,8%{stroke-dashoffset:${barLen}} 62%,90%{stroke-dashoffset:${off2}} 100%{stroke-dashoffset:${barLen}} }
+          @keyframes ${pfx}nf { 0%,18%{opacity:0} 38%,85%{opacity:1} 96%,100%{opacity:0} }
+          @keyframes ${pfx}ct { 0%,55%{opacity:0;transform:translateY(3px)} 72%,88%{opacity:1;transform:translateY(0)} 98%,100%{opacity:0;transform:translateY(3px)} }
+          .${pfx}-bg { fill:none;stroke:#0D2018;stroke-width:5;stroke-linecap:round }
+          .${pfx}-b0 { fill:none;stroke:${color};stroke-width:5;stroke-linecap:round;stroke-dasharray:${barLen};animation:${pfx}b0 4.5s ease-in-out infinite 0.2s }
+          .${pfx}-b1 { fill:none;stroke:${color};stroke-width:5;stroke-linecap:round;stroke-dasharray:${barLen};animation:${pfx}b1 4.5s ease-in-out infinite 0.5s }
+          .${pfx}-b2 { fill:none;stroke:${color};stroke-width:5;stroke-linecap:round;stroke-dasharray:${barLen};animation:${pfx}b2 4.5s ease-in-out infinite 0.8s }
+          .${pfx}-n0 { animation:${pfx}nf 4.5s ease-in-out infinite 0.2s;opacity:0 }
+          .${pfx}-n1 { animation:${pfx}nf 4.5s ease-in-out infinite 0.5s;opacity:0 }
+          .${pfx}-n2 { animation:${pfx}nf 4.5s ease-in-out infinite 0.8s;opacity:0 }
+          .${pfx}-ct { animation:${pfx}ct 4.5s ease-in-out infinite 1.2s;opacity:0 }
+        `}</style>
+      </defs>
+      {/* Card background */}
+      <rect width="700" height="255" rx="12" fill="#060E0A" stroke={color} strokeWidth="1" strokeOpacity="0.18" />
+      <rect width="700" height="3" rx="1" fill={color} opacity="0.65" />
+
+      {/* Trade badge */}
+      <rect x="20" y="18" width="104" height="22" rx="11" fill={color} fillOpacity="0.1" stroke={color} strokeWidth="0.8" strokeOpacity="0.4" />
+      <text x="72" y="33" textAnchor="middle" fontFamily="'DM Mono',monospace" fontSize="11" fontWeight="bold" fill={color} letterSpacing="1">{tradeName}</text>
+      {/* Header label */}
+      <text x="140" y="33" fontFamily="'DM Mono',monospace" fontSize="11" fill="#3A5A4A" letterSpacing="1.5">NORMAIDŐ KALKULÁTOR</text>
+
+      {/* Divider */}
+      <line x1="20" y1="56" x2="680" y2="56" stroke={color} strokeWidth="0.4" strokeOpacity="0.2" />
+
+      {/* Row 0 */}
+      <text x="20" y="88" fontFamily="'DM Mono',monospace" fontSize="12.5" fill="#9CA3AF">{items[0].label}</text>
+      <line className={`${pfx}-bg`} x1="250" y1="85" x2="470" y2="85" />
+      <line className={`${pfx}-b0`} x1="250" y1="85" x2="470" y2="85" />
+      <text className={`${pfx}-n0`} x="478" y="89" fontFamily="'DM Mono',monospace" fontSize="12" fill={color}>{items[0].time}</text>
+
+      {/* Row 1 */}
+      <text x="20" y="138" fontFamily="'DM Mono',monospace" fontSize="12.5" fill="#9CA3AF">{items[1].label}</text>
+      <line className={`${pfx}-bg`} x1="250" y1="135" x2="470" y2="135" />
+      <line className={`${pfx}-b1`} x1="250" y1="135" x2="470" y2="135" />
+      <text className={`${pfx}-n1`} x="478" y="139" fontFamily="'DM Mono',monospace" fontSize="12" fill={color}>{items[1].time}</text>
+
+      {/* Row 2 */}
+      <text x="20" y="188" fontFamily="'DM Mono',monospace" fontSize="12.5" fill="#9CA3AF">{items[2].label}</text>
+      <line className={`${pfx}-bg`} x1="250" y1="185" x2="470" y2="185" />
+      <line className={`${pfx}-b2`} x1="250" y1="185" x2="470" y2="185" />
+      <text className={`${pfx}-n2`} x="478" y="189" fontFamily="'DM Mono',monospace" fontSize="12" fill={color}>{items[2].time}</text>
+
+      {/* Bottom strip */}
+      <line x1="20" y1="212" x2="680" y2="212" stroke={color} strokeWidth="0.4" strokeOpacity="0.18" />
+      <text x="20" y="234" fontFamily="'DM Mono',monospace" fontSize="11.5" fill="#444">{modifier}</text>
+      <text className={`${pfx}-ct`} x="670" y="235" textAnchor="end" fontFamily="'DM Mono',monospace"
+        fontSize="20" fontWeight="bold" fill={color}>{total}</text>
+    </svg>
+  )
+}
+
+const NT_TRADES = [
+  {
+    pfx: 'nte', color: '#00E5A0', tradeName: 'ERŐSÁRAM',
+    items: [
+      { label: 'EL-061  Dugalj beépítés',   time: '0.45 h', pct: 0.50 },
+      { label: 'EL-062  Kapcsoló 1-pólusú',  time: '0.25 h', pct: 0.28 },
+      { label: 'EL-070  LED Panel 60×60',    time: '0.90 h', pct: 1.00 },
+    ],
+    modifier: 'Beton fal  ×1.3   •   Magasság 3.5m+  ×1.4',
+    total: '4.2 h',
+    textBadge: 'Erősáram',
+    textTitle: 'Villamos normaidők, tételenként',
+    textDesc: '60+ normaidő-adat az MSZ szerinti villamos normák alapján – dugaszoló aljzatoktól a komplex bekötésekig. Tételenként állítható falanyag és projekt szorzók.',
+    features: [
+      ['60+ villamos tétel', 'Dugalj, kapcsoló, lámpa, kábeltálca, elosztó – előre feltöltve'],
+      ['Tételszintű falanyag', 'GK / Ytong / Tégla / Beton – soronként, nem globálisan'],
+      ['Projekt szorzók', 'Magasság, hozzáférhetőség, épület típus – az egész projektre'],
+    ],
+    reverse: false,
+  },
+  {
+    pfx: 'ntg', color: '#4CC9F0', tradeName: 'GYENGEÁRAM',
+    items: [
+      { label: 'LAN-01  Cat6A hálózati pont', time: '0.35 h', pct: 0.29 },
+      { label: 'CAM-03  IP kamera (kültéri)',  time: '1.20 h', pct: 1.00 },
+      { label: 'ACC-05  RFID olvasó',          time: '0.85 h', pct: 0.71 },
+    ],
+    modifier: 'Kültéri szerelés  ×1.2   •   Előszerelt rack  ×0.8',
+    total: '3.8 h',
+    textBadge: 'Gyengeáram',
+    textTitle: 'Gyengeáram normaidők egy platformon',
+    textDesc: 'Strukturált hálózat, IP kamera és beléptető rendszer – iparági normaidőkkel. Minden tételhez kategorizált anyaglista, normaidő és tételes PDF ajánlat.',
+    features: [
+      ['Hálózat', 'Cat6A pont, patchpanel, managed switch – normaidőkkel'],
+      ['CCTV és beléptető', 'IP kamera, RFID olvasó, elektromos zár, vezérlőegység'],
+      ['PA és kaputelefon', 'Teljes gyengeáram szakterület lefedve'],
+    ],
+    reverse: true,
+  },
+  {
+    pfx: 'ntt', color: '#FF6B6B', tradeName: 'TŰZJELZŐ',
+    items: [
+      { label: 'FJ-01  Optikai érzékelő',       time: '0.35 h', pct: 0.14 },
+      { label: 'FJ-15  Kábelfektetés /10m',      time: '0.85 h', pct: 0.34 },
+      { label: 'FJ-20  Tűzjelző központ',        time: '2.50 h', pct: 1.00 },
+    ],
+    modifier: 'Álmennyezet  ×1.2   •   Tűzgátló tömítés  ×1.3',
+    total: '6.5 h',
+    textBadge: 'Tűzjelző',
+    textTitle: 'OTSZ-kompatibilis tűzjelző normák',
+    textDesc: 'Optikai érzékelőktől a tűzjelző központig – MSZ EN 54 és OTSZ előírások szerint. JE-H(St)H E30 tűzálló kábellel, teljes rendszerszintű kalkulációval.',
+    features: [
+      ['MSZ EN 54 normák', 'Optikai, hő- és multiszenzoros érzékelők normaidőkkel'],
+      ['JE-H(St)H E30 kábel', 'OTSZ FE180/E30 kötelező tűzálló kábel – automatikusan'],
+      ['Teljes rendszer', 'Központ, kezelőpanel, I/O modul, programozás, tömítések'],
+    ],
+    reverse: false,
+  },
+]
+
 function NormTimeAnimation() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice"
@@ -1200,73 +1326,103 @@ function NormTimeAnimation() {
 
 function NormTimeSection() {
   return (
-    <section className="sec-100" style={{ padding: '100px 24px', background: '#050505', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+    <section className="sec-100" style={{ padding: '100px 24px 80px', background: '#050505', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
       {/* Background glow */}
-      <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 400, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', left: '50%', top: '30%', transform: 'translate(-50%,-50%)', width: 700, height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }} className="normtime-grid">
 
-          {/* Left: explanation */}
-          <FadeIn>
+        {/* ── Section header ── */}
+        <FadeIn>
+          <div style={{ textAlign: 'center', marginBottom: 80 }}>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>
               Normaidő Kalkuláció
             </div>
-            <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(26px, 4vw, 42px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 20, lineHeight: 1.2 }}>
-              Nem becsül –<br />
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(26px, 4vw, 42px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 16, lineHeight: 1.2 }}>
+              Nem becsül –{' '}
               <span style={{ color: '#00E5A0' }}>pontosan számol</span>
             </h2>
-            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', lineHeight: 1.85, marginBottom: 32 }}>
-              60+ normaidő-adat, tételenként. Minden sorhoz beállítható a falanyag (GK / Ytong / Tégla / Beton) – a munkadíj pontosan tükrözi a valós beépítési körülményeket.
+            <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#666', lineHeight: 1.85, maxWidth: 560, margin: '0 auto' }}>
+              Minden szakterülethez saját normaidő-adatbázis. Tételenként beállítható falanyag és projekt szorzók – a munkadíj pontosan tükrözi a valós körülményeket.
             </p>
+          </div>
+        </FadeIn>
 
-            {/* Feature bullets */}
-            {[
-              ['Tételszintű falanyag', 'GK / Ytong / Tégla / Beton – soronként, nem globálisan'],
-              ['Projekt szorzók', 'Hozzáférhetőség, magasság, projekt típus – az egész projektre'],
-              ['60+ tétel', 'Magyar elektromos normák alapján előre feltöltve'],
-              ['Saját normák', 'Szerkeszthető és bővíthető a Beállításokban'],
-            ].map(([title, desc], i) => (
-              <div key={i} style={{ display: 'flex', gap: 14, marginBottom: 18, alignItems: 'flex-start' }}>
-                <div style={{ width: 20, height: 20, flexShrink: 0, marginTop: 1 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M20 6L9 17l-5-5"/>
-                  </svg>
+        {/* ── Three trade rows ── */}
+        {NT_TRADES.map((trade, i) => (
+          <FadeIn key={trade.pfx} delay={i * 0.1}>
+            <div
+              className="normtime-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 64,
+                alignItems: 'center',
+                paddingBottom: i < NT_TRADES.length - 1 ? 72 : 0,
+                marginBottom: i < NT_TRADES.length - 1 ? 72 : 0,
+                borderBottom: i < NT_TRADES.length - 1 ? '1px solid #111' : 'none',
+              }}
+            >
+              {/* Text column */}
+              <div style={{ order: trade.reverse ? 2 : 1 }}>
+                <div style={{
+                  display: 'inline-block', marginBottom: 16,
+                  background: `${trade.color}14`, border: `1px solid ${trade.color}38`,
+                  borderRadius: 100, padding: '5px 16px',
+                  fontFamily: 'DM Mono', fontSize: 11, letterSpacing: '0.1em',
+                  color: trade.color, textTransform: 'uppercase',
+                }}>
+                  {trade.textBadge}
                 </div>
-                <div>
-                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: '#DDD', marginBottom: 3 }}>{title}</div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#777', lineHeight: 1.6 }}>{desc}</div>
+                <h3 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 'clamp(20px, 2.8vw, 28px)', color: '#F0F0F0', letterSpacing: '-0.02em', marginBottom: 14, lineHeight: 1.25 }}>
+                  {trade.textTitle}
+                </h3>
+                <p style={{ fontFamily: 'DM Mono', fontSize: 13.5, color: '#777', lineHeight: 1.85, marginBottom: 28 }}>
+                  {trade.textDesc}
+                </p>
+                {trade.features.map(([title, desc], j) => (
+                  <div key={j} style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
+                    <div style={{ width: 18, height: 18, flexShrink: 0, marginTop: 2 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={trade.color} strokeWidth="2.5" strokeLinecap="round">
+                        <path d="M20 6L9 17l-5-5"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13.5, color: '#DDD', marginBottom: 3 }}>{title}</div>
+                      <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#666', lineHeight: 1.6 }}>{desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* SVG card column */}
+              <div style={{ order: trade.reverse ? 1 : 2 }}>
+                <div style={{
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  border: `1px solid ${trade.color}22`,
+                  boxShadow: `0 0 0 1px #0A0A0A, 0 24px 64px rgba(0,0,0,0.55), 0 0 40px ${trade.color}06`,
+                  background: '#060E0A',
+                  position: 'relative',
+                }}>
+                  {/* Corner accents */}
+                  {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h],ci) => (
+                    <div key={ci} style={{
+                      position:'absolute', [v]:0, [h]:0, width:14, height:14,
+                      [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]: `1.5px solid ${trade.color}`,
+                      [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]: `1.5px solid ${trade.color}`,
+                      borderRadius: ci===0?'4px 0 0 0':ci===1?'0 4px 0 0':ci===2?'0 0 0 4px':'0 0 4px 0',
+                      opacity: 0.45, zIndex: 2,
+                    }} />
+                  ))}
+                  <NtTradeSvg {...trade} />
                 </div>
               </div>
-            ))}
-          </FadeIn>
-
-          {/* Right: animated SVG */}
-          <FadeIn delay={0.15}>
-            <div className="anim-frame-32" style={{
-              borderRadius: 16,
-              overflow: 'hidden',
-              border: '1px solid #0E2018',
-              boxShadow: '0 0 0 1px #0A1A12, 0 32px 80px rgba(0,0,0,0.6), 0 0 60px rgba(0,229,160,0.03)',
-              aspectRatio: '3/2',
-              background: '#050E08',
-              position: 'relative',
-            }}>
-              {/* Corner accents */}
-              {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h],i) => (
-                <div key={i} style={{ position:'absolute', [v]:0, [h]:0, width:18, height:18,
-                  [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]: '1.5px solid #00E5A0',
-                  [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]: '1.5px solid #00E5A0',
-                  borderRadius: i===0?'4px 0 0 0':i===1?'0 4px 0 0':i===2?'0 0 0 4px':'0 0 4px 0',
-                  opacity:0.5, zIndex:2 }} />
-              ))}
-              <NormTimeAnimation />
             </div>
           </FadeIn>
+        ))}
 
-        </div>
       </div>
-
     </section>
   )
 }
