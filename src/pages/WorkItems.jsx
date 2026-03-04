@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
+import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { WORK_ITEM_CATEGORIES } from '../data/workItemsDb.js'
 import { saveWorkItems } from '../data/store.js'
 
@@ -8,12 +9,16 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
   const [search, setSearch] = useState('')
   const [editItem, setEditItem] = useState(null) // null | item object
   const [showAdd, setShowAdd] = useState(false)
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_wi_view') || 'grid')
 
   const filtered = workItems.filter(wi => {
     const matchCat = activeCategory === 'all' || wi.category === activeCategory
     const matchSearch = !search || [wi.name, wi.code].some(v => v?.toLowerCase().includes(search.toLowerCase()))
     return matchCat && matchSearch
   })
+
+  const getKey = wi => wi.code
+  const drag = useDraggableOrder(filtered, 'tpro_wi_order', getKey)
 
   const saveItem = (item) => {
     let updated
@@ -54,7 +59,8 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
             Normaidő adatbázis – {workItems.length} tétel · P50/P90 értékek
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ViewToggle view={viewMode} onChange={v => { setViewMode(v); localStorage.setItem('tpro_wi_view', v) }} />
           <Button variant="ghost" size="sm" onClick={resetToDefaults}>⟳ Alaphelyzet</Button>
           <Button size="sm" onClick={() => { setShowAdd(true); setEditItem({ _isNew: true, code: '', category: 'szerelvenyek', name: '', unit: 'db', p50: 0, p90: 0, heightFactor: false, desc: '' }) }} icon="＋">Új tétel</Button>
         </div>
@@ -92,22 +98,44 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
         <Input value={search} onChange={setSearch} placeholder="Keresés: név, kód..." />
       </div>
 
-      {/* Cards grid */}
-      {filtered.length === 0 ? (
+      {/* Cards grid / List */}
+      {drag.orderedItems.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: C.textMuted, fontFamily: 'DM Mono', fontSize: 13 }}>
           Nincs találat a szűrési feltételekre.
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-          {filtered.map(wi => (
-            <WorkItemGridCard
+          {drag.orderedItems.map(wi => (
+            <DraggableCardWrapper key={wi.code} itemKey={wi.code} {...drag}>
+              <WorkItemGridCard
+                workItem={wi}
+                onEdit={() => setEditItem({ ...wi })}
+                onDelete={() => deleteItem(wi.code)}
+              />
+            </DraggableCardWrapper>
+          ))}
+        </div>
+      ) : (
+        <ListTable>
+          {/* List header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ width: 14, flexShrink: 0 }} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', minWidth: 90 }}>Kategória</span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', minWidth: 62 }}>Kód</span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flex: 1 }}>Megnevezés</span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', minWidth: 130, textAlign: 'right' }}>P50 / P90 / Egys.</span>
+          </div>
+          {drag.orderedItems.map(wi => (
+            <WorkItemListRow
               key={wi.code}
               workItem={wi}
               onEdit={() => setEditItem({ ...wi })}
               onDelete={() => deleteItem(wi.code)}
+              itemKey={wi.code}
+              {...drag}
             />
           ))}
-        </div>
+        </ListTable>
       )}
 
       {/* Info box */}
@@ -127,6 +155,50 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange }) {
   )
 }
 
+// ─── WorkItemListRow ──────────────────────────────────────────────────────────
+function WorkItemListRow({ workItem, onEdit, onDelete, ...dragProps }) {
+  const [hovered, setHovered] = useState(false)
+  const cat = WORK_ITEM_CATEGORIES.find(c => c.key === workItem.category)
+  return (
+    <ListRow onClick={onEdit} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} {...dragProps}>
+      {/* Category badge */}
+      <span style={{
+        fontFamily: 'DM Mono', fontSize: 10, whiteSpace: 'nowrap', flexShrink: 0,
+        color: cat?.color || C.textSub, background: `${cat?.color || C.textSub}14`,
+        border: `1px solid ${cat?.color || C.textSub}28`,
+        padding: '2px 8px', borderRadius: 20, minWidth: 80, textAlign: 'center',
+      }}>{cat?.label || workItem.category}</span>
+      {/* Code */}
+      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, flexShrink: 0, minWidth: 60 }}>{workItem.code}</span>
+      {/* Name + desc */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workItem.name}</div>
+        {workItem.desc && (
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workItem.desc}</div>
+        )}
+      </div>
+      {/* Stats */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.accent, background: C.accentDim, padding: '2px 7px', borderRadius: 5 }}>{workItem.p50}p</span>
+        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.yellow, background: C.yellowDim, padding: '2px 7px', borderRadius: 5 }}>{workItem.p90}p</span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, minWidth: 24, textAlign: 'center' }}>{workItem.unit}</span>
+        {workItem.heightFactor && <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent }}>✓</span>}
+      </div>
+      {/* Delete */}
+      <button onClick={e => { e.stopPropagation(); onDelete() }} style={{
+        padding: '4px 7px', background: 'transparent', border: `1px solid ${C.border}`,
+        borderRadius: 6, color: C.textMuted, cursor: 'pointer', flexShrink: 0,
+        opacity: hovered ? 1 : 0, transition: 'opacity 0.12s',
+      }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+      </button>
+    </ListRow>
+  )
+}
+
+// ─── WorkItemGridCard ─────────────────────────────────────────────────────────
 function WorkItemGridCard({ workItem, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false)
   const cat = WORK_ITEM_CATEGORIES.find(c => c.key === workItem.category)

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
 import { WORK_ITEM_CATEGORIES, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId, getAssemblyCompleteness, getAssemblyComponents } from '../data/workItemsDb.js'
 import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount, trackAsmUsage } from '../data/store.js'
+import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 
 // ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
 
@@ -14,6 +15,7 @@ export default function AssembliesPage() {
   const [tagFilter, setTagFilter] = useState(null)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiHistory, setAiHistory] = useState([])
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_asm_view') || 'grid')
 
   const selected = assemblies.find(a => a.id === selectedId) || null
 
@@ -31,6 +33,8 @@ export default function AssembliesPage() {
     const matchTag = !tagFilter || a.tags?.includes(tagFilter)
     return matchCat && matchSearch && matchVariant && matchTag
   }), [assemblies, catFilter, search, hideVariants, tagFilter])
+
+  const drag = useDraggableOrder(filtered, 'tpro_asm_order', a => a.id)
 
   // Collect all unique tags
   const allTags = useMemo(() => {
@@ -100,7 +104,10 @@ export default function AssembliesPage() {
             Előre összeállított szerelvénycsomagok · {assemblies.length} assembly
           </p>
         </div>
-        <Button size="sm" onClick={handleCreate} icon="＋">Új assembly</Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ViewToggle view={viewMode} onChange={v => { setViewMode(v); localStorage.setItem('tpro_asm_view', v) }} />
+          <Button size="sm" onClick={handleCreate} icon="＋">Új assembly</Button>
+        </div>
       </div>
 
       {/* AI Assembly Builder */}
@@ -162,27 +169,53 @@ export default function AssembliesPage() {
         </div>
       </div>
 
-      {/* 3-column grid */}
-      {filtered.length === 0 ? (
+      {/* Grid / List */}
+      {drag.orderedItems.length === 0 ? (
         <EmptyState
           title="Nincs találat"
           desc="Hozz létre új assembly-t a jobb felső + gombbal"
           action={<Button onClick={handleCreate}>Új assembly</Button>}
         />
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
           gap: 14,
         }}>
-          {filtered.map(asm => (
-            <AssemblyGridCard
-              key={asm.id}
-              assembly={asm}
-              onClick={() => setSelectedId(asm.id)}
-            />
+          {drag.orderedItems.map(asm => (
+            <DraggableCardWrapper key={asm.id} itemKey={asm.id} borderRadius={14} {...drag}>
+              <AssemblyGridCard
+                assembly={asm}
+                onClick={() => setSelectedId(asm.id)}
+              />
+            </DraggableCardWrapper>
           ))}
         </div>
+      ) : (
+        <ListTable>
+          {/* Header */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 14px 8px 38px',
+            borderBottom: `1px solid ${C.border}`,
+          }}>
+            <span style={{ flex: '0 0 90px', fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID / Kat.</span>
+            <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Megnevezés</span>
+            <span style={{ flex: '0 0 110px', textAlign: 'right', fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ár</span>
+            <span style={{ flex: '0 0 80px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Összetevők</span>
+            <span style={{ width: 32 }} />
+          </div>
+          {drag.orderedItems.map(asm => (
+            <AssemblyListRow
+              key={asm.id}
+              assembly={asm}
+              onOpen={() => setSelectedId(asm.id)}
+              onDelete={() => handleDelete(asm.id)}
+              itemKey={asm.id}
+              {...drag}
+            />
+          ))}
+        </ListTable>
       )}
 
       {/* Modal overlay */}
@@ -196,6 +229,92 @@ export default function AssembliesPage() {
         />
       )}
     </div>
+  )
+}
+
+// ─── Assembly List Row ─────────────────────────────────────────────────────────
+
+function AssemblyListRow({ assembly, onOpen, onDelete, isLast, ...dragProps }) {
+  const [hovered, setHovered] = useState(false)
+  const cat = WORK_ITEM_CATEGORIES.find(c => c.key === assembly.category)
+  const workItemComps = assembly.components?.filter(c => c.itemType === 'workitem') || []
+  const materialComps = assembly.components?.filter(c => c.itemType === 'material') || []
+  const pricing = calcAssemblyPrice(assembly)
+  const displayPrice = assembly.priceOverride != null ? assembly.priceOverride : pricing.total
+  const usageCount = getAssemblyUsageCount(assembly.id)
+
+  return (
+    <ListRow
+      onClick={onOpen}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      {...dragProps}
+    >
+      {/* ID + category */}
+      <div style={{ flex: '0 0 90px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{assembly.id}</span>
+        {cat && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            fontSize: 9, fontFamily: 'DM Mono',
+            color: C.accent, background: 'rgba(0,229,160,0.08)',
+            border: `1px solid rgba(0,229,160,0.15)`,
+            borderRadius: 5, padding: '1px 5px', width: 'fit-content',
+          }}>
+            {cat.icon} {cat.label}
+          </span>
+        )}
+      </div>
+
+      {/* Name + description */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {assembly.name}
+        </div>
+        {assembly.description && (
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+            {assembly.description}
+          </div>
+        )}
+      </div>
+
+      {/* Price */}
+      <div style={{ flex: '0 0 110px', textAlign: 'right' }}>
+        <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 14, color: C.accent }}>
+          {fmt(Math.round(displayPrice))}
+        </span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginLeft: 2 }}>Ft</span>
+      </div>
+
+      {/* Component counts */}
+      <div style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center', gap: 10 }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, display: 'flex', alignItems: 'center', gap: 3 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          </svg>
+          {materialComps.length}
+        </span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, display: 'flex', alignItems: 'center', gap: 3 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2.5" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          {workItemComps.length}
+        </span>
+      </div>
+
+      {/* Delete */}
+      <div style={{ width: 32, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: C.textMuted, fontSize: 14, padding: '2px 4px', borderRadius: 4,
+            opacity: hovered ? 0.7 : 0, transition: 'opacity 0.12s',
+          }}
+          title="Törlés"
+        >✕</button>
+      </div>
+    </ListRow>
   )
 }
 

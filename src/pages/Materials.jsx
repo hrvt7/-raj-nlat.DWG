@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { C, fmt, Button, Badge, Input } from '../components/ui.jsx'
+import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { saveMaterials } from '../data/store.js'
 
 // ─── Material categories ────────────────────────────────────────────────────
@@ -21,12 +22,15 @@ export default function MaterialsPage({ materials, onMaterialsChange }) {
   const [search, setSearch] = useState('')
   const [editItem, setEditItem] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_mat_view') || 'grid')
 
   const filtered = materials.filter(m => {
     const matchCat = activeCategory === 'all' || m.category === activeCategory
     const matchSearch = !search || [m.name, m.code].some(v => v?.toLowerCase().includes(search.toLowerCase()))
     return matchCat && matchSearch
   })
+
+  const drag = useDraggableOrder(filtered, 'tpro_mat_order', m => m.code)
 
   const saveItem = (item) => {
     let updated
@@ -75,7 +79,8 @@ export default function MaterialsPage({ materials, onMaterialsChange }) {
             Anyaglista adatbázis – {materials.length} tétel · Nettó egységárak (Ft)
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ViewToggle view={viewMode} onChange={v => { setViewMode(v); localStorage.setItem('tpro_mat_view', v) }} />
           <Button variant="ghost" size="sm" onClick={resetToDefaults}>⟳ Alaphelyzet</Button>
           <Button size="sm" onClick={() => {
             setShowAdd(true)
@@ -119,22 +124,43 @@ export default function MaterialsPage({ materials, onMaterialsChange }) {
         <Input value={search} onChange={setSearch} placeholder="Keresés: név, kód..." />
       </div>
 
-      {/* Cards grid */}
-      {filtered.length === 0 ? (
+      {/* Cards grid / List */}
+      {drag.orderedItems.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 24px', color: C.textMuted, fontFamily: 'DM Mono', fontSize: 13 }}>
           Nincs találat a szűrési feltételekre.
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-          {filtered.map(m => (
-            <MaterialGridCard
+          {drag.orderedItems.map(m => (
+            <DraggableCardWrapper key={m.code} itemKey={m.code} {...drag}>
+              <MaterialGridCard
+                material={m}
+                onEdit={() => setEditItem({ ...m })}
+                onDelete={() => deleteItem(m.code)}
+              />
+            </DraggableCardWrapper>
+          ))}
+        </div>
+      ) : (
+        <ListTable>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ width: 14, flexShrink: 0 }} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', minWidth: 80 }}>Kategória</span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', minWidth: 62 }}>Kód</span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', flex: 1 }}>Megnevezés</span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', minWidth: 120, textAlign: 'right' }}>Ár / Kedv. / Egys.</span>
+          </div>
+          {drag.orderedItems.map(m => (
+            <MaterialListRow
               key={m.code}
               material={m}
               onEdit={() => setEditItem({ ...m })}
               onDelete={() => deleteItem(m.code)}
+              itemKey={m.code}
+              {...drag}
             />
           ))}
-        </div>
+        </ListTable>
       )}
 
       {/* Info box */}
@@ -154,6 +180,44 @@ export default function MaterialsPage({ materials, onMaterialsChange }) {
   )
 }
 
+// ─── MaterialListRow ──────────────────────────────────────────────────────────
+function MaterialListRow({ material, onEdit, onDelete, ...dragProps }) {
+  const [hovered, setHovered] = useState(false)
+  const cat = MATERIAL_CATEGORIES.find(c => c.key === material.category)
+  const discountedPrice = material.discount > 0 ? material.price * (1 - material.discount / 100) : material.price
+  return (
+    <ListRow onClick={onEdit} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} {...dragProps}>
+      <span style={{
+        fontFamily: 'DM Mono', fontSize: 10, whiteSpace: 'nowrap', flexShrink: 0,
+        color: cat?.color || C.textSub, background: `${cat?.color || C.textSub}14`,
+        border: `1px solid ${cat?.color || C.textSub}28`,
+        padding: '2px 8px', borderRadius: 20, minWidth: 80, textAlign: 'center',
+      }}>{cat?.label || material.category}</span>
+      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, flexShrink: 0, minWidth: 62 }}>{material.code}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{material.name}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.accent, background: C.accentDim, padding: '2px 7px', borderRadius: 5 }}>{fmt(discountedPrice)} Ft</span>
+        {material.discount > 0 && (
+          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.yellow, background: C.yellowDim, padding: '2px 7px', borderRadius: 5 }}>-{material.discount}%</span>
+        )}
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, minWidth: 30, textAlign: 'center' }}>{material.unit}</span>
+      </div>
+      <button onClick={e => { e.stopPropagation(); onDelete() }} style={{
+        padding: '4px 7px', background: 'transparent', border: `1px solid ${C.border}`,
+        borderRadius: 6, color: C.textMuted, cursor: 'pointer', flexShrink: 0,
+        opacity: hovered ? 1 : 0, transition: 'opacity 0.12s',
+      }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+        </svg>
+      </button>
+    </ListRow>
+  )
+}
+
+// ─── MaterialGridCard ─────────────────────────────────────────────────────────
 function MaterialGridCard({ material, onEdit, onDelete }) {
   const [hovered, setHovered] = useState(false)
   const cat = MATERIAL_CATEGORIES.find(c => c.key === material.category)
