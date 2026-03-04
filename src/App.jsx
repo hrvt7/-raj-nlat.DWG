@@ -32,6 +32,61 @@ const PDF_LEVELS = [
   { key: 'detailed', label: 'Részletes',    icon: '▦', desc: '+ Minden tétel, anyagok, munka' },
 ]
 
+const PDF_PREVIEW_SECTIONS = {
+  compact: [
+    { label: 'Fejléc + logó',         active: true,  fresh: false },
+    { label: 'KPI összesítő kártyák', active: true,  fresh: false },
+    { label: 'Pénzügyi táblázat',     active: true,  fresh: false },
+    { label: 'Munkacsoport bontás',   active: false, fresh: false },
+    { label: 'Részletes tétellista',  active: false, fresh: false },
+  ],
+  summary: [
+    { label: 'Fejléc + logó',         active: true,  fresh: false },
+    { label: 'KPI összesítő kártyák', active: true,  fresh: false },
+    { label: 'Pénzügyi táblázat',     active: true,  fresh: false },
+    { label: 'Munkacsoport bontás',   active: true,  fresh: true  },
+    { label: 'Részletes tétellista',  active: false, fresh: false },
+  ],
+  detailed: [
+    { label: 'Fejléc + logó',         active: true,  fresh: false },
+    { label: 'KPI összesítő kártyák', active: true,  fresh: false },
+    { label: 'Pénzügyi táblázat',     active: true,  fresh: false },
+    { label: 'Munkacsoport bontás',   active: true,  fresh: false },
+    { label: 'Részletes tétellista',  active: true,  fresh: true  },
+  ],
+}
+
+function PdfPreview({ level }) {
+  const rows = PDF_PREVIEW_SECTIONS[level] || PDF_PREVIEW_SECTIONS.compact
+  return (
+    <div style={{
+      background: C.bg, border: `1px solid ${C.border}`,
+      borderRadius: 8, padding: '10px 12px', marginBottom: 14,
+    }}>
+      <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        Tartalom előnézet
+      </div>
+      {rows.map((row, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3.5px 0' }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+            background: row.active ? (row.fresh ? C.accent : C.blue) : C.border,
+            boxShadow: row.fresh ? `0 0 5px ${C.accent}80` : 'none',
+          }} />
+          <span style={{
+            fontFamily: 'DM Mono', fontSize: 10,
+            color: row.active ? (row.fresh ? C.accent : C.textSub) : C.muted + '60',
+            textDecoration: row.active ? 'none' : 'line-through',
+          }}>{row.label}</span>
+          {row.fresh && (
+            <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 8, color: C.accent, opacity: 0.7, background: C.accentDim, borderRadius: 4, padding: '1px 5px' }}>+ extra</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── QuoteView ────────────────────────────────────────────────────────────────
 function QuoteView({ quote, settings, onBack, onStatusChange }) {
   const statuses = ['draft', 'sent', 'won', 'lost']
@@ -150,25 +205,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
             </div>
           )}
 
-          {/* Material items */}
-          {matItems.length > 0 && (
-            <ItemsGroup
-              title="Anyagok" count={matItems.length} accentColor={C.text}
-              items={matItems}
-              renderRow={item => {
-                const total = (item.unitPrice || 0) * item.qty
-                return [
-                  item.name,
-                  `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
-                  `${fmt(Math.round(item.unitPrice || 0))} Ft`,
-                  '—',
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.text }}>{fmt(Math.round(total))} Ft</span>,
-                ]
-              }}
-            />
-          )}
-
-          {/* Labor items */}
+          {/* Labor items — first */}
           {laborItems.length > 0 && (
             <ItemsGroup
               title="Munka" count={laborItems.length} accentColor={C.blue}
@@ -181,6 +218,24 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
                   `${fmt(rate)} Ft/ó`,
                   `${(item.hours || 0).toFixed(2)} ó`,
                   <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.blue }}>{fmt(Math.round(total))} Ft</span>,
+                ]
+              }}
+            />
+          )}
+
+          {/* Material items — second */}
+          {matItems.length > 0 && (
+            <ItemsGroup
+              title="Anyagok" count={matItems.length} accentColor={C.text}
+              items={matItems}
+              renderRow={item => {
+                const total = (item.unitPrice || 0) * item.qty
+                return [
+                  item.name,
+                  `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
+                  `${fmt(Math.round(item.unitPrice || 0))} Ft`,
+                  '—',
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.text }}>{fmt(Math.round(total))} Ft</span>,
                 ]
               }}
             />
@@ -236,9 +291,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
           <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
             <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 4 }}>PDF Árajánlat</div>
             <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14 }}>Részletezési szint</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
               {PDF_LEVELS.map(lvl => (
-                <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} title={lvl.desc} style={{
+                <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} style={{
                   padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
                   background: pdfLevel === lvl.key ? C.accentDim : C.bg,
                   border: `1px solid ${pdfLevel === lvl.key ? C.accentBorder : C.border}`,
@@ -247,13 +302,17 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
                   display: 'flex', alignItems: 'center', gap: 8,
                 }}>
                   <span style={{ fontSize: 12, opacity: 0.8 }}>{lvl.icon}</span>
-                  <div>
-                    <div>{lvl.label}</div>
-                    <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: pdfLevel === lvl.key ? C.accent : C.muted, marginTop: 1, opacity: 0.8 }}>{lvl.desc}</div>
-                  </div>
+                  {lvl.label}
+                  {pdfLevel === lvl.key && (
+                    <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>✓</span>
+                  )}
                 </button>
               ))}
             </div>
+
+            {/* Live content preview */}
+            <PdfPreview level={pdfLevel} />
+
             <button onClick={handlePdf} disabled={pdfGenerating} style={{
               width: '100%', padding: '11px', borderRadius: 9, cursor: pdfGenerating ? 'wait' : 'pointer',
               background: pdfGenerating ? C.accentDim : C.accent,
@@ -279,15 +338,19 @@ function ItemsGroup({ title, count, accentColor, items, renderRow }) {
   return (
     <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
       <button onClick={() => setOpen(o => !o)} style={{
-        width: '100%', padding: '13px 18px', background: 'none', border: 'none', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: open ? `1px solid ${C.border}` : 'none',
+        width: '100%', padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        borderBottom: open ? `1px solid ${C.border}` : 'none',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 3, height: 16, borderRadius: 2, background: accentColor, flexShrink: 0 }} />
-          <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.text }}>{title}</span>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, padding: '2px 8px' }}>{count} tétel</span>
+          <span style={{ width: 3, height: 18, borderRadius: 2, background: accentColor, flexShrink: 0 }} />
+          <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 14, color: C.text }}>{title}</span>
+          <span style={{
+            fontFamily: 'DM Mono', fontSize: 10, color: C.muted,
+            background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, padding: '2px 8px',
+          }}>{count} tétel</span>
         </div>
-        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{open ? '▲' : '▼'}</span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <div style={{ overflowX: 'auto' }}>
@@ -296,9 +359,9 @@ function ItemsGroup({ title, count, accentColor, items, renderRow }) {
               <tr style={{ background: C.bg }}>
                 {headers.map((h, i) => (
                   <th key={h} style={{
-                    padding: '7px 14px', fontFamily: 'DM Mono', fontSize: 9.5, color: C.muted,
+                    padding: '9px 16px', fontFamily: 'DM Mono', fontSize: 10, color: C.muted,
                     textAlign: i === 0 ? 'left' : 'right', fontWeight: 500,
-                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
                     borderBottom: `1px solid ${C.border}`,
                   }}>{h}</th>
                 ))}
@@ -308,13 +371,21 @@ function ItemsGroup({ title, count, accentColor, items, renderRow }) {
               {items.map((item, i) => {
                 const cells = renderRow(item)
                 return (
-                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}18` }}>
+                  <tr key={i} style={{
+                    borderBottom: `1px solid ${C.border}`,
+                    transition: 'background 0.1s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = C.bgHover}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
                     {cells.map((cell, ci) => (
                       <td key={ci} style={{
-                        padding: '8px 14px',
+                        padding: '11px 16px',
                         textAlign: ci === 0 ? 'left' : 'right',
-                        fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
-                        ...(ci === 0 ? { color: C.text, fontFamily: 'inherit', fontSize: 12 } : {}),
+                        ...(ci === 0
+                          ? { fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }
+                          : { fontFamily: 'DM Mono', fontSize: 12, color: C.textSub }
+                        ),
                       }}>{cell}</td>
                     ))}
                   </tr>
