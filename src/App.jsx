@@ -46,129 +46,282 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
     finally { setTimeout(() => setPdfGenerating(false), 1200) }
   }
 
+  const vatPct = parseFloat(settings?.labor?.vat_percent ?? 27)
+  const net    = Math.round(quote.gross || 0)
+  const vat    = Math.round(net * vatPct / 100)
+  const gross  = net + vat
+  const rate   = quote.pricingData?.hourlyRate || 9000
+
+  // Separate items by type for the grouped table
+  const matItems   = (quote.items || []).filter(i => i.type === 'material' || i.type === 'cable')
+  const laborItems = (quote.items || []).filter(i => i.type === 'labor')
+
+  // Label style reused throughout
+  const labelStyle = { fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5, display: 'block' }
+  const monoVal    = { fontFamily: 'DM Mono', fontSize: 13, color: C.text, fontWeight: 500 }
+
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>←</button>
-        <div>
-          <div style={{ color: C.text, fontWeight: 700, fontSize: 20 }}>{quote.projectName}</div>
-          <div style={{ color: C.muted, fontSize: 13 }}>{quote.id}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <button onClick={onBack} style={{
+          background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8,
+          color: C.textSub, cursor: 'pointer', fontSize: 16, padding: '6px 12px',
+          display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'DM Mono',
+          transition: 'border-color 0.15s',
+        }}>← Vissza</button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: C.text, lineHeight: 1.2 }}>{quote.projectName}</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>{quote.id}</div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <QuoteStatusBadge status={quote.status} />
-        </div>
+        <QuoteStatusBadge status={quote.status} />
       </div>
 
-      {/* ── PDF Export Panel ──────────────────────────────────────────────── */}
-      <div style={{
-        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12,
-        padding: '16px 20px', marginBottom: 24,
-        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-      }}>
-        <div>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 2 }}>PDF Árajánlat</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>Válaszd ki a részletezési szintet</div>
-        </div>
-        {/* Detail level buttons */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {PDF_LEVELS.map(lvl => (
-            <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} title={lvl.desc} style={{
-              padding: '7px 14px', borderRadius: 8, cursor: 'pointer', outline: 'none',
-              background: pdfLevel === lvl.key ? C.accentDim : C.bg,
-              border: `1px solid ${pdfLevel === lvl.key ? C.accentBorder : C.border}`,
-              color: pdfLevel === lvl.key ? C.accent : C.textSub,
-              fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
-              display: 'flex', alignItems: 'center', gap: 5,
-            }}>
-              <span style={{ fontSize: 13 }}>{lvl.icon}</span> {lvl.label}
-            </button>
-          ))}
-        </div>
-        {/* Generate button */}
-        <button onClick={handlePdf} disabled={pdfGenerating} style={{
-          padding: '9px 20px', borderRadius: 8, cursor: pdfGenerating ? 'wait' : 'pointer',
-          background: pdfGenerating ? C.accentDim : C.accent,
-          border: 'none', color: '#09090B',
-          fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
-          display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
-          opacity: pdfGenerating ? 0.7 : 1, marginLeft: 'auto',
+      {/* ── Hero KPI strip ───────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+        {/* Gross — accent hero card */}
+        <div style={{
+          background: `linear-gradient(135deg, ${C.accent}18, ${C.blue}0a)`,
+          border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '18px 20px', gridColumn: 'span 1',
         }}>
-          {pdfGenerating ? '⏳' : '📄'} {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
-        </button>
-      </div>
-
-      <div style={{
-        background: `linear-gradient(135deg, ${C.accent}15, ${C.blue}10)`,
-        border: `1px solid ${C.accent}40`, borderRadius: 12, padding: 24, marginBottom: 24,
-      }}>
-        <div style={{ color: C.muted, fontSize: 13 }}>BRUTTÓ VÉGÖSSZEG</div>
-        <div style={{ color: C.accent, fontSize: 36, fontWeight: 800 }}>{fmt(Math.round(quote.gross || 0))} Ft</div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-          <div style={{ color: C.muted, fontSize: 12, marginBottom: 8 }}>Részletek</div>
-          {[
-            ['Megrendelő', quote.clientName || '—'],
-            ['Létrehozva', new Date(quote.createdAt).toLocaleDateString('hu-HU')],
-            ['Munkaóra', (quote.totalHours || 0).toFixed(1) + ' ó'],
-            ['Anyagköltség', fmt(Math.round(quote.totalMaterials || 0)) + ' Ft'],
-            ['Munkadíj', fmt(Math.round(quote.totalLabor || 0)) + ' Ft'],
-          ].map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${C.border}30` }}>
-              <span style={{ color: C.muted, fontSize: 13 }}>{k}</span>
-              <span style={{ color: C.text, fontSize: 13, fontWeight: 500 }}>{v}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-          <div style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>Státusz módosítása</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {statuses.map(s => (
-              <button key={s} onClick={() => onStatusChange(quote.id, s)}
-                style={{
-                  padding: '10px 14px', borderRadius: 6, cursor: 'pointer', textAlign: 'left',
-                  background: quote.status === s ? statusColors[s] + '20' : C.bg,
-                  border: `1px solid ${quote.status === s ? statusColors[s] : C.border}`,
-                  color: quote.status === s ? statusColors[s] : C.muted,
-                  fontWeight: quote.status === s ? 700 : 400,
-                }}>{statusLabels[s]}</button>
-            ))}
+          <span style={labelStyle}>Bruttó végösszeg</span>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent, lineHeight: 1 }}>{fmt(gross)} Ft</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>
+            Nettó {fmt(net)} + ÁFA {vatPct}%
           </div>
         </div>
+        {/* Materials */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+          <span style={labelStyle}>Anyagköltség</span>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.text }}>{fmt(Math.round(quote.totalMaterials || 0))} Ft</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>nettó</div>
+        </div>
+        {/* Labor */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+          <span style={labelStyle}>Munkadíj</span>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.blue }}>{fmt(Math.round(quote.totalLabor || 0))} Ft</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>nettó</div>
+        </div>
+        {/* Hours */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+          <span style={labelStyle}>Munkaóra</span>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.yellow }}>{(quote.totalHours || 0).toFixed(1)} ó</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{fmt(rate)} Ft/ó</div>
+        </div>
       </div>
 
-      {(quote.items || []).length > 0 && (
-        <div>
-          <div style={{ color: C.text, fontWeight: 600, marginBottom: 12 }}>Tételek</div>
-          <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 500 }}>
+      {/* ── Main body: left (items) + right (sidebar) ────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 260px', gap: 20, alignItems: 'start' }}>
+
+        {/* LEFT – items table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Assembly summary if available */}
+          {(quote.assemblySummary || []).length > 0 && (
+            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.text }}>Munkák összesítő</span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{quote.assemblySummary.length} munkacsoport</span>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: C.bg }}>
+                    {['Tevékenység', 'db', 'Összeg (nettó)'].map((h, i) => (
+                      <th key={h} style={{
+                        padding: '8px 14px', fontFamily: 'DM Mono', fontSize: 10, color: C.muted,
+                        textAlign: i === 0 ? 'left' : 'right', fontWeight: 500,
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        borderBottom: `1px solid ${C.border}`,
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {quote.assemblySummary.map((a, i) => (
+                    <tr key={a.id || i} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                      <td style={{ padding: '10px 14px', fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>{a.name}</td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 11, color: C.muted, textAlign: 'right' }}>{a.qty}</td>
+                      <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 500, textAlign: 'right' }}>{fmt(a.totalPrice || 0)} Ft</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Material items */}
+          {matItems.length > 0 && (
+            <ItemsGroup
+              title="Anyagok" count={matItems.length} accentColor={C.text}
+              items={matItems}
+              renderRow={item => {
+                const total = (item.unitPrice || 0) * item.qty
+                return [
+                  item.name,
+                  `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
+                  `${fmt(Math.round(item.unitPrice || 0))} Ft`,
+                  '—',
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.text }}>{fmt(Math.round(total))} Ft</span>,
+                ]
+              }}
+            />
+          )}
+
+          {/* Labor items */}
+          {laborItems.length > 0 && (
+            <ItemsGroup
+              title="Munka" count={laborItems.length} accentColor={C.blue}
+              items={laborItems}
+              renderRow={item => {
+                const total = (item.hours || 0) * rate
+                return [
+                  item.name,
+                  `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
+                  `${fmt(rate)} Ft/ó`,
+                  `${(item.hours || 0).toFixed(2)} ó`,
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.blue }}>{fmt(Math.round(total))} Ft</span>,
+                ]
+              }}
+            />
+          )}
+
+        </div>
+
+        {/* RIGHT – sidebar */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Metadata card */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 14 }}>Adatok</div>
+            {[
+              ['Megrendelő',  quote.clientName || '—'],
+              ['Dátum',       new Date(quote.createdAt || Date.now()).toLocaleDateString('hu-HU')],
+              ['Ajánlat ID',  quote.id],
+              ['ÁFA kulcs',   `${vatPct}%`],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingBottom: 10, marginBottom: 10, borderBottom: `1px solid ${C.border}30` }}>
+                <span style={labelStyle}>{k}</span>
+                <span style={monoVal}>{v}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Status card */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 12 }}>Státusz</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {statuses.map(s => {
+                const active = quote.status === s
+                const col = statusColors[s]
+                return (
+                  <button key={s} onClick={() => onStatusChange(quote.id, s)} style={{
+                    padding: '9px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                    background: active ? col + '18' : C.bg,
+                    border: `1px solid ${active ? col + '60' : C.border}`,
+                    color: active ? col : C.textSub,
+                    fontFamily: 'Syne', fontWeight: active ? 800 : 600, fontSize: 12,
+                    display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.15s',
+                  }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: active ? col : C.border, flexShrink: 0 }} />
+                    {statusLabels[s]}
+                    {active && <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.7 }}>✓ aktív</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* PDF export card */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 4 }}>PDF Árajánlat</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14 }}>Részletezési szint</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+              {PDF_LEVELS.map(lvl => (
+                <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} title={lvl.desc} style={{
+                  padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                  background: pdfLevel === lvl.key ? C.accentDim : C.bg,
+                  border: `1px solid ${pdfLevel === lvl.key ? C.accentBorder : C.border}`,
+                  color: pdfLevel === lvl.key ? C.accent : C.textSub,
+                  fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ fontSize: 12, opacity: 0.8 }}>{lvl.icon}</span>
+                  <div>
+                    <div>{lvl.label}</div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: pdfLevel === lvl.key ? C.accent : C.muted, marginTop: 1, opacity: 0.8 }}>{lvl.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button onClick={handlePdf} disabled={pdfGenerating} style={{
+              width: '100%', padding: '11px', borderRadius: 9, cursor: pdfGenerating ? 'wait' : 'pointer',
+              background: pdfGenerating ? C.accentDim : C.accent,
+              border: 'none', color: '#09090B',
+              fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              opacity: pdfGenerating ? 0.7 : 1, transition: 'all 0.15s',
+            }}>
+              {pdfGenerating ? '⏳ Generálás...' : '📄 PDF letöltése'}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── ItemsGroup ───────────────────────────────────────────────────────────────
+function ItemsGroup({ title, count, accentColor, items, renderRow }) {
+  const [open, setOpen] = useState(true)
+  const headers = ['Megnevezés', 'Mennyiség', 'Egységár', 'Munkaóra', 'Összesen']
+  return (
+    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        width: '100%', padding: '13px 18px', background: 'none', border: 'none', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: open ? `1px solid ${C.border}` : 'none',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ width: 3, height: 16, borderRadius: 2, background: accentColor, flexShrink: 0 }} />
+          <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.text }}>{title}</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20, padding: '2px 8px' }}>{count} tétel</span>
+        </div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
             <thead>
-              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                {['Megnevezés', 'Menny.', 'Anyag', 'Munkadíj', 'Összesen'].map(h => (
-                  <th key={h} style={{ padding: '8px 10px', color: C.muted, textAlign: h === 'Megnevezés' ? 'left' : 'right' }}>{h}</th>
+              <tr style={{ background: C.bg }}>
+                {headers.map((h, i) => (
+                  <th key={h} style={{
+                    padding: '7px 14px', fontFamily: 'DM Mono', fontSize: 9.5, color: C.muted,
+                    textAlign: i === 0 ? 'left' : 'right', fontWeight: 500,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    borderBottom: `1px solid ${C.border}`,
+                  }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {quote.items.map((item, i) => {
-                const rate = quote.pricingData?.hourlyRate || 9000
-                const mat = (item.unitPrice || 0) * item.qty
-                const labor = (item.hours || 0) * rate
+              {items.map((item, i) => {
+                const cells = renderRow(item)
                 return (
-                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}20` }}>
-                    <td style={{ padding: '8px 10px', color: C.text }}>{item.name}</td>
-                    <td style={{ padding: '8px 10px', color: C.muted, textAlign: 'right' }}>{item.qty} {item.unit}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right', color: C.text }}>{fmt(Math.round(mat))} Ft</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right', color: C.blue }}>{fmt(Math.round(labor))} Ft</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'right', color: C.text, fontWeight: 600 }}>{fmt(Math.round(mat + labor))} Ft</td>
+                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}18` }}>
+                    {cells.map((cell, ci) => (
+                      <td key={ci} style={{
+                        padding: '8px 14px',
+                        textAlign: ci === 0 ? 'left' : 'right',
+                        fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
+                        ...(ci === 0 ? { color: C.text, fontFamily: 'inherit', fontSize: 12 } : {}),
+                      }}>{cell}</td>
+                    ))}
                   </tr>
                 )
               })}
             </tbody>
           </table>
-          </div>
         </div>
       )}
     </div>
