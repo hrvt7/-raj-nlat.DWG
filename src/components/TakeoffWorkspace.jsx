@@ -68,24 +68,33 @@ function computePricing({ takeoffRows, assemblies, workItems, materials, context
   for (const row of takeoffRows) {
     const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
     if (!asm) continue
-    const qty = row.qty
-    // Per-row wall factor (defaults to brick = 1.0)
-    const wallFactor = WALL_FACTORS[row.wallType || 'brick'] ?? 1.0
 
-    for (const comp of (asm.components || [])) {
-      const compQty = comp.qty * qty
-      if (comp.itemType === 'workitem') {
-        const wi = workItems.find(w => w.code === comp.itemCode) || workItems.find(w => w.name === comp.name)
-        const normMin = wi ? wi.p50 * ctxMultiplier * wallFactor : 0
-        const hours = (normMin * compQty) / 60
-        laborHours += hours
-        lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
-      } else {
-        const mat = materials.find(m => m.code === comp.itemCode) || materials.find(m => m.name === comp.name)
-        const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
-        const cost = unitPrice * compQty
-        materialCost += cost
-        lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours: 0, materialCost: cost, type: 'material' })
+    // Build per-wall-type splits: [[wallKey, qty], ...]
+    // row.wallSplits = { drywall: N, ytong: N, brick: N, concrete: N } when user has split the qty
+    // Fall back to single wallType (or brick) when no splits set
+    const splits = row.wallSplits
+      ? Object.entries(row.wallSplits).filter(([, n]) => n > 0)
+      : [[row.wallType || 'brick', row.qty]]
+
+    for (const [wallKey, splitQty] of splits) {
+      if (splitQty <= 0) continue
+      const wallFactor = WALL_FACTORS[wallKey] ?? 1.0
+
+      for (const comp of (asm.components || [])) {
+        const compQty = comp.qty * splitQty
+        if (comp.itemType === 'workitem') {
+          const wi = workItems.find(w => w.code === comp.itemCode) || workItems.find(w => w.name === comp.name)
+          const normMin = wi ? wi.p50 * ctxMultiplier * wallFactor : 0
+          const hours = (normMin * compQty) / 60
+          laborHours += hours
+          lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
+        } else {
+          const mat = materials.find(m => m.code === comp.itemCode) || materials.find(m => m.name === comp.name)
+          const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
+          const cost = unitPrice * compQty
+          materialCost += cost
+          lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours: 0, materialCost: cost, type: 'material' })
+        }
       }
     }
   }
@@ -368,12 +377,28 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallType, assemblies, onQtyChange, onVariantChange, onWallChange, unitCost, isHighlighted }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted }) {
   const asm = assemblies.find(a => a.id === asmId)
-  const variant = variantId ? assemblies.find(a => a.id === variantId) : null
   const variants = assemblies.filter(a => a.variantOf === asmId)
   const rule = BLOCK_ASM_RULES.find(r => r.asmId === asmId)
-  const activeWall = WALL_OPTS.find(w => w.key === (wallType || 'brick')) || WALL_OPTS[2]
+
+  // If no splits set yet, treat all qty as brick
+  const effectiveSplits = wallSplits || { brick: qty }
+  const totalQty = Object.values(effectiveSplits).reduce((s, n) => s + n, 0)
+
+  // Total price = Σ(splitQty × unitCostByWall[wallKey])
+  const costs = unitCostByWall || {}
+  const totalPrice = Object.entries(effectiveSplits).reduce(
+    (s, [wk, n]) => s + n * (costs[wk] ?? costs.brick ?? 0), 0
+  )
+
+  const handleDelta = (wallKey, delta) => {
+    // On first interaction, initialize full splits from current qty
+    const base = wallSplits || { brick: qty }
+    const current = base[wallKey] ?? 0
+    const newVal = Math.max(0, current + delta)
+    onSplitChange(asmId, { ...base, [wallKey]: newVal })
+  }
 
   if (!asm) return null
 
@@ -383,60 +408,59 @@ function TakeoffRow({ asmId, qty, variantId, wallType, assemblies, onQtyChange, 
       background: isHighlighted ? 'rgba(0,229,160,0.06)' : C.bgCard,
       border: `1px solid ${isHighlighted ? C.accent + '60' : C.border}`,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+      {/* ── Top row: icon / name / total qty / total price ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>
           {rule?.icon || '📦'}
         </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{asm.name}</div>
-          <div style={{ display: 'flex', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
-            {/* Wall type selector */}
-            {WALL_OPTS.map(w => (
-              <button key={w.key} onClick={() => onWallChange(asmId, w.key)}
-                style={{
-                  padding: '1px 7px', borderRadius: 4, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono',
-                  background: activeWall.key === w.key ? w.color + '22' : 'transparent',
-                  border: `1px solid ${activeWall.key === w.key ? w.color : C.border}`,
-                  color: activeWall.key === w.key ? w.color : C.textMuted,
-                  transition: 'all 0.12s',
-                }}
-              >{w.label}</button>
-            ))}
-            {variants.length > 0 && (
-              <select value={variantId || ''} onChange={e => onVariantChange(asmId, e.target.value || null)}
-                style={{ background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 4, color: C.textSub, fontSize: 10, padding: '1px 4px', fontFamily: 'DM Mono', cursor: 'pointer' }}>
-                <option value="">Standard</option>
-                {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            )}
-          </div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {asm.name}
         </div>
-
-      {/* Qty input */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <button
-          onClick={() => onQtyChange(asmId, Math.max(0, qty - 1))}
-          style={{ width: 24, height: 24, borderRadius: 6, background: C.bgHover, border: `1px solid ${C.border}`, color: C.text, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >−</button>
-        <input
-          type="number" min="0" value={qty}
-          onChange={e => onQtyChange(asmId, Math.max(0, parseInt(e.target.value) || 0))}
-          style={{
-            width: 48, textAlign: 'center', background: C.bg, border: `1px solid ${C.borderLight}`,
-            borderRadius: 6, color: C.text, fontFamily: 'DM Mono', fontSize: 14, padding: '3px 4px',
-          }}
-        />
-        <button
-          onClick={() => onQtyChange(asmId, qty + 1)}
-          style={{ width: 24, height: 24, borderRadius: 6, background: C.bgHover, border: `1px solid ${C.border}`, color: C.text, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >+</button>
-        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>db</span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, flexShrink: 0 }}>
+          {totalQty} db
+        </span>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, minWidth: 72, textAlign: 'right', flexShrink: 0 }}>
+          {Math.round(totalPrice).toLocaleString('hu-HU')} Ft
+        </div>
       </div>
 
-      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, minWidth: 70, textAlign: 'right' }}>
-        {Math.round(unitCost * qty).toLocaleString('hu-HU')} Ft
-      </div>
+      {/* ── Per-wall-type split counters ── */}
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+        {WALL_OPTS.map(w => {
+          const n = effectiveSplits[w.key] || 0
+          const active = n > 0
+          return (
+            <div key={w.key} style={{
+              display: 'flex', alignItems: 'center', gap: 1,
+              padding: '2px 5px', borderRadius: 6,
+              background: active ? w.color + '15' : 'transparent',
+              border: `1px solid ${active ? w.color + '55' : C.border}`,
+              transition: 'all 0.12s',
+            }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: active ? w.color : C.muted, minWidth: 26, userSelect: 'none' }}>
+                {w.label}
+              </span>
+              <button
+                onClick={() => handleDelta(w.key, -1)}
+                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >−</button>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: active ? w.color : C.muted, minWidth: 16, textAlign: 'center', userSelect: 'none' }}>
+                {n}
+              </span>
+              <button
+                onClick={() => handleDelta(w.key, +1)}
+                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >+</button>
+            </div>
+          )
+        })}
+        {variants.length > 0 && (
+          <select value={variantId || ''} onChange={e => onVariantChange(asmId, e.target.value || null)}
+            style={{ background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 4, color: C.textSub, fontSize: 10, padding: '1px 4px', fontFamily: 'DM Mono', cursor: 'pointer' }}>
+            <option value="">Standard</option>
+            {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+        )}
       </div>
     </div>
   )
@@ -455,7 +479,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [asmOverrides, setAsmOverrides] = useState({})       // blockName → asmId
   const [variantOverrides, setVariantOverrides] = useState({}) // asmId → variantId
   const [qtyOverrides, setQtyOverrides] = useState({})       // asmId → qty
-  const [wallOverrides, setWallOverrides] = useState({})     // asmId → wallType key
+  // wallSplits[asmId] = { drywall: N, ytong: N, brick: N, concrete: N }
+  // Sum of values = total qty for that assembly; individual values = qty per wall material
+  const [wallSplits, setWallSplits] = useState({})
 
   // ── Project context ───────────────────────────────────────────────────────
   const [context, setContext] = useState(settings?.context_defaults || { access: 'empty', project_type: 'renovation', height: 'normal' })
@@ -595,11 +621,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     for (const item of recognizedItems) {
       const asmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
       if (!asmId) continue
-      const qty = qtyOverrides[asmId] !== undefined ? qtyOverrides[asmId] : (rowMap[asmId]?.qty || 0) + item.qty
-      rowMap[asmId] = { asmId, qty, variantId: variantOverrides[asmId] || null, wallType: wallOverrides[asmId] || null }
+      const splits = wallSplits[asmId] || null
+      // If splits exist, derive qty from their sum; otherwise use manual override or recognized count
+      const qty = splits
+        ? Object.values(splits).reduce((s, n) => s + n, 0)
+        : (qtyOverrides[asmId] !== undefined ? qtyOverrides[asmId] : (rowMap[asmId]?.qty || 0) + item.qty)
+      rowMap[asmId] = { asmId, qty, variantId: variantOverrides[asmId] || null, wallSplits: splits }
     }
     return Object.values(rowMap)
-  }, [recognizedItems, asmOverrides, qtyOverrides, variantOverrides, wallOverrides])
+  }, [recognizedItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
 
   // ── Auto-compute cable estimate when takeoff changes ──────────────────────
   useEffect(() => {
@@ -633,15 +663,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate])
 
   // ── Per-assembly unit cost ────────────────────────────────────────────────
-  const unitCostByAsm = useMemo(() => {
+  // Compute unit cost for each assembly × each wall type (for per-split pricing display in TakeoffRow)
+  const unitCostByAsmByWall = useMemo(() => {
     const map = {}
     for (const row of takeoffRows) {
-      if (row.qty === 0) continue
-      const single = computePricing({
-        takeoffRows: [{ ...row, qty: 1 }], assemblies, workItems, materials,
-        context, markup, hourlyRate, cableEstimate: null,
-      })
-      map[row.asmId] = single.total
+      map[row.asmId] = {}
+      for (const wallKey of Object.keys(WALL_FACTORS)) {
+        const single = computePricing({
+          takeoffRows: [{ asmId: row.asmId, qty: 1, variantId: row.variantId, wallSplits: null, wallType: wallKey }],
+          assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate: null,
+        })
+        map[row.asmId][wallKey] = single.total
+      }
     }
     return map
   }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate])
@@ -1072,13 +1105,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         asmId={row.asmId}
                         qty={row.qty}
                         variantId={row.variantId}
-                        wallType={row.wallType}
+                        wallSplits={row.wallSplits}
                         assemblies={assemblies}
                         isHighlighted={highlightBlock && recognizedItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
-                        onQtyChange={(id, qty) => setQtyOverrides(p => ({ ...p, [id]: qty }))}
+                        onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
-                        onWallChange={(id, wt) => setWallOverrides(p => ({ ...p, [id]: wt }))}
-                        unitCost={unitCostByAsm[row.asmId] || 0}
+                        unitCostByWall={unitCostByAsmByWall[row.asmId] || {}}
                       />
                     ))}
 
