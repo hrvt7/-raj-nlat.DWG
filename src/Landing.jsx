@@ -716,7 +716,7 @@ function HeroAnimationMobile() {
 
 function HeroSection({ onStart }) {
   return (
-    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '120px 48px 80px' }}>
+    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '88px 48px 48px' }}>
 
       {/* Subtle grid bg */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.025, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
@@ -726,40 +726,31 @@ function HeroSection({ onStart }) {
 
       <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
 
-        {/* ── Badge ── */}
-        <FadeIn>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(0,229,160,0.07)', border: '1px solid rgba(0,229,160,0.18)', borderRadius: 999, padding: '6px 16px', marginBottom: 28 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E5A0', boxShadow: '0 0 8px #00E5A0' }} />
-            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Villamos kivitelezőknek</span>
-          </div>
-        </FadeIn>
-
         {/* ── Headline ── */}
-        <FadeIn delay={0.05}>
-          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(38px, 5.5vw, 72px)', color: '#F0F0F0', marginBottom: 24, letterSpacing: '-0.03em' }}>
-            DXF-ből profi árajánlat
-            <br />
+        <FadeIn>
+          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(32px, 4.2vw, 62px)', color: '#F0F0F0', marginBottom: 16, letterSpacing: '-0.03em' }}>
+            DXF-ből profi árajánlat<br />
             <span style={{ color: '#00E5A0', textShadow: '0 0 50px rgba(0,229,160,0.35)' }}>2 perc alatt</span>
           </h1>
         </FadeIn>
 
         {/* ── Subtext ── */}
-        <FadeIn delay={0.12}>
-          <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.5vw, 16px)', color: '#999', lineHeight: 1.9, marginBottom: 40, maxWidth: 560, margin: '0 auto 40px' }}>
+        <FadeIn delay={0.08}>
+          <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(13px, 1.4vw, 15px)', color: '#999', lineHeight: 1.85, maxWidth: 520, margin: '0 auto 28px' }}>
             Töltsd fel a villamossági tervet, az alkalmazás automatikusan megszámolja<br className="hero-br" />
             a szerelvényeket, és generál egy profi PDF ajánlatot.
           </p>
         </FadeIn>
 
         {/* ── CTAs ── */}
-        <FadeIn delay={0.2}>
-          <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 64 }}>
-            <button onClick={onStart} style={{ padding: '15px 36px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 16, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
+        <FadeIn delay={0.15}>
+          <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 40 }}>
+            <button onClick={onStart} style={{ padding: '14px 34px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 15, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
               onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.55)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
               onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
               Próbáld ki 14 napig →
             </button>
-            <a href="#how" style={{ padding: '15px 32px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
+            <a href="#how" style={{ padding: '14px 30px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor='#252525'; e.currentTarget.style.color='#999' }}>
               Hogyan működik?
@@ -768,13 +759,13 @@ function HeroSection({ onStart }) {
         </FadeIn>
 
         {/* ── Animated hero frame ── */}
-        <FadeIn delay={0.25}>
+        <FadeIn delay={0.22}>
           <div style={{
             position: 'relative', borderRadius: 16, overflow: 'hidden',
             border: '1px solid rgba(0,229,160,0.1)',
             boxShadow: '0 0 0 1px #090909, 0 40px 100px rgba(0,0,0,0.7), 0 0 60px rgba(0,229,160,0.04)',
             background: '#040A06',
-            maxWidth: 900, margin: '0 auto',
+            maxWidth: 820, margin: '0 auto',
           }}>
             {/* corner accents */}
             {[
