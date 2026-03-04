@@ -389,114 +389,168 @@ function TakeoffAnimation() {
   )
 }
 
-// ─── Hero Trade Animation Cards ───────────────────────────────────────────────
+// ─── Hero unified 3-trade animation ──────────────────────────────────────────
 
-const HERO_TRADES = [
-  {
-    id: 'es', color: '#FFD166', bg: '#06050A',
-    badge: 'ERŐSÁRAM', filename: 'elosztas.dxf',
-    rows: [
-      { label: 'DUGALJ (DB)', val: '12', d: 0.6 },
-      { label: 'KAPCSOLÓ (DB)', val: '07', d: 1.2 },
-      { label: 'LÁMPA (DB)', val: '18', d: 1.8 },
-    ],
-    total: '37',
-  },
-  {
-    id: 'ga', color: '#4CC9F0', bg: '#02070D',
-    badge: 'GYENGEÁRAM', filename: 'gyengaram.dxf',
-    rows: [
-      { label: 'ADATPONT (DB)', val: '08', d: 0.6 },
-      { label: 'KAMERA (DB)', val: '04', d: 1.2 },
-      { label: 'BELÉPTETŐRENDSZER', val: '03', d: 1.8 },
-    ],
-    total: '15',
-  },
-  {
-    id: 'tz', color: '#FF6B6B', bg: '#090304',
-    badge: 'TŰZJELZŐ', filename: 'tuzjelzo.dxf',
-    rows: [
-      { label: 'ÉRZÉKELŐ (DB)', val: '14', d: 0.6 },
-      { label: 'KÉZ. JELZÉSADÓ', val: '03', d: 1.2 },
-      { label: 'SZIRÉNA (DB)', val: '06', d: 1.8 },
-    ],
-    total: '23',
-  },
-]
-
-function HeroTradeCard({ id, color, bg, badge, filename, rows, total }) {
-  const corners = [
-    { top: 0, left: 0, borderTop: `1.5px solid ${color}`, borderLeft: `1.5px solid ${color}`, borderRadius: '4px 0 0 0' },
-    { top: 0, right: 0, borderTop: `1.5px solid ${color}`, borderRight: `1.5px solid ${color}`, borderRadius: '0 4px 0 0' },
-    { bottom: 0, left: 0, borderBottom: `1.5px solid ${color}`, borderLeft: `1.5px solid ${color}`, borderRadius: '0 0 0 4px' },
-    { bottom: 0, right: 0, borderBottom: `1.5px solid ${color}`, borderRight: `1.5px solid ${color}`, borderRadius: '0 0 4px 0' },
-  ]
+function HeroAnimation() {
+  const ec = '#00E5A0'
+  const fc = '#FF6B6B'
+  const lc = '#4CC9F0'
+  const st = 'rgba(200,255,240,0.13)'
   return (
-    <div style={{
-      position: 'relative', borderRadius: 12, overflow: 'hidden',
-      border: `1px solid ${color}20`, background: bg,
-      boxShadow: `0 0 0 1px #090909, 0 8px 32px rgba(0,0,0,0.55), 0 0 28px ${color}08`,
-    }}>
-      {corners.map((s, i) => (
-        <div key={i} style={{ position: 'absolute', width: 14, height: 14, opacity: 0.55, zIndex: 2, ...s }} />
-      ))}
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 180"
-        preserveAspectRatio="xMidYMid meet"
-        style={{ width: '100%', display: 'block' }}>
-        <rect width="1600" height="3" fill={color} opacity="0.75" />
-        <pattern id={`hg-${id}`} width="80" height="80" patternUnits="userSpaceOnUse">
-          <path d="M 80 0 L 0 0 0 80" fill="none" stroke={color} strokeWidth="0.5" opacity="0.03"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520"
+      preserveAspectRatio="xMidYMid meet" fill="none"
+      style={{ width: '100%', height: '100%', display: 'block' }}>
+      <defs>
+        <style>{`
+          @keyframes ha-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+          @keyframes ha-scan  { 0%{transform:translateX(-100px);opacity:0} 10%,90%{opacity:1} 100%{transform:translateX(900px);opacity:0} }
+          @keyframes ha-pec   { 0%,100%{opacity:.22} 50%{opacity:1;filter:drop-shadow(0 0 5px ${ec})} }
+          @keyframes ha-pfc   { 0%,100%{opacity:.22} 50%{opacity:1;filter:drop-shadow(0 0 5px ${fc})} }
+          @keyframes ha-plc   { 0%,100%{opacity:.22} 50%{opacity:1;filter:drop-shadow(0 0 5px ${lc})} }
+          @keyframes ha-cnt   { 0%,10%{opacity:0;transform:translateY(4px)} 20%,100%{opacity:1;transform:translateY(0)} }
+          @keyframes ha-chk   { 0%,80%{opacity:0;transform:scale(.5)} 90%{opacity:1;transform:scale(1.15)} 100%{opacity:1;transform:scale(1)} }
+          .ha-fp  { animation:ha-float 6s ease-in-out infinite }
+          .ha-sec { animation:ha-scan 8s linear infinite }
+          .ha-sfc { animation:ha-scan 8s linear infinite 2.6s; opacity:0 }
+          .ha-slc { animation:ha-scan 8s linear infinite 5.3s; opacity:0 }
+          .ha-iec { animation:ha-pec 8s ease-in-out infinite; opacity:.22 }
+          .ha-ifc { animation:ha-pfc 8s ease-in-out infinite 2.6s; opacity:.22 }
+          .ha-ilc { animation:ha-plc 8s ease-in-out infinite 5.3s; opacity:.22 }
+          .ha-nec { animation:ha-cnt 8s ease-out infinite; opacity:0 }
+          .ha-nfc { animation:ha-cnt 8s ease-out infinite 2.6s; opacity:0 }
+          .ha-nlc { animation:ha-cnt 8s ease-out infinite 5.3s; opacity:0 }
+          .ha-cec { stroke:${ec}; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; animation:ha-chk 8s infinite }
+          .ha-cfc { stroke:${fc}; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; animation:ha-chk 8s infinite 2.6s }
+          .ha-clc { stroke:${lc}; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; animation:ha-chk 8s infinite 5.3s }
+        `}</style>
+        <linearGradient id="ha-ge" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={ec} stopOpacity="0"/><stop offset="100%" stopColor={ec} stopOpacity="0.32"/>
+        </linearGradient>
+        <linearGradient id="ha-gf" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={fc} stopOpacity="0"/><stop offset="100%" stopColor={fc} stopOpacity="0.32"/>
+        </linearGradient>
+        <linearGradient id="ha-gl" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={lc} stopOpacity="0"/><stop offset="100%" stopColor={lc} stopOpacity="0.32"/>
+        </linearGradient>
+        <pattern id="ha-pg" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" stroke="rgba(0,255,170,0.04)" strokeWidth="1" fill="none"/>
         </pattern>
-        <rect width="1600" height="180" fill={`url(#hg-${id})`} />
-        <circle cx="44" cy="42" r="5.5" fill={color}>
-          <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite" />
-        </circle>
-        <text x="62" y="49" fontFamily="'DM Mono',monospace" fontSize="20" fontWeight="bold"
-          fill="#B8CAC0" letterSpacing="2.5">{badge}</text>
-        <text x="340" y="49" fontFamily="'DM Mono',monospace" fontSize="14"
-          fill={color} opacity="0.32" letterSpacing="2">SCANNING...</text>
-        <rect x="1310" y="24" width="252" height="30" rx="5"
-          fill={color} fillOpacity="0.07" stroke={color} strokeOpacity="0.18" strokeWidth="1" />
-        <text x="1436" y="45" textAnchor="middle" fontFamily="'DM Mono',monospace" fontSize="14"
-          fill={color} opacity="0.6" letterSpacing="1">{filename}</text>
-        <line x1="44" y1="68" x2="1556" y2="68" stroke={color} strokeWidth="0.5" opacity="0.14" />
-        {rows.map((row, i) => (
-          <g key={i} transform={`translate(${44 + i * 510}, 86)`}>
-            <text fontFamily="'DM Mono',monospace" fontSize="20" fill="#2C4838"
-              letterSpacing="1.5" y="0">{row.label}</text>
-            <text fontFamily="'DM Mono',monospace" fontSize="54" fill="#162A1C" y="76">
-              00
-              <animate attributeName="opacity" values="1;0" dur="7s"
-                begin={`${row.d}s`} fill="freeze" repeatCount="indefinite" />
-            </text>
-            <text fontFamily="'DM Mono',monospace" fontSize="54" fill={color} y="76" opacity="0">
-              {row.val}
-              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.86;1"
-                dur="7s" begin={`${row.d}s`} fill="freeze" repeatCount="indefinite" />
-            </text>
-          </g>
-        ))}
-        <g transform="translate(1380, 86)">
-          <text fontFamily="'DM Mono',monospace" fontSize="16" fill="#1E3828"
-            letterSpacing="2" y="0">ÖSSZES TÉTEL</text>
-          <text fontFamily="'DM Mono',monospace" fontSize="48" fill={color} y="76" opacity="0"
-            style={{ filter: `drop-shadow(0 0 12px ${color}70)` }}>
-            {total}
-            <animate attributeName="opacity" values="0;0;1;1;0"
-              keyTimes="0;0.35;0.48;0.88;1" dur="7s" begin="0s" repeatCount="indefinite" />
-          </text>
-        </g>
-        <line x1="44" y1="170" x2="1556" y2="170" stroke={color} strokeWidth="0.5" opacity="0.07" />
-      </svg>
-    </div>
-  )
-}
+      </defs>
 
-function HeroTradeStack() {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 880, margin: '0 auto' }}>
-      {HERO_TRADES.map(t => <HeroTradeCard key={t.id} {...t} />)}
-    </div>
+      <rect width="1200" height="520" fill="url(#ha-pg)"/>
+
+      {/* ── Alaprajz ── */}
+      <g transform="translate(72,58)">
+        <g className="ha-fp">
+          <path d="M50,50 h700 v300 h-700 Z M300,50 v300 M550,50 v120 M550,230 v120 M50,180 h250"
+            stroke={st} strokeWidth="1.5" fill="none"/>
+          <path d="M120,50 v-10 M220,50 v-10 M600,350 v10 M700,350 v10"
+            stroke="rgba(200,255,240,0.07)" strokeWidth="1.5" fill="none"/>
+        </g>
+        {/* erősáram szimbólumok */}
+        <circle cx="100" cy="80"  r="4" className="ha-iec" fill={ec}/>
+        <circle cx="100" cy="120" r="4" className="ha-iec" fill={ec}/>
+        <circle cx="280" cy="80"  r="4" className="ha-iec" fill={ec}/>
+        <circle cx="280" cy="320" r="4" className="ha-iec" fill={ec}/>
+        <rect x="400" y="100" width="8" height="8" className="ha-iec" fill={ec}/>
+        <rect x="400" y="200" width="8" height="8" className="ha-iec" fill={ec}/>
+        {/* tűzjelző szimbólumok */}
+        <circle cx="450" cy="150" r="6" className="ha-ifc" fill="none" stroke={fc} strokeWidth="2"/>
+        <circle cx="150" cy="250" r="6" className="ha-ifc" fill="none" stroke={fc} strokeWidth="2"/>
+        <rect x="720" y="120" width="12" height="12" className="ha-ifc" fill={fc}/>
+        <path d="M350,300 l10,-10 h-20 z" className="ha-ifc" fill={fc}/>
+        {/* gyengeáram szimbólumok */}
+        <rect x="500" y="300" width="6"  height="6" className="ha-ilc" fill={lc}/>
+        <circle cx="200" cy="100" r="3"  className="ha-ilc" fill={lc}/>
+        <rect x="680" y="280" width="10" height="4" className="ha-ilc" fill={lc}/>
+        {/* szkenner – erősáram */}
+        <g className="ha-sec">
+          <rect x="0" y="20" width="60" height="360" fill="url(#ha-ge)" stroke="none"/>
+          <line x1="60" y1="20" x2="60" y2="380" stroke={ec} strokeWidth="2" fill="none"/>
+        </g>
+        {/* szkenner – tűzjelző */}
+        <g className="ha-sfc">
+          <rect x="0" y="20" width="60" height="360" fill="url(#ha-gf)" stroke="none"/>
+          <line x1="60" y1="20" x2="60" y2="380" stroke={fc} strokeWidth="2" fill="none"/>
+        </g>
+        {/* szkenner – gyengeáram */}
+        <g className="ha-slc">
+          <rect x="0" y="20" width="60" height="360" fill="url(#ha-gl)" stroke="none"/>
+          <line x1="60" y1="20" x2="60" y2="380" stroke={lc} strokeWidth="2" fill="none"/>
+        </g>
+      </g>
+
+      {/* ── HUD panel ── */}
+      <g transform="translate(878,50)">
+        <rect width="292" height="426" rx="10" fill="rgba(5,12,8,0.94)"
+          stroke={st} strokeWidth="1"/>
+        <rect width="292" height="2" rx="1" fill={ec} opacity="0.55"/>
+        <text x="20" y="38" fontFamily="'DM Mono',monospace" fontSize="12" fontWeight="bold"
+          fill="#B8D0C4" letterSpacing="2">MENNYISÉGKIMUTATÁS</text>
+        <line x1="20" y1="52" x2="272" y2="52" stroke={st} strokeWidth="0.5"/>
+
+        {/* erősáram */}
+        <g transform="translate(20,66)">
+          <circle cx="4" cy="4" r="4" fill={ec}>
+            <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <text x="15" y="9" fontFamily="'DM Mono',monospace" fontSize="10" fill={ec} letterSpacing="2">ERŐSÁRAM</text>
+          <text x="0"   y="30" fontFamily="'DM Mono',monospace" fontSize="12" fill="#3E5E4C">DUGALJ</text>
+          <text x="252" y="30" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="14" fill="#D4EDE4" className="ha-nec">12</text>
+          <text x="0"   y="50" fontFamily="'DM Mono',monospace" fontSize="12" fill="#3E5E4C">LÁMPA</text>
+          <text x="252" y="50" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="14" fill="#D4EDE4" className="ha-nec">18</text>
+          <path d="M234,0 l4,4 l8,-8" className="ha-cec" fill="none"/>
+        </g>
+        <line x1="20" y1="138" x2="272" y2="138" stroke="rgba(200,255,240,0.05)" strokeWidth="0.5"/>
+
+        {/* tűzjelző */}
+        <g transform="translate(20,152)">
+          <circle cx="4" cy="4" r="4" fill={fc}>
+            <animate attributeName="opacity" values="1;0.2;1" dur="2s" begin="2.6s" repeatCount="indefinite"/>
+          </circle>
+          <text x="15" y="9" fontFamily="'DM Mono',monospace" fontSize="10" fill={fc} letterSpacing="2">TŰZJELZŐ</text>
+          <text x="0"   y="30" fontFamily="'DM Mono',monospace" fontSize="12" fill="#3E5E4C">ÉRZÉKELŐ</text>
+          <text x="252" y="30" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="14" fill="#D4EDE4" className="ha-nfc">05</text>
+          <text x="0"   y="50" fontFamily="'DM Mono',monospace" fontSize="12" fill="#3E5E4C">SZIRÉNA</text>
+          <text x="252" y="50" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="14" fill="#D4EDE4" className="ha-nfc">02</text>
+          <path d="M234,0 l4,4 l8,-8" className="ha-cfc" fill="none"/>
+        </g>
+        <line x1="20" y1="224" x2="272" y2="224" stroke="rgba(200,255,240,0.05)" strokeWidth="0.5"/>
+
+        {/* gyengeáram */}
+        <g transform="translate(20,238)">
+          <circle cx="4" cy="4" r="4" fill={lc}>
+            <animate attributeName="opacity" values="1;0.2;1" dur="2s" begin="5.3s" repeatCount="indefinite"/>
+          </circle>
+          <text x="15" y="9" fontFamily="'DM Mono',monospace" fontSize="10" fill={lc} letterSpacing="2">GYENGEÁRAM</text>
+          <text x="0"   y="30" fontFamily="'DM Mono',monospace" fontSize="12" fill="#3E5E4C">ADATPONT</text>
+          <text x="252" y="30" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="14" fill="#D4EDE4" className="ha-nlc">06</text>
+          <text x="0"   y="50" fontFamily="'DM Mono',monospace" fontSize="12" fill="#3E5E4C">KAMERA</text>
+          <text x="252" y="50" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="14" fill="#D4EDE4" className="ha-nlc">03</text>
+          <path d="M234,0 l4,4 l8,-8" className="ha-clc" fill="none"/>
+        </g>
+        <line x1="20" y1="310" x2="272" y2="310" stroke="rgba(200,255,240,0.05)" strokeWidth="0.5"/>
+
+        {/* progress sáv */}
+        <rect x="20" y="328" width="252" height="3" rx="2" fill="rgba(255,255,255,0.05)"/>
+        <rect x="20" y="328" width="0"   height="3" rx="2" fill={ec}>
+          <animate attributeName="width" values="0;252;0" dur="8s" repeatCount="indefinite"/>
+          <animate attributeName="fill" values={`${ec};${fc};${lc};${ec}`} dur="8s" repeatCount="indefinite"/>
+        </rect>
+
+        {/* összesítő */}
+        <text x="20"  y="362" fontFamily="'DM Mono',monospace" fontSize="10" fill="#1E3828" letterSpacing="2">ÖSSZES TÉTEL</text>
+        <text x="272" y="410" textAnchor="end" fontFamily="'DM Mono',monospace" fontSize="34"
+          fill={ec} style={{ filter: `drop-shadow(0 0 10px ${ec}55)` }}>
+          46
+          <animate attributeName="opacity" values="0;0;1" keyTimes="0;0.55;0.7" dur="8s" repeatCount="indefinite"/>
+        </text>
+      </g>
+
+      {/* összekötő szaggatott */}
+      <line x1="854" y1="262" x2="878" y2="262"
+        stroke={ec} strokeWidth="1" strokeDasharray="4,3" opacity="0.1"/>
+    </svg>
   )
 }
 
@@ -553,9 +607,24 @@ function HeroSection({ onStart }) {
           </div>
         </FadeIn>
 
-        {/* ── Trade result cards – all 3 specialties ── */}
+        {/* ── Animated hero frame ── */}
         <FadeIn delay={0.25}>
-          <HeroTradeStack />
+          <div style={{
+            position: 'relative', borderRadius: 16, overflow: 'hidden',
+            border: '1px solid rgba(0,229,160,0.1)',
+            boxShadow: '0 0 0 1px #090909, 0 40px 100px rgba(0,0,0,0.7), 0 0 60px rgba(0,229,160,0.04)',
+            background: '#040A06',
+            maxWidth: 900, margin: '0 auto',
+          }}>
+            {/* corner accents */}
+            {[
+              { top:0, left:0, borderTop:'1.5px solid #00E5A0', borderLeft:'1.5px solid #00E5A0', borderRadius:'4px 0 0 0' },
+              { top:0, right:0, borderTop:'1.5px solid #00E5A0', borderRight:'1.5px solid #00E5A0', borderRadius:'0 4px 0 0' },
+              { bottom:0, left:0, borderBottom:'1.5px solid #00E5A0', borderLeft:'1.5px solid #00E5A0', borderRadius:'0 0 0 4px' },
+              { bottom:0, right:0, borderBottom:'1.5px solid #00E5A0', borderRight:'1.5px solid #00E5A0', borderRadius:'0 0 4px 0' },
+            ].map((s,i) => <div key={i} style={{ position:'absolute', width:18, height:18, opacity:0.45, zIndex:2, ...s }} />)}
+            <HeroAnimation />
+          </div>
         </FadeIn>
 
       </div>
