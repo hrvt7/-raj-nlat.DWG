@@ -41,17 +41,16 @@ export function generatePdf(quote, settings, detailLevel = 'summary') {
       <div class="kpi-value">${k.value}</div>
     </div>`).join('')
 
-  // ── Financial summary table ────────────────────────────────────────────────
+  // ── Financial summary table (no markup/margin disclosed to client) ────────
   const finRows = [
-    ['Anyagköltség', fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft', false],
-    ['Munkadíj',     fmtHU(Math.round(quote.totalLabor || 0))     + ' Ft', false],
-    ['Nettó összköltség (árrés nélkül)', '—', false],
-    [`Összköltség nettó (${Math.round((quote.pricingData?.markup_pct || 0) * 100)}% árrés után)`, fmtHU(net) + ' Ft', false],
-    [`ÁFA (${vatPct}%)`, fmtHU(vatAmt) + ' Ft', false],
+    ['Anyagköltség',       fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft'],
+    ['Munkadíj',           fmtHU(Math.round(quote.totalLabor || 0))     + ' Ft'],
+    ['Nettó összköltség',  fmtHU(net)                                   + ' Ft'],
+    [`ÁFA (${vatPct}%)`,   fmtHU(vatAmt)                                + ' Ft'],
   ]
 
-  const finTableRows = finRows.map(([label, val, bold]) => `
-    <tr class="${bold ? 'fin-subtotal' : ''}">
+  const finTableRows = finRows.map(([label, val]) => `
+    <tr>
       <td class="fin-label">${escHtml(label)}</td>
       <td class="fin-val">${val}</td>
     </tr>`).join('') + `
