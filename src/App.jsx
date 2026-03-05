@@ -620,6 +620,30 @@ function SaaSShell() {
     return () => window.removeEventListener('resize', fn)
   }, [])
 
+  // ── 1.3 Storage quota warning banner ──────────────────────────────────────
+  const [storageWarning, setStorageWarning] = useState(null)
+  useEffect(() => {
+    const handler = (e) => {
+      setStorageWarning(e.detail?.error || 'Ismeretlen tárolási hiba')
+      // Auto-dismiss after 12 seconds
+      setTimeout(() => setStorageWarning(null), 12000)
+    }
+    window.addEventListener('takeoffpro:storage-error', handler)
+    return () => window.removeEventListener('takeoffpro:storage-error', handler)
+  }, [])
+
+  // ── 1.4 Cross-tab sync: reload state when another tab modifies localStorage ─
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.key || !e.key.startsWith('takeoffpro_')) return
+      // Reload relevant state based on which key changed
+      if (e.key.includes('quotes')) setQuotes(loadQuotes())
+      if (e.key.includes('settings')) setSettings(loadSettings())
+    }
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [])
+
   const sidebarW = 220
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
@@ -686,6 +710,24 @@ function SaaSShell() {
             )}
           </div>
         </div>
+
+        {/* ── Storage warning banner ─────────────────────────────────────── */}
+        {storageWarning && (
+          <div style={{
+            background: '#7f1d1d', borderBottom: '1px solid #991b1b',
+            padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10,
+            fontFamily: 'DM Mono', fontSize: 11,
+          }}>
+            <span style={{ color: '#fca5a5' }}>⚠ Tárolási hiba: {storageWarning}</span>
+            <span style={{ color: '#fca5a5', opacity: 0.7, marginLeft: 'auto', fontSize: 10 }}>
+              Töröld a nem használt ajánlatokat a hely felszabadításához
+            </span>
+            <button onClick={() => setStorageWarning(null)} style={{
+              background: 'transparent', border: 'none', color: '#fca5a5',
+              cursor: 'pointer', fontSize: 14, padding: '0 4px',
+            }}>✕</button>
+          </div>
+        )}
 
         {/* ── Content — full-height for TakeoffWorkspace, padded for other pages ── */}
         {page === 'new-quote' ? (

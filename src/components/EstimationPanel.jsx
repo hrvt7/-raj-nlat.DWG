@@ -263,16 +263,20 @@ export default function EstimationPanel({
     // ── 1.4 Markup vs Margin kalkuláció ──────────────────────────────────────
     // markup: grandTotal = subtotal × (1 + pct/100)
     // margin: grandTotal = subtotal / (1 − pct/100)
-    const markupPercent = quoteOverrides._markupPercent ?? (settings?.labor?.markup_percent ?? 15)
+    const rawMarkup     = quoteOverrides._markupPercent ?? (settings?.labor?.markup_percent ?? 15)
+    const markupPercent = Number.isFinite(rawMarkup) ? rawMarkup : 15
     const markupType    = quoteOverrides._markupType    ?? (settings?.labor?.markup_type    ?? 'markup')
     const subtotal      = totalMaterial + cableCost + laborCost
     let grandTotal
     if (markupType === 'margin') {
       const marginRatio = markupPercent / 100
+      // Guard: marginRatio >= 1 would cause division by zero or negative — cap at 10× multiplier
       grandTotal = marginRatio >= 1 ? subtotal * 10 : subtotal / (1 - marginRatio)
     } else {
       grandTotal = subtotal * (1 + markupPercent / 100)
     }
+    // Final NaN/Infinity guard
+    if (!Number.isFinite(grandTotal)) grandTotal = subtotal
     const markupAmount = grandTotal - subtotal
 
     return {
@@ -510,9 +514,9 @@ function SummaryTab({ countByCategory, totalMarkers, measurements, scale, cableD
 // ─── Cables Tab ─────────────────────────────────────────────────────────────
 
 function CablesTab({ cableData, cableByCategory, scale, panelMarker, countByCategory, ceilingHeight, switchHeight, socketHeight, onCeilingHeightChange, onSwitchHeightChange, onSocketHeightChange }) {
-  if (!scale.calibrated) return <HintBox icon="📐" text='Először kalibráld a skálát a "Skála" eszközzel, hogy a kábelhossz számítás pontos legyen.' />
-  if (!panelMarker)      return <HintBox icon="⚡" text='Jelöld be az elosztó(ka)t "Elosztó" kategóriával.' />
-  if (!cableData || cableData.routes.length === 0) return <HintBox icon="📍" text="Jelölj be eszközöket a tervrajzon." />
+  if (!scale.calibrated) return <HintBox icon="📐" text='1. lépés: Kalibráld a skálát a "Skála" eszközzel a pontos méréshez.' />
+  if (!panelMarker)      return <HintBox icon="⚡" text='2. lépés: Jelöld be az elosztó(ka)t az "Elosztó" kategóriával.' />
+  if (!cableData || cableData.routes.length === 0) return <HintBox icon="📍" text='3. lépés: Jelölj be eszközöket (kapcsoló, dugalj, lámpa) a tervrajzon — a kábelhossz automatikusan számítódik.' />
 
   const hasSockets  = (countByCategory['socket']  || 0) > 0
   const hasSwitches = (countByCategory['switch']   || 0) > 0

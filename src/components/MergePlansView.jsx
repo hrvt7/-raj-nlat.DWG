@@ -432,8 +432,13 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
   const availableDisciplines = useMemo(() => [...new Set(selectedPlans.map(p => p.discipline).filter(Boolean))], [selectedPlans])
   const floorList = useMemo(() => Object.keys(mergeResult.byFloor), [mergeResult.byFloor])
 
-  // Grand total count
+  // Grand total count (recognized only)
   const grandTotal = useMemo(() => Object.values(mergeResult.total).reduce((s, v) => s + v, 0), [mergeResult.total])
+
+  // Total block count (recognized + unknown) — matches Plans card "N blokk" display
+  const totalBlockCount = useMemo(() => {
+    return filteredPlans.reduce((sum, p) => sum + (p.parseResult?.blocks?.length || 0), 0)
+  }, [filteredPlans])
 
   // ── View toggle state: 'total' | 'byFloor' | 'byDiscipline' ───────────────
   const [viewMode, setViewMode] = useState('total')
@@ -537,7 +542,7 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
   return (
     <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
       {/* Left: Plan selection */}
-      <div style={{ width: 300, overflow: 'auto', flexShrink: 0 }}>
+      <div style={{ width: 280, minWidth: 220, overflow: 'auto', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>
             Elemzett rajzok
@@ -564,6 +569,7 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
         ) : parsedPlans.map(plan => {
           const isSelected = !!selected[plan.id]
           const blockCount = plan.parseResult?.blocks?.length || 0
+          const recognizedCount = (plan.parseResult?.blocks || []).filter(b => b.assemblyType && b.assemblyType !== 'unknown').length
           return (
             <div key={plan.id} onClick={() => toggleSelect(plan.id)} style={{
               background: isSelected ? C.accent + '10' : C.bgCard,
@@ -580,7 +586,7 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
                   <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                     {plan.floor && <MiniTag text={plan.floor} />}
                     {plan.discipline && <MiniTag text={plan.discipline} color={C.accent} />}
-                    <MiniTag text={`${blockCount} blokk`} color="#888" />
+                    <MiniTag text={recognizedCount < blockCount ? `${recognizedCount}/${blockCount} blokk` : `${blockCount} blokk`} color={recognizedCount < blockCount ? '#f59e0b' : '#888'} />
                   </div>
                 </div>
                 <div style={{
@@ -612,7 +618,7 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
           <>
             {/* Filters + View toggle + CSV export */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Badge color="blue">{selectedIds.length} rajz · {grandTotal} elem</Badge>
+              <Badge color="blue">{selectedIds.length} rajz · {grandTotal} felismert{totalBlockCount > grandTotal ? ` / ${totalBlockCount} blokk` : ' elem'}</Badge>
               <select value={filterFloor} onChange={e => setFilterFloor(e.target.value)} style={filterSelectStyle}>
                 <option value="">Összes emelet</option>
                 {availableFloors.map(f => <option key={f} value={f}>{f}</option>)}
@@ -703,7 +709,9 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
                           viewMode === 'byFloor' ? floorList.length + 2 :
                           viewMode === 'byDiscipline' ? disciplineList.length + 2 : 2
                         } style={{ ...tdStyleCenter, color: C.muted, padding: 20 }}>
-                          Nincs felismert elem
+                          {dedupedUnknowns.length > 0
+                            ? <span>Nincs felismert elem — <span onClick={() => setShowUnknowns(true)} style={{ color: '#f59e0b', cursor: 'pointer', textDecoration: 'underline' }}>rendeld hozzá a(z) {dedupedUnknowns.length} ismeretlen szimbólumot ↑</span></span>
+                            : 'Nincs felismert elem'}
                         </td>
                       </tr>
                     )}
@@ -968,7 +976,7 @@ function PdfRecognitionTab({ plans, onCreateQuote }) {
   return (
     <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
       {/* Left: Plan selection */}
-      <div style={{ width: 300, overflow: 'auto', flexShrink: 0 }}>
+      <div style={{ width: 280, minWidth: 220, overflow: 'auto', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>
             Felismert PDF-ek

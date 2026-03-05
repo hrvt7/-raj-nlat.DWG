@@ -275,12 +275,16 @@ function save(key, value) {
     const json = JSON.stringify(value)
     localStorage.setItem(key, json)
 
-    // Quota monitoring — log warning if usage is high
+    // Quota monitoring — warn if usage is high
     const usage = estimateLocalStorageUsage()
     if (usage > LS_QUOTA_WARN_BYTES) {
-      console.warn(
-        `[TakeoffPro] localStorage usage high: ${(usage / 1024 / 1024).toFixed(2)} MB / ~5 MB`
-      )
+      const msg = `Tárhely közel a limithez: ${(usage / 1024 / 1024).toFixed(1)} MB / ~5 MB`
+      console.warn(`[TakeoffPro] ${msg}`)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('takeoffpro:storage-error', {
+          detail: { key, error: msg, type: 'quota-warning' }
+        }))
+      }
     }
   } catch (err) {
     console.error(`[TakeoffPro] localStorage save FAILED for "${key}":`, err.message)
