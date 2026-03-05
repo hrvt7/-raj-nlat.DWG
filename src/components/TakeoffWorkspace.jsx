@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
 const DxfViewerCanvas = lazy(() => import('./DxfViewer/DxfViewerCanvas.jsx'))
+const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
@@ -921,6 +922,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // isDxf = native DXF file, OR DWG that was successfully converted to DXF
   const isDxf = file.name.toLowerCase().endsWith('.dxf') || dwgStatus === 'done'
+  const isPdf = file.name.toLowerCase().endsWith('.pdf')
 
   // ── Render: main workspace ────────────────────────────────────────────────
   return (
@@ -1027,10 +1029,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             />
           )}
 
-          {/* No DXF viewer fallback — PDF or failed DWG conversion */}
+          {/* No DXF viewer fallback — PDF viewer or failed DWG conversion */}
           {!isDxf && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 32 }}>
-              {dwgStatus === 'failed' ? (
+            dwgStatus === 'failed' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 32 }}>
                 <>
                   <div style={{ fontSize: 40 }}>⚠️</div>
                   <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.yellow, textAlign: 'center' }}>
@@ -1058,14 +1060,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     Ajánlott DXF verzió: AutoCAD 2010 (R18) vagy újabb
                   </div>
                 </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 40 }}>📄</div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.muted }}>PDF nézegető hamarosan</div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Adj meg eszközöket manuálisan →</div>
-                </>
-              )}
-            </div>
+              </div>
+            ) : isPdf ? (
+              <Suspense fallback={<div style={{ width: '100%', height: '100%', background: C.bg }} />}>
+                <PdfViewerPanel
+                  file={file}
+                  style={{ height: '100%', border: 'none', borderRadius: 0 }}
+                />
+              </Suspense>
+            ) : null
           )}
 
           {/* Dot legend bottom-left */}
