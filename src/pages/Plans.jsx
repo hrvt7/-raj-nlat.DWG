@@ -69,6 +69,7 @@ export default function Plans({ onNavigate }) {
   const [parseProgress, setParseProgress] = useState({}) // { planId: 0-100 }
   const [batchParsing, setBatchParsing] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 })
+  const batchCancelRef = useRef(false) // set to true to stop queuing new parses
   const [pdfParsing, setPdfParsing] = useState({})   // { planId: true } while running
   const inputRef = useRef()
 
@@ -133,7 +134,7 @@ export default function Plans({ onNavigate }) {
     } catch (err) {
       console.warn('[PDF takeoff] pipeline error:', err.message)
       updatePlanMeta(planId, {
-        pdfRecognition: { status: 'error', errorMessage: err.message },
+        pdfRecognition: { status: 'error', errorMessage: err.message, processedAt: new Date().toISOString() },
       })
     } finally {
       setPdfParsing(p => { const next = { ...p }; delete next[planId]; return next })
@@ -141,17 +142,22 @@ export default function Plans({ onNavigate }) {
     }
   }, [])
 
-  // ── Batch parse all DXF plans ──
+  // ── Batch parse all DXF plans (parallel — worker pool controls concurrency) ──
   const handleBatchParse = useCallback(async () => {
     const dxfPlans = plans.filter(p => (p.fileType === 'dxf' || p.fileType === 'dwg') && !p.parsedAt)
     if (dxfPlans.length === 0) return
+    batchCancelRef.current = false
     setBatchParsing(true)
     setBatchProgress({ done: 0, total: dxfPlans.length })
-    for (let i = 0; i < dxfPlans.length; i++) {
-      await handleParsePlan(dxfPlans[i])
-      setBatchProgress({ done: i + 1, total: dxfPlans.length })
-    }
+    let completed = 0
+    await Promise.allSettled(dxfPlans.map(async plan => {
+      if (batchCancelRef.current) return
+      await handleParsePlan(plan)
+      completed++
+      setBatchProgress(prev => ({ ...prev, done: completed }))
+    }))
     setBatchParsing(false)
+    batchCancelRef.current = false
   }, [plans, handleParsePlan])
 
   // Load thumbnails for all plans
@@ -189,7 +195,7 @@ export default function Plans({ onNavigate }) {
         floor: floor || null,
         discipline: discipline || null,
         units: null,
-        parsedResult: null,
+        parseResult: null,
         createdAt: new Date().toISOString(),
       }
       await savePlan(plan, file)
@@ -310,15 +316,26 @@ export default function Plans({ onNavigate }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {plans.some(p => (p.fileType === 'dxf' || p.fileType === 'dwg') && !p.parsedAt) && (
-            <button onClick={handleBatchParse} disabled={batchParsing} style={{
-              padding: '8px 16px', borderRadius: 8, cursor: batchParsing ? 'wait' : 'pointer',
-              background: 'rgba(33,243,163,0.1)', border: `1px solid rgba(33,243,163,0.3)`,
-              color: C.accent, fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
-              opacity: batchParsing ? 0.6 : 1,
-            }}>
-              {batchParsing ? `📊 ${batchProgress.done}/${batchProgress.total} elemzés...` : '📊 Összes elemzése'}
-            </button>
+          {(plans.some(p => (p.fileType === 'dxf' || p.fileType === 'dwg') && !p.parsedAt) || batchParsing) && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={handleBatchParse} disabled={batchParsing} style={{
+                padding: '8px 16px', borderRadius: 8, cursor: batchParsing ? 'wait' : 'pointer',
+                background: 'rgba(33,243,163,0.1)', border: `1px solid rgba(33,243,163,0.3)`,
+                color: C.accent, fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
+                opacity: batchParsing ? 0.6 : 1,
+              }}>
+                {batchParsing ? `📊 ${batchProgress.done}/${batchProgress.total} elemzés...` : '📊 Összes elemzése'}
+              </button>
+              {batchParsing && (
+                <button onClick={() => { batchCancelRef.current = true; setBatchParsing(false) }} style={{
+                  padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                  background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)',
+                  color: '#FF6B6B', fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
+                }}>
+                  ✕ Leállít
+                </button>
+              )}
+            </div>
           )}
           {plans.length >= 2 && (
             <button onClick={() => setMergeMode(true)} style={{
