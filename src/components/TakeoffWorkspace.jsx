@@ -1,13 +1,13 @@
 // ─── TakeoffWorkspace ─────────────────────────────────────────────────────────
-// Enterprise-style DXF/PDF takeoff workspace. Replaces the old 6-step wizard.
-// Layout: Left = live DXF/PDF viewer, Right = recognition + takeoff + pricing.
-// Cable estimation: MST-based for PDF, fallback multiplier for DXF.
+// DXF/PDF felmérési munkaterület.
+// Elrendezés: Bal = tervrajz nézegető, Jobb = elemfelismerés + felmérés + kábelbecslés.
+// Kábelbecslés: 1. mért DXF rétegek → 2. MST pozíciókból → 3. eszközszám alapján.
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
 const DxfViewerCanvas = lazy(() => import('./DxfViewer/DxfViewerCanvas.jsx'))
 const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
-import { runPdfTakeoff } from '../pdfTakeoff.js'
+import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
 import { calcProductivityFactor, WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
@@ -60,6 +60,46 @@ function recognizeBlock(blockName) {
     }
   }
   return { asmId: null, confidence: 0, matchType: 'unknown', rule: null }
+}
+
+// ─── DXF cable-layer detection ────────────────────────────────────────────────
+// Priority 1: if DXF has cable route geometry (layers with cable keywords + lengths),
+// use measured lengths directly.  Returns null if nothing suitable found.
+const CABLE_GENERIC_KW = ['KABEL','CABLE','NYM','NYY','CYKY','WIRE','VEZETEK','VILLAMOS','ARAM']
+const CABLE_TYPE_KW = {
+  light:  ['VILAG','LIGHT','3X1','1X1','LAMPA','VIL_KAB','LAMP','VILAGIT'],
+  socket: ['DUGALJ','SOCKET','3X2','1X2','DUG_KAB','KONNEKTOR','OUTLET'],
+  switch: ['KAPCS','SWITCH','KAPCSOL','KAP_KAB'],
+  other:  ['NYY','5X','FOGYASZT','PANEL_KAB'],
+}
+function detectDxfCableLengths(parsedDxf) {
+  if (!parsedDxf?.lengths?.length) return null
+  let total = 0
+  const byType = { light: 0, socket: 0, switch: 0, other: 0 }
+  let layerCount = 0
+  for (const l of parsedDxf.lengths) {
+    if (!l.length || l.length <= 0) continue
+    const up = (l.layer || '').toUpperCase()
+    if (!CABLE_GENERIC_KW.some(k => up.includes(k))) continue
+    layerCount++
+    total += l.length
+    if      (CABLE_TYPE_KW.light.some(k  => up.includes(k))) byType.light  += l.length
+    else if (CABLE_TYPE_KW.socket.some(k => up.includes(k))) byType.socket += l.length
+    else if (CABLE_TYPE_KW.switch.some(k => up.includes(k))) byType.switch += l.length
+    else if (CABLE_TYPE_KW.other.some(k  => up.includes(k))) byType.other  += l.length
+    else byType.socket += l.length  // ismeretlen → dugalj (leggyakoribb)
+  }
+  if (!layerCount || total <= 0) return null
+  const r = v => Math.round(v * 10) / 10
+  return {
+    cable_total_m: r(total),
+    cable_total_m_p50: r(total),
+    cable_total_m_p90: null,
+    cable_by_type: { light_m: r(byType.light), socket_m: r(byType.socket), switch_m: r(byType.switch), other_m: r(byType.other) },
+    method: `Mért kábelvonalak (${layerCount} réteg, ${Math.round(total)} m)`,
+    confidence: 0.92,
+    _source: 'dxf_layers',
+  }
 }
 
 // ─── Pricing computation ──────────────────────────────────────────────────────
@@ -541,6 +581,42 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return () => window.removeEventListener('resize', fn)
   }, [])
 
+  // ── Resizable split panel ─────────────────────────────────────────────────
+  // panelRatio: left panel width as % of the container (clamp 25–80)
+  const [panelRatio, setPanelRatio] = useState(58)
+  const containerRef = useRef(null)
+  const dragStateRef = useRef({ active: false, startX: 0, startRatio: 58 })
+
+  const handleDividerMouseDown = useCallback((e) => {
+    e.preventDefault()
+    dragStateRef.current = { active: true, startX: e.clientX, startRatio: panelRatio }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [panelRatio])
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragStateRef.current.active) return
+      const containerW = containerRef.current?.offsetWidth || 1
+      const dx = e.clientX - dragStateRef.current.startX
+      const delta = (dx / containerW) * 100
+      const newRatio = Math.min(80, Math.max(25, dragStateRef.current.startRatio + delta))
+      setPanelRatio(newRatio)
+    }
+    const onUp = () => {
+      if (!dragStateRef.current.active) return
+      dragStateRef.current.active = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
   // ── DWG conversion state ───────────────────────────────────────────────────
   const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
   const [dwgError, setDwgError] = useState(null)     // actual error message for display
@@ -770,39 +846,82 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return Object.values(rowMap)
   }, [recognizedItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
 
-  // ── Auto-compute cable estimate for DXF when takeoff changes ────────────
-  // PDF pipeline sets cableEstimate directly (MST-based), so skip if already set by PDF.
+  // ── Auto-compute cable estimate for DXF (3-priority system) ─────────────
+  // Priority 1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
+  // Priority 2: MST becslés eszközpozíciók alapján  (confidence ~0.75)
+  // Priority 3: Eszközszám × átlagos kábelhossz  (fallback, confidence 0.55)
+  // PDF pipeline sets cableEstimate directly, so never overwrite it here.
   useEffect(() => {
+    if (cableEstimate?._source === 'pdf_takeoff') return  // PDF már megvan
+
     if (!takeoffRows.length) {
-      // Only clear if not already set by PDF pipeline
       if (cableEstimate?._source !== 'pdf_takeoff') setCableEstimate(null)
       return
     }
-    // Don't overwrite PDF-provided cable estimate
-    if (cableEstimate?._source === 'pdf_takeoff') return
 
-    // DXF fallback: simple per-device multipliers
-    const lightQty = takeoffRows.filter(r => r.asmId === 'ASM-003').reduce((s, r) => s + r.qty, 0)
+    // ── Priority 1: tényleges kábelvonalak a DXF rétegeiből ──────────────
+    const layerResult = detectDxfCableLengths(effectiveParsedDxf)
+    if (layerResult) {
+      setCableEstimate(layerResult)
+      return
+    }
+
+    // ── Priority 2: MST becslés ha vannak pozícióadatok ──────────────────
+    const inserts = effectiveParsedDxf?.inserts
+    if (inserts?.length >= 2) {
+      // Build device list with positions for MST
+      const devices = inserts.map(ins => {
+        const recog = recognizedItems.find(r => r.blockName === ins.name)
+        const asmId = asmOverrides[ins.name] !== undefined ? asmOverrides[ins.name] : recog?.asmId
+        const type = asmId === 'ASM-003' ? 'light' : asmId === 'ASM-001' ? 'socket' : asmId === 'ASM-002' ? 'switch' : 'other'
+        return { type, x: ins.x, y: ins.y, name: ins.name }
+      })
+      const scaleFactor = effectiveParsedDxf?.units?.factor ?? 0.001 // default mm→m
+      try {
+        const mstResult = estimateCablesMST(devices, scaleFactor)
+        if (mstResult && mstResult.cable_total_m > 0) {
+          // Map cable_by_system → cable_by_type (MST uses 'system', UI uses 'type')
+          const sys = mstResult.cable_by_system || {}
+          setCableEstimate({
+            cable_total_m: mstResult.cable_total_m,
+            cable_total_m_p50: mstResult.cable_total_m,
+            cable_total_m_p90: Math.round(mstResult.cable_total_m * 1.35),
+            cable_by_type: {
+              light_m: sys.lighting ?? 0,
+              socket_m: sys.socket ?? 0,
+              switch_m: sys.switch ?? 0,
+              other_m: sys.other ?? 0,
+            },
+            method: `MST becslés (${devices.length} eszközpozíció alapján)`,
+            confidence: mstResult.confidence ?? 0.75,
+            _source: 'dxf_mst',
+          })
+          return
+        }
+      } catch (_e) { /* fallthrough to device-count */ }
+    }
+
+    // ── Priority 3: eszközszám × átlag kábelhossz (fallback) ─────────────
+    const lightQty  = takeoffRows.filter(r => r.asmId === 'ASM-003').reduce((s, r) => s + r.qty, 0)
     const socketQty = takeoffRows.filter(r => r.asmId === 'ASM-001').reduce((s, r) => s + r.qty, 0)
     const switchQty = takeoffRows.filter(r => r.asmId === 'ASM-002').reduce((s, r) => s + r.qty, 0)
     const total = lightQty + socketQty + switchQty
-
     if (!total) { setCableEstimate(null); return }
 
-    const lightM = lightQty * 8
+    const lightM  = lightQty  * 8
     const socketM = socketQty * 6
     const switchM = switchQty * 4
-
-    const totalM = lightM + socketM + switchM
+    const totalM  = lightM + socketM + switchM
     setCableEstimate({
       cable_total_m: totalM,
       cable_total_m_p50: totalM,
-      cable_total_m_p90: Math.round(totalM * 1.5),  // +50% safety margin for P90
+      cable_total_m_p90: Math.round(totalM * 1.5),
       cable_by_type: { light_m: lightM, socket_m: socketM, switch_m: switchM, other_m: 0 },
-      method: 'Automatikus becslés (eszközszám alapján)',
-      confidence: 0.6,
+      method: 'Becslés eszközszám alapján (nincs pozícióadat)',
+      confidence: 0.55,
+      _source: 'device_count',
     })
-  }, [takeoffRows])
+  }, [takeoffRows, effectiveParsedDxf, recognizedItems, asmOverrides])
 
   // ── Derived: pricing ──────────────────────────────────────────────────────
   const pricing = useMemo(() => {
@@ -1033,7 +1152,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           </>
         ) : (
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
-            Rendelj assembly-ket az elemekhez az árazáshoz
+            Adj hozzá elemeket az árajánlat generálásához
           </div>
         )}
 
@@ -1046,10 +1165,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       </div>
 
       {/* ── Main two-column layout ─────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div ref={containerRef} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* ── LEFT: DXF Viewer ──────────────────────────────────────────────── */}
-        <div style={{ flex: isMobile ? '0 0 100%' : '0 0 58%', position: 'relative', background: '#050507', borderRight: `1px solid ${C.border}`, display: (isMobile && !showDxfOnMobile) ? 'none' : undefined }}>
+        {/* ── LEFT: Tervrajz nézegető ────────────────────────────────────────── */}
+        <div style={{ flex: isMobile ? '0 0 100%' : `0 0 ${panelRatio}%`, position: 'relative', background: '#050507', display: (isMobile && !showDxfOnMobile) ? 'none' : undefined }}>
           {isDxf && viewerFile && (
             <Suspense fallback={<div style={{ width: '100%', height: '100%', background: '#050507' }} />}>
               <DxfViewerCanvas
@@ -1144,16 +1263,30 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           )}
         </div>
 
-        {/* ── RIGHT: Takeoff Panel ──────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: (isMobile && showDxfOnMobile) ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
+        {/* ── Drag handle ──────────────────────────────────────────────────── */}
+        {!isMobile && (
+          <div
+            onMouseDown={handleDividerMouseDown}
+            title="Húzd a panel átméretezéséhez"
+            style={{
+              width: 5, flexShrink: 0, cursor: 'col-resize', background: C.border,
+              transition: 'background 0.15s', position: 'relative', zIndex: 10,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = C.accent + '60'}
+            onMouseLeave={e => e.currentTarget.style.background = C.border}
+          />
+        )}
+
+        {/* ── RIGHT: Munkaterület panel ─────────────────────────────────────── */}
+        <div style={{ flex: 1, minWidth: 0, display: (isMobile && showDxfOnMobile) ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
 
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0 }}>
             {[
-              { id: 'recognize', label: '🔍 Felism.', badge: recognizedItems.length },
-              { id: 'takeoff',   label: '📋 Takeoff',  badge: takeoffRows.length },
+              { id: 'recognize', label: '🔍 Elemek',     badge: recognizedItems.length },
+              { id: 'takeoff',   label: '📋 Felmérés',   badge: takeoffRows.length },
               { id: 'cable',     label: '🔌 Kábel' },
-              { id: 'context',   label: '⚙️ Kontextus' },
+              { id: 'context',   label: '⚙️ Beállítás' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1211,8 +1344,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     {parsedDxf?._dwgFailed
                       ? 'DWG konverzió sikertelen. Exportáld DXF-ként és töltsd fel újra.'
                       : parsedDxf?._noDxf
-                      ? 'PDF fájl nem tartalmaz block adatot. Adj hozzá elemeket manuálisan a Takeoff fülön.'
-                      : 'Nem találtunk block-okat a DXF-ben.'}
+                      ? 'A PDF nem tartalmaz felismerhető vektoros elemet. Adj hozzá elemeket manuálisan a Felmérés fülön.'
+                      : 'Nem találtunk ismert blokkokat a DXF-ben.'}
                   </div>
                 ) : (
                   <>
@@ -1315,7 +1448,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               <div>
                 {takeoffRows.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-                    Még nincs felismert elem. Menj a Felismerés fülre és rendelj assembly-ket a blokkokhoz.
+                    Még nincs felvett elem. Az Elemek fülön fogadd el a felismert blokkokat, vagy adj hozzá manuálisan.
                   </div>
                 ) : (
                   <>
@@ -1356,10 +1489,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {rightTab === 'cable' && (
               <div>
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 6 }}>
-                  🔌 Automatikus kábelbecslés
+                  🔌 Kábelbecslés
                 </div>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 16 }}>
-                  Az enterprise szoftverek nem kérnek külön jóváhagyást. A becslés valós időben frissül az eszközszám alapján.
+                  Ha a DXF tartalmaz kábelvonalakat (réteg neve alapján felismeri), azokat méri. Ha nem, MST-algoritmussal becsül eszközpozíciók alapján, végső esetben eszközszám × átlagos kábelhossz értékkel.
                 </div>
 
                 {cableEstimate ? (
@@ -1367,7 +1500,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     {[
                       { key: 'light_m', label: 'Világítási kör (NYM-J 3×1.5)', icon: '💡', color: C.accent },
                       { key: 'socket_m', label: 'Dugalj kör (NYM-J 3×2.5)', icon: '🔌', color: C.blue },
-                      { key: 'switch_m', label: 'Kapcsoló kör (NYM-J 3×2.5)', icon: '🔘', color: C.yellow },
+                      { key: 'switch_m', label: 'Kapcsoló kör (NYM-J 3×1.5)', icon: '🔘', color: C.yellow },
                       { key: 'other_m', label: 'Egyéb (NYM-J 5×2.5)', icon: '⚡', color: C.textSub },
                     ].map(({ key, label, icon, color }) => {
                       const m = cableEstimate.cable_by_type?.[key] || 0
@@ -1394,13 +1527,33 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         </div>
                       )}
                     </div>
-                    <div style={{ marginTop: 8, fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
-                      Módszer: {cableEstimate.method} · Konfidencia: ~{Math.round((cableEstimate.confidence || 0.6) * 100)}%
+                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
+                        {cableEstimate.method}
+                      </span>
+                      <span style={{
+                        fontFamily: 'DM Mono', fontSize: 10, padding: '1px 7px', borderRadius: 10,
+                        background: cableEstimate._source === 'dxf_layers' ? C.accentDim
+                          : cableEstimate._source === 'dxf_mst' ? 'rgba(76,201,240,0.12)'
+                          : cableEstimate._source === 'pdf_takeoff' ? 'rgba(255,209,102,0.15)'
+                          : 'rgba(255,255,255,0.05)',
+                        color: cableEstimate._source === 'dxf_layers' ? C.accent
+                          : cableEstimate._source === 'dxf_mst' ? C.blue
+                          : cableEstimate._source === 'pdf_takeoff' ? C.yellow
+                          : C.muted,
+                        border: `1px solid currentColor`,
+                      }}>
+                        {cableEstimate._source === 'dxf_layers' ? 'mért'
+                          : cableEstimate._source === 'dxf_mst' ? 'MST'
+                          : cableEstimate._source === 'pdf_takeoff' ? 'PDF'
+                          : 'becslés'}
+                        {' '}~{Math.round((cableEstimate.confidence || 0.6) * 100)}%
+                      </span>
                     </div>
                   </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-                    Adj hozzá assembly-ket a Takeoff fülön a kábelbecsléshez.
+                    Adj hozzá elemeket a Felmérés fülön a kábelbecslés elindításához.
                   </div>
                 )}
               </div>
@@ -1414,7 +1567,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 </div>
 
                 <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, padding: '8px 10px', background: C.bgCard, borderRadius: 7, border: `1px solid ${C.border}` }}>
-                  💡 A falanyag tételenként állítható a Takeoff fülön (GK / Ytong / Tégla / Beton). Az alábbi beállítások az egész projektre vonatkoznak.
+                  💡 A falanyag tételenként állítható a Felmérés fülön (GK / Ytong / Tégla / Beton). Az alábbi beállítások az egész projektre vonatkoznak.
                 </div>
 
                 {[
