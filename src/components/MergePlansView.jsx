@@ -13,11 +13,11 @@ import { downloadCSV } from '../utils/csvExport.js'
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function MergePlansView({ plans, onClose, onCreateQuote }) {
-  const [activeTab, setActiveTab] = useState('manual') // 'manual' | 'dxf' | 'pdf'
-
-  // Auto-select tab based on available data
-  const hasPdfResults = plans.some(p => p.fileType === 'pdf' && p.pdfRecognition?.status === 'done')
+  // Auto-select the most data-rich tab on open
   const hasDxfResults = plans.some(p => p.parseResult?.blocks?.length > 0)
+  const hasPdfResults = plans.some(p => p.fileType === 'pdf' && p.pdfRecognition?.status === 'done')
+  const defaultTab = hasDxfResults ? 'dxf' : hasPdfResults ? 'pdf' : 'manual'
+  const [activeTab, setActiveTab] = useState(defaultTab)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -50,7 +50,7 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
       </div>
 
       {activeTab === 'manual' ? (
-        <ManualMergeTab plans={plans} onCreateQuote={onCreateQuote} />
+        <ManualMergeTab plans={plans} onCreateQuote={onCreateQuote} onSwitchToDxf={() => setActiveTab('dxf')} />
       ) : activeTab === 'dxf' ? (
         <DxfAnalysisTab plans={plans} onCreateQuote={onCreateQuote} />
       ) : (
@@ -77,7 +77,7 @@ function TabButton({ active, onClick, children }) {
 // Manual Merge Tab (existing functionality, unchanged)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ManualMergeTab({ plans, onCreateQuote }) {
+function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
   const [selected, setSelected] = useState({})
   const [annotations, setAnnotations] = useState({})
   const [thumbnails, setThumbnails] = useState({})
@@ -224,7 +224,12 @@ function ManualMergeTab({ plans, onCreateQuote }) {
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>{plan.name}</div>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
-                  {plan.markerCount || 0} elem{plan.hasScale ? ' • Kalibrálva' : ''}
+                  {(plan.fileType === 'dxf' || plan.fileType === 'dwg')
+                    ? (plan.parseResult?.blocks?.length > 0
+                        ? `${plan.parseResult.summary?.total_blocks || plan.parseResult.blocks.length} blokk azonosítva`
+                        : plan.parsedAt ? 'Elemzett (0 blokk)' : 'Nincs elemezve')
+                    : `${plan.markerCount || 0} jelölés${plan.hasScale ? ' • Kalibrálva' : ''}`
+                  }
                 </div>
               </div>
               <div style={{
@@ -247,8 +252,34 @@ function ManualMergeTab({ plans, onCreateQuote }) {
           <>
             {loading && <div style={{ color: C.accent, fontSize: 12, fontFamily: 'DM Mono' }}>Betöltés...</div>}
 
+            {/* Hint: DXF blocks available but using manual tab */}
+            {mergedMarkers.length === 0 && selectedIds.some(id => {
+              const p = plans.find(pl => pl.id === id)
+              return p?.parseResult?.blocks?.length > 0
+            }) && (
+              <div style={{
+                background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.3)',
+                borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span style={{ fontSize: 18 }}>📊</span>
+                <div>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: '#4CC9F0' }}>
+                    Ez a terv DXF blokk adatokat tartalmaz
+                  </div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>
+                    A „Kézi jelölések" fül a manuálisan rajzolt markereket összesíti — az automatikusan felismert DXF blokkok a{' '}
+                    <span style={{ color: '#4CC9F0', cursor: 'pointer', textDecoration: 'underline' }}
+                      onClick={onSwitchToDxf}>
+                      📊 DXF elemzés
+                    </span>
+                    {' '}fülön érhetők el.
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Merged count summary */}
-            <SectionCard title={`Összesített elemek (${mergedMarkers.length})`}>
+            <SectionCard title={`Összesített jelölések (${mergedMarkers.length})`}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
                 {COUNT_CATEGORIES.filter(c => countByCategory[c.key]).map(c => (
                   <div key={c.key} style={{ background: C.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${c.color}20` }}>
