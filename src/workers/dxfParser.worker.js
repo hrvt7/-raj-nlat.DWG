@@ -59,7 +59,7 @@ function parseDxfText(text) {
   for (const [code, val] of tokens) {
     if (code === 0 && val === 'SECTION') { inHeader = false }
     if (code === 2 && val === 'HEADER')  { inHeader = true }
-    if (code === 2 && val !== 'HEADER' && inHeader) { currentVar = val }
+    if (code === 9 && inHeader) { currentVar = val }  // DXF header var names use group code 9, not 2
     if (inHeader && currentVar === '$INSUNITS' && code === 70) { insunits = parseInt(val, 10); break }
   }
   let [unitName, unitFactor] = INSUNITS_MAP[insunits] || ['unknown', null]

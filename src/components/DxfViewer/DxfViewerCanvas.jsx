@@ -93,8 +93,17 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
         const url = URL.createObjectURL(blob)
         blobUrlRef.current = url
 
+        // Offload DXF parse to a web worker so the main thread never freezes.
+        // Critical for large files (100+ MB DXF). Without a worker, the browser
+        // UI locks up completely during the geometry build phase.
+        const workerFactory = () => new Worker(
+          new URL('../../workers/dxf-viewer.worker.js', import.meta.url),
+          { type: 'module' }
+        )
+
         await viewer.Load({
           url,
+          workerFactory,
           progressCbk: (phase, loaded, total) => {
             if (!cancelled) {
               const pct = total > 0 ? Math.round((loaded / total) * 100) : 0

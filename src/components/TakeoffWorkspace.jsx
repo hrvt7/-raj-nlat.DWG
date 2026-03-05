@@ -539,6 +539,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── DWG conversion state ───────────────────────────────────────────────────
   const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
+  const [dwgError, setDwgError] = useState(null)     // actual error message for display
   const [viewerFile, setViewerFile] = useState(null)  // synthetic DXF File for DxfViewerCanvas
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -566,6 +567,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setWallSplits({})
     setCableEstimate(null)
     setDwgStatus(null)
+    setDwgError(null)
     setViewerFile(null)
     setUnitOverride(null)
 
@@ -607,31 +609,70 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       let result
 
       if (ext === 'dwg') {
-        // ── CloudConvert DWG → DXF conversion ──────────────────────────────
+        // ── CloudConvert DWG → DXF: direct-upload architecture ─────────────
+        // 1. Our server creates the CC job → returns upload URL (no file bytes to server)
+        // 2. Browser uploads directly to CloudConvert S3 (no Vercel body/timeout limits)
+        // 3. Browser polls our server for job status
+        // 4. Browser downloads DXF directly from CloudConvert CDN
         setDwgStatus('converting')
+        setDwgError(null)
         let dxfText = null
         try {
-          const base64 = await fileToBase64(f)
           const apiUrl = import.meta.env.VITE_API_URL || ''
-          const res = await fetch(`${apiUrl}/api/convert-dwg`, {
+
+          // Step 1: Create CloudConvert job (our server, tiny JSON request)
+          const createRes = await fetch(`${apiUrl}/api/convert-dwg`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filename: f.name, data: base64 }),
+            body: JSON.stringify({ filename: f.name }),
           })
-          const json = await res.json()
-          if (!res.ok || !json.success) throw new Error(json.error || `CloudConvert API error: ${res.status}`)
-          if (json.data) {
-            dxfText = atob(json.data)
-          } else if (json.dxfText) {
-            dxfText = json.dxfText
-          } else if (json.dxf) {
-            dxfText = atob(json.dxf)
-          } else {
-            throw new Error('A konverzió nem adott vissza DXF adatot.')
+          const createJson = await createRes.json()
+          if (!createRes.ok || !createJson.success) {
+            throw new Error(createJson.error || `Job létrehozása sikertelen (${createRes.status})`)
           }
+          const { jobId, uploadUrl, uploadParams } = createJson
+
+          // Step 2: Upload file directly from browser to CloudConvert S3
+          // (file never passes through our Vercel function — no size or timeout issue)
+          const formData = new FormData()
+          for (const [key, val] of Object.entries(uploadParams)) {
+            formData.append(key, val)
+          }
+          formData.append('file', f)
+          const uploadRes = await fetch(uploadUrl, { method: 'POST', body: formData })
+          if (!uploadRes.ok) {
+            throw new Error(`Fájl feltöltése CloudConvert-re sikertelen (HTTP ${uploadRes.status})`)
+          }
+
+          // Step 3: Poll via our server until conversion finishes (max 2 minutes)
+          let downloadUrl = null
+          const pollStart = Date.now()
+          const MAX_POLL_MS = 120_000
+          while (Date.now() - pollStart < MAX_POLL_MS) {
+            await new Promise(r => setTimeout(r, 3000))
+            const pollRes = await fetch(`${apiUrl}/api/convert-dwg`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jobId }),
+            })
+            const pollJson = await pollRes.json()
+            if (!pollRes.ok || !pollJson.success) {
+              throw new Error(pollJson.error || 'Státusz lekérdezése sikertelen')
+            }
+            if (pollJson.status === 'finished') { downloadUrl = pollJson.downloadUrl; break }
+            if (pollJson.status === 'error') throw new Error(pollJson.error || 'CloudConvert konverzió hiba')
+          }
+          if (!downloadUrl) throw new Error('CloudConvert időtúllépés (120 mp). Próbáld újra.')
+
+          // Step 4: Download converted DXF directly from CloudConvert CDN
+          const dxfRes = await fetch(downloadUrl)
+          if (!dxfRes.ok) throw new Error(`DXF letöltése sikertelen (HTTP ${dxfRes.status})`)
+          dxfText = await dxfRes.text()
+
         } catch (convErr) {
           console.warn('DWG → DXF conversion failed:', convErr)
           setDwgStatus('failed')
+          setDwgError(convErr.message)
           setParsedDxf({ success: false, _dwgFailed: true })
           return
         }
@@ -995,8 +1036,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.yellow, textAlign: 'center' }}>
                     DWG konverzió sikertelen
                   </div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, textAlign: 'center', maxWidth: 340, lineHeight: 1.7 }}>
-                    A CloudConvert API nem tudta konvertálni a fájlt.<br />
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, textAlign: 'center', maxWidth: 360, lineHeight: 1.7 }}>
+                    {dwgError
+                      ? <span style={{ color: '#FF9090' }}>{dwgError}</span>
+                      : <>A CloudConvert API nem tudta konvertálni a fájlt.</>
+                    }<br />
                     Exportáld DXF formátumban, majd töltsd fel újra:
                   </div>
                   <div style={{
