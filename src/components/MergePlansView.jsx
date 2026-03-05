@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { C, Button, Badge } from './ui.jsx'
 import { COUNT_CATEGORIES } from './DxfViewer/DxfToolbar.jsx'
 import { getPlanAnnotations, getPlanThumbnail } from '../data/planStore.js'
-import { loadAssemblies } from '../data/store.js'
+import { loadAssemblies, loadSettings } from '../data/store.js'
 import { ASSEMBLY_TYPES, addUserOverride, getAssemblyTypeLabel } from '../data/symbolDictionary.js'
 import { mergeParseResults, getAggregatedRows, deduplicateUnknowns } from '../utils/mergeParseResults.js'
 import { downloadCSV } from '../utils/csvExport.js'
@@ -458,19 +458,21 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
       totalMaterial += matCost * count
       totalLabor += (asm.labor_minutes || 0) * count
     }
+    const hourlyRate = Number(loadSettings()?.labor?.hourly_rate) || 9000
     return {
       materialCost: totalMaterial,
       laborMinutes: totalLabor,
       laborHours: totalLabor / 60,
-      laborCost: (totalLabor / 60) * 9000,
-      grandTotal: totalMaterial + (totalLabor / 60) * 9000,
+      laborCost: (totalLabor / 60) * hourlyRate,
+      grandTotal: totalMaterial + (totalLabor / 60) * hourlyRate,
     }
   }, [assignments, mergeResult.total, assemblies])
 
   // CSV export for DXF aggregation
   const handleExportCSV = useCallback(() => {
-    const VAT = 27
-    const HOURLY = 9000
+    const settings = loadSettings()
+    const VAT = Number(settings?.labor?.vat_percent) || 27
+    const HOURLY = Number(settings?.labor?.hourly_rate) || 9000
     const header = ['Tétel', 'Mennyiség', 'Egység', 'Anyagköltség (Ft)', 'Munkadíj (Ft)',
       'Összeg nettó (Ft)', 'ÁFA (Ft)', 'Összeg bruttó (Ft)']
     const dataRows = rows.map(row => {
@@ -907,13 +909,14 @@ function PdfRecognitionTab({ plans, onCreateQuote }) {
       totalLabor += (asm.labor_minutes || 0) * data.total
     }
     const cableCost = totalCableM * 800
+    const hourlyRate = Number(loadSettings()?.labor?.hourly_rate) || 9000
     return {
       materialCost: totalMaterial,
       cableCost,
       laborMinutes: totalLabor,
       laborHours: totalLabor / 60,
-      laborCost: (totalLabor / 60) * 9000,
-      grandTotal: totalMaterial + cableCost + (totalLabor / 60) * 9000,
+      laborCost: (totalLabor / 60) * hourlyRate,
+      grandTotal: totalMaterial + cableCost + (totalLabor / 60) * hourlyRate,
     }
   }, [assignments, aggregated, assemblies, totalCableM])
 

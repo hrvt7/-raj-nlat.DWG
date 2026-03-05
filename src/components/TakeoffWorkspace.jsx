@@ -834,7 +834,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       if (items.length) setRightTab('recognize')
     } catch (err) {
       console.error('Parse error:', err)
-      setParsedDxf({ success: false, error: err.message })
+      setParsedDxf({ success: false, error: err.message || String(err) })
     } finally {
       setParsePending(false)
     }
@@ -959,11 +959,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Accept all high-confidence ────────────────────────────────────────────
   const acceptAllHighConf = () => {
     const newOverrides = { ...asmOverrides }
+    let changed = false
     for (const item of recognizedItems) {
       if (item.confidence >= 0.8 && item.asmId && newOverrides[item.blockName] === undefined) {
-        // Already accepted by default — nothing to do; just transition to takeoff
+        // Explicitly confirm the auto-matched assembly so manual overrides won't revert it
+        newOverrides[item.blockName] = item.asmId
+        changed = true
       }
     }
+    if (changed) setAsmOverrides(newOverrides)
     setRightTab('takeoff')
   }
 
