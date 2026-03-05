@@ -729,7 +729,7 @@ function HeroSection({ onStart }) {
         {/* ── Headline – block spans = guaranteed 2 lines ── */}
         <FadeIn>
           <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(22px, 3.2vw, 46px)', color: '#F0F0F0', marginBottom: 12, letterSpacing: '-0.03em' }}>
-            <span style={{ display: 'block', whiteSpace: 'nowrap' }}>DXF-ből profi árajánlat</span>
+            <span className="hero-nowrap" style={{ display: 'block', whiteSpace: 'nowrap' }}>DXF-ből profi árajánlat</span>
             <span style={{ display: 'block', color: '#00E5A0', textShadow: '0 0 50px rgba(0,229,160,0.35)' }}>2 perc alatt</span>
           </h1>
         </FadeIn>
@@ -1014,7 +1014,7 @@ const TRADE_BLOCKS = [
       'PA rendszer, kaputelefon – teljes gyengeáram szakterület',
     ],
     svgKey: 'gyengaram',
-    reverse: true,
+    reverse: false,
   },
   {
     id: 'tuzjelzo',
@@ -1044,7 +1044,7 @@ function TradeSupportSection({ onStart }) {
 
       {/* ── Section header ── */}
       <FadeIn>
-        <div style={{ textAlign: 'center', marginBottom: 52 }}>
+        <div className="section-header-gap" style={{ textAlign: 'center', marginBottom: 52 }}>
           <div style={{
             display: 'inline-block', marginBottom: 20,
             background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.18)',
@@ -1070,7 +1070,7 @@ function TradeSupportSection({ onStart }) {
 
       {/* ── Tab pills ── */}
       <FadeIn delay={0.1}>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 52, flexWrap: 'wrap' }}>
+        <div className="tabs-row" style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 52, flexWrap: 'wrap' }}>
           {TRADE_BLOCKS.map((t, i) => (
             <button key={t.id} onClick={() => setActive(i)} style={{
               padding: '9px 24px', borderRadius: 100,
@@ -1089,11 +1089,11 @@ function TradeSupportSection({ onStart }) {
       </FadeIn>
 
       {/* ── Active trade content ── */}
-      <div key={active} style={{ animation: 'nt-tab-in 0.32s ease' }}>
+      <div key={active} style={{ animation: 'nt-tab-in 0.42s cubic-bezier(0.16,1,0.3,1)' }}>
         <div
-          className="trade-block-grid"
+          className="trade-block-grid trade-block-inner"
           style={{
-            maxWidth: 1280, margin: '0 auto', padding: '0 48px 20px',
+            maxWidth: 1280, margin: '0 auto',
             display: 'grid', gridTemplateColumns: '1fr 1fr',
             gap: 72, alignItems: 'center',
           }}
@@ -1309,7 +1309,7 @@ const NT_TRADES = [
       ['CCTV és beléptető', 'IP kamera, RFID olvasó, elektromos zár, vezérlőegység'],
       ['PA és kaputelefon', 'Teljes gyengeáram szakterület lefedve'],
     ],
-    reverse: true,
+    reverse: false,
   },
   {
     pfx: 'ntt', color: '#FF6B6B', tradeName: 'TŰZJELZŐ',
@@ -1497,7 +1497,7 @@ function NormTimeSection() {
 
         {/* ── Section header ── */}
         <FadeIn>
-          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <div className="section-header-gap" style={{ textAlign: 'center', marginBottom: 48 }}>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>
               Normaidő Kalkuláció
             </div>
@@ -1513,7 +1513,7 @@ function NormTimeSection() {
 
         {/* ── Trade tabs ── */}
         <FadeIn delay={0.1}>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 52, flexWrap: 'wrap' }}>
+          <div className="tabs-row" style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 52, flexWrap: 'wrap' }}>
             {NT_TRADES.map((t, i) => (
               <button
                 key={t.pfx}
@@ -1541,7 +1541,7 @@ function NormTimeSection() {
         </FadeIn>
 
         {/* ── Active trade content ── */}
-        <div key={active} style={{ animation: 'nt-tab-in 0.32s ease' }}>
+        <div key={active} style={{ animation: 'nt-tab-in 0.42s cubic-bezier(0.16,1,0.3,1)' }}>
           <div
             className="normtime-grid"
             style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center' }}
@@ -1944,7 +1944,7 @@ function PricingSection() {
 
         {/* Single plan card */}
         <FadeIn delay={0.1}>
-          <div style={{
+          <div className="pricing-card" style={{
             background: 'linear-gradient(145deg, #0C1C15 0%, #08120E 100%)',
             border: '1px solid rgba(0,229,160,0.28)',
             borderRadius: 24, padding: '44px 44px 40px',
@@ -1952,7 +1952,7 @@ function PricingSection() {
             boxShadow: '0 0 80px rgba(0,229,160,0.08)',
           }}>
             {/* Top badge */}
-            <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: '#00E5A0', color: '#0A0A0A', fontFamily: 'Syne', fontWeight: 800, fontSize: 10, padding: '4px 20px', borderRadius: 999, whiteSpace: 'nowrap', letterSpacing: '0.1em' }}>
+            <div className="pricing-badge" style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: '#00E5A0', color: '#0A0A0A', fontFamily: 'Syne', fontWeight: 800, fontSize: 10, padding: '4px 20px', borderRadius: 999, whiteSpace: 'nowrap', letterSpacing: '0.1em' }}>
               TELJES CSOMAG · MINDEN FUNKCIÓ
             </div>
 
@@ -2133,10 +2133,10 @@ export default function Landing({ onStart }) {
           .ha-desktop { display: none !important; }
         }
 
-        /* ─ NormTime tab-switch fade-slide animation ─ */
+        /* ─ Tab-switch fade-slide animation ─ */
         @keyframes nt-tab-in {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: translateY(22px) scale(0.984); filter: blur(2px); }
+          to   { opacity: 1; transform: translateY(0)   scale(1);     filter: blur(0);   }
         }
 
         /* ─ hero subtext line break: visible only on wide screens ─ */
@@ -2144,6 +2144,11 @@ export default function Landing({ onStart }) {
         @media (max-width: 600px) {
           .hero-br { display: none !important; }
         }
+
+        /* ─ Trade block inner padding ─ */
+        .trade-block-inner { padding: 0 48px 20px; }
+        @media (max-width: 900px) { .trade-block-inner { padding: 0 0 20px; } }
+        @media (max-width: 480px) { .trade-block-inner { padding: 0 0 12px; } }
 
         /* ─ TWO-COLUMN grids ─ */
         @media (max-width: 900px) {
@@ -2207,6 +2212,28 @@ export default function Landing({ onStart }) {
         /* ─ Pricing toggle ─ */
         @media (max-width: 400px) {
           .billing-toggle button { padding: 6px 12px !important; font-size: 11px !important; }
+        }
+
+        /* ─ PRICING card responsive ─ */
+        @media (max-width: 540px) {
+          .pricing-card { padding: 36px 20px 28px !important; }
+          .pricing-badge { font-size: 9px !important; padding: 3px 12px !important; left: 50% !important; transform: translateX(-50%) !important; white-space: normal !important; text-align: center !important; }
+        }
+
+        /* ─ TAB row spacing on mobile ─ */
+        @media (max-width: 640px) {
+          .tabs-row { margin-bottom: 32px !important; gap: 6px !important; }
+          .tabs-row button { padding: 7px 16px !important; font-size: 11px !important; }
+        }
+
+        /* ─ Section header gap reduction on mobile ─ */
+        @media (max-width: 640px) {
+          .section-header-gap { margin-bottom: 36px !important; }
+        }
+
+        /* ─ Hero headline: allow wrap on very small screens ─ */
+        @media (max-width: 360px) {
+          .hero-nowrap { white-space: normal !important; }
         }
       `}</style>
       <GlobalMouseGlow />
