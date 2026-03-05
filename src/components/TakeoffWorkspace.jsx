@@ -9,8 +9,9 @@ const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
-import { calcProductivityFactor, WALL_FACTORS } from '../data/workItemsDb.js'
+import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
+import { computePricing } from '../utils/pricing.js'
 import ConfidenceBadge from './ConfidenceBadge.jsx'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
@@ -112,85 +113,7 @@ function detectDxfCableLengths(parsedDxf) {
   }
 }
 
-// ─── Pricing computation ──────────────────────────────────────────────────────
-function computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode }) {
-  const ctxMultiplier = calcProductivityFactor(context)  // height + access + project_type
-  // difficulty_mode: 'normal' → p50, 'difficult' → avg(p50,p90), 'very_difficult' → p90
-  const mode = difficultyMode || 'normal'
-
-  let materialCost = 0, laborHours = 0
-  const lines = []
-
-  for (const row of takeoffRows) {
-    const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
-    if (!asm) continue
-
-    // Build per-wall-type splits: [[wallKey, qty], ...]
-    // row.wallSplits = { drywall: N, ytong: N, brick: N, concrete: N } when user has split the qty
-    // Fall back to single wallType (or brick) when no splits set
-    const splits = row.wallSplits
-      ? Object.entries(row.wallSplits).filter(([, n]) => n > 0)
-      : [[row.wallType || 'brick', row.qty]]
-
-    for (const [wallKey, splitQty] of splits) {
-      if (splitQty <= 0) continue
-      const wallFactor = WALL_FACTORS[wallKey] ?? 1.0
-
-      for (const comp of (asm.components || [])) {
-        const compQty = comp.qty * splitQty
-        if (comp.itemType === 'workitem') {
-          const wi = workItems.find(w => w.code === comp.itemCode) || workItems.find(w => w.name === comp.name)
-          // Select norm time based on difficulty mode
-          const baseNorm = wi
-            ? (mode === 'very_difficult' ? wi.p90
-              : mode === 'difficult' ? (wi.p50 + wi.p90) / 2
-              : wi.p50)
-            : 0
-          const normMin = baseNorm * ctxMultiplier * wallFactor
-          const hours = (normMin * compQty) / 60
-          laborHours += hours
-          lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
-        } else {
-          const mat = materials.find(m => m.code === comp.itemCode) || materials.find(m => m.name === comp.name)
-          const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
-          const cost = unitPrice * compQty
-          materialCost += cost
-          lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours: 0, materialCost: cost, type: 'material' })
-        }
-      }
-    }
-  }
-
-  // Cable estimate integration
-  if (cableEstimate && cableEstimate.cable_total_m > 0) {
-    const cableTypes = cableEstimate.cable_by_type || {}
-    const cableData = [
-      { code: 'MAT-020', fallback: 'NYM-J 3×1.5', m: cableTypes.light_m || 0 },
-      { code: 'MAT-021', fallback: 'NYM-J 3×2.5', m: cableTypes.socket_m || 0 },
-      { code: 'MAT-021', fallback: 'NYM-J 3×2.5', m: cableTypes.switch_m || 0 },
-      { code: 'MAT-022', fallback: 'NYM-J 5×2.5', m: cableTypes.other_m || 0 },
-    ]
-    for (const c of cableData) {
-      if (c.m <= 0) continue
-      const mat = materials.find(m => m.code === c.code) || materials.find(m => m.name?.includes(c.fallback))
-      const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
-      const cost = unitPrice * c.m
-      materialCost += cost
-      lines.push({ name: c.fallback, qty: Math.round(c.m), unit: 'm', hours: 0, materialCost: cost, type: 'cable' })
-    }
-    // Cable labor (apply context multiplier for consistency with assembly labor)
-    const cableNormMin = 3 // min/m average
-    const cableHours = (cableEstimate.cable_total_m * cableNormMin * ctxMultiplier) / 60
-    laborHours += cableHours
-  }
-
-  const laborCost = laborHours * hourlyRate
-  const subtotal = materialCost + laborCost
-  const markupAmount = subtotal * markup
-  const total = subtotal + markupAmount
-
-  return { materialCost, laborCost, laborHours, subtotal, markup: markupAmount, total, lines }
-}
+// computePricing is imported from '../utils/pricing.js' — shared with MergePlansView
 
 // ─── SVG Overlay for block positions ─────────────────────────────────────────
 function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems, highlightBlock, onBlockClick, canvasRef }) {
@@ -528,7 +451,7 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 }
 
 // ─── Main TakeoffWorkspace ────────────────────────────────────────────────────
-export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel }) {
+export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData }) {
   // ── File & parse state ────────────────────────────────────────────────────
   const [file, setFile] = useState(null)
   const [parsedDxf, setParsedDxf] = useState(null)
@@ -590,6 +513,42 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     window.addEventListener('resize', fn)
     return () => window.removeEventListener('resize', fn)
   }, [])
+
+  // ── Pre-fill from MergePlansView (DXF / PDF / Manual merge) ─────────────
+  // When the user clicks "Ajánlat létrehozása" in MergePlansView, initialData
+  // carries the counted assembly quantities.  We synthesise recognizedItems so
+  // the normal takeoffRows pipeline picks them up, then jump to the Felmérés tab.
+  useEffect(() => {
+    if (!initialData) return
+
+    const syntheticItems = []
+
+    if (initialData.source === 'dxf_analysis' && initialData.countByAssemblyType) {
+      for (const [asmType, count] of Object.entries(initialData.countByAssemblyType)) {
+        const asmId = initialData.assignments?.[asmType]
+        if (asmId && count > 0)
+          syntheticItems.push({ blockName: `PREFILL_${asmType}`, qty: count, asmId, confidence: 1.0 })
+      }
+    } else if (initialData.source === 'pdf_recognition' && initialData.recognizedItems) {
+      for (const item of initialData.recognizedItems) {
+        if (item.asmId && item.total > 0)
+          syntheticItems.push({ blockName: `PREFILL_${item._pdfType || item.label}`, qty: item.total, asmId: item.asmId, confidence: 1.0 })
+      }
+    } else if (initialData.countByCategory && initialData.assignments) {
+      // ManualMergeTab
+      for (const [cat, count] of Object.entries(initialData.countByCategory)) {
+        const asmId = initialData.assignments?.[cat]
+        if (asmId && count > 0)
+          syntheticItems.push({ blockName: `PREFILL_${cat}`, qty: count, asmId, confidence: 1.0 })
+      }
+    }
+
+    if (syntheticItems.length > 0) {
+      setRecognizedItems(syntheticItems)
+      setRightTab('takeoff')
+    }
+    if (initialData.planName) setQuoteName(initialData.planName)
+  }, [initialData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Resizable split panel ─────────────────────────────────────────────────
   // panelRatio: left panel width as % of the container (clamp 25–80)

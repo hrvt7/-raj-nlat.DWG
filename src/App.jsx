@@ -697,6 +697,7 @@ function SaaSShell() {
               <TakeoffWorkspace
                 settings={settings}
                 materials={materials}
+                initialData={prefillData}
                 onSaved={quote => { setPrefillData(null); handleQuoteSaved(quote) }}
                 onCancel={() => { setPrefillData(null); setPage('quotes') }}
               />

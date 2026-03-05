@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { C, Button, Badge } from './ui.jsx'
 import { COUNT_CATEGORIES } from './DxfViewer/DxfToolbar.jsx'
 import { getPlanAnnotations, getPlanThumbnail } from '../data/planStore.js'
-import { loadAssemblies, loadSettings } from '../data/store.js'
+import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings } from '../data/store.js'
+import { computePricing } from '../utils/pricing.js'
 import { ASSEMBLY_TYPES, addUserOverride, getAssemblyTypeLabel } from '../data/symbolDictionary.js'
 import { mergeParseResults, getAggregatedRows, deduplicateUnknowns } from '../utils/mergeParseResults.js'
 import { downloadCSV } from '../utils/csvExport.js'
@@ -86,6 +87,8 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
   const [socketHeight, setSocketHeight] = useState(0.3)
   const [assignments, setAssignments] = useState({})
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
+  const workItems  = useMemo(() => { try { return loadWorkItems()  } catch { return [] } }, [])
+  const materials  = useMemo(() => { try { return loadMaterials()  } catch { return [] } }, [])
 
   useEffect(() => {
     Promise.all(plans.map(async p => {
@@ -172,25 +175,29 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
   }, [mergedMarkers, bestScale, ceilingHeight, socketHeight])
 
   const costEstimate = useMemo(() => {
-    let totalMaterial = 0, totalLabor = 0
-    for (const cat of Object.keys(countByCategory)) {
-      const asmId = assignments[cat]
-      if (!asmId) continue
-      const asm = assemblies.find(a => a.id === asmId)
-      if (!asm) continue
-      const qty = countByCategory[cat]
-      const matCost = (asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0)
-      totalMaterial += matCost * qty
-      totalLabor += (asm.labor_minutes || 0) * qty
+    const settings  = loadSettings()
+    const hourlyRate = Number(settings?.labor?.hourly_rate) || 9000
+    const vatPct     = Number(settings?.labor?.vat_percent)  || 27
+
+    const takeoffRows = Object.entries(countByCategory)
+      .map(([cat, qty]) => ({ asmId: assignments[cat], qty, variantId: null, wallSplits: null }))
+      .filter(r => r.asmId && r.qty > 0)
+
+    const cableTotal  = cableData ? cableData.totalWithWaste : 0
+    const cableEst    = cableTotal > 0
+      ? { cable_total_m: cableTotal, cable_by_type: { socket_m: cableTotal } }
+      : null
+
+    if (takeoffRows.length === 0 && !cableEst) {
+      return { materialCost: 0, laborCost: 0, laborHours: 0, subtotal: 0, markup: 0, total: 0, lines: [], vatPct, totalCable: cableTotal }
     }
-    const cableTotal = cableData ? cableData.totalWithWaste : 0
-    const cableCost = cableTotal * 800
-    return {
-      materialCost: totalMaterial, cableCost, laborMinutes: totalLabor,
-      laborHours: totalLabor / 60, laborCost: (totalLabor / 60) * 9000,
-      totalCable: cableTotal, grandTotal: totalMaterial + cableCost + (totalLabor / 60) * 9000,
-    }
-  }, [assignments, countByCategory, assemblies, cableData])
+    const result = computePricing({
+      takeoffRows, assemblies, workItems, materials,
+      context: null, markup: 0, hourlyRate,
+      cableEstimate: cableEst, difficultyMode: 'normal',
+    })
+    return { ...result, vatPct, totalCable: cableTotal }
+  }, [assignments, countByCategory, assemblies, workItems, materials, cableData])
 
   return (
     <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
@@ -343,16 +350,18 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
 
             {/* Cost summary */}
             <SectionCard title="Költségbecslés">
-              <Row label="Anyagköltség" value={`${costEstimate.materialCost.toLocaleString('hu-HU')} Ft`} />
-              <Row label={`Kábel (${costEstimate.totalCable.toFixed(0)} m)`} value={`${costEstimate.cableCost.toLocaleString('hu-HU')} Ft`} />
-              <Row label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
+              <Row label="Anyagköltség" value={`${Math.round(costEstimate.materialCost).toLocaleString('hu-HU')} Ft`} />
+              {(costEstimate.totalCable || 0) > 0 && (
+                <Row label={`Kábel (~${Math.round(costEstimate.totalCable || 0)} m)`} value={`— (anyagköltségbe számítva)`} />
+              )}
+              <Row label={`Munkadíj (${(costEstimate.laborHours || 0).toFixed(1)} óra)`} value={`${Math.round(costEstimate.laborCost).toLocaleString('hu-HU')} Ft`} />
               <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
-                <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>{costEstimate.grandTotal.toLocaleString('hu-HU')} Ft</span>
+                <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>{Math.round(costEstimate.subtotal || costEstimate.total || 0).toLocaleString('hu-HU')} Ft</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó (27% ÁFA)</span>
-                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{(costEstimate.grandTotal * 1.27).toLocaleString('hu-HU')} Ft</span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó ({costEstimate.vatPct ?? 27}% ÁFA)</span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{Math.round((costEstimate.subtotal || 0) * (1 + (costEstimate.vatPct ?? 27) / 100)).toLocaleString('hu-HU')} Ft</span>
               </div>
             </SectionCard>
 
@@ -380,6 +389,8 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
   const [filterFloor, setFilterFloor] = useState('') // '' = all
   const [filterDiscipline, setFilterDiscipline] = useState('')
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
+  const workItems  = useMemo(() => { try { return loadWorkItems()  } catch { return [] } }, [])
+  const materials  = useMemo(() => { try { return loadMaterials()  } catch { return [] } }, [])
 
   // Only show plans that have been parsed (have parseResult with blocks)
   const parsedPlans = useMemo(() =>
@@ -446,55 +457,71 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
     })
   }, [mergeResult, rows, disciplineList])
 
-  // Cost estimate for DXF
+  // Cost estimate for DXF — uses the shared computePricing engine (same as TakeoffWorkspace)
   const costEstimate = useMemo(() => {
-    let totalMaterial = 0, totalLabor = 0
-    for (const [asmType, count] of Object.entries(mergeResult.total)) {
-      const asmId = assignments[asmType]
-      if (!asmId) continue
-      const asm = assemblies.find(a => a.id === asmId)
-      if (!asm) continue
-      const matCost = (asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0)
-      totalMaterial += matCost * count
-      totalLabor += (asm.labor_minutes || 0) * count
-    }
-    const hourlyRate = Number(loadSettings()?.labor?.hourly_rate) || 9000
-    return {
-      materialCost: totalMaterial,
-      laborMinutes: totalLabor,
-      laborHours: totalLabor / 60,
-      laborCost: (totalLabor / 60) * hourlyRate,
-      grandTotal: totalMaterial + (totalLabor / 60) * hourlyRate,
-    }
-  }, [assignments, mergeResult.total, assemblies])
-
-  // CSV export for DXF aggregation
-  const handleExportCSV = useCallback(() => {
     const settings = loadSettings()
-    const VAT = Number(settings?.labor?.vat_percent) || 27
-    const HOURLY = Number(settings?.labor?.hourly_rate) || 9000
+    const hourlyRate = Number(settings?.labor?.hourly_rate) || 9000
+    const vatPct     = Number(settings?.labor?.vat_percent)  || 27
+
+    // Convert assemblyType→count map into takeoffRows format
+    const takeoffRows = Object.entries(mergeResult.total)
+      .filter(([asmType, count]) => assignments[asmType] && count > 0)
+      .map(([asmType, count]) => ({
+        asmId: assignments[asmType],
+        qty:   count,
+        variantId: null,
+        wallSplits: null,
+      }))
+
+    if (takeoffRows.length === 0) {
+      return { materialCost: 0, laborCost: 0, laborHours: 0, subtotal: 0, markup: 0, total: 0, lines: [], vatPct }
+    }
+
+    const result = computePricing({
+      takeoffRows, assemblies, workItems, materials,
+      context: null,        // no height/access multiplier at merge stage
+      markup: 0,
+      hourlyRate,
+      cableEstimate: null,
+      difficultyMode: 'normal',
+    })
+    return { ...result, vatPct }
+  }, [assignments, mergeResult.total, assemblies, workItems, materials])
+
+  // CSV export — uses costEstimate lines from computePricing (same engine as TakeoffWorkspace)
+  const handleExportCSV = useCallback(() => {
+    const vatPct = costEstimate.vatPct ?? 27
     const header = ['Tétel', 'Mennyiség', 'Egység', 'Anyagköltség (Ft)', 'Munkadíj (Ft)',
       'Összeg nettó (Ft)', 'ÁFA (Ft)', 'Összeg bruttó (Ft)']
+
+    // Per-row breakdown using computePricing per assembly type
+    const settings = loadSettings()
+    const hourlyRate = Number(settings?.labor?.hourly_rate) || 9000
     const dataRows = rows.map(row => {
       const asmId = assignments[row.assemblyType]
-      const asm = asmId ? assemblies.find(a => a.id === asmId) : null
-      const matCost = asm ? Math.round((asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0) * row.total) : 0
-      const laborMin = asm ? (asm.labor_minutes || 0) * row.total : 0
-      const laborCost = Math.round(laborMin / 60 * HOURLY)
-      const net = matCost + laborCost
-      const vat = Math.round(net * VAT / 100)
-      return [row.label, row.total, 'db', matCost, laborCost, net, vat, net + vat]
+      if (!asmId) return [row.label, row.total, 'db', 0, 0, 0, 0, 0]
+      const singleResult = computePricing({
+        takeoffRows: [{ asmId, qty: row.total, variantId: null, wallSplits: null }],
+        assemblies, workItems, materials, context: null, markup: 0, hourlyRate,
+        cableEstimate: null, difficultyMode: 'normal',
+      })
+      const matCost  = Math.round(singleResult.materialCost)
+      const laborCst = Math.round(singleResult.laborCost)
+      const net      = Math.round(singleResult.subtotal)
+      const vat      = Math.round(net * vatPct / 100)
+      return [row.label, row.total, 'db', matCost, laborCst, net, vat, net + vat]
     })
-    const totMat = costEstimate.materialCost
+
+    const totMat   = Math.round(costEstimate.materialCost)
     const totLabor = Math.round(costEstimate.laborCost)
-    const totNet = Math.round(costEstimate.grandTotal)
-    const totVat = Math.round(totNet * VAT / 100)
-    const allRows = [header, ...dataRows, [],
+    const totNet   = Math.round(costEstimate.subtotal)
+    const totVat   = Math.round(totNet * vatPct / 100)
+    const allRows  = [header, ...dataRows, [],
       ['ÖSSZESEN', grandTotal, '', totMat, totLabor, totNet, totVat, totNet + totVat]]
     const BOM = '\uFEFF'
     const csv = BOM + allRows.map(r => r.join(';')).join('\r\n')
     downloadCSV(csv, `dxf_osszesito_${new Date().toISOString().slice(0, 10)}.csv`)
-  }, [rows, assignments, assemblies, costEstimate, grandTotal])
+  }, [rows, assignments, assemblies, workItems, materials, costEstimate, grandTotal])
 
   // Save unknown symbol assignments
   const handleSaveUnknowns = useCallback(() => {
@@ -722,18 +749,25 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
               </SectionCard>
             )}
 
-            {/* Cost estimate */}
+            {/* Cost estimate — uses same computePricing engine as TakeoffWorkspace */}
             {rows.length > 0 && (
               <SectionCard title="Költségbecslés (DXF)">
-                <Row label="Anyagköltség" value={`${costEstimate.materialCost.toLocaleString('hu-HU')} Ft`} />
-                <Row label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
+                {costEstimate.total === 0 && Object.values(assignments).every(v => !v) && (
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 10 }}>
+                    ℹ Rendelj hozzá assembly-ket a fenti panelben az árak megjelenítéséhez
+                  </div>
+                )}
+                <Row label="Anyagköltség" value={`${Math.round(costEstimate.materialCost).toLocaleString('hu-HU')} Ft`} />
+                <Row label={`Munkadíj (${(costEstimate.laborHours || 0).toFixed(1)} óra)`} value={`${Math.round(costEstimate.laborCost).toLocaleString('hu-HU')} Ft`} />
                 <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
-                  <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>{costEstimate.grandTotal.toLocaleString('hu-HU')} Ft</span>
+                  <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>{Math.round(costEstimate.subtotal || costEstimate.total || 0).toLocaleString('hu-HU')} Ft</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó (27% ÁFA)</span>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{(costEstimate.grandTotal * 1.27).toLocaleString('hu-HU')} Ft</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó ({costEstimate.vatPct ?? 27}% ÁFA)</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>
+                    {Math.round((costEstimate.subtotal || 0) * (1 + (costEstimate.vatPct ?? 27) / 100)).toLocaleString('hu-HU')} Ft
+                  </span>
                 </div>
               </SectionCard>
             )}
@@ -818,6 +852,8 @@ function PdfRecognitionTab({ plans, onCreateQuote }) {
   const [selected, setSelected] = useState({})
   const [assignments, setAssignments] = useState({}) // _pdfType → assemblyId override
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
+  const workItems  = useMemo(() => { try { return loadWorkItems()  } catch { return [] } }, [])
+  const materials  = useMemo(() => { try { return loadMaterials()  } catch { return [] } }, [])
 
   // Plans with successful Vision AI recognition
   const recognizedPlans = useMemo(() =>
@@ -896,29 +932,38 @@ function PdfRecognitionTab({ plans, onCreateQuote }) {
     return Math.round(all.reduce((s, v) => s + v, 0) / all.length * 100)
   }, [aggregated])
 
-  // Cost estimate: pre-mapped asmId from pdfTakeoff + user overrides
+  // Cost estimate: computePricing (same engine as TakeoffWorkspace + DxfAnalysisTab)
   const costEstimate = useMemo(() => {
-    let totalMaterial = 0, totalLabor = 0
-    for (const [type, data] of Object.entries(aggregated)) {
-      const asmId = assignments[type] || data.asmId
-      if (!asmId) continue
-      const asm = assemblies.find(a => a.id === asmId)
-      if (!asm) continue
-      const matCost = (asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0)
-      totalMaterial += matCost * data.total
-      totalLabor += (asm.labor_minutes || 0) * data.total
+    const settings = loadSettings()
+    const hourlyRate = Number(settings?.labor?.hourly_rate) || 9000
+    const vatPct     = Number(settings?.labor?.vat_percent)  || 27
+
+    // Build takeoffRows: each PDF-recognised type + user assignment overrides
+    const takeoffRows = Object.entries(aggregated)
+      .map(([type, data]) => ({
+        asmId: assignments[type] || data.asmId,
+        qty:   data.total,
+        variantId: null,
+        wallSplits: null,
+      }))
+      .filter(r => r.asmId && r.qty > 0)
+
+    // Build a synthetic cable estimate from the summed cable metres across plans
+    const cableEst = totalCableM > 0
+      ? { cable_total_m: totalCableM, cable_by_type: { socket_m: totalCableM } }
+      : null
+
+    if (takeoffRows.length === 0 && !cableEst) {
+      return { materialCost: 0, laborCost: 0, laborHours: 0, subtotal: 0, markup: 0, total: 0, lines: [], vatPct }
     }
-    const cableCost = totalCableM * 800
-    const hourlyRate = Number(loadSettings()?.labor?.hourly_rate) || 9000
-    return {
-      materialCost: totalMaterial,
-      cableCost,
-      laborMinutes: totalLabor,
-      laborHours: totalLabor / 60,
-      laborCost: (totalLabor / 60) * hourlyRate,
-      grandTotal: totalMaterial + cableCost + (totalLabor / 60) * hourlyRate,
-    }
-  }, [assignments, aggregated, assemblies, totalCableM])
+
+    const result = computePricing({
+      takeoffRows, assemblies, workItems, materials,
+      context: null, markup: 0, hourlyRate,
+      cableEstimate: cableEst, difficultyMode: 'normal',
+    })
+    return { ...result, vatPct }
+  }, [assignments, aggregated, assemblies, workItems, materials, totalCableM])
 
   return (
     <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
@@ -1126,18 +1171,18 @@ function PdfRecognitionTab({ plans, onCreateQuote }) {
             {/* Cost estimate */}
             {pdfTypes.length > 0 && (
               <SectionCard title="Költségbecslés (PDF)">
-                <Row label="Anyagköltség" value={`${costEstimate.materialCost.toLocaleString('hu-HU')} Ft`} />
+                <Row label="Anyagköltség" value={`${Math.round(costEstimate.materialCost).toLocaleString('hu-HU')} Ft`} />
                 {totalCableM > 0 && (
-                  <Row label={`Kábel (~${Math.round(totalCableM)}m × 800 Ft/m)`} value={`${costEstimate.cableCost.toLocaleString('hu-HU')} Ft`} />
+                  <Row label={`Kábel (~${Math.round(totalCableM)} m)`} value={`(anyagköltségbe számítva)`} />
                 )}
-                <Row label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
+                <Row label={`Munkadíj (${(costEstimate.laborHours || 0).toFixed(1)} óra)`} value={`${Math.round(costEstimate.laborCost).toLocaleString('hu-HU')} Ft`} />
                 <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
-                  <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>{costEstimate.grandTotal.toLocaleString('hu-HU')} Ft</span>
+                  <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>{Math.round(costEstimate.subtotal || costEstimate.total || 0).toLocaleString('hu-HU')} Ft</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó (27% ÁFA)</span>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{(costEstimate.grandTotal * 1.27).toLocaleString('hu-HU')} Ft</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó ({costEstimate.vatPct ?? 27}% ÁFA)</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{Math.round((costEstimate.subtotal || 0) * (1 + (costEstimate.vatPct ?? 27) / 100)).toLocaleString('hu-HU')} Ft</span>
                 </div>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, marginTop: 8 }}>
                   ⚠ Vision AI becslés alapján — ellenőrizd DXF rajz alapján, ha elérhető
