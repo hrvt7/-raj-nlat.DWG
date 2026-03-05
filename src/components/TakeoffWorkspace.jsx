@@ -451,7 +451,7 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 }
 
 // ─── Main TakeoffWorkspace ────────────────────────────────────────────────────
-export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData }) {
+export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile }) {
   // ── File & parse state ────────────────────────────────────────────────────
   const [file, setFile] = useState(null)
   const [parsedDxf, setParsedDxf] = useState(null)
@@ -549,6 +549,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     }
     if (initialData.planName) setQuoteName(initialData.planName)
   }, [initialData]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-load file when passed as prop (e.g. from Felmérés page) ────────────
+  useEffect(() => {
+    if (initialFile && !file) handleFile(initialFile)
+  }, [initialFile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Resizable split panel ─────────────────────────────────────────────────
   // panelRatio: left panel width as % of the container (clamp 25–80)

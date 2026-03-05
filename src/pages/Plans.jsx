@@ -177,7 +177,12 @@ export default function Plans({ onNavigate }) {
   }, [plans])
 
   const handleUpload = useCallback(async (fileList) => {
-    const files = Array.from(fileList)
+    // Only accept DXF/DWG — PDF plans go to Felmérés page
+    const files = Array.from(fileList).filter(f => {
+      const ext = f.name.toLowerCase().split('.').pop()
+      return ext === 'dxf' || ext === 'dwg'
+    })
+    if (files.length === 0) return
     setUploading(true)
 
     for (const file of files) {
@@ -312,7 +317,7 @@ export default function Plans({ onNavigate }) {
             Tervrajzok
           </h1>
           <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>
-            DXF, DWG és PDF tervrajzok kezelése — mérés, számlálás, kalibráció
+            DXF és DWG tervrajzok archívuma — blokkfelismerés, összevonás
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -416,10 +421,10 @@ export default function Plans({ onNavigate }) {
           Tervrajz feltöltése
         </div>
         <div style={{ color: '#17C7FF', fontSize: 12, marginTop: 4, opacity: 0.65, fontFamily: 'DM Mono', letterSpacing: '0.03em' }}>
-          DXF / DWG / PDF fájlok — húzd ide vagy kattints
+          DXF / DWG fájlok — húzd ide vagy kattints
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
-          {['DXF', 'DWG', 'PDF'].map(ext => (
+          {['DXF', 'DWG'].map(ext => (
             <span key={ext} style={{
               padding: '2px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono',
               background: 'rgba(33,243,163,0.07)',
@@ -428,7 +433,7 @@ export default function Plans({ onNavigate }) {
             }}>{ext}</span>
           ))}
         </div>
-        <input ref={inputRef} type="file" multiple accept=".dxf,.dwg,.pdf"
+        <input ref={inputRef} type="file" multiple accept=".dxf,.dwg"
           style={{ display: 'none' }}
           onChange={e => handleUpload(e.target.files)}
         />
@@ -448,7 +453,7 @@ export default function Plans({ onNavigate }) {
             </svg>
           </div>
           <div style={{ fontSize: 14, fontFamily: 'Syne', color: C.textSub }}>Még nincsenek tervrajzok</div>
-          <div style={{ fontSize: 12, marginTop: 6, fontFamily: 'DM Mono', color: C.textMuted }}>Töltsd fel az első DXF/DWG/PDF fájlt</div>
+          <div style={{ fontSize: 12, marginTop: 6, fontFamily: 'DM Mono', color: C.textMuted }}>Töltsd fel az első DXF/DWG fájlt</div>
         </div>
       ) : (
         <div style={{

@@ -9,6 +9,7 @@ import WorkItems from './pages/WorkItems.jsx'
 import Settings from './pages/Settings.jsx'
 import AssembliesPage from './pages/Assemblies.jsx'
 import PlansPage from './pages/Plans.jsx'
+import FelmeresPage from './pages/Felmeres.jsx'
 import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes } from './data/store.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
@@ -570,12 +571,15 @@ function SaaSShell() {
     const tradeLabel = activeTrade ? TRADE_LABELS[activeTrade] : null
     const baseTitles = {
       dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
-      plans: 'Tervek', 'work-items': 'Munkatételek', materials: 'Anyagok',
+      plans: 'Tervrajzok', felmeres: 'Felmérés', 'felmeres-workspace': 'Felmérés',
+      'work-items': 'Munkatételek', materials: 'Anyagok',
       assemblies: 'Assemblyk', settings: 'Beállítások',
     }
     const base = baseTitles[page] || page
     return tradeLabel ? `${base} — ${tradeLabel}` : base
   }
+
+  const [felmeresFile, setFelmeresFile] = useState(null)
 
   const [workItems, setWorkItems] = useState(loadWorkItems)
 
@@ -730,19 +734,29 @@ function SaaSShell() {
         )}
 
         {/* ── Content — full-height for TakeoffWorkspace, padded for other pages ── */}
-        {page === 'new-quote' ? (
+        {(page === 'new-quote' || page === 'felmeres-workspace') ? (
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <ErrorBoundary
               fallbackLabel="TakeoffWorkspace összeomlott"
               onManualMode={() => setPage('plans')}
             >
-              <TakeoffWorkspace
-                settings={settings}
-                materials={materials}
-                initialData={prefillData}
-                onSaved={quote => { setPrefillData(null); handleQuoteSaved(quote) }}
-                onCancel={() => { setPrefillData(null); setPage('quotes') }}
-              />
+              {page === 'new-quote' ? (
+                <TakeoffWorkspace
+                  settings={settings}
+                  materials={materials}
+                  initialData={prefillData}
+                  onSaved={quote => { setPrefillData(null); handleQuoteSaved(quote) }}
+                  onCancel={() => { setPrefillData(null); setPage('quotes') }}
+                />
+              ) : (
+                <TakeoffWorkspace
+                  settings={settings}
+                  materials={materials}
+                  initialFile={felmeresFile}
+                  onSaved={quote => { setFelmeresFile(null); handleQuoteSaved(quote) }}
+                  onCancel={() => { setFelmeresFile(null); setPage('felmeres') }}
+                />
+              )}
             </ErrorBoundary>
           </div>
         ) : (
@@ -762,6 +776,8 @@ function SaaSShell() {
                 <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} activeTrade={activeTrade} />
               ) : page === 'materials' ? (
                 <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
+              ) : page === 'felmeres' ? (
+                <FelmeresPage onOpenFile={f => { setFelmeresFile(f); setPage('felmeres-workspace') }} />
               ) : page === 'plans' ? (
                 <PlansPage onNavigate={(p, data) => { if (data) setPrefillData(data); setPage(p) }} />
               ) : page === 'assemblies' ? (
