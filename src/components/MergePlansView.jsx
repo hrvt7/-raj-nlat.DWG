@@ -8,11 +8,15 @@ import { mergeParseResults, getAggregatedRows, deduplicateUnknowns } from '../ut
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MergePlansView — Combine annotations from multiple plans into one estimate
-// Two modes: "manual" (marker-based) and "dxf" (auto block recognition)
+// Three modes: "manual" (marker-based), "dxf" (auto block recognition), "pdf" (Vision AI)
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function MergePlansView({ plans, onClose, onCreateQuote }) {
-  const [activeTab, setActiveTab] = useState('manual') // 'manual' | 'dxf'
+  const [activeTab, setActiveTab] = useState('manual') // 'manual' | 'dxf' | 'pdf'
+
+  // Auto-select tab based on available data
+  const hasPdfResults = plans.some(p => p.fileType === 'pdf' && p.pdfRecognition?.status === 'done')
+  const hasDxfResults = plans.some(p => p.parseResult?.blocks?.length > 0)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -36,13 +40,20 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
         </TabButton>
         <TabButton active={activeTab === 'dxf'} onClick={() => setActiveTab('dxf')}>
           📊 DXF elemzés
+          {hasDxfResults && <span style={{ marginLeft: 5, width: 6, height: 6, borderRadius: '50%', background: C.accent, display: 'inline-block', verticalAlign: 'middle' }} />}
+        </TabButton>
+        <TabButton active={activeTab === 'pdf'} onClick={() => setActiveTab('pdf')}>
+          📄 PDF felismerés
+          {hasPdfResults && <span style={{ marginLeft: 5, width: 6, height: 6, borderRadius: '50%', background: '#4CC9F0', display: 'inline-block', verticalAlign: 'middle' }} />}
         </TabButton>
       </div>
 
       {activeTab === 'manual' ? (
         <ManualMergeTab plans={plans} onCreateQuote={onCreateQuote} />
-      ) : (
+      ) : activeTab === 'dxf' ? (
         <DxfAnalysisTab plans={plans} onCreateQuote={onCreateQuote} />
+      ) : (
+        <PdfRecognitionTab plans={plans} onCreateQuote={onCreateQuote} />
       )}
     </div>
   )
@@ -669,6 +680,372 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
               </div>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PDF Recognition Tab — Vision AI results aggregated across PDF plans
+// ═══════════════════════════════════════════════════════════════════════════
+
+function PdfRecognitionTab({ plans, onCreateQuote }) {
+  const [selected, setSelected] = useState({})
+  const [assignments, setAssignments] = useState({}) // _pdfType → assemblyId override
+  const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
+
+  // Plans with successful Vision AI recognition
+  const recognizedPlans = useMemo(() =>
+    plans.filter(p => p.fileType === 'pdf' && p.pdfRecognition?.status === 'done'),
+  [plans])
+
+  // Plans that are still pending or errored
+  const pendingPlans = useMemo(() =>
+    plans.filter(p => p.fileType === 'pdf' && p.pdfRecognition?.status !== 'done'),
+  [plans])
+
+  const toggleSelect = useCallback((id) => {
+    setSelected(prev => ({ ...prev, [id]: !prev[id] }))
+  }, [])
+
+  const selectAll = useCallback(() => {
+    const all = {}
+    for (const p of recognizedPlans) all[p.id] = true
+    setSelected(all)
+  }, [recognizedPlans])
+
+  const selectedIds = Object.keys(selected).filter(id => selected[id])
+  const selectedPlans = recognizedPlans.filter(p => selectedIds.includes(p.id))
+
+  // Aggregate recognized items: group by _pdfType, sub-group by plan.floor
+  const aggregated = useMemo(() => {
+    // { _pdfType: { label, icon, asmId, confidences[], floors: { floorName: qty }, total } }
+    const map = {}
+    for (const plan of selectedPlans) {
+      const floor = plan.floor || 'Egyéb'
+      for (const item of (plan.pdfRecognition?.recognizedItems || [])) {
+        const type = item._pdfType || item.blockName
+        if (!map[type]) {
+          map[type] = {
+            label: item.label || type,
+            icon: item.icon || '▪',
+            asmId: item.asmId || null,
+            confidences: [],
+            floors: {},
+            total: 0,
+          }
+        }
+        map[type].floors[floor] = (map[type].floors[floor] || 0) + (item.qty || 0)
+        map[type].total += item.qty || 0
+        if (item.confidence != null) map[type].confidences.push(item.confidence)
+      }
+    }
+    return map
+  }, [selectedPlans])
+
+  const pdfTypes = Object.keys(aggregated)
+
+  // All floors present across selected plans (for column headers)
+  const floorList = useMemo(() => {
+    const floors = new Set()
+    for (const plan of selectedPlans) {
+      floors.add(plan.floor || 'Egyéb')
+    }
+    return [...floors]
+  }, [selectedPlans])
+
+  // Cable estimate: sum across selected plans
+  const totalCableM = useMemo(() => {
+    return selectedPlans.reduce((s, p) => s + (p.pdfRecognition?.cableEstimate?.cable_total_m || 0), 0)
+  }, [selectedPlans])
+
+  // Grand total
+  const grandTotal = useMemo(() =>
+    Object.values(aggregated).reduce((s, v) => s + v.total, 0),
+  [aggregated])
+
+  // Average confidence
+  const avgConfidence = useMemo(() => {
+    const all = Object.values(aggregated).flatMap(d => d.confidences)
+    if (all.length === 0) return null
+    return Math.round(all.reduce((s, v) => s + v, 0) / all.length * 100)
+  }, [aggregated])
+
+  // Cost estimate: pre-mapped asmId from pdfTakeoff + user overrides
+  const costEstimate = useMemo(() => {
+    let totalMaterial = 0, totalLabor = 0
+    for (const [type, data] of Object.entries(aggregated)) {
+      const asmId = assignments[type] || data.asmId
+      if (!asmId) continue
+      const asm = assemblies.find(a => a.id === asmId)
+      if (!asm) continue
+      const matCost = (asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0)
+      totalMaterial += matCost * data.total
+      totalLabor += (asm.labor_minutes || 0) * data.total
+    }
+    const cableCost = totalCableM * 800
+    return {
+      materialCost: totalMaterial,
+      cableCost,
+      laborMinutes: totalLabor,
+      laborHours: totalLabor / 60,
+      laborCost: (totalLabor / 60) * 9000,
+      grandTotal: totalMaterial + cableCost + (totalLabor / 60) * 9000,
+    }
+  }, [assignments, aggregated, assemblies, totalCableM])
+
+  return (
+    <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
+      {/* Left: Plan selection */}
+      <div style={{ width: 300, overflow: 'auto', flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>
+            Felismert PDF-ek
+          </div>
+          {recognizedPlans.length > 0 && (
+            <button onClick={selectAll} style={{
+              background: 'transparent', border: 'none', color: C.accent,
+              fontFamily: 'DM Mono', fontSize: 10, cursor: 'pointer', textDecoration: 'underline',
+            }}>Mind kiválaszt</button>
+          )}
+        </div>
+
+        {recognizedPlans.length === 0 ? (
+          <div style={{
+            padding: 20, textAlign: 'center', background: C.bgCard,
+            borderRadius: 8, border: `1px solid ${C.border}`,
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🤖</div>
+            <div style={{ fontFamily: 'Syne', fontSize: 12, color: C.textSub }}>Nincs felismert PDF</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 4 }}>
+              A Vision AI elemzés automatikusan indul PDF feltöltéskor
+            </div>
+          </div>
+        ) : recognizedPlans.map(plan => {
+          const isSelected = !!selected[plan.id]
+          const pr = plan.pdfRecognition
+          const itemCount = pr?.recognizedItems?.length || 0
+          const cableM = pr?.cableEstimate?.cable_total_m
+          return (
+            <div key={plan.id} onClick={() => toggleSelect(plan.id)} style={{
+              background: isSelected ? C.accent + '10' : C.bgCard,
+              border: `1px solid ${isSelected ? C.accent + '40' : C.border}`,
+              borderRadius: 8, padding: 10, marginBottom: 6, cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: 'Syne', fontSize: 12, fontWeight: 600, color: C.text,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{plan.name}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                    {plan.floor && <MiniTag text={plan.floor} />}
+                    {plan.discipline && <MiniTag text={plan.discipline} color={C.accent} />}
+                    <MiniTag text={`${itemCount} elem`} color="#888" />
+                    {cableM != null && <MiniTag text={`~${Math.round(cableM)}m kábel`} color="#4CC9F0" />}
+                  </div>
+                </div>
+                <div style={{
+                  width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginLeft: 8,
+                  border: `2px solid ${isSelected ? C.accent : C.border}`,
+                  background: isSelected ? C.accent : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: C.bg, fontSize: 11, fontWeight: 700,
+                }}>{isSelected ? '✓' : ''}</div>
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Pending / errored PDF notice */}
+        {pendingPlans.length > 0 && (
+          <div style={{ marginTop: 10, padding: 10, background: 'rgba(255,209,102,0.05)', borderRadius: 8, border: '1px solid rgba(255,209,102,0.2)' }}>
+            {(() => {
+              const errored = pendingPlans.filter(p => p.pdfRecognition?.status === 'error').length
+              const running = pendingPlans.filter(p => p.pdfRecognition?.status === 'running').length
+              const unstarted = pendingPlans.filter(p => !p.pdfRecognition).length
+              const msg = errored > 0 ? `${errored} PDF felismerés sikertelen — kézi jelölés szükséges`
+                : running > 0 ? `${running} PDF elemzés folyamatban…`
+                : `${unstarted} PDF még nem elemzett`
+              return (
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FFD166' }}>⚠ {msg}</div>
+              )
+            })()}
+          </div>
+        )}
+      </div>
+
+      {/* Right: Aggregated results */}
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {selectedIds.length === 0 ? (
+          <EmptyState icon="📄" title="Válassz ki felismert PDF terveket" subtitle="A Vision AI által azonosított elemek összesítésre kerülnek" />
+        ) : (
+          <>
+            {/* Summary bar */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Badge color="red">{selectedIds.length} PDF · {grandTotal} elem</Badge>
+              {totalCableM > 0 && (
+                <Badge color="blue">~{Math.round(totalCableM)}m kábel</Badge>
+              )}
+              {avgConfidence != null && (
+                <span style={{
+                  fontFamily: 'DM Mono', fontSize: 10,
+                  color: avgConfidence >= 80 ? C.accent : avgConfidence >= 60 ? '#FFD166' : '#FF6B6B',
+                  padding: '3px 8px', borderRadius: 4,
+                  background: 'rgba(255,209,102,0.08)', border: '1px solid rgba(255,209,102,0.2)',
+                }}>
+                  🎯 Konfidencia: {avgConfidence}%
+                </span>
+              )}
+            </div>
+
+            {/* Confidence disclaimer */}
+            <div style={{
+              padding: '10px 14px', borderRadius: 8,
+              background: 'rgba(255,209,102,0.05)', border: '1px solid rgba(255,209,102,0.18)',
+            }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FFD166' }}>
+                ⚠ Vision AI becslés — nem determinisztikus. Az értékek ±15–25%-kal eltérhetnek.
+                DXF rajz elérhető esetén a DXF elemzés pontosabb.
+              </span>
+            </div>
+
+            {/* Aggregated table */}
+            <SectionCard title="Összesítő (PDF felismerés)">
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'DM Mono', fontSize: 11 }}>
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                      <th style={thStyle}>Elem típus</th>
+                      {floorList.map(f => <th key={f} style={thStyleCenter}>{f}</th>)}
+                      <th style={{ ...thStyleCenter, color: C.accent, fontWeight: 800 }}>ÖSSZ</th>
+                      <th style={{ ...thStyleCenter, color: '#FFD166', fontWeight: 700 }}>Konfid.</th>
+                      <th style={{ ...thStyleCenter, color: '#4CC9F0', fontSize: 9, fontWeight: 600 }}>Forrás</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pdfTypes.map(type => {
+                      const data = aggregated[type]
+                      const conf = data.confidences.length > 0
+                        ? Math.round(data.confidences.reduce((s, v) => s + v, 0) / data.confidences.length * 100)
+                        : null
+                      const confColor = conf == null ? C.muted : conf >= 80 ? C.accent : conf >= 60 ? '#FFD166' : '#FF6B6B'
+                      return (
+                        <tr key={type} style={{ borderBottom: `1px solid ${C.border}10` }}>
+                          <td style={tdStyle}>
+                            <span>{data.icon} {data.label}</span>
+                            {!data.asmId && !assignments[type] && (
+                              <span title="Nincs Assembly hozzárendelés" style={{ color: '#FFD166', marginLeft: 6, fontSize: 10 }}>⚠</span>
+                            )}
+                          </td>
+                          {floorList.map(f => (
+                            <td key={f} style={tdStyleCenter}>{data.floors[f] || '—'}</td>
+                          ))}
+                          <td style={{ ...tdStyleCenter, fontWeight: 700, color: C.accent }}>{data.total}</td>
+                          <td style={{ ...tdStyleCenter, color: confColor }}>
+                            {conf != null ? `${conf}%` : '—'}
+                          </td>
+                          <td style={{ ...tdStyleCenter, color: '#4CC9F0', fontSize: 9 }}>[PDF]</td>
+                        </tr>
+                      )
+                    })}
+                    {pdfTypes.length === 0 && (
+                      <tr>
+                        <td colSpan={floorList.length + 4} style={{ ...tdStyleCenter, color: C.muted, padding: 20 }}>
+                          Nincs felismert elem
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {pdfTypes.length > 0 && totalCableM > 0 && (
+                    <tfoot>
+                      <tr style={{ borderTop: `2px solid ${C.border}` }}>
+                        <td colSpan={floorList.length + 1} style={{ ...tdStyle, fontWeight: 800, color: C.textSub }}>Kábel becslés</td>
+                        <td style={{ ...tdStyleCenter, color: '#4CC9F0', fontWeight: 700 }}>~{Math.round(totalCableM)}m</td>
+                        <td colSpan={2} style={{ ...tdStyleCenter, color: C.muted, fontSize: 9 }}>MST / konzervatív</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </SectionCard>
+
+            {/* Assembly override — only for types without pre-mapped asmId */}
+            {pdfTypes.some(t => !aggregated[t].asmId) && (
+              <SectionCard title="Assembly hozzárendelés (hiányzó)">
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 10 }}>
+                  A ⚠ jelű elemekhez nincs automatikus Assembly — rendeld hozzá manuálisan:
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                  {pdfTypes.filter(t => !aggregated[t].asmId).map(type => (
+                    <div key={type} style={{ background: C.bg, borderRadius: 8, padding: 10, border: '1px solid rgba(255,209,102,0.25)' }}>
+                      <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#FFD166', marginBottom: 4 }}>
+                        {aggregated[type].icon} {aggregated[type].label} ({aggregated[type].total})
+                      </div>
+                      <select
+                        value={assignments[type] || ''}
+                        onChange={e => setAssignments(p => ({ ...p, [type]: e.target.value || null }))}
+                        style={selectStyle}
+                      >
+                        <option value="">— Assembly —</option>
+                        {assemblies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {/* Cost estimate */}
+            {pdfTypes.length > 0 && (
+              <SectionCard title="Költségbecslés (PDF)">
+                <Row label="Anyagköltség" value={`${costEstimate.materialCost.toLocaleString('hu-HU')} Ft`} />
+                {totalCableM > 0 && (
+                  <Row label={`Kábel (~${Math.round(totalCableM)}m × 800 Ft/m)`} value={`${costEstimate.cableCost.toLocaleString('hu-HU')} Ft`} />
+                )}
+                <Row label={`Munkadíj (${costEstimate.laborHours.toFixed(1)} óra)`} value={`${costEstimate.laborCost.toLocaleString('hu-HU')} Ft`} />
+                <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
+                  <span style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 800, color: C.accent }}>{costEstimate.grandTotal.toLocaleString('hu-HU')} Ft</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó (27% ÁFA)</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{(costEstimate.grandTotal * 1.27).toLocaleString('hu-HU')} Ft</span>
+                </div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, marginTop: 8 }}>
+                  ⚠ Vision AI becslés alapján — ellenőrizd DXF rajz alapján, ha elérhető
+                </div>
+              </SectionCard>
+            )}
+
+            {/* Create quote button */}
+            <button
+              onClick={() => onCreateQuote?.({
+                source: 'pdf_recognition',
+                mergedFrom: selectedIds,
+                recognizedItems: pdfTypes.map(type => ({
+                  _pdfType: type,
+                  label: aggregated[type].label,
+                  icon: aggregated[type].icon,
+                  total: aggregated[type].total,
+                  byFloor: aggregated[type].floors,
+                  asmId: assignments[type] || aggregated[type].asmId,
+                })),
+                totalCableM,
+                costEstimate,
+              })}
+              disabled={pdfTypes.length === 0}
+              style={{
+                ...primaryButtonStyle,
+                opacity: pdfTypes.length === 0 ? 0.5 : 1,
+                cursor: pdfTypes.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              📥 Árajánlat létrehozása (PDF felismerésből)
+            </button>
+          </>
         )}
       </div>
     </div>

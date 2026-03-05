@@ -7,6 +7,8 @@ import { loadPlans, savePlan, getPlanFile, deletePlan, generatePlanId, savePlanT
 import { normalizeBlocks } from '../data/symbolDictionary.js'
 import { getDxfParserPool } from '../utils/workerPool.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { runPdfTakeoff } from '../pdfTakeoff.js'
+import { parseFilenameMetadata } from '../utils/filenameParser.js'
 
 const fmtSize = (bytes) => {
   if (bytes < 1024) return bytes + ' B'
@@ -67,6 +69,7 @@ export default function Plans({ onNavigate }) {
   const [parseProgress, setParseProgress] = useState({}) // { planId: 0-100 }
   const [batchParsing, setBatchParsing] = useState(false)
   const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 })
+  const [pdfParsing, setPdfParsing] = useState({})   // { planId: true } while running
   const inputRef = useRef()
 
   // Load plans + thumbnails on mount
@@ -112,6 +115,32 @@ export default function Plans({ onNavigate }) {
     }
   }, [])
 
+  // ── PDF auto-parse (runs immediately after upload) ──
+  const handleParsePdf = useCallback(async (planId, file) => {
+    setPdfParsing(p => ({ ...p, [planId]: true }))
+    updatePlanMeta(planId, { pdfRecognition: { status: 'running' } })
+    try {
+      const { recognizedItems, cableEstimate, warnings } = await runPdfTakeoff(file)
+      updatePlanMeta(planId, {
+        pdfRecognition: {
+          status: 'done',
+          recognizedItems,
+          cableEstimate,
+          warnings,
+          processedAt: new Date().toISOString(),
+        },
+      })
+    } catch (err) {
+      console.warn('[PDF takeoff] pipeline error:', err.message)
+      updatePlanMeta(planId, {
+        pdfRecognition: { status: 'error', errorMessage: err.message },
+      })
+    } finally {
+      setPdfParsing(p => { const next = { ...p }; delete next[planId]; return next })
+      setPlans(loadPlans())
+    }
+  }, [])
+
   // ── Batch parse all DXF plans ──
   const handleBatchParse = useCallback(async () => {
     const dxfPlans = plans.filter(p => (p.fileType === 'dxf' || p.fileType === 'dwg') && !p.parsedAt)
@@ -148,22 +177,30 @@ export default function Plans({ onNavigate }) {
     for (const file of files) {
       const id = generatePlanId()
       const fileType = getFileType(file.name)
+
+      // Auto-tag floor/discipline from filename for all file types
+      const { floor, discipline } = parseFilenameMetadata(file.name)
+
       const plan = {
         id,
         name: file.name,
         fileType,
         fileSize: file.size,
+        floor: floor || null,
+        discipline: discipline || null,
         units: null,
         parsedResult: null,
         createdAt: new Date().toISOString(),
       }
       await savePlan(plan, file)
 
-      // Generate thumbnail for PDFs
       if (fileType === 'pdf') {
+        // Thumbnail (non-blocking)
         generatePdfThumbnail(file, id).then(dataUrl => {
           if (dataUrl) setThumbnails(prev => ({ ...prev, [id]: dataUrl }))
         }).catch(() => {})
+        // Auto-pipeline: Vision AI recognition (non-blocking, fire-and-forget)
+        handleParsePdf(id, file)
       }
     }
 
@@ -482,7 +519,7 @@ export default function Plans({ onNavigate }) {
                     <span>{fmtDate(plan.createdAt)}</span>
                   </div>
 
-                  {/* Floor / Discipline tags */}
+                  {/* Floor / Discipline tags — DXF/DWG only (manual selection) */}
                   {(plan.fileType === 'dxf' || plan.fileType === 'dwg') && (
                     <div style={{ display: 'flex', gap: 6, marginTop: 8 }} onClick={e => e.stopPropagation()}>
                       <select
@@ -510,8 +547,26 @@ export default function Plans({ onNavigate }) {
                     </div>
                   )}
 
-                  {/* Parse status badge */}
-                  {plan.parsedAt && (
+                  {/* PDF: auto-tag preview (read-only) */}
+                  {plan.fileType === 'pdf' && (plan.floor || plan.discipline) && (
+                    <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+                      {plan.floor && (
+                        <span style={{
+                          padding: '2px 7px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono',
+                          background: 'rgba(76,201,240,0.12)', border: '1px solid rgba(76,201,240,0.25)', color: '#4CC9F0',
+                        }}>{plan.floor}</span>
+                      )}
+                      {plan.discipline && (
+                        <span style={{
+                          padding: '2px 7px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono',
+                          background: 'rgba(33,243,163,0.10)', border: '1px solid rgba(33,243,163,0.22)', color: C.accent,
+                        }}>{plan.discipline}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* DXF parse status badge */}
+                  {(plan.fileType === 'dxf' || plan.fileType === 'dwg') && plan.parsedAt && (
                     <div style={{
                       marginTop: 6, display: 'flex', alignItems: 'center', gap: 4,
                       fontSize: 10, fontFamily: 'DM Mono', color: C.accent,
@@ -530,6 +585,47 @@ export default function Plans({ onNavigate }) {
                       ❌ Elemzés sikertelen
                     </div>
                   )}
+
+                  {/* PDF Vision AI status badge */}
+                  {plan.fileType === 'pdf' && (() => {
+                    const pr = plan.pdfRecognition
+                    const isRunning = pdfParsing[plan.id] || pr?.status === 'running'
+                    if (isRunning) return (
+                      <div style={{ marginTop: 6, fontSize: 10, fontFamily: 'DM Mono', color: '#4CC9F0' }}>
+                        🤖 Vision AI elemzés…
+                      </div>
+                    )
+                    if (pr?.status === 'done') {
+                      const items = pr.recognizedItems || []
+                      const totalQty = items.reduce((s, i) => s + (i.qty || 0), 0)
+                      const cableM = pr.cableEstimate?.cable_total_m
+                      // Build icon summary: top 3 types by qty
+                      const topItems = [...items].sort((a, b) => b.qty - a.qty).slice(0, 3)
+                      return (
+                        <div style={{ marginTop: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontFamily: 'DM Mono', color: C.accent }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, display: 'inline-block' }} />
+                            {totalQty} elem felismerve{cableM ? ` · ~${Math.round(cableM)}m kábel` : ''}
+                          </div>
+                          {topItems.length > 0 && (
+                            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                              {topItems.map(it => (
+                                <span key={it.blockName} style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted }}>
+                                  {it.rule?.icon || '▪'} {it.qty}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    if (pr?.status === 'error') return (
+                      <div style={{ marginTop: 6, fontSize: 10, fontFamily: 'DM Mono', color: '#FFD166' }}>
+                        ⚠️ Auto-felismerés sikertelen · kézi jelölés szükséges
+                      </div>
+                    )
+                    return null
+                  })()}
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
