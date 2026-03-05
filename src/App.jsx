@@ -14,6 +14,7 @@ import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes } 
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -682,12 +683,17 @@ function SaaSShell() {
         {/* ── Content — full-height for TakeoffWorkspace, padded for other pages ── */}
         {page === 'new-quote' ? (
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <TakeoffWorkspace
-              settings={settings}
-              materials={materials}
-              onSaved={quote => { setPrefillData(null); handleQuoteSaved(quote) }}
-              onCancel={() => { setPrefillData(null); setPage('quotes') }}
-            />
+            <ErrorBoundary
+              fallbackLabel="TakeoffWorkspace összeomlott"
+              onManualMode={() => setPage('plans')}
+            >
+              <TakeoffWorkspace
+                settings={settings}
+                materials={materials}
+                onSaved={quote => { setPrefillData(null); handleQuoteSaved(quote) }}
+                onCancel={() => { setPrefillData(null); setPage('quotes') }}
+              />
+            </ErrorBoundary>
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 14px' : '32px 28px' }}>

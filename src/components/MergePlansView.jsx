@@ -5,6 +5,7 @@ import { getPlanAnnotations, getPlanThumbnail } from '../data/planStore.js'
 import { loadAssemblies } from '../data/store.js'
 import { ASSEMBLY_TYPES, addUserOverride, getAssemblyTypeLabel } from '../data/symbolDictionary.js'
 import { mergeParseResults, getAggregatedRows, deduplicateUnknowns } from '../utils/mergeParseResults.js'
+import { downloadCSV } from '../utils/csvExport.js'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MergePlansView — Combine annotations from multiple plans into one estimate
@@ -392,6 +393,28 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
   // Grand total count
   const grandTotal = useMemo(() => Object.values(mergeResult.total).reduce((s, v) => s + v, 0), [mergeResult.total])
 
+  // ── View toggle state: 'total' | 'byFloor' | 'byDiscipline' ───────────────
+  const [viewMode, setViewMode] = useState('total')
+
+  // Discipline breakdown (analogous to floorList / rows)
+  const disciplineList = useMemo(() => Object.keys(mergeResult.byDiscipline), [mergeResult.byDiscipline])
+
+  const disciplineRows = useMemo(() => {
+    const { byDiscipline, assemblyTypes, total } = mergeResult
+    return assemblyTypes.map(type => {
+      const label = rows.find(r => r.assemblyType === type)?.label || type
+      return {
+        assemblyType: type,
+        label,
+        disciplines: disciplineList.reduce((acc, d) => {
+          acc[d] = byDiscipline[d]?.[type] || 0
+          return acc
+        }, {}),
+        total: total[type] || 0,
+      }
+    })
+  }, [mergeResult, rows, disciplineList])
+
   // Cost estimate for DXF
   const costEstimate = useMemo(() => {
     let totalMaterial = 0, totalLabor = 0
@@ -412,6 +435,33 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
       grandTotal: totalMaterial + (totalLabor / 60) * 9000,
     }
   }, [assignments, mergeResult.total, assemblies])
+
+  // CSV export for DXF aggregation
+  const handleExportCSV = useCallback(() => {
+    const VAT = 27
+    const HOURLY = 9000
+    const header = ['Tétel', 'Mennyiség', 'Egység', 'Anyagköltség (Ft)', 'Munkadíj (Ft)',
+      'Összeg nettó (Ft)', 'ÁFA (Ft)', 'Összeg bruttó (Ft)']
+    const dataRows = rows.map(row => {
+      const asmId = assignments[row.assemblyType]
+      const asm = asmId ? assemblies.find(a => a.id === asmId) : null
+      const matCost = asm ? Math.round((asm.items || []).reduce((s, it) => s + (it.qty || 0) * (it.unit_price || 0), 0) * row.total) : 0
+      const laborMin = asm ? (asm.labor_minutes || 0) * row.total : 0
+      const laborCost = Math.round(laborMin / 60 * HOURLY)
+      const net = matCost + laborCost
+      const vat = Math.round(net * VAT / 100)
+      return [row.label, row.total, 'db', matCost, laborCost, net, vat, net + vat]
+    })
+    const totMat = costEstimate.materialCost
+    const totLabor = Math.round(costEstimate.laborCost)
+    const totNet = Math.round(costEstimate.grandTotal)
+    const totVat = Math.round(totNet * VAT / 100)
+    const allRows = [header, ...dataRows, [],
+      ['ÖSSZESEN', grandTotal, '', totMat, totLabor, totNet, totVat, totNet + totVat]]
+    const BOM = '\uFEFF'
+    const csv = BOM + allRows.map(r => r.join(';')).join('\r\n')
+    downloadCSV(csv, `dxf_osszesito_${new Date().toISOString().slice(0, 10)}.csv`)
+  }, [rows, assignments, assemblies, costEstimate, grandTotal])
 
   // Save unknown symbol assignments
   const handleSaveUnknowns = useCallback(() => {
@@ -500,7 +550,7 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
           <EmptyState icon="📊" title="Válassz ki elemzett rajzokat" subtitle="Az automatikus blokkfelismerés eredménye összesítésre kerül" />
         ) : (
           <>
-            {/* Filters */}
+            {/* Filters + View toggle + CSV export */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <Badge color="blue">{selectedIds.length} rajz · {grandTotal} elem</Badge>
               <select value={filterFloor} onChange={e => setFilterFloor(e.target.value)} style={filterSelectStyle}>
@@ -511,6 +561,32 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
                 <option value="">Összes diszciplína</option>
                 {availableDisciplines.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
+              {/* View mode toggle */}
+              <div style={{ display: 'flex', background: C.bg, borderRadius: 7, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                {[
+                  { key: 'total', label: 'TOTAL' },
+                  { key: 'byFloor', label: 'Emeletek' },
+                  { key: 'byDiscipline', label: 'Diszciplínák' },
+                ].map(({ key, label }) => (
+                  <button key={key} onClick={() => setViewMode(key)} style={{
+                    padding: '5px 11px', border: 'none', cursor: 'pointer',
+                    fontFamily: 'DM Mono', fontSize: 10,
+                    background: viewMode === key ? C.accent + '25' : 'transparent',
+                    color: viewMode === key ? C.accent : C.muted,
+                    borderRight: `1px solid ${C.border}`,
+                    fontWeight: viewMode === key ? 700 : 400,
+                    transition: 'all 0.12s',
+                  }}>{label}</button>
+                ))}
+              </div>
+              {/* CSV export */}
+              {rows.length > 0 && (
+                <button onClick={handleExportCSV} style={{
+                  padding: '5px 11px', borderRadius: 6, cursor: 'pointer',
+                  background: 'transparent', border: `1px solid ${C.border}`,
+                  color: C.textSub, fontFamily: 'DM Mono', fontSize: 10,
+                }}>⬇ CSV</button>
+              )}
             </div>
 
             {/* Unknown symbol warning */}
@@ -532,30 +608,41 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
               </div>
             )}
 
-            {/* Aggregated table */}
-            <SectionCard title="Összesítő">
+            {/* Aggregated table — view depends on viewMode */}
+            <SectionCard title={
+              viewMode === 'total' ? 'Összesítő (TOTAL)' :
+              viewMode === 'byFloor' ? 'Összesítő emeletek szerint' :
+              'Összesítő diszciplínák szerint'
+            }>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'DM Mono', fontSize: 11 }}>
                   <thead>
                     <tr style={{ borderBottom: `2px solid ${C.border}` }}>
                       <th style={thStyle}>Szerelvény típus</th>
-                      {floorList.map(f => <th key={f} style={thStyleCenter}>{f}</th>)}
+                      {viewMode === 'byFloor' && floorList.map(f => <th key={f} style={thStyleCenter}>{f}</th>)}
+                      {viewMode === 'byDiscipline' && disciplineList.map(d => <th key={d} style={thStyleCenter}>{d}</th>)}
                       <th style={{ ...thStyleCenter, color: C.accent, fontWeight: 800 }}>ÖSSZ</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map(row => (
+                    {(viewMode === 'byDiscipline' ? disciplineRows : rows).map(row => (
                       <tr key={row.assemblyType} style={{ borderBottom: `1px solid ${C.border}10` }}>
                         <td style={tdStyle}>{row.label}</td>
-                        {floorList.map(f => (
+                        {viewMode === 'byFloor' && floorList.map(f => (
                           <td key={f} style={tdStyleCenter}>{row.floors[f] || '—'}</td>
+                        ))}
+                        {viewMode === 'byDiscipline' && disciplineList.map(d => (
+                          <td key={d} style={tdStyleCenter}>{row.disciplines[d] || '—'}</td>
                         ))}
                         <td style={{ ...tdStyleCenter, fontWeight: 700, color: C.accent }}>{row.total}</td>
                       </tr>
                     ))}
                     {rows.length === 0 && (
                       <tr>
-                        <td colSpan={floorList.length + 2} style={{ ...tdStyleCenter, color: C.muted, padding: 20 }}>
+                        <td colSpan={
+                          viewMode === 'byFloor' ? floorList.length + 2 :
+                          viewMode === 'byDiscipline' ? disciplineList.length + 2 : 2
+                        } style={{ ...tdStyleCenter, color: C.muted, padding: 20 }}>
                           Nincs felismert elem
                         </td>
                       </tr>
@@ -565,9 +652,13 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
                     <tfoot>
                       <tr style={{ borderTop: `2px solid ${C.border}` }}>
                         <td style={{ ...tdStyle, fontWeight: 800 }}>ÖSSZESEN</td>
-                        {floorList.map(f => {
+                        {viewMode === 'byFloor' && floorList.map(f => {
                           const sum = Object.values(mergeResult.byFloor[f] || {}).reduce((s, v) => s + v, 0)
                           return <td key={f} style={{ ...tdStyleCenter, fontWeight: 700 }}>{sum}</td>
+                        })}
+                        {viewMode === 'byDiscipline' && disciplineList.map(d => {
+                          const sum = Object.values(mergeResult.byDiscipline[d] || {}).reduce((s, v) => s + v, 0)
+                          return <td key={d} style={{ ...tdStyleCenter, fontWeight: 700 }}>{sum}</td>
                         })}
                         <td style={{ ...tdStyleCenter, fontWeight: 800, color: C.accent, fontSize: 13 }}>{grandTotal}</td>
                       </tr>

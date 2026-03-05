@@ -306,11 +306,32 @@ function clusterDevicesIntoRooms(devices, cellSizeM = 5) {
 // Main pipeline: PDF API result → recognizedItems + cable estimate
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ── Confidence thresholds ──────────────────────────────────────────────────────
+// Vector result is "good enough" (no Vision fallback needed) when above this value.
+const VECTOR_CONFIDENCE_THRESHOLD = 0.55
+
 /**
- * Call the server-side PDF parser (Vision AI + vector analysis).
- * Returns the raw server response.
+ * Compute an overall confidence score for a merged result set.
+ * Returns 0–1 float.
  */
-export async function callPdfApi(file) {
+export function computeOverallConfidence(items, source) {
+  if (!items || items.length === 0) return 0
+  const avg = items.reduce((s, i) => s + (i.confidence || 0), 0) / items.length
+  // Vector source gets a slight bonus; fallback/text a penalty
+  const sourceBonus = source === 'vector' ? 0.05 : source === 'fallback' ? -0.15 : 0
+  return Math.min(1, Math.max(0, avg + sourceBonus))
+}
+
+/**
+ * Call the server-side PDF parser.
+ * Strategy: vector-first — try deterministic vector analysis first.
+ * If vector confidence is below threshold, fall back to Vision AI.
+ *
+ * @param {File} file
+ * @param {Function} onProgress - progress callback (10–50)
+ * @returns {{ vision: object|null, vector: object|null, source: string }}
+ */
+export async function callPdfApi(file, onProgress) {
   const base64 = await new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -322,25 +343,54 @@ export async function callPdfApi(file) {
   })
 
   const apiUrl = import.meta.env.VITE_API_URL || ''
+  const payload = JSON.stringify({ pdf_base64: base64, filename: file.name })
 
-  // Call both endpoints in parallel: Vision AI + Vector analysis
-  const [visionRes, vectorRes] = await Promise.allSettled([
-    fetch(`${apiUrl}/api/parse-pdf`, {
+  // ── Step 1: Vector analysis (deterministic, fast, no AI cost) ──────────────
+  onProgress?.(15)
+  let vector = null
+  try {
+    const vectorRes = await fetch(`${apiUrl}/api/parse-pdf-vectors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pdf_base64: base64, filename: file.name }),
-    }).then(r => r.json()),
-    fetch(`${apiUrl}/api/parse-pdf-vectors`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pdf_base64: base64, filename: file.name }),
-    }).then(r => r.json()),
-  ])
+      body: payload,
+    })
+    if (vectorRes.ok) {
+      vector = await vectorRes.json()
+    }
+  } catch {
+    vector = null
+  }
+  onProgress?.(30)
 
-  const vision = visionRes.status === 'fulfilled' ? visionRes.value : null
-  const vector = vectorRes.status === 'fulfilled' ? vectorRes.value : null
+  // ── Step 2: Check vector confidence; skip Vision if vector is good enough ──
+  const vectorConf = vector?.success ? (vector._confidence || 0) : 0
+  const needsVision = !vector?.success || vectorConf < VECTOR_CONFIDENCE_THRESHOLD
 
-  return { vision, vector }
+  let vision = null
+  let source = 'vector'
+
+  if (needsVision) {
+    // Fall back to Vision AI
+    source = vector?.success ? 'mixed' : 'vision'
+    onProgress?.(35)
+    try {
+      const visionRes = await fetch(`${apiUrl}/api/parse-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      })
+      if (visionRes.ok) {
+        vision = await visionRes.json()
+      }
+    } catch {
+      vision = null
+    }
+    onProgress?.(50)
+  } else {
+    onProgress?.(50)
+  }
+
+  return { vision, vector, source }
 }
 
 /**
@@ -637,21 +687,22 @@ export function buildParsedDxfFromPdf(merged, cableEst) {
 
 /**
  * Full PDF takeoff pipeline — entry point called from TakeoffWorkspace.
+ * Vector-first: runs vector analysis, falls back to Vision AI only if needed.
  *
  * @param {File} file - PDF file
  * @param {Function} onProgress - progress callback (0-100)
- * @returns {{ parsedDxf, recognizedItems, cableEstimate, warnings }}
+ * @returns {{ parsedDxf, recognizedItems, cableEstimate, warnings, confidence, pipelineSource }}
  */
 export async function runPdfTakeoff(file, onProgress) {
   onProgress?.(10)
 
-  // Step 1: Call server APIs
-  const { vision, vector } = await callPdfApi(file)
-  onProgress?.(50)
+  // Step 1: Call server APIs (vector-first, Vision as fallback)
+  const { vision, vector, source } = await callPdfApi(file, pct => onProgress?.(pct))
+  onProgress?.(52)
 
   // Step 2: Merge and normalize results
   const merged = mergeAndNormalize(vision, vector)
-  onProgress?.(70)
+  onProgress?.(68)
 
   // Step 3: Convert to recognizedItems + sanitize (schema guard before storage)
   const recognizedItemsRaw = toRecognizedItems(merged.items)
@@ -660,11 +711,14 @@ export async function runPdfTakeoff(file, onProgress) {
     .filter(Boolean)  // drop nulls (items with missing blockName or qty)
   onProgress?.(80)
 
-  // Step 4: Estimate cables (MST-based)
+  // Step 4: Compute overall confidence
+  const confidence = computeOverallConfidence(merged.items, source)
+
+  // Step 5: Estimate cables (MST-based)
   const cableEstimate = estimateCablesMST(merged.items, merged.scaleFactor)
   onProgress?.(90)
 
-  // Step 5: Build parsedDxf-compatible structure
+  // Step 6: Build parsedDxf-compatible structure
   const parsedDxf = buildParsedDxfFromPdf(merged, cableEstimate)
   onProgress?.(100)
 
@@ -673,5 +727,7 @@ export async function runPdfTakeoff(file, onProgress) {
     recognizedItems,
     cableEstimate,
     warnings: merged.warnings,
+    confidence,          // 0–1 overall recognition confidence
+    pipelineSource: source, // 'vector' | 'vision' | 'mixed'
   }
 }

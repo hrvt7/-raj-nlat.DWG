@@ -11,6 +11,8 @@ import { runPdfTakeoff } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
 import { calcProductivityFactor, WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
+import ConfidenceBadge from './ConfidenceBadge.jsx'
+import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -544,6 +546,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [dwgError, setDwgError] = useState(null)     // actual error message for display
   const [viewerFile, setViewerFile] = useState(null)  // synthetic DXF File for DxfViewerCanvas
 
+  // ── PDF pipeline state ────────────────────────────────────────────────────
+  const [pdfConfidence, setPdfConfidence] = useState(null)  // 0–1 overall confidence
+  const [pdfSource, setPdfSource] = useState(null)           // 'vector' | 'vision' | 'mixed'
+  const [pdfError, setPdfError] = useState(null)             // last PDF API error message
+  const [lastPdfFile, setLastPdfFile] = useState(null)       // for retry
+
   // ── Data ──────────────────────────────────────────────────────────────────
   const canvasRef = useRef(null)
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
@@ -576,21 +584,27 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     const ext = f.name.toLowerCase().split('.').pop()
 
     if (ext === 'pdf') {
-      // ── PDF Takeoff Pipeline ─────────────────────────────────────────
-      // Calls Vision AI + vector analysis → MST cable estimation → recognizedItems
+      // ── PDF Takeoff Pipeline (vector-first, Vision AI fallback) ──────────
       setParsePending(true)
       setParseProgress(0)
+      setPdfConfidence(null)
+      setPdfSource(null)
+      setPdfError(null)
+      setLastPdfFile(f)
       try {
         const result = await runPdfTakeoff(f, pct => setParseProgress(pct))
         setParsedDxf(result.parsedDxf)
         setRecognizedItems(result.recognizedItems)
         setCableEstimate(result.cableEstimate)
+        setPdfConfidence(result.confidence ?? null)
+        setPdfSource(result.pipelineSource ?? null)
         if (result.recognizedItems.length) setRightTab('recognize')
         if (result.warnings?.length) {
           console.warn('PDF takeoff warnings:', result.warnings)
         }
       } catch (err) {
         console.error('PDF takeoff error:', err)
+        setPdfError(err.message || 'PDF feldolgozási hiba')
         setParsedDxf({ success: false, error: err.message, _pdfError: true })
       } finally {
         setParsePending(false)
@@ -1089,6 +1103,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
                     Ajánlott DXF verzió: AutoCAD 2010 (R18) vagy újabb
                   </div>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                    <button onClick={() => file && handleFile(file)} style={{
+                      padding: '9px 18px', borderRadius: 8, cursor: 'pointer',
+                      background: C.accentDim, border: `1px solid ${C.accent}40`,
+                      color: C.accent, fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+                    }}>🔄 Próbáld újra</button>
+                    <button onClick={() => { setFile(null); setParsedDxf(null) }} style={{
+                      padding: '9px 18px', borderRadius: 8, cursor: 'pointer',
+                      background: 'transparent', border: `1px solid ${C.border}`,
+                      color: C.textSub, fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+                    }}>📁 Másik fájl</button>
+                  </div>
                 </>
               </div>
             ) : isPdf ? (
@@ -1156,6 +1182,30 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {/* ── RECOGNITION TAB ────────────────────────────────────────── */}
             {rightTab === 'recognize' && (
               <div>
+                {/* PDF-specific: confidence badge + API error banner */}
+                {isPdf && pdfConfidence !== null && (
+                  <div style={{ marginBottom: 12 }}>
+                    <ConfidenceBadge
+                      confidence={pdfConfidence}
+                      source={pdfSource}
+                      showManualHint={true}
+                      onOpenManualTools={() => {
+                        // Switch to PDF viewer manual mode (Count/Measure tool)
+                        setRightTab('cable')
+                      }}
+                    />
+                  </div>
+                )}
+                {isPdf && pdfError && (
+                  <div style={{ marginBottom: 12 }}>
+                    <ApiErrorBanner
+                      error={pdfError}
+                      label="PDF feldolgozási hiba"
+                      onRetry={() => lastPdfFile && handleFile(lastPdfFile)}
+                      onManualMode={() => setRightTab('takeoff')}
+                    />
+                  </div>
+                )}
                 {recognizedItems.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
                     {parsedDxf?._dwgFailed
