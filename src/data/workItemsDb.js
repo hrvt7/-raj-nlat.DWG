@@ -1500,6 +1500,96 @@ export const CONTEXT_FACTORS = {
     ]
   },
 
+  // ── Projekt komplexitás ───────────────────────────────────────────────────
+  layout_complexity: {
+    label: 'Elrendezés bonyolultsága',
+    group: 'komplexitas',
+    groupLabel: 'Projekt komplexitás',
+    desc: 'Mennyire összetett a nyomvonal és a szerelvények elrendezése.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'simple',  label: 'Egyszerű',   factor: 0.90, icon: '🟢', desc: 'Egyenes nyomvonalak, kevés elágazás' },
+      { key: 'normal',  label: 'Átlagos',    factor: 1.00, icon: '🟡', desc: 'Tipikus lakás/iroda elrendezés' },
+      { key: 'complex', label: 'Összetett',  factor: 1.20, icon: '🔴', desc: 'Sok elágazás, speciális útvonalak' },
+    ]
+  },
+  concurrent_trades: {
+    label: 'Párhuzamos szakmák',
+    group: 'komplexitas',
+    groupLabel: 'Projekt komplexitás',
+    desc: 'Más szakipari csapatokkal való egyidejű munka lassít.',
+    defaultKey: 'none',
+    options: [
+      { key: 'none',    label: 'Nincs ütközés', factor: 1.00, icon: '🟢', desc: 'Egyedül dolgozunk a helyszínen' },
+      { key: 'some',    label: 'Részben',        factor: 1.10, icon: '🟡', desc: 'Néhány más szakma is jelen van' },
+      { key: 'heavy',   label: 'Jelentős',       factor: 1.25, icon: '🔴', desc: 'Folyamatos egyeztetés, várakozás' },
+    ]
+  },
+  prefabrication: {
+    label: 'Előregyártás mértéke',
+    group: 'komplexitas',
+    groupLabel: 'Projekt komplexitás',
+    desc: 'Előregyártott elemek használata gyorsítja a helyszíni munkát.',
+    defaultKey: 'standard',
+    options: [
+      { key: 'full',     label: 'Teljes előregyártás', factor: 0.80, icon: '🟢', desc: 'Moduláris, előre összeszerelt elemek' },
+      { key: 'standard', label: 'Standard',             factor: 1.00, icon: '🟡', desc: 'Szokásos helyszíni szerelés' },
+      { key: 'none',     label: 'Minden helyszínen',    factor: 1.10, icon: '🔴', desc: 'Nincs előregyártás, minden kézzel' },
+    ]
+  },
+
+  // ── Munkakörülmények ──────────────────────────────────────────────────────
+  overtime: {
+    label: 'Túlóra / műszakrend',
+    group: 'munkakorulmenyek',
+    groupLabel: 'Munkakörülmények',
+    desc: 'Rendszeres túlóra csökkenti a hatékonyságot.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'normal',   label: 'Normál műszak',  factor: 1.00, icon: '🟢', desc: '8 órás munkanap' },
+      { key: 'overtime',  label: 'Túlóra (10-12h)', factor: 1.15, icon: '🟡', desc: 'Rendszeres hosszabb munkanapok' },
+      { key: 'shift',     label: 'Többműszakos',    factor: 1.25, icon: '🔴', desc: 'Éjszakai / hétvégi műszakok' },
+    ]
+  },
+  weather_environment: {
+    label: 'Időjárás / környezet',
+    group: 'munkakorulmenyek',
+    groupLabel: 'Munkakörülmények',
+    desc: 'Szélsőséges körülmények lassítják a munkát.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'normal',  label: 'Normál (beltéri)',  factor: 1.00, icon: '🟢', desc: 'Védett, beltéri munkavégzés' },
+      { key: 'outdoor',  label: 'Kültéri',           factor: 1.10, icon: '🟡', desc: 'Időjárás-függő kültéri munka' },
+      { key: 'extreme',  label: 'Szélsőséges',       factor: 1.25, icon: '🔴', desc: 'Hideg, meleg, nedvesség, por' },
+    ]
+  },
+
+  // ── Tapasztalat & tervezés ────────────────────────────────────────────────
+  engineering_changes: {
+    label: 'Tervezési módosítások',
+    group: 'tapasztalat',
+    groupLabel: 'Tapasztalat & tervezés',
+    desc: 'Gyakori terv módosítások újramunkát és várakozást okoznak.',
+    defaultKey: 'none',
+    options: [
+      { key: 'none',     label: 'Nincs / minimális', factor: 1.00, icon: '🟢', desc: 'Végleges terv, nincs módosítás' },
+      { key: 'moderate', label: 'Mérsékelt',          factor: 1.10, icon: '🟡', desc: 'Néhány módosítás munka közben' },
+      { key: 'frequent', label: 'Gyakori',            factor: 1.25, icon: '🔴', desc: 'Folyamatos tervi változások' },
+    ]
+  },
+  crew_experience: {
+    label: 'Csapat tapasztalata',
+    group: 'tapasztalat',
+    groupLabel: 'Tapasztalat & tervezés',
+    desc: 'Tapasztaltabb csapat gyorsabban és pontosabban dolgozik.',
+    defaultKey: 'normal',
+    options: [
+      { key: 'expert',  label: 'Tapasztalt',  factor: 0.90, icon: '🟢', desc: '5+ év releváns tapasztalat' },
+      { key: 'normal',  label: 'Átlagos',     factor: 1.00, icon: '🟡', desc: 'Szokásos szakmai szint' },
+      { key: 'junior',  label: 'Kezdő',       factor: 1.20, icon: '🔴', desc: 'Betanulás, lassabb tempó' },
+    ]
+  },
+
 }
 
 // ─── Összetett produktivitási szorzó számítása ──────────────────────────────

@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "lint": "eslint src/ --ext .js,.jsx",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -20,6 +21,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
     "vite": "^4.4.0",
     "vitest": "^1.6.1"
   }

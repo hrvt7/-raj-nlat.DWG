@@ -488,7 +488,7 @@ function ProductivityTab({ settings, update }) {
             Kombinált projektszorzó
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.6 }}>
-            A 3 projekt-tényező szorzata – ez módosítja az összes normaidőt.<br/>
+            Az összes projekt-tényező szorzata – ez módosítja az összes normaidőt.<br/>
             1.00 = alap, &gt;1.00 = lassabb (nehezebb), &lt;1.00 = gyorsabb (könnyebb).<br/>
             <span style={{ color: C.textMuted }}>💡 A falanyag (GK / Ytong / Tégla / Beton) tételenként állítható a Takeoff fülön.</span>
           </div>
@@ -503,54 +503,66 @@ function ProductivityTab({ settings, update }) {
         </div>
       </div>
 
-      {/* All 3 factors in one card */}
-      <Card style={{ padding: 24 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 16,
-          paddingBottom: 10, borderBottom: `1px solid ${C.border}` }}>
-          Helyszíni körülmények
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {Object.entries(CONTEXT_FACTORS).map(([factorKey, factorDef]) => {
-            const selectedKey = ctx[factorKey] ?? factorDef.defaultKey
-            const selectedOpt = factorDef.options.find(o => o.key === selectedKey) || factorDef.options[0]
-            return (
-              <div key={factorKey}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>
-                    {factorDef.label}
+      {/* Group factors by their group field */}
+      {(() => {
+        const groups = []
+        const seen = new Set()
+        for (const [, factorDef] of Object.entries(CONTEXT_FACTORS)) {
+          if (!seen.has(factorDef.group)) {
+            seen.add(factorDef.group)
+            groups.push({ group: factorDef.group, groupLabel: factorDef.groupLabel })
+          }
+        }
+        return groups.map(({ group, groupLabel }) => (
+          <Card key={group} style={{ padding: 24, marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 16,
+              paddingBottom: 10, borderBottom: `1px solid ${C.border}` }}>
+              {groupLabel}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {Object.entries(CONTEXT_FACTORS).filter(([, fd]) => fd.group === group).map(([factorKey, factorDef]) => {
+                const selectedKey = ctx[factorKey] ?? factorDef.defaultKey
+                const selectedOpt = factorDef.options.find(o => o.key === selectedKey) || factorDef.options[0]
+                return (
+                  <div key={factorKey}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>
+                        {factorDef.label}
+                      </div>
+                      <div style={{ fontFamily: 'DM Mono', fontSize: 12,
+                        color: selectedOpt.factor === 1.0 ? C.textSub : selectedOpt.factor < 1 ? '#4ade80' : C.yellow,
+                        background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 10px', flexShrink: 0, marginLeft: 12 }}>
+                        ×{selectedOpt.factor.toFixed(2)}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {factorDef.options.map(opt => {
+                        const active = opt.key === selectedKey
+                        return (
+                          <button key={opt.key}
+                            onClick={() => update(`context_defaults.${factorKey}`, opt.key)}
+                            style={{
+                              flex: 1, minWidth: 120, padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
+                              textAlign: 'left', outline: 'none', transition: 'all 0.15s',
+                              background: active ? C.accentDim : C.bg,
+                              border: `1px solid ${active ? C.accent : C.border}`,
+                            }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                              <span style={{ fontSize: 13 }}>{opt.icon}</span>
+                              <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: active ? C.accent : C.text }}>{opt.label}</span>
+                            </div>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, lineHeight: 1.5 }}>×{opt.factor.toFixed(2)}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 12,
-                    color: selectedOpt.factor === 1.0 ? C.textSub : selectedOpt.factor < 1 ? '#4ade80' : C.yellow,
-                    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 10px', flexShrink: 0, marginLeft: 12 }}>
-                    ×{selectedOpt.factor.toFixed(2)}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {factorDef.options.map(opt => {
-                    const active = opt.key === selectedKey
-                    return (
-                      <button key={opt.key}
-                        onClick={() => update(`context_defaults.${factorKey}`, opt.key)}
-                        style={{
-                          flex: 1, minWidth: 120, padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
-                          textAlign: 'left', outline: 'none', transition: 'all 0.15s',
-                          background: active ? C.accentDim : C.bg,
-                          border: `1px solid ${active ? C.accent : C.border}`,
-                        }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                          <span style={{ fontSize: 13 }}>{opt.icon}</span>
-                          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: active ? C.accent : C.text }}>{opt.label}</span>
-                        </div>
-                        <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, lineHeight: 1.5 }}>×{opt.factor.toFixed(2)}</div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </Card>
+                )
+              })}
+            </div>
+          </Card>
+        ))
+      })()}
     </div>
   )
 }

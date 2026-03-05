@@ -10,6 +10,7 @@ import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
 import { calcProductivityFactor, WALL_FACTORS } from '../data/workItemsDb.js'
+import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -621,8 +622,34 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         try {
           const apiUrl = import.meta.env.VITE_API_URL || ''
 
+          // ── Helper: fetch with retry + exponential backoff ──────────────
+          const MAX_RETRIES = 3
+          const fetchWithRetry = async (url, opts, retries = MAX_RETRIES) => {
+            for (let attempt = 0; attempt <= retries; attempt++) {
+              try {
+                const res = await fetch(url, opts)
+                if (res.ok || res.status < 500) return res  // only retry on 5xx
+                if (attempt < retries) {
+                  const delay = Math.min(1000 * Math.pow(2, attempt), 8000) + Math.random() * 500
+                  console.warn(`DWG retry ${attempt + 1}/${retries} after ${Math.round(delay)}ms (HTTP ${res.status})`)
+                  await new Promise(r => setTimeout(r, delay))
+                  continue
+                }
+                return res  // last attempt, return whatever we got
+              } catch (netErr) {
+                if (attempt < retries) {
+                  const delay = Math.min(1000 * Math.pow(2, attempt), 8000) + Math.random() * 500
+                  console.warn(`DWG retry ${attempt + 1}/${retries} after ${Math.round(delay)}ms (${netErr.message})`)
+                  await new Promise(r => setTimeout(r, delay))
+                  continue
+                }
+                throw netErr
+              }
+            }
+          }
+
           // Step 1: Create CloudConvert job (our server, tiny JSON request)
-          const createRes = await fetch(`${apiUrl}/api/convert-dwg`, {
+          const createRes = await fetchWithRetry(`${apiUrl}/api/convert-dwg`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: f.name }),
@@ -640,7 +667,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             formData.append(key, val)
           }
           formData.append('file', f)
-          const uploadRes = await fetch(uploadUrl, { method: 'POST', body: formData })
+          const uploadRes = await fetchWithRetry(uploadUrl, { method: 'POST', body: formData })
           if (!uploadRes.ok) {
             throw new Error(`Fájl feltöltése CloudConvert-re sikertelen (HTTP ${uploadRes.status})`)
           }
@@ -651,11 +678,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           const MAX_POLL_MS = 120_000
           while (Date.now() - pollStart < MAX_POLL_MS) {
             await new Promise(r => setTimeout(r, 3000))
-            const pollRes = await fetch(`${apiUrl}/api/convert-dwg`, {
+            const pollRes = await fetchWithRetry(`${apiUrl}/api/convert-dwg`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ jobId }),
-            })
+            }, 2)
             const pollJson = await pollRes.json()
             if (!pollRes.ok || !pollJson.success) {
               throw new Error(pollJson.error || 'Státusz lekérdezése sikertelen')
@@ -666,7 +693,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           if (!downloadUrl) throw new Error('CloudConvert időtúllépés (120 mp). Próbáld újra.')
 
           // Step 4: Download converted DXF directly from CloudConvert CDN
-          const dxfRes = await fetch(downloadUrl)
+          const dxfRes = await fetchWithRetry(downloadUrl, {}, 2)
           if (!dxfRes.ok) throw new Error(`DXF letöltése sikertelen (HTTP ${dxfRes.status})`)
           dxfText = await dxfRes.text()
 
@@ -752,8 +779,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     const socketM = socketQty * 6
     const switchM = switchQty * 4
 
+    const totalM = lightM + socketM + switchM
     setCableEstimate({
-      cable_total_m: lightM + socketM + switchM,
+      cable_total_m: totalM,
+      cable_total_m_p50: totalM,
+      cable_total_m_p90: Math.round(totalM * 1.5),  // +50% safety margin for P90
       cable_by_type: { light_m: lightM, socket_m: socketM, switch_m: switchM, other_m: 0 },
       method: 'Automatikus becslés (eszközszám alapján)',
       confidence: 0.6,
@@ -1210,7 +1240,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                             key={item.blockName} item={item} asmOverrides={asmOverrides}
                             assemblies={assemblies}
                             onAccept={() => {}}
-                            onOverride={(name, id) => setAsmOverrides(p => ({ ...p, [name]: id }))}
+                            onOverride={(name, id) => {
+                              setAsmOverrides(p => ({ ...p, [name]: id }))
+                              // Persist unknown→assembly mapping for future projects
+                              if (id) {
+                                const rule = BLOCK_ASM_RULES.find(r => r.asmId === id)
+                                const asmType = ASSEMBLY_TYPES.find(t => t.key === rule?.label) || ASSEMBLY_TYPES.find(t => t.label === rule?.label)
+                                addUserOverride(name, asmType?.key || id)
+                              }
+                            }}
                             isHighlighted={highlightBlock === item.blockName}
                             onHover={setHighlightBlock}
                           />
@@ -1292,9 +1330,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         </div>
                       )
                     })}
-                    <div style={{ marginTop: 12, padding: '12px 14px', background: C.accentDim, borderRadius: 8, border: `1px solid ${C.accent}30`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text }}>Összesen</span>
-                      <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color: C.accent }}>{Math.round(cableEstimate.cable_total_m)} m</span>
+                    <div style={{ marginTop: 12, padding: '12px 14px', background: C.accentDim, borderRadius: 8, border: `1px solid ${C.accent}30` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text }}>Összesen</span>
+                        <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color: C.accent }}>{Math.round(cableEstimate.cable_total_m)} m</span>
+                      </div>
+                      {cableEstimate.cable_total_m_p90 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>P50–P90 tartomány</span>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>
+                            {Math.round(cableEstimate.cable_total_m_p50 || cableEstimate.cable_total_m)}–{Math.round(cableEstimate.cable_total_m_p90)} m
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div style={{ marginTop: 8, fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
                       Módszer: {cableEstimate.method} · Konfidencia: ~{Math.round((cableEstimate.confidence || 0.6) * 100)}%

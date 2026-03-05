@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -128,8 +129,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
       setError(null)
       try {
         const pdfjsLib = await import('pdfjs-dist')
-        // Set worker — use specific version to avoid mismatch
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        // Use bundled worker (version-matched, no CDN dependency)
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
         const arrayBuffer = file instanceof Blob ? await file.arrayBuffer() : file
         const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
