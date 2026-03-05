@@ -4,6 +4,7 @@ from urllib.request import urlopen, Request
 
 # CloudConvert API key — set as Vercel env var CLOUDCONVERT_API_KEY
 CLOUDCONVERT_API_KEY = os.environ.get('CLOUDCONVERT_API_KEY', '')
+ALLOWED_ORIGIN      = os.environ.get('ALLOWED_ORIGIN', '*')
 
 
 def create_job(filename):
@@ -140,7 +141,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode())
 
     def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 

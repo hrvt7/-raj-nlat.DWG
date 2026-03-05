@@ -2,7 +2,9 @@ from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, io, re, os
 from collections import Counter
 
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_API_KEY  = os.environ.get('OPENAI_API_KEY', '')
+ALLOWED_ORIGIN  = os.environ.get('ALLOWED_ORIGIN', '*')
+MAX_UPLOAD_MB   = int(os.environ.get('MAX_UPLOAD_MB', '20'))  # default 20 MB
 
 SYMBOL_KEYWORDS = {
     'dugalj':        ['dugalj', 'konnektor', 'socket', 'aljzat'],
@@ -26,22 +28,27 @@ FONTOS TUDNIVALÓK A VONALRAJZOKRÓL:
 - Szimbólumokat számold meg: körök=dugalj/kapcsoló, kereszt=lámpa, téglalap=panel
 - Ha látod a kábeltálca szimbólumot (dupla vonal vagy vastag téglalap vonal) → add meg a hosszát méterben
 - Ha látod a léptéket (pl. 1:50, 1:100) → használd a hosszbecsléshez
+- Ha szimbólum mellett van áramkör jelölés (pl. "K12", "A3", "F1"), add meg "circuit" mezőben
 
 KÁBELTÁLCA AZONOSÍTÁS:
 - Dupla párhuzamos vonal = kábeltálca nyomvonal
 - Általában tetőn vagy falon futó sáv jelöli
 - Mérete lehet pl. 100x60, 200x60, 300x100 mm – ez a neve, de a HOSSZA kell méterben
 
+LÉPTÉKJEL:
+- Ha van M 1:XX vagy méretarány a rajzon, add meg a "scale" mezőben (pl. "1:50")
+
 VÁLASZOLJ KIZÁRÓLAG valid JSON-ban:
 {
   "items": [
     {"name": "Kábeltálca 200x60", "type": "kabeltalca", "quantity": 45.5, "unit": "fm", "notes": "3. sor alapján"},
     {"name": "NYM-J 3x2.5", "type": "kabel", "quantity": 120, "unit": "fm", "notes": ""},
-    {"name": "Dugalj 2P+F IP44", "type": "dugalj", "quantity": 8, "unit": "db", "notes": ""},
+    {"name": "Dugalj 2P+F IP44", "type": "dugalj", "quantity": 8, "unit": "db", "notes": "", "circuit": "K12"},
     {"name": "LED panel 60x60", "type": "lampa", "quantity": 12, "unit": "db", "notes": ""}
   ],
   "confidence": 0.65,
   "source": "vision_plan",
+  "scale": "1:50",
   "notes": "Kábeltálca elrendezési terv – vonalak alapján becsülve"
 }
 
@@ -281,6 +288,67 @@ def parse_legend_pdf(file_bytes):
         }
 
 
+def detect_pdf_type(file_bytes):
+    """Detect whether PDF is vector-based or raster-based (scanned).
+    Returns 'vector', 'raster', or 'mixed'."""
+    try:
+        import fitz
+        doc = fitz.open(stream=file_bytes, filetype='pdf')
+        total_paths = 0
+        total_images = 0
+        total_text_len = 0
+        pages_checked = min(len(doc), 3)
+
+        for i in range(pages_checked):
+            page = doc[i]
+            paths = page.get_drawings()
+            total_paths += len(paths)
+            images = page.get_images(full=True)
+            total_images += len(images)
+            total_text_len += len(page.get_text('text').strip())
+
+        # Heuristics: vector PDF has many paths and/or text, raster has large images
+        if total_paths > 50 or total_text_len > 200:
+            if total_images > 0 and total_paths < 10:
+                return 'mixed'
+            return 'vector'
+        elif total_images > 0:
+            return 'raster'
+        return 'vector'  # default to vector (even empty PDFs)
+    except Exception:
+        return 'unknown'
+
+
+def extract_text_near_symbols(file_bytes, max_pages=6):
+    """Extract text blocks with positions from PDF pages.
+    Returns list of {text, x, y, page} for nearest-neighbor circuit label matching."""
+    try:
+        import fitz
+        doc = fitz.open(stream=file_bytes, filetype='pdf')
+        text_blocks = []
+        for i, page in enumerate(doc):
+            if i >= max_pages:
+                break
+            blocks = page.get_text('dict', flags=0)
+            for block in blocks.get('blocks', []):
+                if block.get('type') != 0:  # text block
+                    continue
+                for line in block.get('lines', []):
+                    for span in line.get('spans', []):
+                        t = span.get('text', '').strip()
+                        if t and len(t) < 20:  # short labels only (circuit IDs)
+                            bbox = span.get('bbox', [0, 0, 0, 0])
+                            text_blocks.append({
+                                'text': t,
+                                'x': (bbox[0] + bbox[2]) / 2,
+                                'y': (bbox[1] + bbox[3]) / 2,
+                                'page': i,
+                            })
+        return text_blocks
+    except Exception:
+        return []
+
+
 def parse_pdf_bytes(file_bytes, filename='', legend_context=None):
     try:
         import fitz
@@ -292,6 +360,12 @@ def parse_pdf_bytes(file_bytes, filename='', legend_context=None):
         return parse_legend_pdf(file_bytes)
 
     warnings = []
+
+    # ── PDF típus detektálás (vektor vs raszter) ─────────────────────────
+    pdf_type = detect_pdf_type(file_bytes)
+
+    # ── Text label extraction (for circuit IDs near symbols) ─────────────
+    text_labels = extract_text_near_symbols(file_bytes) if pdf_type in ('vector', 'mixed') else []
 
     if OPENAI_API_KEY:
         try:
@@ -323,6 +397,13 @@ Ezeket a szimbólumokat keresd a tervrajzon!"""
             vision_items, avg_conf = merge_vision_results(page_results)
             blocks, lengths = vision_results_to_blocks(vision_items)
 
+            # Extract detected scale from Vision responses
+            detected_scale = None
+            for pr in page_results:
+                if pr.get('scale'):
+                    detected_scale = pr['scale']
+                    break
+
             return {
                 'success': True,
                 'blocks': blocks,
@@ -341,7 +422,10 @@ Ezeket a szimbólumokat keresd a tervrajzon!"""
                 '_pages_analyzed': len(images),
                 '_vision_confidence': round(avg_conf, 2),
                 '_vision_items': vision_items,
-                '_note': f'GPT-4o Vision elemezte ({len(images)}/{page_count} oldal). Átlagos bizalom: {round(avg_conf*100)}%.',
+                '_pdf_type': pdf_type,
+                '_text_labels': text_labels[:200],  # cap to avoid huge payloads
+                '_detected_scale': detected_scale,
+                '_note': f'GPT-4o Vision elemezte ({len(images)}/{page_count} oldal). Átlagos bizalom: {round(avg_conf*100)}%. PDF típus: {pdf_type}.',
                 'warnings': warnings,
             }
 
@@ -390,12 +474,28 @@ class handler(BaseHTTPRequestHandler):
             filename = ''
             legend_context = None
 
+            # ── Méretlimit ellenőrzés (DoS-védelemhez) ──────────────────────
+            max_bytes = MAX_UPLOAD_MB * 1024 * 1024
+            if length > max_bytes:
+                return self._respond(413, {
+                    'success': False,
+                    'error': f'A feltöltött fájl túl nagy ({length // (1024*1024)} MB). '
+                             f'Maximum megengedett méret: {MAX_UPLOAD_MB} MB.'
+                })
+
             if 'application/json' in content_type:
                 payload = json.loads(body or b'{}')
                 b64 = payload.get('pdf_base64') or payload.get('data') or ''
                 if not b64:
                     raise ValueError('pdf_base64 mező hiányzik')
                 pdf_bytes = base64.b64decode(b64)
+                # Decoded size check (base64 can be up to ~33% larger than binary)
+                if len(pdf_bytes) > max_bytes:
+                    return self._respond(413, {
+                        'success': False,
+                        'error': f'A PDF fájl mérete ({len(pdf_bytes) // (1024*1024)} MB) '
+                                 f'meghaladja a {MAX_UPLOAD_MB} MB-os limitet.'
+                    })
                 filename = payload.get('filename', '')
                 legend_context = payload.get('legend_context')  # opcionális: [{symbol, meaning, type}]
             else:
@@ -421,7 +521,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
     def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 

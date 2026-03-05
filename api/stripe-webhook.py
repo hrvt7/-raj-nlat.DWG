@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler
 import json, os, hashlib, hmac, urllib.request, time
 
 STRIPE_WEBHOOK_SECRET  = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+ALLOWED_ORIGIN         = os.environ.get('ALLOWED_ORIGIN', '*')
 SUPABASE_URL           = os.environ.get('VITE_SUPABASE_URL', 'https://pprlbtsqfyrbfhbqjpai.supabase.co')
 SUPABASE_SERVICE_KEY   = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
 
@@ -176,6 +177,6 @@ class handler(BaseHTTPRequestHandler):
     def _respond(self, code, body):
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.end_headers()
         self.wfile.write(json.dumps(body).encode())

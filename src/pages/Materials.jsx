@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { C, fmt, Button, Badge, Input } from '../components/ui.jsx'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
-import { saveMaterials } from '../data/store.js'
+import { saveMaterials, DEFAULT_MATERIALS } from '../data/store.js'
 import { getMaterialCategoriesForTrade } from '../data/trades.js'
 
 // ─── Material categories ────────────────────────────────────────────────────
@@ -65,10 +65,8 @@ export default function MaterialsPage({ materials, onMaterialsChange, activeTrad
 
   const resetToDefaults = () => {
     if (!confirm('Visszaállítod az alapértelmezett anyaglistát? A saját módosításaid elvesznek.')) return
-    import('../data/store.js').then(m => {
-      onMaterialsChange([...m.DEFAULT_MATERIALS])
-      saveMaterials(m.DEFAULT_MATERIALS)
-    }).catch(e => { console.error('Alapértelmezések visszaállítása sikertelen:', e); alert('Hiba: ' + e.message) })
+    onMaterialsChange([...DEFAULT_MATERIALS])
+    saveMaterials(DEFAULT_MATERIALS)
   }
 
   const newCode = () => {

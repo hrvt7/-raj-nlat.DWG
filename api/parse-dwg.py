@@ -7,6 +7,9 @@ from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, os, re
 from collections import Counter
 
+ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '*')
+MAX_UPLOAD_MB  = int(os.environ.get('MAX_UPLOAD_MB', '30'))
+
 SYMBOL_KEYWORDS = {
     'dugalj':        ['dugalj', 'konnektor', 'socket', 'aljzat'],
     'kapcsolo':      ['kapcsoló', 'kapcsolo', 'switch', 'villanykapcs'],
@@ -97,6 +100,14 @@ class handler(BaseHTTPRequestHandler):
         filename = 'file.dwg'
         try:
             length = int(self.headers.get('Content-Length', 0))
+            max_bytes = MAX_UPLOAD_MB * 1024 * 1024
+            if length > max_bytes:
+                return self._respond(413, {
+                    'success': False,
+                    'error': f'A feltöltött fájl túl nagy ({length // (1024*1024)} MB). '
+                             f'Maximum megengedett méret: {MAX_UPLOAD_MB} MB.',
+                    'warnings': [],
+                })
             body = self.rfile.read(length)
             payload = json.loads(body)
 
@@ -182,7 +193,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
     def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 

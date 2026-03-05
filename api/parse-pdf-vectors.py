@@ -8,6 +8,9 @@ from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, io, math, os
 from collections import defaultdict
 
+ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '*')
+MAX_UPLOAD_MB  = int(os.environ.get('MAX_UPLOAD_MB', '20'))
+
 def classify_color(c, threshold_r=0.75):
     """Szín kategorizálás (tuple/list of floats 0..1)"""
     if not c or len(c) < 3:
@@ -310,6 +313,13 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             length = int(self.headers.get('Content-Length', 0))
+            max_bytes = MAX_UPLOAD_MB * 1024 * 1024
+            if length > max_bytes:
+                return self._respond(413, {
+                    'success': False,
+                    'error': f'A feltöltött fájl túl nagy ({length // (1024*1024)} MB). '
+                             f'Maximum megengedett méret: {MAX_UPLOAD_MB} MB.'
+                })
             body = self.rfile.read(length)
             payload = json.loads(body or b'{}')
 
@@ -325,6 +335,12 @@ class handler(BaseHTTPRequestHandler):
                 raise RuntimeError('PyMuPDF nincs telepítve')
 
             pdf_bytes = base64.b64decode(b64)
+            if len(pdf_bytes) > max_bytes:
+                return self._respond(413, {
+                    'success': False,
+                    'error': f'A PDF fájl mérete ({len(pdf_bytes) // (1024*1024)} MB) '
+                             f'meghaladja a {MAX_UPLOAD_MB} MB-os limitet.'
+                })
             result = analyze_pdf_vectors(pdf_bytes, filename, scale_override)
             self._respond(200, result)
 
@@ -343,7 +359,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
     def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 

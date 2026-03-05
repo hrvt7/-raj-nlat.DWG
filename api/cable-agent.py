@@ -3,6 +3,7 @@ import json, traceback, os, urllib.request, urllib.error, base64
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 OPENAI_API_KEY    = os.environ.get('OPENAI_API_KEY', '')
+ALLOWED_ORIGIN    = os.environ.get('ALLOWED_ORIGIN', '*')
 
 SYSTEM_PROMPT = """Te egy tapasztalt magyar villamos tervező mérnök AI asszisztens vagy.
 Kapsz egy DXF tervrajz képét és/vagy a belőle kinyert geometriai adatokat.
@@ -254,7 +255,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
     def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 

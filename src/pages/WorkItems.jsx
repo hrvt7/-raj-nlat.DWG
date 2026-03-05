@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
-import { WORK_ITEM_CATEGORIES } from '../data/workItemsDb.js'
+import { WORK_ITEM_CATEGORIES, WORK_ITEMS_DEFAULT } from '../data/workItemsDb.js'
 import { saveWorkItems } from '../data/store.js'
 import { getCategoriesForTrade } from '../data/trades.js'
 
@@ -48,10 +48,8 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange, activeTrad
 
   const resetToDefaults = () => {
     if (!confirm('Visszaállítod az alapértelmezett normaidőket? A saját módosításaid elvesznek.')) return
-    import('../data/workItemsDb.js').then(m => {
-      onWorkItemsChange([...m.WORK_ITEMS_DEFAULT])
-      saveWorkItems(m.WORK_ITEMS_DEFAULT)
-    }).catch(e => { console.error('Alapértelmezések visszaállítása sikertelen:', e); alert('Hiba: ' + e.message) })
+    onWorkItemsChange([...WORK_ITEMS_DEFAULT])
+    saveWorkItems(WORK_ITEMS_DEFAULT)
   }
 
   return (

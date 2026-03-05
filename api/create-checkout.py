@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.error, urllib.parse
 
 STRIPE_SECRET_KEY      = os.environ.get('STRIPE_SECRET_KEY', '')
+ALLOWED_ORIGIN         = os.environ.get('ALLOWED_ORIGIN', '*')
 STRIPE_PRICE_MONTHLY   = os.environ.get('STRIPE_PRICE_MONTHLY', '')   # pl. price_xxxxx
 STRIPE_PRICE_ANNUAL    = os.environ.get('STRIPE_PRICE_ANNUAL', '')    # pl. price_yyyyy
 APP_URL                = os.environ.get('VITE_APP_URL', 'https://raj-nlat-dwg.vercel.app')
@@ -91,6 +92,6 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({'error': msg}).encode())
 
     def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')

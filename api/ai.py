@@ -1,7 +1,8 @@
 from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, os, urllib.request, urllib.error
 
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_API_KEY  = os.environ.get('OPENAI_API_KEY', '')
+ALLOWED_ORIGIN  = os.environ.get('ALLOWED_ORIGIN', '*')
 
 def openai_chat(messages, model='gpt-4o', max_tokens=2000):
     if not OPENAI_API_KEY:
@@ -163,7 +164,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
     def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 

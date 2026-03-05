@@ -6,6 +6,63 @@
 // This replaces the old "no-op" PDF path and the per-device cable multipliers.
 // ──────────────────────────────────────────────────────────────────────────────
 
+
+// ── Schema validation helpers ─────────────────────────────────────────────────
+
+/**
+ * Validate a raw API response from /api/parse-pdf or /api/parse-pdf-vectors.
+ * Returns { ok: boolean, reason?: string }.
+ * Rejects responses that don't match the expected shape to keep garbage out of storage.
+ */
+function validateApiResponse(res, name) {
+  if (!res || typeof res !== 'object') return { ok: false, reason: `${name}: nem objektum` }
+  if (res.success !== true) return { ok: false, reason: `${name}: success !== true (${res.error ?? '?'})` }
+  if ('blocks' in res && !Array.isArray(res.blocks))
+    return { ok: false, reason: `${name}: blocks nem tömb` }
+  if ('lengths' in res && !Array.isArray(res.lengths))
+    return { ok: false, reason: `${name}: lengths nem tömb` }
+  return { ok: true }
+}
+
+/**
+ * Sanitize a single recognizedItem before it reaches planStore.
+ * - qty must be a positive integer
+ * - confidence must be 0–1; clamp if out of range
+ * - blockName must be a non-empty string
+ * - Low-confidence items (< UNCERTAIN_THRESHOLD) get matchType 'uncertain'
+ * Returns null for fundamentally unusable items (missing blockName or qty).
+ */
+const UNCERTAIN_THRESHOLD = 0.3
+
+function sanitizeRecognizedItem(item) {
+  if (!item || typeof item !== 'object') return null
+  const blockName = String(item.blockName || '').trim()
+  if (!blockName) return null
+
+  const rawQty = Number(item.qty)
+  const qty = Number.isFinite(rawQty) && rawQty > 0 ? Math.round(rawQty) : 1
+
+  const rawConf = Number(item.confidence)
+  const confidence = Number.isFinite(rawConf) ? Math.min(1, Math.max(0, rawConf)) : 0.3
+
+  const matchType = (confidence < UNCERTAIN_THRESHOLD)
+    ? 'uncertain'
+    : (item.matchType || 'pdf_vision')
+
+  return {
+    blockName,
+    qty,
+    asmId:         item.asmId ?? null,
+    confidence,
+    matchType,
+    rule:          (item.rule && typeof item.rule === 'object') ? item.rule : null,
+    _pdfType:      String(item._pdfType      || 'egyeb'),
+    _pdfName:      String(item._pdfName      || blockName),
+    _pdfCableType: String(item._pdfCableType || 'power'),
+    _pdfPositions: Array.isArray(item._pdfPositions) ? item._pdfPositions : [],
+  }
+}
+
 // ── Symbol → Assembly mapping ─────────────────────────────────────────────────
 // Maps PDF-detected symbol types to assembly IDs (same BLOCK_ASM_RULES as DXF)
 const PDF_SYMBOL_ASM_MAP = {
@@ -305,15 +362,25 @@ export function mergeAndNormalize(vision, vector) {
   let scaleFactor = null
   let scaleInfo = null
 
+  // ── Validate raw API responses ─────────────────────────────────────────
+  const visionValidation = validateApiResponse(vision, 'vision')
+  const vectorValidation = validateApiResponse(vector, 'vector')
+  if (!visionValidation.ok)  warnings.push(`Vision API válasz érvénytelen: ${visionValidation.reason}`)
+  if (!vectorValidation.ok)  warnings.push(`Vector API válasz érvénytelen: ${vectorValidation.reason}`)
+
+  // Use null for invalid responses so downstream code gets clean input
+  const safeVision = visionValidation.ok  ? vision  : null
+  const safeVector = vectorValidation.ok  ? vector  : null
+
   // ── Extract scale from vector result ────────────────────────────────────
-  if (vector?.success && vector._scale) {
-    scaleInfo = vector._scale
-    scaleFactor = vector._scale.m_per_pt || null
+  if (safeVector?.success && safeVector._scale) {
+    scaleInfo = safeVector._scale
+    scaleFactor = safeVector._scale.m_per_pt || null
   }
 
   // ── Process Vision AI items (primary source for counts) ────────────────
-  if (vision?.success && vision._vision_items) {
-    for (const vi of vision._vision_items) {
+  if (safeVision?.success && safeVision._vision_items) {
+    for (const vi of safeVision._vision_items) {
       const type = guessSymbolType(vi.name, vi.type)
       const mapping = PDF_SYMBOL_ASM_MAP[type] || PDF_SYMBOL_ASM_MAP.egyeb
       const qty = Math.round(Number(vi.quantity) || 0)
@@ -327,7 +394,7 @@ export function mergeAndNormalize(vision, vector) {
         icon: mapping.icon,
         label: mapping.label,
         cableType: mapping.cableType,
-        confidence: (vision._vision_confidence || 0.5) * 0.9,
+        confidence: (safeVision._vision_confidence || 0.5) * 0.9,
         matchType: 'pdf_vision',
         positions: [],  // Vision API doesn't give coordinates
       })
@@ -336,11 +403,11 @@ export function mergeAndNormalize(vision, vector) {
 
   // ── Process vector analysis symbols (for positions) ───────────────────
   // Vector analysis gives us RED symbol clusters with positions
-  if (vector?.success && vector._symbol_count > 0) {
+  if (safeVector?.success && safeVector._symbol_count > 0) {
     // If vision didn't provide items, use vector counts
     if (!items.length) {
       // Vector gives generic "small/medium/large" categories
-      for (const block of (vector.blocks || [])) {
+      for (const block of (safeVector.blocks || [])) {
         const isSmall = block.layer?.includes('SMALL')
         const isMedium = block.layer?.includes('MEDIUM')
         const type = isSmall ? 'dugalj' : isMedium ? 'lampa' : 'panel'
@@ -353,7 +420,7 @@ export function mergeAndNormalize(vision, vector) {
           icon: mapping.icon,
           label: mapping.label,
           cableType: mapping.cableType,
-          confidence: (vector._confidence || 0.5) * 0.7,
+          confidence: (safeVector._confidence || 0.5) * 0.7,
           matchType: 'pdf_vector',
           positions: [],
         })
@@ -362,8 +429,8 @@ export function mergeAndNormalize(vision, vector) {
   }
 
   // ── Process text fallback if nothing else worked ──────────────────────
-  if (!items.length && vision?.success && vision.blocks?.length) {
-    for (const block of vision.blocks) {
+  if (!items.length && safeVision?.success && safeVision.blocks?.length) {
+    for (const block of safeVision.blocks) {
       const type = guessSymbolType(block.name, null)
       const mapping = PDF_SYMBOL_ASM_MAP[type] || PDF_SYMBOL_ASM_MAP.egyeb
       items.push({
@@ -383,20 +450,20 @@ export function mergeAndNormalize(vision, vector) {
 
   // ── Collect cable lengths from vector analysis ─────────────────────────
   const lengths = []
-  if (vector?.success) {
-    for (const l of (vector.lengths || [])) {
+  if (safeVector?.success) {
+    for (const l of (safeVector.lengths || [])) {
       if (l.length > 0) lengths.push(l)
     }
   }
-  if (vision?.success) {
-    for (const l of (vision.lengths || [])) {
+  if (safeVision?.success) {
+    for (const l of (safeVision.lengths || [])) {
       if (l.length > 0 && l.layer !== 'PDF') lengths.push(l)
     }
   }
 
   // ── Warnings ──────────────────────────────────────────────────────────
-  if (vision?.warnings) warnings.push(...vision.warnings)
-  if (vector?.warnings) warnings.push(...vector.warnings)
+  if (safeVision?.warnings) warnings.push(...safeVision.warnings)
+  if (safeVector?.warnings) warnings.push(...safeVector.warnings)
   if (!items.length) {
     warnings.push('Nem sikerült szimbólumokat azonosítani a PDF-ben. Próbáld DXF formátumban exportálni, vagy használd a kézi számlálás eszközt a PDF nézetben.')
   }
@@ -586,8 +653,11 @@ export async function runPdfTakeoff(file, onProgress) {
   const merged = mergeAndNormalize(vision, vector)
   onProgress?.(70)
 
-  // Step 3: Convert to recognizedItems
-  const recognizedItems = toRecognizedItems(merged.items)
+  // Step 3: Convert to recognizedItems + sanitize (schema guard before storage)
+  const recognizedItemsRaw = toRecognizedItems(merged.items)
+  const recognizedItems = recognizedItemsRaw
+    .map(sanitizeRecognizedItem)
+    .filter(Boolean)  // drop nulls (items with missing blockName or qty)
   onProgress?.(80)
 
   // Step 4: Estimate cables (MST-based)

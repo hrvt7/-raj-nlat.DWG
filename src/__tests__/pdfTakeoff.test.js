@@ -13,7 +13,7 @@ describe('mergeAndNormalize', () => {
     const result = mergeAndNormalize(null, null)
     expect(result.items).toHaveLength(0)
     expect(result.warnings.length).toBeGreaterThan(0)
-    expect(result.warnings[0]).toContain('szimbólumokat')
+    expect(result.warnings.some(w => w.includes('szimbólumokat'))).toBe(true)
   })
 
   it('extracts items from vision API result', () => {
