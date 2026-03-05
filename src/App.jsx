@@ -10,6 +10,9 @@ import Settings from './pages/Settings.jsx'
 import AssembliesPage from './pages/Assemblies.jsx'
 import PlansPage from './pages/Plans.jsx'
 import FelmeresPage from './pages/Felmeres.jsx'
+import LegendPanel from './components/LegendPanel.jsx'
+import DetectionReviewPanel from './components/DetectionReviewPanel.jsx'
+import PdfMergePanel from './components/PdfMergePanel.jsx'
 import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes } from './data/store.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
@@ -580,6 +583,10 @@ function SaaSShell() {
   }
 
   const [felmeresFile, setFelmeresFile] = useState(null)
+  // Felmérés modal panels
+  const [legendPanelOpen, setLegendPanelOpen] = useState(false)
+  const [detectPanelPlans, setDetectPanelPlans] = useState(null) // null = closed, [] = plans
+  const [mergePanelPlans, setMergePanelPlans] = useState(null)   // null = closed, [] = plans
 
   const [workItems, setWorkItems] = useState(loadWorkItems)
 
@@ -777,7 +784,12 @@ function SaaSShell() {
               ) : page === 'materials' ? (
                 <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
               ) : page === 'felmeres' ? (
-                <FelmeresPage onOpenFile={f => { setFelmeresFile(f); setPage('felmeres-workspace') }} />
+                <FelmeresPage
+                  onOpenFile={f => { setFelmeresFile(f); setPage('felmeres-workspace') }}
+                  onLegendPanel={() => setLegendPanelOpen(true)}
+                  onDetectPanel={plans => setDetectPanelPlans(plans)}
+                  onMergePanel={plans => setMergePanelPlans(plans)}
+                />
               ) : page === 'plans' ? (
                 <PlansPage onNavigate={(p, data) => { if (data) setPrefillData(data); setPage(p) }} />
               ) : page === 'assemblies' ? (
@@ -791,6 +803,26 @@ function SaaSShell() {
           </div>
         )}
       </div>
+
+      {/* ── Felmérés modal panels ─────────────────────────────────────────── */}
+      {legendPanelOpen && (
+        <LegendPanel onClose={() => setLegendPanelOpen(false)} />
+      )}
+      {detectPanelPlans && (
+        <DetectionReviewPanel
+          plans={detectPanelPlans}
+          onClose={() => setDetectPanelPlans(null)}
+          onDone={() => setDetectPanelPlans(null)}
+        />
+      )}
+      {mergePanelPlans && (
+        <PdfMergePanel
+          plans={mergePanelPlans}
+          materials={materials}
+          onClose={() => setMergePanelPlans(null)}
+          onSaved={quote => { handleQuoteSaved(quote); setMergePanelPlans(null) }}
+        />
+      )}
     </div>
   )
 }
