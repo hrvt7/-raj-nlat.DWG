@@ -3,7 +3,9 @@ import { C, Button, Badge } from '../components/ui.jsx'
 const DxfViewerPanel = lazy(() => import('../components/DxfViewer/index.jsx'))
 const PdfViewerPanel = lazy(() => import('../components/PdfViewer/index.jsx'))
 import MergePlansView from '../components/MergePlansView.jsx'
-import { loadPlans, savePlan, getPlanFile, deletePlan, generatePlanId, savePlanThumbnail, getPlanThumbnail } from '../data/planStore.js'
+import { loadPlans, savePlan, getPlanFile, deletePlan, generatePlanId, savePlanThumbnail, getPlanThumbnail, updatePlanMeta, getOrParse, FLOOR_OPTIONS, DISCIPLINE_OPTIONS } from '../data/planStore.js'
+import { normalizeBlocks } from '../data/symbolDictionary.js'
+import { getDxfParserPool } from '../utils/workerPool.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const fmtSize = (bytes) => {
@@ -61,12 +63,67 @@ export default function Plans({ onNavigate }) {
   const [uploading, setUploading] = useState(false)
   const [thumbnails, setThumbnails] = useState({}) // { planId: dataUrl }
   const [mergeMode, setMergeMode] = useState(false)
+  const [parsing, setParsing] = useState({})      // { planId: 'running'|'done'|'error' }
+  const [parseProgress, setParseProgress] = useState({}) // { planId: 0-100 }
+  const [batchParsing, setBatchParsing] = useState(false)
+  const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 })
   const inputRef = useRef()
 
   // Load plans + thumbnails on mount
   useEffect(() => {
     setPlans(loadPlans())
   }, [])
+
+  // ── Floor / Discipline tag handlers ──
+  const handleFloorChange = useCallback((planId, floor) => {
+    updatePlanMeta(planId, { floor })
+    setPlans(loadPlans())
+  }, [])
+
+  const handleDisciplineChange = useCallback((planId, discipline) => {
+    updatePlanMeta(planId, { discipline })
+    setPlans(loadPlans())
+  }, [])
+
+  // ── Single plan auto-parse ──
+  const handleParsePlan = useCallback(async (plan) => {
+    if (plan.fileType !== 'dxf' && plan.fileType !== 'dwg') return
+    setParsing(p => ({ ...p, [plan.id]: 'running' }))
+    setParseProgress(p => ({ ...p, [plan.id]: 0 }))
+    try {
+      const file = await getPlanFile(plan.id)
+      if (!file) throw new Error('Fájl nem található')
+      const pool = getDxfParserPool()
+      const { parseResult } = await getOrParse(plan.id, file, (dxfText) =>
+        pool.parse(dxfText, (pct) => setParseProgress(p => ({ ...p, [plan.id]: pct })))
+      )
+      // Normalize blocks through symbol dictionary
+      if (parseResult?.blocks) {
+        const { normalized, unknowns } = normalizeBlocks(parseResult.blocks)
+        updatePlanMeta(plan.id, {
+          parseResult: { ...parseResult, blocks: normalized, unknowns },
+        })
+      }
+      setParsing(p => ({ ...p, [plan.id]: 'done' }))
+      setPlans(loadPlans())
+    } catch (err) {
+      console.error('Parse error:', err)
+      setParsing(p => ({ ...p, [plan.id]: 'error' }))
+    }
+  }, [])
+
+  // ── Batch parse all DXF plans ──
+  const handleBatchParse = useCallback(async () => {
+    const dxfPlans = plans.filter(p => (p.fileType === 'dxf' || p.fileType === 'dwg') && !p.parsedAt)
+    if (dxfPlans.length === 0) return
+    setBatchParsing(true)
+    setBatchProgress({ done: 0, total: dxfPlans.length })
+    for (let i = 0; i < dxfPlans.length; i++) {
+      await handleParsePlan(dxfPlans[i])
+      setBatchProgress({ done: i + 1, total: dxfPlans.length })
+    }
+    setBatchParsing(false)
+  }, [plans, handleParsePlan])
 
   // Load thumbnails for all plans
   useEffect(() => {
@@ -215,15 +272,27 @@ export default function Plans({ onNavigate }) {
             DXF, DWG és PDF tervrajzok kezelése — mérés, számlálás, kalibráció
           </p>
         </div>
-        {plans.length >= 2 && (
-          <button onClick={() => setMergeMode(true)} style={{
-            padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
-            background: 'rgba(76,201,240,0.1)', border: `1px solid rgba(76,201,240,0.3)`,
-            color: '#4CC9F0', fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
-          }}>
-            Tervek összevonása
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {plans.some(p => (p.fileType === 'dxf' || p.fileType === 'dwg') && !p.parsedAt) && (
+            <button onClick={handleBatchParse} disabled={batchParsing} style={{
+              padding: '8px 16px', borderRadius: 8, cursor: batchParsing ? 'wait' : 'pointer',
+              background: 'rgba(33,243,163,0.1)', border: `1px solid rgba(33,243,163,0.3)`,
+              color: C.accent, fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
+              opacity: batchParsing ? 0.6 : 1,
+            }}>
+              {batchParsing ? `📊 ${batchProgress.done}/${batchProgress.total} elemzés...` : '📊 Összes elemzése'}
+            </button>
+          )}
+          {plans.length >= 2 && (
+            <button onClick={() => setMergeMode(true)} style={{
+              padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+              background: 'rgba(76,201,240,0.1)', border: `1px solid rgba(76,201,240,0.3)`,
+              color: '#4CC9F0', fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
+            }}>
+              Tervek összevonása
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Upload area */}
@@ -413,6 +482,55 @@ export default function Plans({ onNavigate }) {
                     <span>{fmtDate(plan.createdAt)}</span>
                   </div>
 
+                  {/* Floor / Discipline tags */}
+                  {(plan.fileType === 'dxf' || plan.fileType === 'dwg') && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }} onClick={e => e.stopPropagation()}>
+                      <select
+                        value={plan.floor || ''}
+                        onChange={e => handleFloorChange(plan.id, e.target.value || null)}
+                        style={{
+                          flex: 1, padding: '4px 6px', borderRadius: 5, fontSize: 10, fontFamily: 'DM Mono',
+                          background: C.bg, border: `1px solid ${C.border}`, color: plan.floor ? C.text : C.muted,
+                        }}
+                      >
+                        <option value="">Emelet…</option>
+                        {FLOOR_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                      <select
+                        value={plan.discipline || ''}
+                        onChange={e => handleDisciplineChange(plan.id, e.target.value || null)}
+                        style={{
+                          flex: 1, padding: '4px 6px', borderRadius: 5, fontSize: 10, fontFamily: 'DM Mono',
+                          background: C.bg, border: `1px solid ${C.border}`, color: plan.discipline ? C.text : C.muted,
+                        }}
+                      >
+                        <option value="">Típus…</option>
+                        {DISCIPLINE_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Parse status badge */}
+                  {plan.parsedAt && (
+                    <div style={{
+                      marginTop: 6, display: 'flex', alignItems: 'center', gap: 4,
+                      fontSize: 10, fontFamily: 'DM Mono', color: C.accent,
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, display: 'inline-block' }} />
+                      Elemzett ✓ {plan.parseResult?.summary?.total_blocks || 0} blokk
+                    </div>
+                  )}
+                  {parsing[plan.id] === 'running' && (
+                    <div style={{ marginTop: 6, fontSize: 10, fontFamily: 'DM Mono', color: '#4CC9F0' }}>
+                      ⏳ Elemzés... {parseProgress[plan.id] || 0}%
+                    </div>
+                  )}
+                  {parsing[plan.id] === 'error' && (
+                    <div style={{ marginTop: 6, fontSize: 10, fontFamily: 'DM Mono', color: '#FF6B6B' }}>
+                      ❌ Elemzés sikertelen
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                     <button
@@ -425,6 +543,18 @@ export default function Plans({ onNavigate }) {
                     >
                       Megnyitás
                     </button>
+                    {(plan.fileType === 'dxf' || plan.fileType === 'dwg') && !plan.parsedAt && parsing[plan.id] !== 'running' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleParsePlan(plan) }}
+                        style={{
+                          padding: '6px 10px', borderRadius: 5,
+                          background: 'rgba(33,243,163,0.08)', border: `1px solid rgba(33,243,163,0.25)`,
+                          color: C.accent, fontSize: 11, fontFamily: 'Syne', fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        🔍 Elemzés
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
