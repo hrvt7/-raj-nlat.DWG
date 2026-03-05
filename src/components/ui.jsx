@@ -54,7 +54,7 @@ export function Button({ children, onClick, variant = 'primary', size = 'md', di
     ghost: { background: 'transparent', color: C.textSub, border: `1px solid ${C.border}` },
     danger: { background: C.redDim, color: C.red, border: `1px solid rgba(255,107,107,0.25)` },
   }
-  const s = sizes[size]; const v = variants[variant]
+  const s = sizes[size] || sizes.md; const v = variants[variant] || variants.primary
   return (
     <button onClick={onClick} disabled={disabled} style={{
       display: 'inline-flex', alignItems: 'center', gap: 7,

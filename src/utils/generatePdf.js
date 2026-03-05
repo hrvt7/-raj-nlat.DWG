@@ -2,8 +2,16 @@
 // Uses HTML + window.print() for pixel-perfect A4 output (no external deps).
 // Supports 3 detail levels: compact | summary | detailed
 
-const fmtHU = n => (n ?? 0).toLocaleString('hu-HU')
-const fmtDate = iso => new Date(iso || Date.now()).toLocaleDateString('hu-HU')
+const fmtHU = n => {
+  const num = Number(n)
+  return Number.isFinite(num) ? num.toLocaleString('hu-HU') : '0'
+}
+const fmtDate = iso => {
+  try {
+    const d = new Date(iso || Date.now())
+    return isNaN(d.getTime()) ? new Date().toLocaleDateString('hu-HU') : d.toLocaleDateString('hu-HU')
+  } catch { return new Date().toLocaleDateString('hu-HU') }
+}
 
 const WALL_LABELS = { drywall: 'GK', ytong: 'Ytong', brick: 'Tégla', concrete: 'Beton' }
 
@@ -13,8 +21,8 @@ function escHtml(s) {
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 export function generatePdf(quote, settings, detailLevel = 'summary') {
-  const vatPct    = parseFloat(settings?.labor?.vat_percent ?? 27)
-  const net       = Math.round(quote.gross || 0)
+  const vatPct    = Number(settings?.labor?.vat_percent) || 27
+  const net       = Math.round(Number(quote.gross) || 0)
   const vatAmt    = Math.round(net * vatPct / 100)
   const gross     = net + vatAmt
   const company   = settings?.company || {}
@@ -22,11 +30,13 @@ export function generatePdf(quote, settings, detailLevel = 'summary') {
   const validity  = parseInt(qSettings.validity_days) || 30
   const createdAt = quote.createdAt || new Date().toISOString()
   const validUntil = new Date(new Date(createdAt).getTime() + validity * 86400000)
-  const hourlyRate = quote.pricingData?.hourlyRate || 9000
+  const hourlyRate = Number(quote.pricingData?.hourlyRate) || 9000
 
-  // ── Logo HTML ──────────────────────────────────────────────────────────────
-  const logoHtml = company.logo_base64
-    ? `<img src="${company.logo_base64}" style="max-height:56px;max-width:180px;object-fit:contain;display:block;" />`
+  // ── Logo HTML (XSS-safe: only allow data: URIs for base64 images) ──────────
+  const logoSrc = company.logo_base64 || ''
+  const isSafeDataUri = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/i.test(logoSrc)
+  const logoHtml = isSafeDataUri
+    ? `<img src="${logoSrc}" style="max-height:56px;max-width:180px;object-fit:contain;display:block;" />`
     : `<span class="company-name-text">${escHtml(company.name || 'TakeoffPro')}</span>`
 
   // ── KPI cards ─────────────────────────────────────────────────────────────
@@ -102,16 +112,18 @@ export function generatePdf(quote, settings, detailLevel = 'summary') {
     const labors    = (quote.items || []).filter(i => i.type === 'labor')
 
     const renderRows = items => items.map(item => {
-      const unitPrice = item.unitPrice || 0
-      const matTotal  = unitPrice * (item.qty || 0)
-      const laborTotal = (item.hours || 0) * hourlyRate
+      const unitPrice = Number(item.unitPrice) || 0
+      const qty       = Number(item.qty) || 0
+      const hours     = Number(item.hours) || 0
+      const matTotal  = unitPrice * qty
+      const laborTotal = hours * hourlyRate
       const total = item.type === 'labor' ? laborTotal : matTotal
       return `
         <tr>
           <td class="td-name">${escHtml(item.name || '—')}</td>
-          <td class="td-center td-mono">${fmtHU(+(item.qty || 0).toFixed(2))} ${escHtml(item.unit || '')}</td>
+          <td class="td-center td-mono">${fmtHU(+qty.toFixed(2))} ${escHtml(item.unit || '')}</td>
           <td class="td-right td-mono">${item.type === 'labor' ? fmtHU(hourlyRate) + ' Ft/ó' : fmtHU(Math.round(unitPrice)) + ' Ft'}</td>
-          <td class="td-right td-mono">${item.hours > 0 ? item.hours.toFixed(2) + ' ó' : '—'}</td>
+          <td class="td-right td-mono">${hours > 0 ? hours.toFixed(2) + ' ó' : '—'}</td>
           <td class="td-price td-right">${fmtHU(Math.round(total))} Ft</td>
         </tr>`
     }).join('')

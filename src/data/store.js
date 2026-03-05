@@ -245,15 +245,52 @@ export const DEFAULT_MATERIALS = [
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
+/** localStorage quota tracking — warns when usage exceeds threshold */
+const LS_QUOTA_WARN_BYTES = 4 * 1024 * 1024  // 4 MB — warn before hitting 5 MB limit
+
+function estimateLocalStorageUsage() {
+  try {
+    let total = 0
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      total += (key?.length || 0) + (localStorage.getItem(key)?.length || 0)
+    }
+    return total * 2  // UTF-16 → 2 bytes per char
+  } catch { return -1 }
+}
+
 function load(key, fallback) {
   try {
     const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
-  } catch { return fallback }
+    if (raw === null) return fallback
+    return JSON.parse(raw)
+  } catch (err) {
+    console.warn(`[TakeoffPro] localStorage load failed for "${key}":`, err.message)
+    return fallback
+  }
 }
 
 function save(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+  try {
+    const json = JSON.stringify(value)
+    localStorage.setItem(key, json)
+
+    // Quota monitoring — log warning if usage is high
+    const usage = estimateLocalStorageUsage()
+    if (usage > LS_QUOTA_WARN_BYTES) {
+      console.warn(
+        `[TakeoffPro] localStorage usage high: ${(usage / 1024 / 1024).toFixed(2)} MB / ~5 MB`
+      )
+    }
+  } catch (err) {
+    console.error(`[TakeoffPro] localStorage save FAILED for "${key}":`, err.message)
+    // Surface to user via custom event so UI can show notification
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('takeoffpro:storage-error', {
+        detail: { key, error: err.message, type: 'write' }
+      }))
+    }
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

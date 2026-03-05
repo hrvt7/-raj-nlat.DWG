@@ -42,12 +42,25 @@ export const DISCIPLINE_OPTIONS = ['Világítás', 'Erősáram', 'Kábeltálca',
 function loadPlansMeta() {
   try {
     const raw = localStorage.getItem(LS_KEY)
-    return raw ? JSON.parse(raw) : []
-  } catch { return [] }
+    if (raw === null) return []
+    return JSON.parse(raw)
+  } catch (err) {
+    console.warn(`[TakeoffPro] planStore load failed:`, err.message)
+    return []
+  }
 }
 
 function savePlansMeta(plans) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(plans)) } catch {}
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(plans))
+  } catch (err) {
+    console.error(`[TakeoffPro] planStore save FAILED:`, err.message)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('takeoffpro:storage-error', {
+        detail: { key: LS_KEY, error: err.message, type: 'write' }
+      }))
+    }
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

@@ -45,20 +45,30 @@ const ASM_COLORS = {
 
 function recognizeBlock(blockName) {
   const up = (blockName || '').toUpperCase().replace(/[_\-\.]/g, ' ')
+
+  // Phase 1: exact match — return immediately (perfect confidence)
   for (const rule of BLOCK_ASM_RULES) {
     for (const pattern of rule.patterns) {
       if (up === pattern) return { asmId: rule.asmId, confidence: 1.0, matchType: 'exact', rule }
     }
   }
+
+  // Phase 2: partial match — collect ALL matches, return the BEST one
+  let bestMatch = null
   for (const rule of BLOCK_ASM_RULES) {
     for (const pattern of rule.patterns) {
       if (up.includes(pattern)) {
-        const specificity = Math.min(pattern.length / Math.max(up.replace(/ /g,'').length, 1), 1)
+        const normalizedLen = up.replace(/ /g, '').length
+        const specificity = Math.min(pattern.length / Math.max(normalizedLen, 1), 1)
         const confidence = 0.60 + specificity * 0.35
-        return { asmId: rule.asmId, confidence, matchType: 'partial', rule }
+        if (!bestMatch || confidence > bestMatch.confidence) {
+          bestMatch = { asmId: rule.asmId, confidence, matchType: 'partial', rule }
+        }
       }
     }
   }
+  if (bestMatch) return bestMatch
+
   return { asmId: null, confidence: 0, matchType: 'unknown', rule: null }
 }
 

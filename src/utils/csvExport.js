@@ -143,7 +143,8 @@ function csvEsc(val) {
   return s
 }
 
-/** Format a number using Hungarian locale (no thousand separator in CSV to avoid Excel issues) */
+/** Format a number — safe against NaN/Infinity/undefined */
 function fmtNum(n) {
-  return String(Math.round(Number(n) || 0))
+  const num = Number(n)
+  return Number.isFinite(num) ? String(Math.round(num)) : '0'
 }

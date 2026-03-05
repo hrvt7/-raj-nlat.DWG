@@ -34,13 +34,22 @@ function validateApiResponse(res, name) {
  */
 const UNCERTAIN_THRESHOLD = 0.3
 
+const MAX_REASONABLE_QTY = 9999  // No single item should exceed this in a realistic takeoff
+
 function sanitizeRecognizedItem(item) {
   if (!item || typeof item !== 'object') return null
   const blockName = String(item.blockName || '').trim()
   if (!blockName) return null
 
   const rawQty = Number(item.qty)
-  const qty = Number.isFinite(rawQty) && rawQty > 0 ? Math.round(rawQty) : 1
+  // Reject negative, zero, NaN, Infinity, and unreasonably large quantities
+  const qty = (Number.isFinite(rawQty) && rawQty > 0 && rawQty <= MAX_REASONABLE_QTY)
+    ? Math.round(rawQty)
+    : 1
+
+  if (rawQty > MAX_REASONABLE_QTY) {
+    console.warn(`[TakeoffPro] Clamped extreme qty ${rawQty} → 1 for "${blockName}"`)
+  }
 
   const rawConf = Number(item.confidence)
   const confidence = Number.isFinite(rawConf) ? Math.min(1, Math.max(0, rawConf)) : 0.3

@@ -10,7 +10,7 @@ import Settings from './pages/Settings.jsx'
 import AssembliesPage from './pages/Assemblies.jsx'
 import PlansPage from './pages/Plans.jsx'
 import MaterialsPage from './pages/Materials.jsx'
-import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes } from './data/store.js'
+import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes } from './data/store.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
@@ -102,11 +102,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
     finally { setTimeout(() => setPdfGenerating(false), 1200) }
   }
 
-  const vatPct = parseFloat(settings?.labor?.vat_percent ?? 27)
-  const net    = Math.round(quote.gross || 0)
+  const vatPct = Number(settings?.labor?.vat_percent) || 27
+  const net    = Math.round(Number(quote.gross) || 0)
   const vat    = Math.round(net * vatPct / 100)
   const gross  = net + vat
-  const rate   = quote.pricingData?.hourlyRate || 9000
+  const rate   = Number(quote.pricingData?.hourlyRate) || 9000
 
   // Separate items by type for the grouped table
   const matItems   = (quote.items || []).filter(i => i.type === 'material' || i.type === 'cable')
@@ -580,7 +580,7 @@ function SaaSShell() {
   const [workItems, setWorkItems] = useState(loadWorkItems)
 
   const handleQuotesChange = (updated) => {
-    localStorage.setItem('tpro_quotes', JSON.stringify(updated))
+    saveQuotes(updated)
     setQuotes(updated)
   }
 
@@ -589,14 +589,21 @@ function SaaSShell() {
     setQuotes(updated)
     setViewingQuote(quote)
     setPage('quotes')
-    if (session) saveQuoteRemote(quote).catch(console.error)
+    if (session) {
+      saveQuoteRemote(quote).catch(err => {
+        console.error('[TakeoffPro] Remote quote sync failed:', err.message)
+        // Data is safe in localStorage — remote sync will retry on next save
+      })
+    }
   }
 
   const handleStatusChange = (quoteId, newStatus) => {
-    const all = loadQuotes()
-    const updated = all.map(q => q.id === quoteId ? { ...q, status: newStatus } : q)
-    localStorage.setItem('tpro_quotes', JSON.stringify(updated))
-    setQuotes(updated)
+    // Use functional state update to avoid race condition with stale quotes
+    setQuotes(prev => {
+      const updated = prev.map(q => q.id === quoteId ? { ...q, status: newStatus, updatedAt: new Date().toISOString() } : q)
+      saveQuotes(updated)
+      return updated
+    })
     if (viewingQuote?.id === quoteId) setViewingQuote(prev => ({ ...prev, status: newStatus }))
   }
 

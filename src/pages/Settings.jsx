@@ -20,7 +20,8 @@ export default function SettingsPage({ settings, onSettingsChange, materials, on
     const newSettings = { ...settings }
     let obj = newSettings
     for (let i = 0; i < keys.length - 1; i++) {
-      obj[keys[i]] = { ...obj[keys[i]] }
+      // Guard against undefined intermediates — create empty object if missing
+      obj[keys[i]] = { ...(obj[keys[i]] || {}) }
       obj = obj[keys[i]]
     }
     obj[keys[keys.length - 1]] = value
