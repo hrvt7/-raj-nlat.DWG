@@ -192,7 +192,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
       for (let i = 0; i < markers.length; i++) {
         const m = markers[i]
         const p = proj(m.x, m.y)
-        drawMarker(ctx, p.x, p.y, i + 1, m.color)
+        drawMarker(ctx, p.x, p.y, i + 1, m.color, m.source)
       }
 
       // ── Crosshair ──
@@ -727,28 +727,52 @@ function drawMeasureLine(ctx, p1, p2, label, isDashed) {
   ctx.restore()
 }
 
-function drawMarker(ctx, x, y, num, color) {
+function drawMarker(ctx, x, y, num, color, source) {
   const r = 13
+  const isDetection = source === 'detection'
   ctx.save()
-  // Outer ring
-  ctx.fillStyle = color
-  ctx.shadowColor = color
-  ctx.shadowBlur = 8
-  ctx.beginPath()
-  ctx.arc(x, y, r, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.shadowBlur = 0
-  // Inner
-  ctx.fillStyle = '#09090B'
-  ctx.beginPath()
-  ctx.arc(x, y, r - 2.5, 0, Math.PI * 2)
-  ctx.fill()
-  // Number
-  ctx.fillStyle = color
-  ctx.font = `bold ${num > 99 ? 8 : 10}px "DM Mono", monospace`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(String(num), x, y + 0.5)
+  if (isDetection) {
+    // Detection markers: dashed outline, no glow, smaller
+    const rd = 11
+    ctx.setLineDash([3, 3])
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.arc(x, y, rd, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+    // Inner dot
+    ctx.fillStyle = color + '30'
+    ctx.beginPath()
+    ctx.arc(x, y, rd - 2, 0, Math.PI * 2)
+    ctx.fill()
+    // Number
+    ctx.fillStyle = color
+    ctx.font = `bold ${num > 99 ? 7 : 9}px "DM Mono", monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(String(num), x, y + 0.5)
+  } else {
+    // Manual markers: solid ring + glow (original)
+    ctx.fillStyle = color
+    ctx.shadowColor = color
+    ctx.shadowBlur = 8
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+    // Inner
+    ctx.fillStyle = '#09090B'
+    ctx.beginPath()
+    ctx.arc(x, y, r - 2.5, 0, Math.PI * 2)
+    ctx.fill()
+    // Number
+    ctx.fillStyle = color
+    ctx.font = `bold ${num > 99 ? 8 : 10}px "DM Mono", monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(String(num), x, y + 0.5)
+  }
   ctx.restore()
 }
 

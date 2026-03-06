@@ -276,7 +276,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     // ── Markers ──
     for (const m of markersRef.current) {
       const s = proj(m.x, m.y)
-      drawMarker(ctx, s.x, s.y, m.color, v.zoom)
+      drawMarker(ctx, s.x, s.y, m.color, v.zoom, m.source)
     }
 
     // ── Measurements ──
@@ -782,21 +782,39 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
 // ─── Drawing helpers (same as DXF overlay) ──────────────────────────────────
 
-function drawMarker(ctx, x, y, color, zoom) {
+function drawMarker(ctx, x, y, color, zoom, source) {
   const r = Math.max(6, 10 * Math.min(zoom, 1.5))
+  const isDetection = source === 'detection'
+
   ctx.beginPath()
   ctx.arc(x, y, r, 0, Math.PI * 2)
-  ctx.fillStyle = color + '40'
+  ctx.fillStyle = color + (isDetection ? '20' : '40')
   ctx.fill()
-  ctx.lineWidth = 2
+  ctx.lineWidth = isDetection ? 1.5 : 2
+
+  if (isDetection) {
+    // Dashed border for auto-detected markers
+    ctx.setLineDash([3, 3])
+  }
   ctx.strokeStyle = color
   ctx.stroke()
-  // Cross
-  const c = r * 0.5
-  ctx.beginPath()
-  ctx.moveTo(x - c, y); ctx.lineTo(x + c, y)
-  ctx.moveTo(x, y - c); ctx.lineTo(x, y + c)
-  ctx.stroke()
+  ctx.setLineDash([]) // reset
+
+  // Cross (manual) or dot (detection)
+  if (isDetection) {
+    // Small inner dot for detection markers
+    ctx.beginPath()
+    ctx.arc(x, y, 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = color
+    ctx.fill()
+  } else {
+    // Cross for manual markers
+    const c = r * 0.5
+    ctx.beginPath()
+    ctx.moveTo(x - c, y); ctx.lineTo(x + c, y)
+    ctx.moveTo(x, y - c); ctx.lineTo(x, y + c)
+    ctx.stroke()
+  }
 }
 
 function drawMeasureLine(ctx, x1, y1, x2, y2, label, color) {

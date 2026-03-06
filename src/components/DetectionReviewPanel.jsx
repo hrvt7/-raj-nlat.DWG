@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { getPlanFile, getPlanAnnotations, savePlanAnnotations, updatePlanMeta } from '../data/planStore.js'
@@ -16,6 +16,14 @@ const C = {
   text: '#E4E4E7', muted: '#71717A', textSub: '#A1A1AA',
   accentDim: 'rgba(0,229,160,0.08)', accentBorder: 'rgba(0,229,160,0.2)',
 }
+
+// ─── Review filter options ─────────────────────────────────────────────────────
+const REVIEW_FILTERS = [
+  { key: 'all',      label: 'Mind' },
+  { key: 'accepted', label: '✓ Elfogadva' },
+  { key: 'rejected', label: '✗ Elvetve' },
+  { key: 'pending',  label: '⏳ Alacsony biz.' },
+]
 
 // ─── COUNT_CATEGORIES (mirrors DxfToolbar) ────────────────────────────────────
 const COUNT_CATEGORIES = [
@@ -58,10 +66,11 @@ function ProgressBar({ value, label }) {
 }
 
 // ─── Detection group (per category) ──────────────────────────────────────────
-function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle }) {
+function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle, onLocate, scoreThreshold }) {
   const cat = getCat(category)
   const accepted = detections.filter(d => d.accepted !== false)
-  const rejected = detections.filter(d => d.accepted === false)
+  // Sort by score descending for easier review
+  const sorted = useMemo(() => [...detections].sort((a, b) => b.score - a.score), [detections])
 
   return (
     <div style={{
@@ -98,37 +107,117 @@ function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onTogg
         </button>
       </div>
 
-      {/* Individual detections */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '10px 14px' }}>
-        {detections.map((d, idx) => {
+      {/* Individual detections — sorted by score desc */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px' }}>
+        {sorted.map((d) => {
           const isAccepted = d.accepted !== false
+          const isBelowThreshold = d.score < scoreThreshold
           return (
-            <button
-              key={d.id}
-              onClick={() => onToggle(d.id)}
-              title={`Bizonyosság: ${Math.round(d.score * 100)}%  ·  Oldal ${d.pageNum}  ·  (${Math.round(d.x)}, ${Math.round(d.y)})`}
-              style={{
-                fontFamily: 'DM Mono', fontSize: 9,
-                color: isAccepted ? '#000' : C.muted,
-                background: isAccepted ? cat.color : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${isAccepted ? cat.color : C.border}`,
-                borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
-                transition: 'all 0.12s', display: 'flex', alignItems: 'center', gap: 4,
-              }}
-            >
-              {isAccepted
-                ? <CheckIcon size={9} color="#000" />
-                : <XSmIcon size={9} color={C.muted} />
-              }
-              {Math.round(d.score * 100)}%
-              {d.pageNum > 1 && <span style={{ opacity: 0.7 }}>· o{d.pageNum}</span>}
-            </button>
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button
+                onClick={() => onToggle(d.id)}
+                title={`Bizonyosság: ${Math.round(d.score * 100)}%  ·  Oldal ${d.pageNum}  ·  (${Math.round(d.x)}, ${Math.round(d.y)})`}
+                style={{
+                  fontFamily: 'DM Mono', fontSize: 9,
+                  color: isAccepted ? '#000' : C.muted,
+                  background: isAccepted ? cat.color : isBelowThreshold ? 'rgba(255,209,102,0.06)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${isAccepted ? cat.color : isBelowThreshold ? 'rgba(255,209,102,0.2)' : C.border}`,
+                  borderRadius: '6px 0 0 6px', padding: '3px 8px', cursor: 'pointer',
+                  transition: 'all 0.12s', display: 'flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                {isAccepted
+                  ? <CheckIcon size={9} color="#000" />
+                  : <XSmIcon size={9} color={isBelowThreshold ? C.yellow : C.muted} />
+                }
+                {Math.round(d.score * 100)}%
+                {d.pageNum > 1 && <span style={{ opacity: 0.7 }}>· o{d.pageNum}</span>}
+              </button>
+              {/* Locate button — shows where this detection is on the plan */}
+              {onLocate && (
+                <button
+                  onClick={() => onLocate(d)}
+                  title={`Ugrás: ${d.planId} · ${d.pageNum}. oldal · (${Math.round(d.x)}, ${Math.round(d.y)})`}
+                  style={{
+                    fontFamily: 'DM Mono', fontSize: 8,
+                    color: C.muted, background: 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '0 6px 6px 0', padding: '3px 5px', cursor: 'pointer',
+                    borderLeft: 'none', display: 'flex', alignItems: 'center',
+                  }}
+                >
+                  📍
+                </button>
+              )}
+            </div>
           )
         })}
         {detections.length === 0 && (
           <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Nincs detektálás</span>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Score Threshold Slider ──────────────────────────────────────────────────
+function ScoreThresholdSlider({ value, onChange, onApply, detections }) {
+  const aboveCount = detections.filter(d => d.score >= value).length
+  const belowCount = detections.length - aboveCount
+  return (
+    <div style={{
+      background: C.bgCard, border: `1px solid ${C.border}`,
+      borderRadius: 12, padding: '12px 16px',
+      display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+    }}>
+      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, whiteSpace: 'nowrap' }}>
+        Bizonyossági küszöb:
+      </span>
+      <input
+        type="range" min={30} max={95} step={5} value={Math.round(value * 100)}
+        onChange={e => onChange(parseInt(e.target.value) / 100)}
+        style={{ width: 120, accentColor: C.accent }}
+      />
+      <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 700, color: C.accent, minWidth: 32 }}>
+        {Math.round(value * 100)}%
+      </span>
+      <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>
+        {aboveCount} felett · {belowCount} alatt
+      </span>
+      <button
+        onClick={onApply}
+        style={{
+          ...actionBtnStyle,
+          color: C.accent, borderColor: C.accentBorder, background: C.accentDim,
+          fontWeight: 700,
+        }}
+      >
+        ✓ {aboveCount} elfogadása (≥{Math.round(value * 100)}%)
+      </button>
+    </div>
+  )
+}
+
+// ─── Review Filter Bar ──────────────────────────────────────────────────────
+function ReviewFilterBar({ filter, onFilterChange, counts }) {
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {REVIEW_FILTERS.map(f => (
+        <button
+          key={f.key}
+          onClick={() => onFilterChange(f.key)}
+          style={{
+            fontFamily: 'DM Mono', fontSize: 10,
+            color: filter === f.key ? '#000' : C.muted,
+            background: filter === f.key ? C.accent : 'transparent',
+            border: `1px solid ${filter === f.key ? C.accent : C.border}`,
+            borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
+            transition: 'all 0.12s',
+          }}
+        >
+          {f.label} {counts[f.key] != null ? `(${counts[f.key]})` : ''}
+        </button>
+      ))}
     </div>
   )
 }
@@ -173,7 +262,7 @@ function NoTemplatesWarning({ onClose }) {
 }
 
 // ─── DetectionReviewPanel ─────────────────────────────────────────────────────
-export default function DetectionReviewPanel({ plans, onClose, onDone, projectId }) {
+export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection }) {
   const [phase, setPhase] = useState('loading') // loading | no_templates | detecting | review | saving | done
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState(0)
@@ -181,6 +270,8 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const [allDetections, setAllDetections] = useState([]) // { id, planId, pageNum, x, y, score, category, color, templateId, accepted }
   const [error, setError] = useState(null)
   const runIdRef = useRef(null) // DetectionRun.id for persistence
+  const [scoreThreshold, setScoreThreshold] = useState(0.70)
+  const [reviewFilter, setReviewFilter] = useState('all') // all | accepted | rejected | pending
 
   // ── Load templates and start detection ──
   useEffect(() => {
@@ -310,6 +401,45 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const handleRejectAll = useCallback((category) => {
     setAllDetections(prev => prev.map(d => d.category === category ? { ...d, accepted: false } : d))
   }, [])
+
+  // ── Bulk accept by score threshold ──
+  const handleApplyThreshold = useCallback(() => {
+    setAllDetections(prev => prev.map(d => ({
+      ...d,
+      accepted: d.score >= scoreThreshold,
+    })))
+  }, [scoreThreshold])
+
+  // ── Locate detection on plan (pass to parent) ──
+  const handleLocate = useCallback((detection) => {
+    if (onLocateDetection) {
+      onLocateDetection({
+        planId: detection.planId,
+        pageNum: detection.pageNum,
+        x: detection.x,
+        y: detection.y,
+        category: detection.category,
+      })
+    }
+  }, [onLocateDetection])
+
+  // ── Filtered detections for display ──
+  const filteredDetections = useMemo(() => {
+    switch (reviewFilter) {
+      case 'accepted': return allDetections.filter(d => d.accepted !== false)
+      case 'rejected': return allDetections.filter(d => d.accepted === false)
+      case 'pending':  return allDetections.filter(d => d.score < scoreThreshold)
+      default:         return allDetections
+    }
+  }, [allDetections, reviewFilter, scoreThreshold])
+
+  // ── Filter counts ──
+  const filterCounts = useMemo(() => ({
+    all: allDetections.length,
+    accepted: allDetections.filter(d => d.accepted !== false).length,
+    rejected: allDetections.filter(d => d.accepted === false).length,
+    pending: allDetections.filter(d => d.score < scoreThreshold).length,
+  }), [allDetections, scoreThreshold])
 
   // ── Apply accepted detections to plan annotations ──
   const handleApply = useCallback(async () => {
@@ -468,7 +598,7 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                     Nem találtunk szimbólumokat
                   </div>
                   <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-                    Próbálj alacsonyabb küszöböt, vagy adj hozzá több/pontosabb sablonookat a jelmagyarázathoz.
+                    Próbálj alacsonyabb küszöböt, vagy adj hozzá több/pontosabb sablonokat a jelmagyarázathoz.
                   </div>
                 </div>
               ) : (
@@ -481,29 +611,56 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                   }}>
                     <div>
                       <span style={{ fontFamily: 'DM Mono', fontSize: 22, fontWeight: 700, color: C.accent }}>{allDetections.length}</span>
-                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginLeft: 6 }}>detektált szimbólum</span>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginLeft: 6 }}>detektált</span>
                     </div>
                     <div>
                       <span style={{ fontFamily: 'DM Mono', fontSize: 22, fontWeight: 700, color: C.text }}>{acceptedCount}</span>
                       <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginLeft: 6 }}>elfogadva</span>
                     </div>
+                    <div>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 22, fontWeight: 700, color: C.yellow }}>
+                        {allDetections.filter(d => d.score < scoreThreshold).length}
+                      </span>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginLeft: 6 }}>alacsony biz.</span>
+                    </div>
                     <div style={{ flex: 1 }} />
                     <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
-                      Kattints egy jelölőre a ki/bekapcsoláshoz · %-szám = bizonyosság
+                      Kattints → elfogad/elvet · 📍 → ugrás a tervre
                     </div>
                   </div>
 
-                  {/* Per-category groups */}
-                  {categories.map(cat => (
-                    <DetectionGroup
-                      key={cat}
-                      category={cat}
-                      detections={allDetections.filter(d => d.category === cat)}
-                      onAcceptAll={handleAcceptAll}
-                      onRejectAll={handleRejectAll}
-                      onToggle={handleToggle}
-                    />
-                  ))}
+                  {/* Score threshold slider */}
+                  <ScoreThresholdSlider
+                    value={scoreThreshold}
+                    onChange={setScoreThreshold}
+                    onApply={handleApplyThreshold}
+                    detections={allDetections}
+                  />
+
+                  {/* Filter bar */}
+                  <ReviewFilterBar
+                    filter={reviewFilter}
+                    onFilterChange={setReviewFilter}
+                    counts={filterCounts}
+                  />
+
+                  {/* Per-category groups (filtered) */}
+                  {categories.map(cat => {
+                    const catDetections = filteredDetections.filter(d => d.category === cat)
+                    if (catDetections.length === 0 && reviewFilter !== 'all') return null
+                    return (
+                      <DetectionGroup
+                        key={cat}
+                        category={cat}
+                        detections={catDetections}
+                        onAcceptAll={handleAcceptAll}
+                        onRejectAll={handleRejectAll}
+                        onToggle={handleToggle}
+                        onLocate={handleLocate}
+                        scoreThreshold={scoreThreshold}
+                      />
+                    )
+                  })}
                 </div>
               )}
             </>
