@@ -22,7 +22,7 @@ function formatDist(m) {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -64,6 +64,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const activeStartRef = useRef(null) // { x, y } for measure/calibrate in progress
   const mousePdfRef = useRef(null) // { x, y } mouse in pdf coords
   const [renderTick, setRenderTick] = useState(0)
+  const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -113,6 +114,35 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     })
     return unsub
   }, [planId, onMarkersChange])
+
+  // ── Focus on target marker (from review panel locate) ──
+  useEffect(() => {
+    if (!focusTarget || !focusTarget.x || !focusTarget.y) return
+    const v = viewRef.current
+    if (!v.pageWidth) return // PDF not rendered yet
+    // If focusTarget has pageNum and it differs from current, switch page first
+    if (focusTarget.pageNum && focusTarget.pageNum !== pageNum) {
+      setPageNum(focusTarget.pageNum)
+    }
+    // Center viewport on target coordinates with comfortable zoom
+    const container = containerRef.current
+    if (!container) return
+    const cw = container.clientWidth
+    const ch = container.clientHeight
+    const targetZoom = Math.max(v.zoom, 2.0) // zoom in at least to 2x for visibility
+    v.zoom = targetZoom
+    v.offsetX = cw / 2 - focusTarget.x * targetZoom
+    v.offsetY = ch / 2 - focusTarget.y * targetZoom
+    // Start highlight pulse
+    highlightRef.current = { x: focusTarget.x, y: focusTarget.y, startTime: Date.now() }
+    setRenderTick(t => t + 1)
+    // Auto-clear highlight after 2s
+    const timer = setTimeout(() => {
+      highlightRef.current = null
+      setRenderTick(t => t + 1)
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [focusTarget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-save annotations on unmount ──
   // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
@@ -314,6 +344,33 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     for (const m of markersRef.current) {
       const s = proj(m.x, m.y)
       drawMarker(ctx, s.x, s.y, m.color, v.zoom, m.source)
+    }
+
+    // ── Focus highlight pulse ──
+    if (highlightRef.current) {
+      const h = highlightRef.current
+      const hs = proj(h.x, h.y)
+      const elapsed = Date.now() - h.startTime
+      const progress = Math.min(elapsed / 2000, 1)
+      const alpha = 1 - progress
+      const pulseR = 18 + progress * 30
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(hs.x, hs.y, pulseR, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(0, 229, 160, ${alpha})`
+      ctx.lineWidth = 3
+      ctx.stroke()
+      // Inner solid ring
+      ctx.beginPath()
+      ctx.arc(hs.x, hs.y, 14, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(0, 229, 160, ${alpha * 0.7})`
+      ctx.lineWidth = 2
+      ctx.setLineDash([4, 3])
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.restore()
+      // Animate
+      if (progress < 1) requestAnimationFrame(() => setRenderTick(t => t + 1))
     }
 
     // ── Measurements ──

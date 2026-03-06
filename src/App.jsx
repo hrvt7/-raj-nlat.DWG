@@ -591,6 +591,7 @@ function SaaSShell() {
   const [detectPanelPlans, setDetectPanelPlans] = useState(null) // null = closed, [] = plans
   const [detectPanelProjectId, setDetectPanelProjectId] = useState(null)
   const [mergePanelPlans, setMergePanelPlans] = useState(null)   // null = closed, [] = plans
+  const [viewerFocusTarget, setViewerFocusTarget] = useState(null) // { planId, pageNum, x, y } from review locate
 
   const [workItems, setWorkItems] = useState(loadWorkItems)
 
@@ -765,6 +766,7 @@ function SaaSShell() {
                   materials={materials}
                   initialFile={felmeresFile}
                   planId={felmeresOpenPlan?.id || null}
+                  focusTarget={viewerFocusTarget}
                   onSaved={() => {
                     // Per-plan save: go back to Felmérés (NOT to Ajánlatok)
                     setFelmeresFile(null)
@@ -832,6 +834,7 @@ function SaaSShell() {
           projectId={detectPanelProjectId}
           onClose={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null) }}
           onDone={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null) }}
+          onLocateDetection={(target) => setViewerFocusTarget({ ...target, _ts: Date.now() })}
         />
       )}
       {mergePanelPlans && (

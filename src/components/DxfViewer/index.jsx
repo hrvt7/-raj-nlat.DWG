@@ -23,7 +23,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote }) {
+export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, focusTarget }) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -65,6 +65,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
   const mouseSceneRef = useRef(null)  // {x,y} current mouse in scene coords
   const mouseScreenRef = useRef(null) // {x,y} current mouse in screen coords
   const activeToolRef = useRef(null)
+  const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
 
   // ── Load saved annotations on mount ──
@@ -89,6 +90,29 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
     })
     return unsub
   }, [planId])
+
+  // ── Focus on target marker (from review panel locate) ──
+  useEffect(() => {
+    if (!focusTarget || !focusTarget.x || !focusTarget.y) return
+    const viewer = canvasRef.current?.getViewer()
+    if (!viewer?.camera) return
+    const cam = viewer.camera
+    // Center camera on target scene coordinates
+    const viewWidth = (cam.right - cam.left)
+    const viewHeight = (cam.top - cam.bottom)
+    // Zoom in to ~30% of current view if too wide
+    const targetSpan = Math.min(viewWidth, viewHeight, 500)
+    cam.left = focusTarget.x - targetSpan / 2
+    cam.right = focusTarget.x + targetSpan / 2
+    cam.top = focusTarget.y + targetSpan / 2 * (viewHeight / viewWidth || 1)
+    cam.bottom = focusTarget.y - targetSpan / 2 * (viewHeight / viewWidth || 1)
+    cam.updateProjectionMatrix()
+    // Start highlight pulse
+    highlightRef.current = { x: focusTarget.x, y: focusTarget.y, startTime: Date.now() }
+    // Auto-clear highlight after 2s
+    const timer = setTimeout(() => { highlightRef.current = null }, 2000)
+    return () => clearTimeout(timer)
+  }, [focusTarget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-save annotations on unmount ──
   // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
@@ -222,6 +246,30 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
         const m = markers[i]
         const p = proj(m.x, m.y)
         drawMarker(ctx, p.x, p.y, i + 1, m.color, m.source)
+      }
+
+      // ── Focus highlight pulse ──
+      if (highlightRef.current) {
+        const h = highlightRef.current
+        const hp = proj(h.x, h.y)
+        const elapsed = Date.now() - h.startTime
+        const progress = Math.min(elapsed / 2000, 1)
+        const alpha = 1 - progress
+        const pulseR = 18 + progress * 30
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(hp.x, hp.y, pulseR, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(0, 229, 160, ${alpha})`
+        ctx.lineWidth = 3
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(hp.x, hp.y, 14, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(0, 229, 160, ${alpha * 0.7})`
+        ctx.lineWidth = 2
+        ctx.setLineDash([4, 3])
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.restore()
       }
 
       // ── Crosshair ──

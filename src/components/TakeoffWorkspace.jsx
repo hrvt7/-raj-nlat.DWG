@@ -513,7 +513,7 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 }
 
 // ─── Main TakeoffWorkspace ────────────────────────────────────────────────────
-export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId }) {
+export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId, focusTarget }) {
   // ── File & parse state ────────────────────────────────────────────────────
   const [file, setFile] = useState(null)
   const [parsedDxf, setParsedDxf] = useState(null)
@@ -1444,6 +1444,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   file={file}
                   style={{ height: '100%', border: 'none', borderRadius: 0 }}
                   assemblies={assemblies}
+                  focusTarget={focusTarget}
                   onMarkersChange={(markers) => {
                     setPdfMarkers(markers)
                   }}
