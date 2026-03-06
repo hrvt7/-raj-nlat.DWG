@@ -81,16 +81,35 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
   }, [planId])
 
   // ── Auto-save annotations on unmount ──
+  // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
   useEffect(() => {
     return () => {
       if (!planId) return
-      savePlanAnnotations(planId, {
-        markers: markersRef.current,
-        measurements: measuresRef.current,
-        scale: scaleRef.current,
-        ceilingHeight,
-        switchHeight,
-        socketHeight,
+      const localMarkers = markersRef.current
+      getPlanAnnotations(planId).then(stored => {
+        const storedMarkers = normalizeMarkers(stored?.markers || [])
+        const localIds = new Set(localMarkers.map(m => m.id))
+        const externalDetections = storedMarkers.filter(
+          m => m.source === 'detection' && !localIds.has(m.id)
+        )
+        const merged = [...localMarkers, ...externalDetections]
+        savePlanAnnotations(planId, {
+          markers: merged,
+          measurements: measuresRef.current,
+          scale: scaleRef.current,
+          ceilingHeight,
+          switchHeight,
+          socketHeight,
+        })
+      }).catch(() => {
+        savePlanAnnotations(planId, {
+          markers: localMarkers,
+          measurements: measuresRef.current,
+          scale: scaleRef.current,
+          ceilingHeight,
+          switchHeight,
+          socketHeight,
+        })
       })
     }
   }, [planId, ceilingHeight, socketHeight])

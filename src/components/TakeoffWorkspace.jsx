@@ -13,6 +13,7 @@ import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta } from '../data
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
+import { normalizeMarkers } from '../utils/markerModel.js'
 import ConfidenceBadge from './ConfidenceBadge.jsx'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
@@ -635,7 +636,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     ;(async () => {
       const ann = await getPlanAnnotations(planId)
       if (ann && ann.markers && ann.markers.length > 0) {
-        setPdfMarkers(ann.markers)
+        setPdfMarkers(normalizeMarkers(ann.markers))
         if (ann.wallSplits) setWallSplits(ann.wallSplits)
         if (ann.variantOverrides) setVariantOverrides(ann.variantOverrides)
         setRightTab('takeoff')
