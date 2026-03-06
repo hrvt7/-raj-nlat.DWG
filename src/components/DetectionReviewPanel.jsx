@@ -6,6 +6,7 @@ import { loadTemplatesWithImages, getTemplatesByProject } from '../data/legendSt
 import { detectAllTemplates } from '../utils/templateMatching.js'
 import { createMarker, normalizeMarkers, mergeMarkersManualFirst } from '../utils/markerModel.js'
 import { createDetectionRun, updateDetectionRun, linkDetectionToMarker } from '../data/detectionRunStore.js'
+import { loadCategoryAssemblyMap } from '../data/categoryAssemblyMap.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -337,6 +338,7 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const [progress, setProgress] = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
   const [allDetections, setAllDetections] = useState([]) // { id, planId, pageNum, x, y, score, category, color, templateId, accepted }
+  const [applySummary, setApplySummary] = useState(null) // { total, byCategory: [{ key, label, color, count, hasAssembly }], autoAssigned, needsManual }
   const [error, setError] = useState(null)
   const runIdRef = useRef(null) // DetectionRun.id for persistence
   const [scoreThreshold, setScoreThreshold] = useState(0.70)
@@ -603,9 +605,24 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
       })
     }
 
+    // ── Compute outcome summary ──
+    const appliedDets = allDetections.filter(d => d.accepted !== false)
+    const catMap = {}
+    for (const d of appliedDets) {
+      if (!catMap[d.category]) catMap[d.category] = 0
+      catMap[d.category]++
+    }
+    const defaults = loadCategoryAssemblyMap(projectId)
+    const byCategory = Object.entries(catMap).map(([key, count]) => {
+      const catDef = getCat(key)
+      return { key, label: catDef.label, color: catDef.color, count, hasAssembly: !!defaults[key] }
+    }).sort((a, b) => b.count - a.count)
+    const autoAssigned = byCategory.filter(c => c.hasAssembly).reduce((s, c) => s + c.count, 0)
+    const needsManual = byCategory.filter(c => !c.hasAssembly).reduce((s, c) => s + c.count, 0)
+    setApplySummary({ total: appliedDets.length, byCategory, autoAssigned, needsManual })
+
     setPhase('done')
-    if (onDone) onDone()
-  }, [allDetections, onDone])
+  }, [allDetections, projectId])
 
   // ── Merge new auto-detected markers with existing ones (manual-first) ──
   // Delegates to shared utility: manual markers always win over detection markers.
@@ -755,26 +772,86 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
             </div>
           )}
 
-          {/* Done phase */}
-          {phase === 'done' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 16 }}>
+          {/* Done phase — outcome summary */}
+          {phase === 'done' && applySummary && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 20, maxWidth: 440, margin: '0 auto' }}>
               <div style={{ fontSize: 40 }}>✅</div>
-              <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.text }}>
-                {acceptedCount} szimbólum sikeresen hozzáadva
+              <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.text, textAlign: 'center' }}>
+                {applySummary.total} szimbólum sikeresen hozzáadva
               </div>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-                A jelölések megjelennek a tervekben. Most összevonhatod kalkulációhoz.
+
+              {/* Category breakdown */}
+              <div style={{ width: '100%', background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                  Kategória összefoglaló
+                </div>
+                {applySummary.byCategory.map(cat => (
+                  <div key={cat.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color, flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, flex: 1 }}>
+                      {cat.label}
+                    </span>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 700, minWidth: 28, textAlign: 'right' }}>
+                      {cat.count} db
+                    </span>
+                    <span style={{
+                      fontFamily: 'DM Mono', fontSize: 9, padding: '2px 6px', borderRadius: 4,
+                      background: cat.hasAssembly ? 'rgba(0,229,160,0.12)' : 'rgba(255,209,102,0.12)',
+                      color: cat.hasAssembly ? C.accent : C.yellow,
+                    }}>
+                      {cat.hasAssembly ? '✓ assembly' : '⚠ kézi'}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <button
-                onClick={onClose}
-                style={{
-                  fontFamily: 'DM Mono', fontSize: 12, color: '#000',
-                  background: C.accent, border: 'none',
-                  borderRadius: 8, padding: '10px 28px', cursor: 'pointer',
-                }}
-              >
-                Bezárás
-              </button>
+
+              {/* Status summary */}
+              <div style={{ width: '100%', display: 'flex', gap: 8 }}>
+                <div style={{
+                  flex: 1, background: 'rgba(0,229,160,0.08)', border: '1px solid rgba(0,229,160,0.2)',
+                  borderRadius: 8, padding: '10px 12px', textAlign: 'center',
+                }}>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color: C.accent }}>{applySummary.autoAssigned}</div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent, opacity: 0.7 }}>auto assembly</div>
+                </div>
+                {applySummary.needsManual > 0 && (
+                  <div style={{
+                    flex: 1, background: 'rgba(255,209,102,0.08)', border: '1px solid rgba(255,209,102,0.2)',
+                    borderRadius: 8, padding: '10px 12px', textAlign: 'center',
+                  }}>
+                    <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color: C.yellow }}>{applySummary.needsManual}</div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.yellow, opacity: 0.7 }}>kézi hozzárendelés</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Next step guidance */}
+              {applySummary.needsManual > 0 ? (
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.yellow, textAlign: 'center', lineHeight: 1.5 }}>
+                  ⚠ {applySummary.byCategory.filter(c => !c.hasAssembly).length} kategória vár assembly hozzárendelésre.
+                  <br />Nyisd meg a tervet és az Estimation panelen rendeld hozzá.
+                </div>
+              ) : (
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, textAlign: 'center', lineHeight: 1.5 }}>
+                  ✓ Minden kategória rendelkezik assembly-vel.
+                  <br />A kalkuláció azonnal elérhető a tervben.
+                </div>
+              )}
+
+              {/* CTAs */}
+              <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                <button
+                  onClick={() => { if (onDone) onDone(); else onClose() }}
+                  style={{
+                    fontFamily: 'DM Mono', fontSize: 12, color: '#000', fontWeight: 600,
+                    background: C.accent, border: 'none',
+                    borderRadius: 8, padding: '10px 0', cursor: 'pointer',
+                    flex: 1, transition: 'all 0.15s',
+                  }}
+                >
+                  {applySummary.needsManual > 0 ? 'Tovább a tervekhez' : 'Tovább a kalkulációhoz'}
+                </button>
+              </div>
             </div>
           )}
         </div>
