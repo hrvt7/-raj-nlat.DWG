@@ -590,6 +590,7 @@ function SaaSShell() {
   const [legendPanelData, setLegendPanelData] = useState(null) // null = closed, { projectId?, legendPlanId? }
   const [detectPanelPlans, setDetectPanelPlans] = useState(null) // null = closed, [] = plans
   const [detectPanelProjectId, setDetectPanelProjectId] = useState(null)
+  const [detectPanelExistingRun, setDetectPanelExistingRun] = useState(null) // existing run for reopen
   const [mergePanelPlans, setMergePanelPlans] = useState(null)   // null = closed, [] = plans
   const [viewerFocusTarget, setViewerFocusTarget] = useState(null) // { planId, pageNum, x, y } from review locate
 
@@ -802,6 +803,12 @@ function SaaSShell() {
                   onLegendPanel={(data) => setLegendPanelData(data || {})}
                   onDetectPanel={(plans, projId) => { setDetectPanelPlans(plans); setDetectPanelProjectId(projId || null) }}
                   onMergePanel={plans => setMergePanelPlans(plans)}
+                  onReopenDetection={(run) => {
+                    setDetectPanelExistingRun(run)
+                    setDetectPanelProjectId(run.projectId || null)
+                    // Use planIds from the run to provide plans context
+                    setDetectPanelPlans((run.planIds || []).map(id => ({ id })))
+                  }}
                   activeProjectId={activeProjectId}
                   onOpenProject={id => setActiveProjectId(id)}
                   onBackToProjects={() => setActiveProjectId(null)}
@@ -832,8 +839,9 @@ function SaaSShell() {
         <DetectionReviewPanel
           plans={detectPanelPlans}
           projectId={detectPanelProjectId}
-          onClose={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null) }}
-          onDone={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null) }}
+          existingRun={detectPanelExistingRun}
+          onClose={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null); setDetectPanelExistingRun(null) }}
+          onDone={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null); setDetectPanelExistingRun(null) }}
           onLocateDetection={(target) => setViewerFocusTarget({ ...target, _ts: Date.now() })}
         />
       )}

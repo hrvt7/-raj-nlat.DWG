@@ -262,7 +262,7 @@ function NoTemplatesWarning({ onClose }) {
 }
 
 // ─── DetectionReviewPanel ─────────────────────────────────────────────────────
-export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection }) {
+export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun }) {
   const [phase, setPhase] = useState('loading') // loading | no_templates | detecting | review | saving | done
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState(0)
@@ -273,8 +273,21 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const [scoreThreshold, setScoreThreshold] = useState(0.70)
   const [reviewFilter, setReviewFilter] = useState('all') // all | accepted | rejected | pending
 
-  // ── Load templates and start detection ──
+  // ── Reopen existing run (skip detection) ──
   useEffect(() => {
+    if (!existingRun) return
+    runIdRef.current = existingRun.id
+    const dets = (existingRun.results || []).map(r => ({
+      ...r,
+      accepted: r.accepted !== false,
+    }))
+    setAllDetections(dets)
+    setPhase('review')
+  }, [existingRun])
+
+  // ── Load templates and start detection (skip if reopening) ──
+  useEffect(() => {
+    if (existingRun) return // skip detection when reopening
     ;(async () => {
       setPhase('loading')
       // Load project-scoped templates if projectId provided, otherwise global

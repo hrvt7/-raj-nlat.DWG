@@ -12,6 +12,7 @@ import {
 import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
 } from '../data/legendStore.js'
+import { listDetectionRuns } from '../data/detectionRunStore.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -434,9 +435,95 @@ function ProjectListView({ onOpenProject }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── DETECTION HISTORY MINI ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const STATUS_LABEL = { running: '⏳ Fut', completed: '✅ Kész', applied: '✅ Alkalmazva', failed: '❌ Hiba' }
+const STATUS_COLOR = { running: C.yellow, completed: C.accent, applied: C.accent, failed: '#FF6B6B' }
+
+function DetectionHistoryMini({ projectId, onReopen }) {
+  const [runs, setRuns] = useState([])
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open || !projectId) return
+    listDetectionRuns(projectId).then(setRuns)
+  }, [open, projectId])
+
+  if (!projectId) return null
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6,
+          padding: '6px 12px', fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
+          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+        }}
+      >
+        📋 Korábbi detekciók
+        <span style={{ fontSize: 9, color: C.muted }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 100,
+          background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8,
+          padding: 8, minWidth: 320, maxHeight: 300, overflowY: 'auto',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+        }}>
+          {runs.length === 0 ? (
+            <div style={{ padding: 12, textAlign: 'center', fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
+              Nincs korábbi detekció
+            </div>
+          ) : runs.map(run => {
+            const total = run.results?.length || 0
+            const accepted = run.results?.filter(r => r.accepted !== false).length || 0
+            const dateStr = run.startedAt ? new Date(run.startedAt).toLocaleString('hu-HU', {
+              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+            }) : '?'
+            return (
+              <button
+                key={run.id}
+                onClick={() => { setOpen(false); onReopen(run) }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                  padding: '8px 10px', background: 'transparent', border: 'none',
+                  borderRadius: 6, cursor: 'pointer', textAlign: 'left',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = C.bg}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>
+                    {dateStr}
+                    <span style={{
+                      marginLeft: 8, fontSize: 9, padding: '1px 5px', borderRadius: 3,
+                      background: (STATUS_COLOR[run.status] || C.muted) + '20',
+                      color: STATUS_COLOR[run.status] || C.muted,
+                    }}>
+                      {STATUS_LABEL[run.status] || run.status}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 2 }}>
+                    {total} detekció · {accepted} elfogadva · {run.planIds?.length || 0} terv
+                  </div>
+                </div>
+                <span style={{ fontSize: 14, color: C.textSub }}>→</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ── PROJECT DETAIL VIEW ───────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDetectPanel, onMergePanel }) {
+function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, onReopenDetection }) {
   const [project, setProject] = useState(null)
   const [plans, setPlans] = useState([])
   const [thumbnails, setThumbnails] = useState({})
@@ -553,6 +640,11 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         />
       )}
 
+      {/* ── Detection history ── */}
+      <div style={{ marginBottom: 12 }}>
+        <DetectionHistoryMini projectId={projectId} onReopen={onReopenDetection} />
+      </div>
+
       {/* ── Plans section ── */}
       <div>
         <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
@@ -606,7 +698,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── MAIN EXPORT ───────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function FelmeresPage({ onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, activeProjectId, onOpenProject, onBackToProjects }) {
+export default function FelmeresPage({ onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, onReopenDetection, activeProjectId, onOpenProject, onBackToProjects }) {
   const [currentProjectId, setCurrentProjectId] = useState(activeProjectId || null)
 
   // Sync with external prop
@@ -631,6 +723,7 @@ export default function FelmeresPage({ onOpenFile, onLegendPanel, onDetectPanel,
         onLegendPanel={onLegendPanel}
         onDetectPanel={onDetectPanel}
         onMergePanel={onMergePanel}
+        onReopenDetection={onReopenDetection}
       />
     )
   }
