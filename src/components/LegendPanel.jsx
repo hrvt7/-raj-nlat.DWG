@@ -205,7 +205,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId }) {
     setAutoProgress({ phase: 'start', value: 0 })
     setExtractedSymbols([])
     try {
-      const phaseLabels = { render: 'Renderelés…', threshold: 'Küszöbölés…', components: 'Összetevők keresése…', rows: 'Sorok csoportosítása…', crop: 'Szimbólumok kivágása…' }
+      const phaseLabels = { render: 'PDF renderelés…', text: 'Szöveg felismerés…', crop: 'Szimbólumok kivágása…' }
       const results = await extractLegendSymbols(pdfBlob, {
         pageNum: 1,
         onProgress: (phase, value) => {
@@ -622,8 +622,12 @@ export default function LegendPanel({ onClose, projectId, legendPlanId }) {
 
               <div style={{ flex: 1, overflow: 'auto', padding: '10px 14px' }}>
                 {extractedSymbols.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px 0', color: C.muted, fontFamily: 'DM Mono', fontSize: 11 }}>
-                    Nem található szimbólum. Próbáld kézzel a kijelölést.
+                  <div style={{ textAlign: 'center', padding: '30px 10px', color: C.muted, fontFamily: 'DM Mono', fontSize: 11, lineHeight: 1.6 }}>
+                    Nem található szimbólum.<br/>
+                    <span style={{ fontSize: 10 }}>
+                      Lehet, hogy a PDF szkennelt kép (nincs beágyazott szöveg).
+                      Próbáld kézzel a kijelölést, vagy tölts fel szöveges PDF-et.
+                    </span>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -681,6 +685,14 @@ export default function LegendPanel({ onClose, projectId, legendPlanId }) {
                                 >{c.label}</button>
                               ))}
                             </div>
+                            {/* Source text (from PDF) */}
+                            {sym.sourceText && (
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 8, color: C.muted, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                title={sym.sourceText}
+                              >
+                                📄 {sym.sourceText}
+                              </div>
+                            )}
                             {/* Label input */}
                             <input
                               value={sym.editLabel}

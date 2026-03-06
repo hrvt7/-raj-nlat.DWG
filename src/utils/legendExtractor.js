@@ -1,254 +1,341 @@
-// ─── Legend Extractor ──────────────────────────────────────────────────────────
-// Automatically extracts symbol images from a legend PDF page.
-// Uses: PDF → canvas render → grayscale → binary threshold → connected components
-// → blob filtering → row clustering → symbol cropping
+// ─── Legend Extractor v2 ─────────────────────────────────────────────────────
+// Uses pdf.js text extraction to locate text labels + their positions,
+// then crops the SYMBOL region (left of each text row) from the rendered page.
 //
-// Output: [{ imageDataUrl, bounds: {x,y,w,h}, rowIndex, proposedCategory }]
+// Flow:
+//  1. Render PDF page at high DPI
+//  2. Extract text items with positions via page.getTextContent()
+//  3. Group text items into rows by Y proximity
+//  4. For each row: text → category match, left-of-text → symbol crop
+//  5. Tight-crop dark pixels in the symbol area
+//
+// Output: [{ imageDataUrl, bounds, rowIndex, proposedCategory, proposedLabel, sourceText }]
 
 import * as pdfjsLib from 'pdfjs-dist'
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const RENDER_SCALE = 3        // Render at 3x for high detail (~300 DPI for A4)
-const BINARY_THRESHOLD = 180  // Pixels darker than this → black (0..255)
-const MIN_BLOB_W = 12         // Min blob width in rendered pixels
-const MIN_BLOB_H = 12         // Min blob height
-const MAX_BLOB_W = 250        // Max blob width (filter out large borders/frames)
-const MAX_BLOB_H = 250        // Max blob height
-const MIN_BLOB_AREA = 80      // Min pixel area (filter tiny noise)
-const ROW_GAP_THRESHOLD = 25  // Y-gap to consider blobs in same row (pixels)
-const CROP_PADDING = 6        // Extra pixels around each symbol crop
+const RENDER_SCALE = 3        // 3x for ~300 DPI on A4
+const DARK_THRESHOLD = 180    // Grayscale threshold for "dark pixel" detection
+const CROP_PADDING = 6        // Extra px around cropped symbol
+const MIN_SYMBOL_PX = 10      // Min width/height to accept a symbol crop
+const MAX_SYMBOL_SCAN_PT = 150 // Max pts to scan left of text for symbol
+const TEXT_ROW_GAP_FACTOR = 1.6 // Row grouping: items within fontSize*factor are same row
 
-// ── Category heuristics ───────────────────────────────────────────────────────
-const CATEGORIES = [
-  { key: 'socket',    label: 'Dugalj',    color: '#FF8C42' },
-  { key: 'switch',    label: 'Kapcsoló',   color: '#FFD166' },
-  { key: 'light',     label: 'Lámpa',      color: '#4CC9F0' },
-  { key: 'panel',     label: 'Elosztó',    color: '#FF6B6B' },
-  { key: 'junction',  label: 'Kötődoboz', color: '#A78BFA' },
-  { key: 'conduit',   label: 'Csővezeték', color: '#71717A' },
-  { key: 'other',     label: 'Egyéb',      color: '#00E5A0' },
+// ── Category keyword matching (Hungarian electrical terms) ───────────────────
+const CATEGORY_KEYWORDS = [
+  {
+    key: 'socket', label: 'Dugalj', color: '#FF8C42',
+    patterns: [
+      'dugalj', 'dugasz', 'csatlakozó aljzat', 'aljzat', 'konnektor',
+      'földelt', 'schuko', 'ipari csatl', 'erőcsatl',
+      'usb', 'telefon aljzat', 'adat csatl', 'hálózat csatl',
+    ],
+  },
+  {
+    key: 'switch', label: 'Kapcsoló', color: '#A78BFA',
+    patterns: [
+      'kapcsoló', 'nyomó', 'dimmer', 'fényerő', 'fényerőszabályzó',
+      'váltókapcsoló', 'váltó', 'csillárkapcs', 'keresztkapcs',
+      'időkapcs', 'mozgásérzékelő', 'jelenlétzékelő',
+      'nyomógomb', 'csengő', 'kaputelefon',
+    ],
+  },
+  {
+    key: 'light', label: 'Lámpa', color: '#FFD166',
+    patterns: [
+      'lámpa', 'lámpat', 'világít', 'fénycső', 'fénycs',
+      'spot', 'led', 'mennyezeti', 'fali lámpa', 'falikar',
+      'armatúra', 'beépített', 'süllyesztett', 'felületre',
+      'vészvilág', 'biztonsági', 'kültéri lámpa', 'reflektor',
+      'downlight', 'panel lámpa', 'csillár',
+    ],
+  },
+  {
+    key: 'panel', label: 'Elosztó', color: '#FF6B6B',
+    patterns: [
+      'elosztó', 'főelosztó', 'alelosztó', 'mérőhely',
+      'tábla', 'szekrény', 'kapcsolótábla', 'biztosíték',
+      'kismegszakít', 'fi relé', 'túlfesz', 'villámvéd',
+    ],
+  },
+  {
+    key: 'junction', label: 'Kötődoboz', color: '#4CC9F0',
+    patterns: [
+      'kötődoboz', 'kötő doboz', 'köteg', 'csomópont',
+      'leágazó', 'leágazás', 'elágazó',
+    ],
+  },
+  {
+    key: 'conduit', label: 'Csővezeték', color: '#06B6D4',
+    patterns: [
+      'védőcső', 'csővez', 'kábelvéd', 'gégecső',
+      'merev cső', 'hajlékony', 'müanyag cső', 'fém cső',
+    ],
+  },
+  {
+    key: 'cable_tray', label: 'Kábeltálca', color: '#818CF8',
+    patterns: [
+      'kábeltálca', 'tálca', 'kábelcsatorna', 'kábel csatorna',
+      'parapetcsatorna', 'paraapet',
+    ],
+  },
+  {
+    key: 'other', label: 'Egyéb', color: '#71717A',
+    patterns: [],
+  },
 ]
 
-function guessCategory(w, h) {
-  const aspect = w / h
-  const area = w * h
-  // Small square-ish → switch
-  if (area < 1200 && aspect > 0.7 && aspect < 1.4) return 'switch'
-  // Small circle-ish (compact) → light
-  if (area < 1500 && aspect > 0.6 && aspect < 1.6) return 'light'
-  // Medium → socket
-  if (area < 3000) return 'socket'
-  // Large → panel
-  if (area > 5000) return 'panel'
-  return 'other'
-}
-
-// ── Connected Component labeling (flood fill) ─────────────────────────────────
-function findConnectedComponents(binary, w, h) {
-  const visited = new Uint8Array(w * h)
-  const components = []
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = y * w + x
-      if (binary[idx] === 0 || visited[idx]) continue // 0 = white/bg, skip
-      // BFS flood fill
-      const queue = [idx]
-      visited[idx] = 1
-      let minX = x, maxX = x, minY = y, maxY = y
-      let pixelCount = 0
-      while (queue.length > 0) {
-        const ci = queue.pop()
-        const cx = ci % w
-        const cy = (ci - cx) / w
-        pixelCount++
-        if (cx < minX) minX = cx
-        if (cx > maxX) maxX = cx
-        if (cy < minY) minY = cy
-        if (cy > maxY) maxY = cy
-        // 4-connected neighbors
-        const neighbors = [
-          cy > 0 ? ci - w : -1,
-          cy < h - 1 ? ci + w : -1,
-          cx > 0 ? ci - 1 : -1,
-          cx < w - 1 ? ci + 1 : -1,
-        ]
-        for (const ni of neighbors) {
-          if (ni >= 0 && !visited[ni] && binary[ni] === 1) {
-            visited[ni] = 1
-            queue.push(ni)
-          }
-        }
-      }
-      const bw = maxX - minX + 1
-      const bh = maxY - minY + 1
-      components.push({ x: minX, y: minY, w: bw, h: bh, area: pixelCount })
+/**
+ * Match a text string against Hungarian electrical categories.
+ * Returns the best matching category object.
+ */
+function matchCategory(text) {
+  const lower = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const lowerOrig = text.toLowerCase()
+  for (const cat of CATEGORY_KEYWORDS) {
+    for (const pattern of cat.patterns) {
+      const pNorm = pattern.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      if (lowerOrig.includes(pattern) || lower.includes(pNorm)) return cat
     }
   }
-  return components
+  return CATEGORY_KEYWORDS[CATEGORY_KEYWORDS.length - 1]
 }
-
-// ── Merge nearby blobs that belong to same symbol ─────────────────────────────
-function mergeNearbyBlobs(blobs, mergeDistance = 8) {
-  if (blobs.length === 0) return []
-  // Sort by y then x
-  const sorted = [...blobs].sort((a, b) => a.y - b.y || a.x - b.x)
-  const merged = []
-  const used = new Set()
-
-  for (let i = 0; i < sorted.length; i++) {
-    if (used.has(i)) continue
-    let { x, y, w, h } = sorted[i]
-    let x2 = x + w, y2 = y + h
-    used.add(i)
-    // Try to merge with nearby blobs
-    let changed = true
-    while (changed) {
-      changed = false
-      for (let j = 0; j < sorted.length; j++) {
-        if (used.has(j)) continue
-        const b = sorted[j]
-        const bx2 = b.x + b.w, by2 = b.y + b.h
-        // Check if blob j is within mergeDistance of current group
-        if (b.x <= x2 + mergeDistance && bx2 >= x - mergeDistance &&
-            b.y <= y2 + mergeDistance && by2 >= y - mergeDistance) {
-          x = Math.min(x, b.x)
-          y = Math.min(y, b.y)
-          x2 = Math.max(x2, bx2)
-          y2 = Math.max(y2, by2)
-          used.add(j)
-          changed = true
-        }
-      }
-    }
-    merged.push({ x, y, w: x2 - x, h: y2 - y })
-  }
-  return merged
-}
-
-// ── Cluster blobs into rows ───────────────────────────────────────────────────
-function clusterIntoRows(blobs, threshold = ROW_GAP_THRESHOLD) {
-  if (blobs.length === 0) return []
-  const sorted = [...blobs].sort((a, b) => a.y - b.y)
-  const rows = [[sorted[0]]]
-  for (let i = 1; i < sorted.length; i++) {
-    const lastRow = rows[rows.length - 1]
-    const lastMidY = lastRow.reduce((s, b) => s + b.y + b.h / 2, 0) / lastRow.length
-    const curMidY = sorted[i].y + sorted[i].h / 2
-    if (Math.abs(curMidY - lastMidY) < threshold) {
-      lastRow.push(sorted[i])
-    } else {
-      rows.push([sorted[i]])
-    }
-  }
-  // Sort blobs within each row by x
-  rows.forEach(row => row.sort((a, b) => a.x - b.x))
-  return rows
-}
-
-// ── Main extraction function ──────────────────────────────────────────────────
 
 /**
- * Extract symbols from a legend PDF.
+ * Find the tight bounding box of dark pixels within a region of the canvas.
+ * Returns { minX, maxX, minY, maxY, hasDark } in LOCAL region coordinates.
+ */
+function findDarkBounds(ctx, rx, ry, rw, rh) {
+  if (rw <= 0 || rh <= 0) return { hasDark: false }
+  const imgData = ctx.getImageData(
+    Math.round(rx), Math.round(ry),
+    Math.round(rw), Math.round(rh)
+  )
+  const d = imgData.data
+  const w = imgData.width, h = imgData.height
+  let minX = w, maxX = 0, minY = h, maxY = 0
+  let hasDark = false
+
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const idx = (py * w + px) * 4
+      const gray = 0.299 * d[idx] + 0.587 * d[idx + 1] + 0.114 * d[idx + 2]
+      if (gray < DARK_THRESHOLD) {
+        if (px < minX) minX = px
+        if (px > maxX) maxX = px
+        if (py < minY) minY = py
+        if (py > maxY) maxY = py
+        hasDark = true
+      }
+    }
+  }
+  return { minX, maxX, minY, maxY, hasDark }
+}
+
+// ── Exported categories (for UI) ─────────────────────────────────────────────
+export const CATEGORIES = CATEGORY_KEYWORDS.map(c => ({
+  key: c.key, label: c.label, color: c.color,
+}))
+
+// ── Main extraction function ─────────────────────────────────────────────────
+
+/**
+ * Extract symbols from a legend PDF using text-position analysis.
  * @param {Blob|File} pdfFile — The legend PDF file
  * @param {Object} options
- * @param {number} options.pageNum — Page number to extract from (default 1)
- * @param {function} options.onProgress — Progress callback (phase, progress 0-1)
- * @returns {Promise<Array<{ imageDataUrl, bounds, rowIndex, proposedCategory, proposedLabel }>>}
+ * @param {number}   options.pageNum    — Page number (default 1)
+ * @param {function} options.onProgress — Progress callback (phase, 0..1)
+ * @returns {Promise<Array>}
  */
 export async function extractLegendSymbols(pdfFile, options = {}) {
   const { pageNum = 1, onProgress } = options
   onProgress?.('render', 0)
 
-  // 1. Load and render PDF page
+  // 1. Load PDF
   const ab = await pdfFile.arrayBuffer()
   const doc = await pdfjsLib.getDocument({ data: ab }).promise
   const page = await doc.getPage(pageNum)
-  const vp = page.getViewport({ scale: RENDER_SCALE })
+
+  // 2. Get unscaled viewport (for coordinate math)
+  const vpBase = page.getViewport({ scale: 1 })
+
+  // 3. Render at high DPI
+  const vpRender = page.getViewport({ scale: RENDER_SCALE })
   const canvas = document.createElement('canvas')
-  canvas.width = vp.width; canvas.height = vp.height
+  canvas.width = vpRender.width
+  canvas.height = vpRender.height
   const ctx = canvas.getContext('2d')
-  await page.render({ canvasContext: ctx, viewport: vp }).promise
+  await page.render({ canvasContext: ctx, viewport: vpRender }).promise
   onProgress?.('render', 1)
 
-  // 2. Convert to grayscale binary
-  onProgress?.('threshold', 0)
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const { data, width, height } = imageData
-  const binary = new Uint8Array(width * height)
-  for (let i = 0; i < width * height; i++) {
-    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]
-    const gray = 0.299 * r + 0.587 * g + 0.114 * b
-    binary[i] = gray < BINARY_THRESHOLD ? 1 : 0 // 1 = dark/foreground
+  // 4. Extract text content
+  onProgress?.('text', 0)
+  const textContent = await page.getTextContent()
+
+  // Map text items to canvas coordinates
+  // PDF coord system: origin bottom-left, y goes UP
+  // Canvas coord system: origin top-left, y goes DOWN
+  const textItems = textContent.items
+    .filter(item => item.str && item.str.trim().length > 1) // skip single chars / empty
+    .map(item => {
+      const tx = item.transform[4]  // PDF x
+      const ty = item.transform[5]  // PDF y (from bottom)
+      const fontSize = Math.sqrt(
+        item.transform[0] * item.transform[0] + item.transform[1] * item.transform[1]
+      ) || 10
+
+      // Text width: use item.width if available, else estimate
+      const textWidth = item.width || (item.str.length * fontSize * 0.5)
+
+      // Convert to canvas coords (top-left origin, scaled)
+      const canvasX = tx * RENDER_SCALE
+      const canvasY = (vpBase.height - ty) * RENDER_SCALE
+      const canvasH = fontSize * RENDER_SCALE * 1.3
+      const canvasW = textWidth * RENDER_SCALE
+
+      return {
+        str: item.str.trim(),
+        x: canvasX,
+        y: canvasY - canvasH, // top of the text line
+        w: canvasW,
+        h: canvasH,
+        fontSize,
+      }
+    })
+    .filter(t => t.w > 0 && t.h > 0)
+
+  if (textItems.length === 0) {
+    // No text found — likely a scanned image PDF
+    onProgress?.('text', 1)
+    onProgress?.('crop', 1)
+    return [] // Fallback: return empty, LegendPanel shows "use manual mode"
   }
-  onProgress?.('threshold', 1)
 
-  // 3. Find connected components
-  onProgress?.('components', 0)
-  const rawBlobs = findConnectedComponents(binary, width, height)
-  onProgress?.('components', 0.5)
+  // 5. Group text items into rows by Y proximity
+  const avgFontSize = textItems.reduce((s, t) => s + t.fontSize, 0) / textItems.length
+  const rowThreshold = avgFontSize * RENDER_SCALE * TEXT_ROW_GAP_FACTOR
 
-  // 4. Filter by size
-  const sizeFiltered = rawBlobs.filter(b =>
-    b.w >= MIN_BLOB_W && b.h >= MIN_BLOB_H &&
-    b.w <= MAX_BLOB_W && b.h <= MAX_BLOB_H &&
-    b.area >= MIN_BLOB_AREA
-  )
+  const sortedByY = [...textItems].sort((a, b) => a.y - b.y)
+  const textRows = []
 
-  // 5. Merge nearby blobs (parts of same symbol)
-  const merged = mergeNearbyBlobs(sizeFiltered, 10)
-  onProgress?.('components', 1)
+  for (const item of sortedByY) {
+    let placed = false
+    for (const row of textRows) {
+      const rowMidY = row.reduce((s, t) => s + t.y + t.h / 2, 0) / row.length
+      const itemMidY = item.y + item.h / 2
+      if (Math.abs(itemMidY - rowMidY) < rowThreshold) {
+        row.push(item)
+        placed = true
+        break
+      }
+    }
+    if (!placed) textRows.push([item])
+  }
 
-  // 6. Re-filter merged blobs
-  const validBlobs = merged.filter(b =>
-    b.w >= MIN_BLOB_W && b.h >= MIN_BLOB_H &&
-    b.w <= MAX_BLOB_W && b.h <= MAX_BLOB_H
-  )
+  // Sort rows top to bottom, sort items within each row left to right
+  textRows.sort((a, b) => {
+    const ay = Math.min(...a.map(t => t.y))
+    const by = Math.min(...b.map(t => t.y))
+    return ay - by
+  })
+  textRows.forEach(row => row.sort((a, b) => a.x - b.x))
 
-  // 7. Cluster into rows
-  onProgress?.('rows', 0)
-  const rows = clusterIntoRows(validBlobs)
-  onProgress?.('rows', 1)
+  onProgress?.('text', 1)
 
-  // 8. For each row, take leftmost blob group as symbol
+  // 6. Determine row vertical extents (for symbol cropping)
+  // Each row's vertical extent = midpoint to prev row .. midpoint to next row
+  const rowExtents = textRows.map((row, idx) => {
+    const rowTop = Math.min(...row.map(t => t.y))
+    const rowBottom = Math.max(...row.map(t => t.y + t.h))
+    const rowMidY = (rowTop + rowBottom) / 2
+
+    let extTop, extBottom
+    if (idx === 0) {
+      extTop = Math.max(0, rowTop - (rowBottom - rowTop) * 0.8)
+    } else {
+      const prevBottom = Math.max(...textRows[idx - 1].map(t => t.y + t.h))
+      extTop = Math.max(0, (prevBottom + rowTop) / 2)
+    }
+    if (idx === textRows.length - 1) {
+      extBottom = Math.min(canvas.height, rowBottom + (rowBottom - rowTop) * 0.8)
+    } else {
+      const nextTop = Math.min(...textRows[idx + 1].map(t => t.y))
+      extBottom = Math.min(canvas.height, (rowBottom + nextTop) / 2)
+    }
+
+    return { extTop, extBottom, rowMidY }
+  })
+
+  // 7. For each text row, crop the symbol to the LEFT of the text
   onProgress?.('crop', 0)
   const results = []
-  for (let ri = 0; ri < rows.length; ri++) {
-    const row = rows[ri]
-    // Take the leftmost blob as the symbol (legend layout: symbol | text)
-    const symbol = row[0]
-    if (!symbol) continue
 
-    // Crop with padding
-    const cx = Math.max(0, symbol.x - CROP_PADDING)
-    const cy = Math.max(0, symbol.y - CROP_PADDING)
-    const cw = Math.min(width - cx, symbol.w + CROP_PADDING * 2)
-    const ch = Math.min(height - cy, symbol.h + CROP_PADDING * 2)
+  for (let ri = 0; ri < textRows.length; ri++) {
+    const row = textRows[ri]
+    const { extTop, extBottom } = rowExtents[ri]
 
+    // Combine all text in this row
+    const rowText = row.map(t => t.str).join(' ')
+
+    // Skip very short or likely-header text
+    if (rowText.length < 2) continue
+
+    // Find leftmost text x in this row
+    const leftmostTextX = Math.min(...row.map(t => t.x))
+
+    // Symbol scan area: from 0 (or limited range) to just before the text
+    const scanRight = Math.max(0, leftmostTextX - CROP_PADDING)
+    const scanLeft = Math.max(0, scanRight - MAX_SYMBOL_SCAN_PT * RENDER_SCALE)
+    const scanTop = Math.max(0, Math.floor(extTop))
+    const scanBottom = Math.min(canvas.height, Math.ceil(extBottom))
+    const scanW = Math.round(scanRight - scanLeft)
+    const scanH = Math.round(scanBottom - scanTop)
+
+    if (scanW < 5 || scanH < 5) continue
+
+    // Find tight dark-pixel bounds in the symbol area
+    const bounds = findDarkBounds(ctx, Math.round(scanLeft), scanTop, scanW, scanH)
+    if (!bounds.hasDark) continue
+
+    const symW = bounds.maxX - bounds.minX + 1
+    const symH = bounds.maxY - bounds.minY + 1
+    if (symW < MIN_SYMBOL_PX || symH < MIN_SYMBOL_PX) continue
+
+    // Convert local bounds back to canvas coords + padding
+    const cx = Math.max(0, Math.round(scanLeft) + bounds.minX - CROP_PADDING)
+    const cy = Math.max(0, scanTop + bounds.minY - CROP_PADDING)
+    const cw = Math.min(canvas.width - cx, symW + CROP_PADDING * 2)
+    const ch = Math.min(canvas.height - cy, symH + CROP_PADDING * 2)
+
+    if (cw < MIN_SYMBOL_PX || ch < MIN_SYMBOL_PX) continue
+    // Skip unreasonably large crops (probably not a single symbol)
+    if (cw > 200 * RENDER_SCALE || ch > 200 * RENDER_SCALE) continue
+
+    // Crop symbol image
     const cropCanvas = document.createElement('canvas')
-    cropCanvas.width = cw; cropCanvas.height = ch
+    cropCanvas.width = cw
+    cropCanvas.height = ch
     const cropCtx = cropCanvas.getContext('2d')
     cropCtx.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch)
     const imageDataUrl = cropCanvas.toDataURL('image/png')
 
-    const proposedCategory = guessCategory(symbol.w, symbol.h)
-    const catInfo = CATEGORIES.find(c => c.key === proposedCategory) || CATEGORIES[CATEGORIES.length - 1]
+    // Match category from text content
+    const cat = matchCategory(rowText)
 
     results.push({
       imageDataUrl,
       bounds: { x: cx, y: cy, w: cw, h: ch },
       rowIndex: ri,
-      proposedCategory: catInfo.key,
-      proposedLabel: catInfo.label,
-      proposedColor: catInfo.color,
+      proposedCategory: cat.key,
+      proposedLabel: rowText.substring(0, 50),
+      proposedColor: cat.color,
       width: cw,
       height: ch,
+      sourceText: rowText,
     })
 
-    onProgress?.('crop', (ri + 1) / rows.length)
+    onProgress?.('crop', (ri + 1) / textRows.length)
   }
 
   return results
 }
-
-export { CATEGORIES }
