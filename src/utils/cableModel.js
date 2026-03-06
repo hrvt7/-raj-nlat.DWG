@@ -4,15 +4,19 @@
 
 // ── Source constants (priority order: lower index = higher priority) ──────────
 export const CABLE_SOURCE = {
-  PDF_MARKERS:  'pdf_markers',   // P0 — manual marker placement (highest)
+  PDF_MARKERS:  'pdf_markers',   // P0 — manual marker placement on PDF (highest)
+  DXF_MARKERS:  'dxf_markers',   // P0 — manual marker placement on DXF (highest, same tier)
   DXF_LAYERS:   'dxf_layers',    // P1 — measured cable geometry from DXF layers
   PDF_TAKEOFF:  'pdf_takeoff',   // P2 — PDF API + MST estimation
   DXF_MST:      'dxf_mst',       // P3 — MST from device positions
   DEVICE_COUNT: 'device_count',  // P4 — qty × average (lowest)
 }
 
+// Priority tiers: lower index = higher priority.
+// PDF_MARKERS and DXF_MARKERS share P0 tier (both are manual).
 const PRIORITY = [
   CABLE_SOURCE.PDF_MARKERS,
+  CABLE_SOURCE.DXF_MARKERS,
   CABLE_SOURCE.DXF_LAYERS,
   CABLE_SOURCE.PDF_TAKEOFF,
   CABLE_SOURCE.DXF_MST,
@@ -22,10 +26,27 @@ const PRIORITY = [
 // Default p90 multipliers per source
 const P90_MULTIPLIER = {
   [CABLE_SOURCE.PDF_MARKERS]:  1.2,
+  [CABLE_SOURCE.DXF_MARKERS]:  1.2,
   [CABLE_SOURCE.DXF_LAYERS]:   1.15,
   [CABLE_SOURCE.PDF_TAKEOFF]:  1.35,
   [CABLE_SOURCE.DXF_MST]:      1.35,
   [CABLE_SOURCE.DEVICE_COUNT]: 1.5,
+}
+
+// ── Context guard helpers ────────────────────────────────────────────────────
+// Sources that originate from a specific viewer context.
+// Cross-context overwrites (e.g. dxf_markers overwriting pdf_markers) must be
+// blocked at the call site — shouldOverwrite is context-unaware by design.
+const MARKER_SOURCES = new Set([CABLE_SOURCE.PDF_MARKERS, CABLE_SOURCE.DXF_MARKERS])
+
+/**
+ * Check if two sources are both manual-marker sources from different contexts.
+ * If true, the caller should NOT allow the overwrite — the incoming estimate
+ * belongs to a different viewer context.
+ */
+export function isCrossContextMarkerConflict(currentSource, incomingSource) {
+  if (!MARKER_SOURCES.has(currentSource) || !MARKER_SOURCES.has(incomingSource)) return false
+  return currentSource !== incomingSource
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────

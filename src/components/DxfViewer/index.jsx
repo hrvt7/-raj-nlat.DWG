@@ -23,7 +23,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, focusTarget, assemblies: assembliesProp }, ref) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, focusTarget, assemblies: assembliesProp }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -168,6 +168,58 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       })
     }
   }, [planId, ceilingHeight, socketHeight])
+
+  // ── Report cable data to parent when markers/scale change ──
+  // Mirrors the PdfViewer onCableData pattern: Manhattan distance from panel to each device.
+  useEffect(() => {
+    if (!onCableData) return
+    const markers = markersRef.current
+    const sf = scaleRef.current
+    if (!markers.length || !sf.calibrated || !sf.factor) {
+      onCableData(null)
+      return
+    }
+    const panel = markers.find(m => m.category === 'panel')
+    if (!panel) { onCableData(null); return }
+
+    const ROUTING_FACTOR = 1.25
+    let lightM = 0, socketM = 0, switchM = 0, otherM = 0
+    let lightN = 0, socketN = 0, switchN = 0, otherN = 0
+
+    for (const m of markers) {
+      if (m.category === 'panel') continue
+      const catDef = COUNT_CATEGORIES.find(c => c.key === m.category)
+      if (catDef?.isCableTray) continue
+      if (m.category === 'junction' || m.category === 'other') continue
+
+      const dist = (Math.abs(m.x - panel.x) + Math.abs(m.y - panel.y)) * sf.factor * ROUTING_FACTOR
+      const asm = (assembliesProp || []).find(a => a.id === m.category)
+      const asmCat = asm?.category
+      if (asmCat === 'vilagitas' || m.category === 'light') { lightM += dist; lightN++ }
+      else if (m.category === 'socket' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('dugalj'))) { socketM += dist; socketN++ }
+      else if (m.category === 'switch' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('kapcsol'))) { switchM += dist; switchN++ }
+      else { otherM += dist; otherN++ }
+    }
+
+    const totalM = lightM + socketM + switchM + otherM
+    const deviceCount = lightN + socketN + switchN + otherN
+    if (deviceCount === 0) { onCableData(null); return }
+
+    onCableData({
+      cable_total_m: Math.round(totalM * 10) / 10,
+      cable_total_m_p50: Math.round(totalM * 10) / 10,
+      cable_total_m_p90: Math.round(totalM * 1.2 * 10) / 10,
+      cable_by_type: {
+        light_m: Math.round(lightM * 10) / 10,
+        socket_m: Math.round(socketM * 10) / 10,
+        switch_m: Math.round(switchM * 10) / 10,
+        other_m: Math.round(otherM * 10) / 10,
+      },
+      method: `Kézi jelölés alapján (${deviceCount} eszköz, Manhattan-távolság × ${ROUTING_FACTOR})`,
+      confidence: 0.92,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderTick, scale, onCableData])
 
   // ── Coordinate projection helper ──
   const project = useCallback((sx, sy) => {

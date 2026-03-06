@@ -13,7 +13,7 @@ import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsC
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
-import { normalizeCableEstimate, shouldOverwrite, CABLE_SOURCE } from '../utils/cableModel.js'
+import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
 import { normalizeMarkers } from '../utils/markerModel.js'
 import ConfidenceBadge from './ConfidenceBadge.jsx'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
@@ -1369,6 +1369,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 planId={planId}
                 assemblies={assemblies}
                 focusTarget={focusTarget}
+                onCableData={(data) => {
+                  if (data) {
+                    const normalized = normalizeCableEstimate(data, CABLE_SOURCE.DXF_MARKERS)
+                    // Context guard: never let DXF markers overwrite PDF marker estimate
+                    if (isCrossContextMarkerConflict(cableEstimate?._source, CABLE_SOURCE.DXF_MARKERS)) return
+                    if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
+                  } else if (cableEstimate?._source === CABLE_SOURCE.DXF_MARKERS) {
+                    // Markers cleared — drop DXF marker estimate, let DXF useEffect recalculate
+                    setCableEstimate(null)
+                  }
+                }}
                 style={{ height: '100%', border: 'none', borderRadius: 0 }}
               />
             </Suspense>
@@ -1444,6 +1455,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   onCableData={(data) => {
                     if (data) {
                       const normalized = normalizeCableEstimate(data, CABLE_SOURCE.PDF_MARKERS)
+                      // Context guard: never let PDF markers overwrite DXF marker estimate
+                      if (isCrossContextMarkerConflict(cableEstimate?._source, CABLE_SOURCE.PDF_MARKERS)) return
                       if (shouldOverwrite(cableEstimate, normalized)) {
                         setCableEstimate(normalized)
                       }
@@ -1778,11 +1791,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         fontFamily: 'DM Mono', fontSize: 10, padding: '1px 7px', borderRadius: 10,
                         background: cableEstimate._source === 'dxf_layers' ? C.accentDim
                           : cableEstimate._source === 'pdf_markers' ? C.accentDim
+                          : cableEstimate._source === 'dxf_markers' ? C.accentDim
                           : cableEstimate._source === 'dxf_mst' ? 'rgba(76,201,240,0.12)'
                           : cableEstimate._source === 'pdf_takeoff' ? 'rgba(255,209,102,0.15)'
                           : 'rgba(255,255,255,0.05)',
                         color: cableEstimate._source === 'dxf_layers' ? C.accent
                           : cableEstimate._source === 'pdf_markers' ? C.accent
+                          : cableEstimate._source === 'dxf_markers' ? C.accent
                           : cableEstimate._source === 'dxf_mst' ? C.blue
                           : cableEstimate._source === 'pdf_takeoff' ? C.yellow
                           : C.muted,
@@ -1790,6 +1805,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       }}>
                         {cableEstimate._source === 'dxf_layers' ? 'mért'
                           : cableEstimate._source === 'pdf_markers' ? 'jelölt'
+                          : cableEstimate._source === 'dxf_markers' ? 'jelölt'
                           : cableEstimate._source === 'dxf_mst' ? 'MST'
                           : cableEstimate._source === 'pdf_takeoff' ? 'PDF'
                           : 'becslés'}

@@ -4,6 +4,7 @@ import {
   normalizeCableEstimate,
   shouldOverwrite,
   isValidEstimate,
+  isCrossContextMarkerConflict,
 } from '../utils/cableModel.js'
 
 // ─── isValidEstimate ─────────────────────────────────────────────────────────
@@ -176,5 +177,91 @@ describe('shouldOverwrite', () => {
   it('unknown current source → any known incoming overwrites', () => {
     const unknownCurrent = { cable_total_m: 100, _source: 'unknown', confidence: 0.5 }
     expect(shouldOverwrite(unknownCurrent, mkEst('device_count'))).toBe(true)
+  })
+
+  // ── dxf_markers specific tests ──────────────────────────────────────────
+  it('dxf_markers (P0) overwrites dxf_layers (P1)', () => {
+    expect(shouldOverwrite(mkEst('dxf_layers'), mkEst('dxf_markers'))).toBe(true)
+  })
+
+  it('dxf_markers (P0) overwrites dxf_mst (P3)', () => {
+    expect(shouldOverwrite(mkEst('dxf_mst'), mkEst('dxf_markers'))).toBe(true)
+  })
+
+  it('dxf_markers (P0) overwrites device_count (P4)', () => {
+    expect(shouldOverwrite(mkEst('device_count'), mkEst('dxf_markers'))).toBe(true)
+  })
+
+  it('device_count (P4) does NOT overwrite dxf_markers (P0)', () => {
+    expect(shouldOverwrite(mkEst('dxf_markers'), mkEst('device_count'))).toBe(false)
+  })
+
+  it('pdf_markers (P0) vs dxf_markers (P0) — cross-context blocked at call site, priority index differs', () => {
+    // pdf_markers is index 0, dxf_markers is index 1 in PRIORITY array.
+    // shouldOverwrite alone would allow pdf_markers to overwrite dxf_markers (higher index),
+    // but NOT dxf_markers to overwrite pdf_markers. In practice, isCrossContextMarkerConflict
+    // blocks both directions at the call site.
+    expect(shouldOverwrite(mkEst('pdf_markers'), mkEst('dxf_markers'))).toBe(false)
+    expect(shouldOverwrite(mkEst('dxf_markers'), mkEst('pdf_markers'))).toBe(true)
+  })
+})
+
+// ─── normalizeCableEstimate with dxf_markers ────────────────────────────────
+
+describe('normalizeCableEstimate — dxf_markers', () => {
+  it('normalizes dxf_markers with cable_by_type', () => {
+    const raw = {
+      cable_total_m: 85.3,
+      cable_by_type: { light_m: 30, socket_m: 35.5, switch_m: 10, other_m: 9.8 },
+      method: 'Kézi jelölés alapján (6 eszköz, Manhattan-távolság × 1.25)',
+      confidence: 0.92,
+    }
+    const result = normalizeCableEstimate(raw, CABLE_SOURCE.DXF_MARKERS)
+    expect(result._source).toBe('dxf_markers')
+    expect(result.cable_total_m).toBe(85.3)
+    expect(result.cable_by_type.light_m).toBe(30)
+    expect(result.cable_by_type.socket_m).toBe(35.5)
+    expect(result.confidence).toBe(0.92)
+  })
+
+  it('generates p90 with 1.2 multiplier for dxf_markers', () => {
+    const raw = { cable_total_m: 100 }
+    const result = normalizeCableEstimate(raw, CABLE_SOURCE.DXF_MARKERS)
+    expect(result.cable_total_m_p90).toBe(120)
+  })
+
+  it('returns null for dxf_markers with zero total', () => {
+    expect(normalizeCableEstimate({ cable_total_m: 0 }, CABLE_SOURCE.DXF_MARKERS)).toBe(null)
+  })
+})
+
+// ─── isCrossContextMarkerConflict ───────────────────────────────────────────
+
+describe('isCrossContextMarkerConflict', () => {
+  it('returns true for pdf_markers vs dxf_markers (different context)', () => {
+    expect(isCrossContextMarkerConflict('pdf_markers', 'dxf_markers')).toBe(true)
+    expect(isCrossContextMarkerConflict('dxf_markers', 'pdf_markers')).toBe(true)
+  })
+
+  it('returns false for same-context marker sources', () => {
+    expect(isCrossContextMarkerConflict('pdf_markers', 'pdf_markers')).toBe(false)
+    expect(isCrossContextMarkerConflict('dxf_markers', 'dxf_markers')).toBe(false)
+  })
+
+  it('returns false when current is non-marker source', () => {
+    expect(isCrossContextMarkerConflict('dxf_layers', 'dxf_markers')).toBe(false)
+    expect(isCrossContextMarkerConflict('dxf_mst', 'pdf_markers')).toBe(false)
+    expect(isCrossContextMarkerConflict('device_count', 'dxf_markers')).toBe(false)
+  })
+
+  it('returns false when incoming is non-marker source', () => {
+    expect(isCrossContextMarkerConflict('pdf_markers', 'dxf_layers')).toBe(false)
+    expect(isCrossContextMarkerConflict('dxf_markers', 'pdf_takeoff')).toBe(false)
+  })
+
+  it('returns false for null/undefined sources', () => {
+    expect(isCrossContextMarkerConflict(null, 'dxf_markers')).toBe(false)
+    expect(isCrossContextMarkerConflict('pdf_markers', undefined)).toBe(false)
+    expect(isCrossContextMarkerConflict(null, null)).toBe(false)
   })
 })
