@@ -154,14 +154,47 @@ export async function getPlanThumbnail(planId) {
   return await planThumbStore.getItem(planId)
 }
 
+// ─── Annotation change notifications ─────────────────────────────────────────
+// Minimal pub/sub so viewers and workspace can react to external marker changes
+// (e.g., DetectionReviewPanel applying markers while a viewer is open).
+const _annotListeners = new Map() // planId → Set<callback>
+
+/**
+ * Subscribe to annotation changes for a specific planId.
+ * Callback receives { planId, markers } when savePlanAnnotations is called.
+ * @param {string} planId
+ * @param {function} callback
+ * @returns {function} unsubscribe function
+ */
+export function onAnnotationsChanged(planId, callback) {
+  if (!_annotListeners.has(planId)) _annotListeners.set(planId, new Set())
+  _annotListeners.get(planId).add(callback)
+  return () => {
+    const s = _annotListeners.get(planId)
+    if (s) { s.delete(callback); if (s.size === 0) _annotListeners.delete(planId) }
+  }
+}
+
+function _notifyAnnotListeners(planId, annotations) {
+  const s = _annotListeners.get(planId)
+  if (s) {
+    for (const cb of s) {
+      try { cb({ planId, markers: annotations.markers || [] }) } catch (e) {
+        console.warn('[planStore] annotation listener error:', e)
+      }
+    }
+  }
+}
+
 // ─── Annotation management (markers, measurements, scale) ──────────────────
 
 /**
  * Save plan annotations
  * @param {string} planId
  * @param {Object} annotations - { markers: [], measurements: [], scale: {}, cableRoutes: [] }
+ * @param {Object} [opts] - { silent: true } to skip notification (used by viewer unmount save)
  */
-export async function savePlanAnnotations(planId, annotations) {
+export async function savePlanAnnotations(planId, annotations, opts) {
   await planAnnotStore.setItem(planId, annotations)
   // Update plan meta to reflect counts
   const meta = loadPlansMeta()
@@ -171,6 +204,10 @@ export async function savePlanAnnotations(planId, annotations) {
     meta[idx].measureCount = annotations.measurements?.length || 0
     meta[idx].hasScale = !!annotations.scale?.calibrated
     savePlansMeta(meta)
+  }
+  // Notify listeners (unless silent — used by viewer unmount to avoid infinite loops)
+  if (!opts?.silent) {
+    _notifyAnnotListeners(planId, annotations)
   }
 }
 
