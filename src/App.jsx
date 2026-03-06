@@ -8,7 +8,6 @@ import Quotes from './pages/Quotes.jsx'
 import WorkItems from './pages/WorkItems.jsx'
 import Settings from './pages/Settings.jsx'
 import AssembliesPage from './pages/Assemblies.jsx'
-import PlansPage from './pages/Plans.jsx'
 import ProjektekPage from './pages/Projektek.jsx'
 import LegendPanel from './components/LegendPanel.jsx'
 import DetectionReviewPanel from './components/DetectionReviewPanel.jsx'
@@ -595,7 +594,7 @@ function SaaSShell() {
     const tradeLabel = activeTrade ? TRADE_LABELS[activeTrade] : null
     const baseTitles = {
       dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
-      plans: 'Tervrajzok', projektek: 'Projektek', 'projektek-workspace': 'Projektek',
+      projektek: 'Projektek', 'projektek-workspace': 'Projektek',
       'work-items': 'Munkatételek', materials: 'Anyagok',
       assemblies: 'Assemblyk', settings: 'Beállítások',
     }
