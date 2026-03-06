@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { C, Button, Badge } from './ui.jsx'
 import { COUNT_CATEGORIES } from './DxfViewer/DxfToolbar.jsx'
 import { getPlanAnnotations, getPlanThumbnail } from '../data/planStore.js'
@@ -8,6 +8,8 @@ import { ASSEMBLY_TYPES, addUserOverride, getAssemblyTypeLabel } from '../data/s
 import { mergeParseResults, getAggregatedRows, deduplicateUnknowns } from '../utils/mergeParseResults.js'
 import { downloadCSV } from '../utils/csvExport.js'
 import { normalizeMarker } from '../utils/markerModel.js'
+import { createBundle, checkBundleStaleness, staleReasonLabel } from '../utils/bundleModel.js'
+import { saveBundle, listBundles, getBundle, deleteBundle } from '../data/bundleStore.js'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MergePlansView — Combine annotations from multiple plans into one estimate
@@ -20,6 +22,60 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
   const hasPdfResults = plans.some(p => p.fileType === 'pdf' && p.pdfRecognition?.status === 'done')
   const defaultTab = hasDxfResults ? 'dxf' : hasPdfResults ? 'pdf' : 'manual'
   const [activeTab, setActiveTab] = useState(defaultTab)
+
+  // ── Bundle state ──────────────────────────────────────────────────────
+  const [savedBundles, setSavedBundles] = useState([])
+  const [activeBundleId, setActiveBundleId] = useState(null)
+  const [bundleSaveMsg, setBundleSaveMsg] = useState(null)
+
+  // Load saved bundles on mount
+  useEffect(() => {
+    listBundles().then(setSavedBundles).catch(() => {})
+  }, [])
+
+  // Save bundle handler — called by each tab with its current state
+  const handleSaveBundle = useCallback(async ({ mergeType, planIds, assignments, unknownMappings, name }) => {
+    try {
+      const bundle = createBundle({
+        id: activeBundleId || undefined, // update existing if loaded
+        name: name || `Csomag — ${new Date().toLocaleString('hu-HU')}`,
+        planIds,
+        mergeType,
+        assignments: assignments || {},
+        unknownMappings: unknownMappings || {},
+        plans, // for snapshot extraction
+      })
+      await saveBundle(bundle)
+      setActiveBundleId(bundle.id)
+      const refreshed = await listBundles()
+      setSavedBundles(refreshed)
+      setBundleSaveMsg('✓ Csomag mentve')
+      setTimeout(() => setBundleSaveMsg(null), 2500)
+      return bundle
+    } catch (e) {
+      console.error('[BundleSave]', e)
+      setBundleSaveMsg('✗ Mentés sikertelen')
+      setTimeout(() => setBundleSaveMsg(null), 2500)
+      return null
+    }
+  }, [plans, activeBundleId])
+
+  // Load bundle handler — restores tab + selection + assignments
+  const handleLoadBundle = useCallback(async (bundleId) => {
+    const bundle = await getBundle(bundleId)
+    if (!bundle) return null
+    setActiveBundleId(bundle.id)
+    setActiveTab(bundle.mergeType)
+    return bundle
+  }, [])
+
+  // Delete bundle handler
+  const handleDeleteBundle = useCallback(async (bundleId) => {
+    await deleteBundle(bundleId)
+    if (activeBundleId === bundleId) setActiveBundleId(null)
+    const refreshed = await listBundles()
+    setSavedBundles(refreshed)
+  }, [activeBundleId])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -34,6 +90,34 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
             Tervek összevonása
           </div>
         </div>
+
+        {/* Bundle selector */}
+        {savedBundles.length > 0 && (
+          <select
+            value={activeBundleId || ''}
+            onChange={async (e) => {
+              if (!e.target.value) { setActiveBundleId(null); return }
+              await handleLoadBundle(e.target.value)
+            }}
+            style={{
+              background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 6,
+              padding: '5px 8px', color: C.text, fontSize: 11, fontFamily: 'DM Mono',
+              maxWidth: 200,
+            }}
+          >
+            <option value="">Mentett csomagok…</option>
+            {savedBundles.map(b => (
+              <option key={b.id} value={b.id}>{b.name} ({b.planIds.length} terv)</option>
+            ))}
+          </select>
+        )}
+
+        {bundleSaveMsg && (
+          <span style={{
+            fontFamily: 'DM Mono', fontSize: 11,
+            color: bundleSaveMsg.startsWith('✓') ? '#10b981' : '#ef4444',
+          }}>{bundleSaveMsg}</span>
+        )}
       </div>
 
       {/* Tab bar */}
@@ -52,11 +136,14 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
       </div>
 
       {activeTab === 'manual' ? (
-        <ManualMergeTab plans={plans} onCreateQuote={onCreateQuote} onSwitchToDxf={() => setActiveTab('dxf')} />
+        <ManualMergeTab plans={plans} onCreateQuote={onCreateQuote} onSwitchToDxf={() => setActiveTab('dxf')}
+          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} />
       ) : activeTab === 'dxf' ? (
-        <DxfAnalysisTab plans={plans} onCreateQuote={onCreateQuote} />
+        <DxfAnalysisTab plans={plans} onCreateQuote={onCreateQuote}
+          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} />
       ) : (
-        <PdfRecognitionTab plans={plans} onCreateQuote={onCreateQuote} />
+        <PdfRecognitionTab plans={plans} onCreateQuote={onCreateQuote}
+          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} />
       )}
     </div>
   )
@@ -79,7 +166,7 @@ function TabButton({ active, onClick, children }) {
 // Manual Merge Tab (existing functionality, unchanged)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
+function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf, onSaveBundle, activeBundleId, onLoadBundle }) {
   const [selected, setSelected] = useState({})
   const [annotations, setAnnotations] = useState({})
   const [thumbnails, setThumbnails] = useState({})
@@ -87,9 +174,23 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
   const [ceilingHeight, setCeilingHeight] = useState(3.0)
   const [socketHeight, setSocketHeight] = useState(0.3)
   const [assignments, setAssignments] = useState({})
+  const bundleLoadedRef = useRef(false)
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
   const workItems  = useMemo(() => { try { return loadWorkItems()  } catch { return [] } }, [])
   const materials  = useMemo(() => { try { return loadMaterials()  } catch { return [] } }, [])
+
+  // Load bundle state if activeBundleId is set and matches 'manual' type
+  useEffect(() => {
+    if (!activeBundleId || bundleLoadedRef.current) return
+    getBundle(activeBundleId).then(bundle => {
+      if (!bundle || bundle.mergeType !== 'manual') return
+      bundleLoadedRef.current = true
+      const sel = {}
+      for (const pid of bundle.planIds) sel[pid] = true
+      setSelected(sel)
+      setAssignments(bundle.assignments || {})
+    }).catch(() => {})
+  }, [activeBundleId])
 
   useEffect(() => {
     Promise.all(plans.map(async p => {
@@ -366,11 +467,26 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
               </div>
             </SectionCard>
 
-            <button onClick={() => onCreateQuote?.({
-              mergedFrom: selectedIds, countByCategory, assignments, cableData, costEstimate, markers: mergedMarkers,
-            })} style={primaryButtonStyle}>
-              Ajánlat létrehozása az összesítésből
-            </button>
+            {/* Bundle stale warning */}
+            <BundleStaleWarning bundleId={activeBundleId} plans={plans} />
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => onSaveBundle?.({
+                mergeType: 'manual', planIds: selectedIds, assignments,
+                name: `Kézi csomag — ${selectedIds.length} terv`,
+              })} style={{
+                ...primaryButtonStyle, background: C.bgCard, color: C.text,
+                border: `1px solid ${C.border}`, flex: '0 0 auto',
+              }}>
+                💾 Csomag mentése
+              </button>
+              <button onClick={() => onCreateQuote?.({
+                mergedFrom: selectedIds, countByCategory, assignments, cableData, costEstimate, markers: mergedMarkers,
+                bundleId: activeBundleId,
+              })} style={{ ...primaryButtonStyle, flex: 1 }}>
+                Ajánlat létrehozása az összesítésből
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -382,16 +498,31 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
 // DXF Analysis Tab — Auto block recognition aggregated across plans
 // ═══════════════════════════════════════════════════════════════════════════
 
-function DxfAnalysisTab({ plans, onCreateQuote }) {
+function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, onLoadBundle }) {
   const [selected, setSelected] = useState({})
   const [assignments, setAssignments] = useState({}) // assemblyType → assemblyId
   const [showUnknowns, setShowUnknowns] = useState(false)
   const [unknownAssignments, setUnknownAssignments] = useState({}) // blockName → assemblyType
   const [filterFloor, setFilterFloor] = useState('') // '' = all
   const [filterDiscipline, setFilterDiscipline] = useState('')
+  const bundleLoadedRef = useRef(false)
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
   const workItems  = useMemo(() => { try { return loadWorkItems()  } catch { return [] } }, [])
   const materials  = useMemo(() => { try { return loadMaterials()  } catch { return [] } }, [])
+
+  // Load bundle state if activeBundleId is set and matches 'dxf' type
+  useEffect(() => {
+    if (!activeBundleId || bundleLoadedRef.current) return
+    getBundle(activeBundleId).then(bundle => {
+      if (!bundle || bundle.mergeType !== 'dxf') return
+      bundleLoadedRef.current = true
+      const sel = {}
+      for (const pid of bundle.planIds) sel[pid] = true
+      setSelected(sel)
+      setAssignments(bundle.assignments || {})
+      if (bundle.unknownMappings) setUnknownAssignments(bundle.unknownMappings)
+    }).catch(() => {})
+  }, [activeBundleId])
 
   // Only show plans that have been parsed (have parseResult with blocks)
   const parsedPlans = useMemo(() =>
@@ -781,21 +912,36 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
               </SectionCard>
             )}
 
-            {/* Create quote */}
-            <button onClick={() => onCreateQuote?.({
-              source: 'dxf_analysis',
-              mergedFrom: selectedIds,
-              countByAssemblyType: mergeResult.total,
-              byFloor: mergeResult.byFloor,
-              assignments,
-              costEstimate,
-            })} disabled={rows.length === 0} style={{
-              ...primaryButtonStyle,
-              opacity: rows.length === 0 ? 0.5 : 1,
-              cursor: rows.length === 0 ? 'not-allowed' : 'pointer',
-            }}>
-              📥 Árajánlat létrehozása (DXF elemzésből)
-            </button>
+            {/* Bundle stale warning */}
+            <BundleStaleWarning bundleId={activeBundleId} plans={plans} />
+
+            {/* Create quote + save bundle */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => onSaveBundle?.({
+                mergeType: 'dxf', planIds: selectedIds, assignments, unknownMappings: unknownAssignments,
+                name: `DXF csomag — ${selectedIds.length} terv`,
+              })} style={{
+                ...primaryButtonStyle, background: C.bgCard, color: C.text,
+                border: `1px solid ${C.border}`, flex: '0 0 auto', width: 'auto',
+              }}>
+                💾 Csomag mentése
+              </button>
+              <button onClick={() => onCreateQuote?.({
+                source: 'dxf_analysis',
+                mergedFrom: selectedIds,
+                countByAssemblyType: mergeResult.total,
+                byFloor: mergeResult.byFloor,
+                assignments,
+                costEstimate,
+                bundleId: activeBundleId,
+              })} disabled={rows.length === 0} style={{
+                ...primaryButtonStyle, flex: 1,
+                opacity: rows.length === 0 ? 0.5 : 1,
+                cursor: rows.length === 0 ? 'not-allowed' : 'pointer',
+              }}>
+                📥 Árajánlat létrehozása (DXF elemzésből)
+              </button>
+            </div>
           </>
         )}
 
@@ -857,12 +1003,26 @@ function DxfAnalysisTab({ plans, onCreateQuote }) {
 // PDF Recognition Tab — Vision AI results aggregated across PDF plans
 // ═══════════════════════════════════════════════════════════════════════════
 
-function PdfRecognitionTab({ plans, onCreateQuote }) {
+function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, onLoadBundle }) {
   const [selected, setSelected] = useState({})
   const [assignments, setAssignments] = useState({}) // _pdfType → assemblyId override
+  const bundleLoadedRef = useRef(false)
   const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
   const workItems  = useMemo(() => { try { return loadWorkItems()  } catch { return [] } }, [])
   const materials  = useMemo(() => { try { return loadMaterials()  } catch { return [] } }, [])
+
+  // Load bundle state if activeBundleId is set and matches 'pdf' type
+  useEffect(() => {
+    if (!activeBundleId || bundleLoadedRef.current) return
+    getBundle(activeBundleId).then(bundle => {
+      if (!bundle || bundle.mergeType !== 'pdf') return
+      bundleLoadedRef.current = true
+      const sel = {}
+      for (const pid of bundle.planIds) sel[pid] = true
+      setSelected(sel)
+      setAssignments(bundle.assignments || {})
+    }).catch(() => {})
+  }, [activeBundleId])
 
   // Plans with successful Vision AI recognition
   const recognizedPlans = useMemo(() =>
@@ -1199,33 +1359,85 @@ function PdfRecognitionTab({ plans, onCreateQuote }) {
               </SectionCard>
             )}
 
-            {/* Create quote button */}
-            <button
-              onClick={() => onCreateQuote?.({
-                source: 'pdf_recognition',
-                mergedFrom: selectedIds,
-                recognizedItems: pdfTypes.map(type => ({
-                  _pdfType: type,
-                  label: aggregated[type].label,
-                  icon: aggregated[type].icon,
-                  total: aggregated[type].total,
-                  byFloor: aggregated[type].floors,
-                  asmId: assignments[type] || aggregated[type].asmId,
-                })),
-                totalCableM,
-                costEstimate,
-              })}
-              disabled={pdfTypes.length === 0}
-              style={{
-                ...primaryButtonStyle,
-                opacity: pdfTypes.length === 0 ? 0.5 : 1,
-                cursor: pdfTypes.length === 0 ? 'not-allowed' : 'pointer',
-              }}
-            >
-              📥 Árajánlat létrehozása (PDF felismerésből)
-            </button>
+            {/* Bundle stale warning */}
+            <BundleStaleWarning bundleId={activeBundleId} plans={plans} />
+
+            {/* Create quote + save bundle */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => onSaveBundle?.({
+                mergeType: 'pdf', planIds: selectedIds, assignments,
+                name: `PDF csomag — ${selectedIds.length} terv`,
+              })} style={{
+                ...primaryButtonStyle, background: C.bgCard, color: C.text,
+                border: `1px solid ${C.border}`, flex: '0 0 auto', width: 'auto',
+              }}>
+                💾 Csomag mentése
+              </button>
+              <button
+                onClick={() => onCreateQuote?.({
+                  source: 'pdf_recognition',
+                  mergedFrom: selectedIds,
+                  recognizedItems: pdfTypes.map(type => ({
+                    _pdfType: type,
+                    label: aggregated[type].label,
+                    icon: aggregated[type].icon,
+                    total: aggregated[type].total,
+                    byFloor: aggregated[type].floors,
+                    asmId: assignments[type] || aggregated[type].asmId,
+                  })),
+                  totalCableM,
+                  costEstimate,
+                  bundleId: activeBundleId,
+                })}
+                disabled={pdfTypes.length === 0}
+                style={{
+                  ...primaryButtonStyle, flex: 1,
+                  opacity: pdfTypes.length === 0 ? 0.5 : 1,
+                  cursor: pdfTypes.length === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                📥 Árajánlat létrehozása (PDF felismerésből)
+              </button>
+            </div>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bundle stale warning — async-loaded, renders only when bundle has changed sources
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BundleStaleWarning({ bundleId, plans }) {
+  const [stalePlans, setStalePlans] = useState([])
+
+  useEffect(() => {
+    if (!bundleId) { setStalePlans([]); return }
+    getBundle(bundleId).then(bundle => {
+      if (!bundle) { setStalePlans([]); return }
+      setStalePlans(checkBundleStaleness(bundle, plans))
+    }).catch(() => setStalePlans([]))
+  }, [bundleId, plans])
+
+  if (!bundleId || stalePlans.length === 0) return null
+
+  return (
+    <div style={{
+      background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+      borderRadius: 8, padding: '10px 14px', marginBottom: 8,
+    }}>
+      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: '#f59e0b', marginBottom: 4 }}>
+        ⚠ Csomag elavult — forrástervek változtak
+      </div>
+      {stalePlans.map(s => (
+        <div key={s.planId} style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#f59e0b' }}>
+          • {plans.find(p => p.id === s.planId)?.name || s.planId}: {staleReasonLabel(s.reason)}
+        </div>
+      ))}
+      <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 4 }}>
+        Mentsd újra a csomagot a frissítéshez.
       </div>
     </div>
   )
