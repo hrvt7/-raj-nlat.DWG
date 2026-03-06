@@ -144,7 +144,7 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote })
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['Projekt / Azonosító', 'Megrendelő', 'Összeg', 'Munkaóra', 'Státusz', ''].map(h => (
+                  {['Projekt / Azonosító', 'Megrendelő', 'Összeg (nettó)', 'Munkaóra', 'Státusz', ''].map(h => (
                     <th key={h} style={{
                       padding: '10px 16px', textAlign: 'left', fontSize: 10,
                       color: C.textSub, fontFamily: 'DM Mono', fontWeight: 500,
