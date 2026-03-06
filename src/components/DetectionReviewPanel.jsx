@@ -66,7 +66,72 @@ function ProgressBar({ value, label }) {
 }
 
 // ─── Detection group (per category) ──────────────────────────────────────────
-function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle, onLocate, scoreThreshold }) {
+// ─── Inline category picker (mini dropdown) ────────────────────────────────
+function CategoryPicker({ currentCategory, onPick, detectionId }) {
+  const [open, setOpen] = useState(false)
+  const cat = getCat(currentCategory)
+
+  if (!open) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(true) }}
+        title="Kategória átsorolás"
+        style={{
+          fontFamily: 'DM Mono', fontSize: 7,
+          color: C.muted, background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${C.border}`,
+          borderRadius: 4, padding: '2px 4px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 2, lineHeight: 1,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: cat.color, display: 'inline-block' }} />
+        ▾
+      </button>
+    )
+  }
+
+  return (
+    <div
+      style={{
+        position: 'absolute', top: '100%', left: 0, zIndex: 10,
+        background: C.bgCard, border: `1px solid ${C.border}`,
+        borderRadius: 8, padding: '4px 0', minWidth: 120,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {COUNT_CATEGORIES.map(c => (
+        <button
+          key={c.key}
+          onClick={() => { onPick(detectionId, c.key, c.color); setOpen(false) }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            width: '100%', padding: '4px 10px', border: 'none',
+            background: c.key === currentCategory ? 'rgba(0,229,160,0.08)' : 'transparent',
+            cursor: 'pointer', fontFamily: 'DM Mono', fontSize: 10,
+            color: c.key === currentCategory ? C.accent : C.text,
+          }}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
+          {c.label}
+        </button>
+      ))}
+      <button
+        onClick={() => setOpen(false)}
+        style={{
+          width: '100%', padding: '4px 10px', border: 'none',
+          background: 'transparent', cursor: 'pointer',
+          fontFamily: 'DM Mono', fontSize: 9, color: C.muted, textAlign: 'center',
+          borderTop: `1px solid ${C.border}`, marginTop: 2,
+        }}
+      >
+        Mégse
+      </button>
+    </div>
+  )
+}
+
+function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle, onLocate, onRemap, scoreThreshold }) {
   const cat = getCat(category)
   const accepted = detections.filter(d => d.accepted !== false)
   // Sort by score descending for easier review
@@ -113,7 +178,7 @@ function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onTogg
           const isAccepted = d.accepted !== false
           const isBelowThreshold = d.score < scoreThreshold
           return (
-            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
               <button
                 onClick={() => onToggle(d.id)}
                 title={`Bizonyosság: ${Math.round(d.score * 100)}%  ·  Oldal ${d.pageNum}  ·  (${Math.round(d.x)}, ${Math.round(d.y)})`}
@@ -133,6 +198,10 @@ function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onTogg
                 {Math.round(d.score * 100)}%
                 {d.pageNum > 1 && <span style={{ opacity: 0.7 }}>· o{d.pageNum}</span>}
               </button>
+              {/* Category remap picker */}
+              {onRemap && (
+                <CategoryPicker currentCategory={d.category} onPick={onRemap} detectionId={d.id} />
+              )}
               {/* Locate button — shows where this detection is on the plan */}
               {onLocate && (
                 <button
@@ -415,6 +484,13 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
     setAllDetections(prev => prev.map(d => d.category === category ? { ...d, accepted: false } : d))
   }, [])
 
+  // ── Remap detection category ──
+  const handleRemap = useCallback((detId, newCategory, newColor) => {
+    setAllDetections(prev => prev.map(d =>
+      d.id === detId ? { ...d, category: newCategory, color: newColor } : d
+    ))
+  }, [])
+
   // ── Bulk accept by score threshold ──
   const handleApplyThreshold = useCallback(() => {
     setAllDetections(prev => prev.map(d => ({
@@ -662,6 +738,7 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                         onRejectAll={handleRejectAll}
                         onToggle={handleToggle}
                         onLocate={handleLocate}
+                        onRemap={handleRemap}
                         scoreThreshold={scoreThreshold}
                       />
                     )
