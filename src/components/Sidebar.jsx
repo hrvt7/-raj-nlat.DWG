@@ -7,8 +7,7 @@ const MAIN_NAV = [
   { key: 'dashboard',  label: 'Dashboard' },
   { key: 'quotes',     label: 'Ajánlatok' },
   { key: 'new-quote',  label: 'Új ajánlat', highlight: true },
-  { key: 'felmeres',   label: 'Felmérés' },
-  { key: 'plans',      label: 'Tervrajzok' },
+  { key: 'projektek',  label: 'Projektek' },
 ]
 
 const SETTINGS_NAV = [
@@ -20,8 +19,7 @@ const NAV_PATHS = {
   dashboard:    'M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z',
   quotes:       ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2z','M14 2v6h6M9 13h6M9 17h4'],
   'new-quote':  'M12 5v14M5 12h14',
-  felmeres:     ['M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2','M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z','M9 12h6M9 16h4'],
-  plans:        ['M3 3h18v18H3V3z','M3 9h18M9 21V9'],
+  projektek:    ['M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2','M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z','M9 12h6M9 16h4'],
   'work-items': 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   materials:    ['M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z','M7 7h.01'],
   assemblies:   ['M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z','M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12'],

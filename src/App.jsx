@@ -9,13 +9,14 @@ import WorkItems from './pages/WorkItems.jsx'
 import Settings from './pages/Settings.jsx'
 import AssembliesPage from './pages/Assemblies.jsx'
 import PlansPage from './pages/Plans.jsx'
-import FelmeresPage from './pages/Felmeres.jsx'
+import ProjektekPage from './pages/Projektek.jsx'
 import LegendPanel from './components/LegendPanel.jsx'
 import DetectionReviewPanel from './components/DetectionReviewPanel.jsx'
 import PdfMergePanel from './components/PdfMergePanel.jsx'
 import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes } from './data/store.js'
-import { getPlanFile, getPlanMeta, getPlansByProject } from './data/planStore.js'
+import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
+import { generateProjectId, saveProject, loadProjects } from './data/projectStore.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
@@ -547,6 +548,25 @@ function SaaSShell() {
     }
   }, [session])
 
+  // ── Plans route redirect → projektek ───────────────────────────────────────
+  useEffect(() => {
+    if (page === 'plans') setPage('projektek')
+  }, [page])
+
+  // ── Orphan plan migration (once, on mount) ────────────────────────────────
+  useEffect(() => {
+    const orphans = loadPlans().filter(p => !p.projectId)
+    if (orphans.length === 0) return
+    // Check if "Importált tervek" project already exists
+    const existing = loadProjects().find(p => p.name === 'Importált tervek')
+    const projectId = existing ? existing.id : generateProjectId()
+    if (!existing) {
+      saveProject({ id: projectId, name: 'Importált tervek', createdAt: new Date().toISOString() })
+    }
+    orphans.forEach(p => updatePlanMeta(p.id, { projectId }))
+    console.log(`[App] Migrated ${orphans.length} orphan plan(s) → "Importált tervek" project (${projectId})`)
+  }, [])
+
   const handleSignOut = async () => {
     await signOut()
     setSession(null)
@@ -575,7 +595,7 @@ function SaaSShell() {
     const tradeLabel = activeTrade ? TRADE_LABELS[activeTrade] : null
     const baseTitles = {
       dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
-      plans: 'Tervrajzok', felmeres: 'Felmérés', 'felmeres-workspace': 'Felmérés',
+      plans: 'Tervrajzok', projektek: 'Projektek', 'projektek-workspace': 'Projektek',
       'work-items': 'Munkatételek', materials: 'Anyagok',
       assemblies: 'Assemblyk', settings: 'Beállítások',
     }
@@ -764,11 +784,11 @@ function SaaSShell() {
         )}
 
         {/* ── Content — full-height for TakeoffWorkspace, padded for other pages ── */}
-        {(page === 'new-quote' || page === 'felmeres-workspace') ? (
+        {(page === 'new-quote' || page === 'projektek-workspace') ? (
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <ErrorBoundary
               fallbackLabel="TakeoffWorkspace összeomlott"
-              onManualMode={() => setPage('plans')}
+              onManualMode={() => setPage('projektek')}
             >
               {page === 'new-quote' ? (
                 <TakeoffWorkspace
@@ -787,15 +807,15 @@ function SaaSShell() {
                   focusTarget={viewerFocusTarget}
                   onDirtyChange={handleViewerDirtyChange}
                   onSaved={() => {
-                    // Per-plan save: go back to Felmérés (NOT to Ajánlatok)
+                    // Per-plan save: go back to Projektek (NOT to Ajánlatok)
                     viewerDirtyRef.current = false
                     setFelmeresFile(null)
                     setFelmeresOpenPlan(null)
-                    setPage('felmeres')
+                    setPage('projektek')
                   }}
                   onCancel={() => {
                     viewerDirtyRef.current = false
-                    setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('felmeres')
+                    setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('projektek')
                   }}
                 />
               )}
@@ -819,11 +839,11 @@ function SaaSShell() {
                 <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} activeTrade={activeTrade} />
               ) : page === 'materials' ? (
                 <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
-              ) : page === 'felmeres' ? (
-                <FelmeresPage
+              ) : page === 'projektek' ? (
+                <ProjektekPage
                   onOpenFile={(f, plan) => {
                     if (viewerDirtyRef.current) { showAutoSaveToast(); viewerDirtyRef.current = false }
-                    setFelmeresFile(f); setFelmeresOpenPlan(plan || null); setPage('felmeres-workspace')
+                    setFelmeresFile(f); setFelmeresOpenPlan(plan || null); setPage('projektek-workspace')
                   }}
                   onLegendPanel={(data) => setLegendPanelData(data || {})}
                   onDetectPanel={(plans, projId) => { setDetectPanelPlans(plans); setDetectPanelProjectId(projId || null) }}
@@ -838,8 +858,6 @@ function SaaSShell() {
                   onOpenProject={id => setActiveProjectId(id)}
                   onBackToProjects={() => setActiveProjectId(null)}
                 />
-              ) : page === 'plans' ? (
-                <PlansPage onNavigate={(p, data) => { if (data) setPrefillData(data); setPage(p) }} />
               ) : page === 'assemblies' ? (
                 <AssembliesPage activeTrade={activeTrade} />
               ) : page === 'settings' ? (
@@ -895,7 +913,7 @@ function SaaSShell() {
                   const file = new File([blob], meta.name || 'terv.pdf', { type: 'application/pdf' })
                   setFelmeresOpenPlan({ id: target.planId, name: meta.name || 'Terv' })
                   setFelmeresFile(file)
-                  setPage('felmeres-workspace')
+                  setPage('projektek-workspace')
                 }
               } catch (e) {
                 console.warn('[App] multi-plan locate: plan load failed', e)
@@ -909,7 +927,7 @@ function SaaSShell() {
                   const file = new File([blob], meta.name || 'terv.pdf', { type: 'application/pdf' })
                   setFelmeresOpenPlan({ id: target.planId, name: meta.name || 'Terv' })
                   setFelmeresFile(file)
-                  setPage('felmeres-workspace')
+                  setPage('projektek-workspace')
                 }
               } catch (e) {
                 console.warn('[App] plan open for locate failed', e)

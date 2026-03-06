@@ -221,7 +221,7 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote })
             <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Gyors navigáció</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {[
-                { label: 'Tervek', page: 'plans', color: '#EC4899' },
+                { label: 'Projektek', page: 'projektek', color: '#EC4899' },
                 { label: 'Munkatételek', page: 'work-items', color: '#4CC9F0' },
                 { label: 'Anyagok', page: 'materials', color: '#A78BFA' },
                 { label: 'Assemblyk', page: 'assemblies', color: '#FFD166' },
