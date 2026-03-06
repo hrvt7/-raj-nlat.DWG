@@ -13,6 +13,7 @@ import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsC
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
+import { normalizeCableEstimate, shouldOverwrite, CABLE_SOURCE } from '../utils/cableModel.js'
 import { normalizeMarkers } from '../utils/markerModel.js'
 import ConfidenceBadge from './ConfidenceBadge.jsx'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
@@ -746,7 +747,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         const result = await runPdfTakeoff(f, pct => setParseProgress(pct))
         setParsedDxf(result.parsedDxf)
         setRecognizedItems(result.recognizedItems)
-        setCableEstimate(result.cableEstimate)
+        setCableEstimate(normalizeCableEstimate(result.cableEstimate, CABLE_SOURCE.PDF_TAKEOFF))
         setPdfConfidence(result.confidence ?? null)
         setPdfSource(result.pipelineSource ?? null)
         if (result.recognizedItems.length) setRightTab('recognize')
@@ -1018,63 +1019,51 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return Object.values(rowMap)
   }, [recognitionTakeoffRows, markerTakeoffRows])
 
-  // ── Auto-compute cable estimate for DXF (3-priority system) ─────────────
-  // Priority 1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
-  // Priority 2: MST becslés eszközpozíciók alapján  (confidence ~0.75)
-  // Priority 3: Eszközszám × átlagos kábelhossz  (fallback, confidence 0.55)
-  // PDF pipeline sets cableEstimate directly, so never overwrite it here.
+  // ── Auto-compute cable estimate for DXF (3-tier cascade) ────────────────
+  // P1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
+  // P2: MST becslés eszközpozíciók alapján  (confidence ~0.75)
+  // P3: Eszközszám × átlagos kábelhossz  (fallback, confidence 0.55)
+  // Guard: shouldOverwrite() prevents lower-priority estimates from replacing
+  // higher-priority ones (e.g. pdf_markers won't be overwritten by dxf_mst).
   useEffect(() => {
-    if (cableEstimate?._source === 'pdf_markers') return   // Kézi jelölés — legmagasabb prioritás
-    if (cableEstimate?._source === 'pdf_takeoff') return  // PDF API már megvan
-
     if (!takeoffRows.length) {
-      if (cableEstimate?._source !== 'pdf_takeoff') setCableEstimate(null)
+      // No data — clear DXF-origin estimates only (preserve PDF sources)
+      if (cableEstimate?._source !== CABLE_SOURCE.PDF_TAKEOFF && cableEstimate?._source !== CABLE_SOURCE.PDF_MARKERS) {
+        setCableEstimate(null)
+      }
       return
     }
 
-    // ── Priority 1: tényleges kábelvonalak a DXF rétegeiből ──────────────
+    // ── Tier 1: tényleges kábelvonalak a DXF rétegeiből ──────────────────
     const layerResult = detectDxfCableLengths(effectiveParsedDxf)
     if (layerResult) {
-      setCableEstimate(layerResult)
+      const normalized = normalizeCableEstimate(layerResult, CABLE_SOURCE.DXF_LAYERS)
+      if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
       return
     }
 
-    // ── Priority 2: MST becslés ha vannak pozícióadatok ──────────────────
+    // ── Tier 2: MST becslés ha vannak pozícióadatok ──────────────────────
     const inserts = effectiveParsedDxf?.inserts
     if (inserts?.length >= 2) {
-      // Build device list with positions for MST
       const devices = inserts.map(ins => {
         const recog = recognizedItems.find(r => r.blockName === ins.name)
         const asmId = asmOverrides[ins.name] !== undefined ? asmOverrides[ins.name] : recog?.asmId
         const type = asmId === 'ASM-003' ? 'light' : asmId === 'ASM-001' ? 'socket' : asmId === 'ASM-002' ? 'switch' : 'other'
         return { type, x: ins.x, y: ins.y, name: ins.name }
       })
-      const scaleFactor = effectiveParsedDxf?.units?.factor ?? 0.001 // default mm→m
+      const scaleFactor = effectiveParsedDxf?.units?.factor ?? 0.001
       try {
         const mstResult = estimateCablesMST(devices, scaleFactor)
         if (mstResult && mstResult.cable_total_m > 0) {
-          // Map cable_by_system → cable_by_type (MST uses 'system', UI uses 'type')
-          const sys = mstResult.cable_by_system || {}
-          setCableEstimate({
-            cable_total_m: mstResult.cable_total_m,
-            cable_total_m_p50: mstResult.cable_total_m,
-            cable_total_m_p90: Math.round(mstResult.cable_total_m * 1.35),
-            cable_by_type: {
-              light_m: sys.lighting ?? 0,
-              socket_m: sys.socket ?? 0,
-              switch_m: sys.switch ?? 0,
-              other_m: sys.other ?? 0,
-            },
-            method: `MST becslés (${devices.length} eszközpozíció alapján)`,
-            confidence: mstResult.confidence ?? 0.75,
-            _source: 'dxf_mst',
-          })
+          mstResult.method = `MST becslés (${devices.length} eszközpozíció alapján)`
+          const normalized = normalizeCableEstimate(mstResult, CABLE_SOURCE.DXF_MST)
+          if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
           return
         }
       } catch (_e) { /* fallthrough to device-count */ }
     }
 
-    // ── Priority 3: eszközszám × átlag kábelhossz (fallback) ─────────────
+    // ── Tier 3: eszközszám × átlag kábelhossz (fallback) ─────────────────
     const lightQty  = takeoffRows.filter(r => r.asmId === 'ASM-003').reduce((s, r) => s + r.qty, 0)
     const socketQty = takeoffRows.filter(r => r.asmId === 'ASM-001').reduce((s, r) => s + r.qty, 0)
     const switchQty = takeoffRows.filter(r => r.asmId === 'ASM-002').reduce((s, r) => s + r.qty, 0)
@@ -1085,15 +1074,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     const socketM = socketQty * 6
     const switchM = switchQty * 4
     const totalM  = lightM + socketM + switchM
-    setCableEstimate({
+    const normalized = normalizeCableEstimate({
       cable_total_m: totalM,
-      cable_total_m_p50: totalM,
-      cable_total_m_p90: Math.round(totalM * 1.5),
       cable_by_type: { light_m: lightM, socket_m: socketM, switch_m: switchM, other_m: 0 },
       method: 'Becslés eszközszám alapján (nincs pozícióadat)',
       confidence: 0.55,
-      _source: 'device_count',
-    })
+    }, CABLE_SOURCE.DEVICE_COUNT)
+    if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
   }, [takeoffRows, effectiveParsedDxf, recognizedItems, asmOverrides])
 
   // ── Derived: pricing ──────────────────────────────────────────────────────
@@ -1456,8 +1443,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   }}
                   onCableData={(data) => {
                     if (data) {
-                      setCableEstimate(data)
-                    } else if (cableEstimate?._source === 'pdf_markers') {
+                      const normalized = normalizeCableEstimate(data, CABLE_SOURCE.PDF_MARKERS)
+                      if (shouldOverwrite(cableEstimate, normalized)) {
+                        setCableEstimate(normalized)
+                      }
+                    } else if (cableEstimate?._source === CABLE_SOURCE.PDF_MARKERS) {
                       // Markers cleared — fall back to pdf_takeoff or null
                       setCableEstimate(null)
                     }
