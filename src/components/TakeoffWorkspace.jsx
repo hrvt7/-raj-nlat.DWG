@@ -861,6 +861,21 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     }
   }, [fileToBase64])
 
+  // ── Effective items (filtered + overridden) ──────────────────────────────
+  const effectiveItems = useMemo(() => {
+    return recognizedItems
+      .filter(i => !deletedItems.has(i.blockName))
+      .map(i => itemQtyOverrides[i.blockName] != null
+        ? { ...i, qty: itemQtyOverrides[i.blockName] }
+        : i
+      )
+  }, [recognizedItems, deletedItems, itemQtyOverrides])
+
+  const highConf = effectiveItems.filter(i => i.confidence >= 0.8)
+  const midConf  = effectiveItems.filter(i => i.confidence >= 0.5 && i.confidence < 0.8)
+  const lowConf  = effectiveItems.filter(i => i.confidence < 0.5)
+  const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
+
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
   const takeoffRows = useMemo(() => {
     const rowMap = {}
@@ -1067,21 +1082,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       setSaving(false)
     }
   }
-
-  // ── Effective items (filtered + overridden) ──────────────────────────────
-  const effectiveItems = useMemo(() => {
-    return recognizedItems
-      .filter(i => !deletedItems.has(i.blockName))
-      .map(i => itemQtyOverrides[i.blockName] != null
-        ? { ...i, qty: itemQtyOverrides[i.blockName] }
-        : i
-      )
-  }, [recognizedItems, deletedItems, itemQtyOverrides])
-
-  const highConf = effectiveItems.filter(i => i.confidence >= 0.8)
-  const midConf  = effectiveItems.filter(i => i.confidence >= 0.5 && i.confidence < 0.8)
-  const lowConf  = effectiveItems.filter(i => i.confidence < 0.5)
-  const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
 
   // ── Render: upload screen ─────────────────────────────────────────────────
   if (!file) {
