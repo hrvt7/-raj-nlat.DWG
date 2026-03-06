@@ -41,7 +41,7 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
         <div>
           <h1 style={{ fontFamily: 'Syne', fontSize: 24, fontWeight: 800, color: C.text }}>Ajánlatok</h1>
           <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, marginTop: 4 }}>
-            {filtered.length} ajánlat · összesen {fmt(totalValue)} Ft bruttó
+            {filtered.length} ajánlat · összesen {fmt(totalValue)} Ft nettó
           </p>
         </div>
         <Button onClick={() => onNavigate('new-quote')} >Új ajánlat</Button>
@@ -90,7 +90,7 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
               <tr style={{ background: C.bgCard }}>
-                {['Azonosító', 'Projekt neve', 'Megrendelő', 'Összeg (bruttó)', 'Munkaóra', 'Dátum', 'Státusz', ''].map(h => (
+                {['Azonosító', 'Projekt neve', 'Megrendelő', 'Összeg (nettó)', 'Munkaóra', 'Dátum', 'Státusz', ''].map(h => (
                   <th key={h} style={{
                     padding: '10px 16px', textAlign: 'left', fontSize: 10,
                     color: C.textSub, fontFamily: 'DM Mono', fontWeight: 500,

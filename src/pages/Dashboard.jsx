@@ -86,7 +86,7 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote })
         <StatCard
           label="Nyertes összérték"
           value={stats.wonTotal > 0 ? `${fmt(stats.wonTotal / 1000000)} M` : '–'}
-          sub="Ft (bruttó)"
+          sub="Ft (nettó)"
           color={C.blue}
         />
       </div>
