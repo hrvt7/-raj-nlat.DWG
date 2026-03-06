@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { saveTemplate, loadTemplates, getTemplateImage, deleteTemplate, generateTemplateId } from '../data/legendStore.js'
 
-// pdf.js worker (already configured in the app)
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {

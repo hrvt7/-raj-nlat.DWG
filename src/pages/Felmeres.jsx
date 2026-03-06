@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { C } from '../components/ui.jsx'
 import {
   loadPlans, getPlanFile, savePlan, deletePlan,
   generatePlanId, savePlanThumbnail, getPlanThumbnail,
 } from '../data/planStore.js'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtSize = (bytes) => {
@@ -19,8 +23,6 @@ const fmtDate = (iso) => {
 // Generate PDF thumbnail via pdf.js (same logic as Plans.jsx)
 async function generatePdfThumb(file, planId) {
   try {
-    const pdfjsLib = await import('pdfjs-dist')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
     const ab = await file.arrayBuffer()
     const doc = await pdfjsLib.getDocument({ data: ab }).promise
     const page = await doc.getPage(1)
