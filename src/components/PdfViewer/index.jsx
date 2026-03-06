@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
-import { createMarker, normalizeMarkers } from '../../utils/markerModel.js'
+import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -159,7 +159,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         const externalDetections = storedMarkers.filter(
           m => m.source === 'detection' && !localIds.has(m.id)
         )
-        const merged = [...localMarkers, ...externalDetections]
+        // Manual-first dedup: if a manual local marker and a detection marker
+        // occupy the same spot, the manual marker wins.
+        const merged = deduplicateMarkersManualFirst([...localMarkers, ...externalDetections])
         savePlanAnnotations(planId, {
           markers: merged,
           measurements: measuresRef.current,

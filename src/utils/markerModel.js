@@ -110,3 +110,91 @@ export function normalizeMarkers(markers) {
   if (!markers || !markers.length) return []
   return markers.map(normalizeMarker)
 }
+
+// ── Manual-first proximity dedup ─────────────────────────────────────────────
+
+/** Default proximity threshold (PDF/DXF coordinate pixels). */
+export const DEDUP_PROXIMITY = 15
+
+/**
+ * Source priority — lower number wins when two markers collide.
+ * Manual markers ALWAYS win over detection/import.
+ */
+const SOURCE_PRIORITY = { manual: 0, import: 1, detection: 2 }
+
+function sourcePriority(marker) {
+  return SOURCE_PRIORITY[marker.source] ?? SOURCE_PRIORITY.detection
+}
+
+/**
+ * Merge newly-detected markers into an existing set, respecting manual-first rule.
+ *
+ * Rules:
+ *   1. If a detected marker is within PROXIMITY of an existing marker with the
+ *      same category, it is treated as a duplicate.
+ *   2. In a duplicate pair the marker with the HIGHER source priority (lower
+ *      number) always survives — i.e. manual > import > detection.
+ *   3. If both have the same priority, the first-write (existing) wins.
+ *
+ * @param {object[]} existing  — markers already in the store (may be manual or detection)
+ * @param {object[]} incoming  — new detection markers to merge in
+ * @param {number}   [proximity=DEDUP_PROXIMITY]
+ * @returns {object[]} merged array — existing markers preserved/upgraded, non-dup incoming appended
+ */
+export function mergeMarkersManualFirst(existing, incoming, proximity = DEDUP_PROXIMITY) {
+  const result = [...existing]
+
+  for (const inc of incoming) {
+    const dupIdx = result.findIndex(e =>
+      e.category === inc.category &&
+      Math.hypot(e.x - inc.x, e.y - inc.y) < proximity
+    )
+
+    if (dupIdx === -1) {
+      // No duplicate — safe to add
+      result.push(inc)
+    } else {
+      // Duplicate found — higher priority source survives
+      const dup = result[dupIdx]
+      if (sourcePriority(inc) < sourcePriority(dup)) {
+        // Incoming has higher priority (e.g. manual incoming vs detection existing)
+        result[dupIdx] = inc
+      }
+      // else: existing wins (same or better priority) — skip incoming
+    }
+  }
+
+  return result
+}
+
+/**
+ * Deduplicate a flat marker array using manual-first proximity rule.
+ * Useful for viewer unmount merge where markers from different sources are mixed.
+ *
+ * Iterates once; when two markers collide, the higher-priority source survives.
+ *
+ * @param {object[]} markers
+ * @param {number}   [proximity=DEDUP_PROXIMITY]
+ * @returns {object[]} deduplicated array
+ */
+export function deduplicateMarkersManualFirst(markers, proximity = DEDUP_PROXIMITY) {
+  const result = []
+
+  for (const m of markers) {
+    const dupIdx = result.findIndex(e =>
+      e.category === m.category &&
+      Math.hypot(e.x - m.x, e.y - m.y) < proximity
+    )
+
+    if (dupIdx === -1) {
+      result.push(m)
+    } else {
+      const dup = result[dupIdx]
+      if (sourcePriority(m) < sourcePriority(dup)) {
+        result[dupIdx] = m
+      }
+    }
+  }
+
+  return result
+}

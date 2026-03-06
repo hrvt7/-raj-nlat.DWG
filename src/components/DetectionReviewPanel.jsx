@@ -4,7 +4,7 @@ import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { getPlanFile, getPlanAnnotations, savePlanAnnotations, updatePlanMeta } from '../data/planStore.js'
 import { loadTemplatesWithImages, getTemplatesByProject } from '../data/legendStore.js'
 import { detectAllTemplates } from '../utils/templateMatching.js'
-import { createMarker, normalizeMarkers } from '../utils/markerModel.js'
+import { createMarker, normalizeMarkers, mergeMarkersManualFirst } from '../utils/markerModel.js'
 import { createDetectionRun, updateDetectionRun, linkDetectionToMarker } from '../data/detectionRunStore.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
@@ -531,18 +531,10 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
     if (onDone) onDone()
   }, [allDetections, onDone])
 
-  // ── Merge new auto-detected markers with existing ones ──
+  // ── Merge new auto-detected markers with existing ones (manual-first) ──
+  // Delegates to shared utility: manual markers always win over detection markers.
   function mergeMarkers(existing, detected) {
-    const PROXIMITY = 15 // pixels in PDF coords — treat as duplicate if within this
-    const result = [...existing]
-    for (const d of detected) {
-      const isDuplicate = existing.some(e =>
-        e.category === d.category &&
-        Math.hypot(e.x - d.x, e.y - d.y) < PROXIMITY
-      )
-      if (!isDuplicate) result.push(d)
-    }
-    return result
+    return mergeMarkersManualFirst(existing, detected)
   }
 
   // ── Group detections by category ──

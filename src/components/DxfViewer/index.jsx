@@ -5,7 +5,7 @@ import DxfToolbar, { COUNT_CATEGORIES } from './DxfToolbar.jsx'
 import DxfLayerPanel from './DxfLayerPanel.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
-import { createMarker, normalizeMarkers } from '../../utils/markerModel.js'
+import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -126,7 +126,8 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
         const externalDetections = storedMarkers.filter(
           m => m.source === 'detection' && !localIds.has(m.id)
         )
-        const merged = [...localMarkers, ...externalDetections]
+        // Manual-first dedup: manual markers always win over detection markers at same spot.
+        const merged = deduplicateMarkersManualFirst([...localMarkers, ...externalDetections])
         savePlanAnnotations(planId, {
           markers: merged,
           measurements: measuresRef.current,
