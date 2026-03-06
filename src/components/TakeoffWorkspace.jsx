@@ -1146,13 +1146,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     }
     setSaving(true); setSaveError(null)
     try {
-      // ── Per-plan save (Felmérés flow): save annotations + calc to planStore ──
+      // ── Per-plan save (Felmérés flow): merge-before-save to avoid partial overwrite ──
+      // Read current store state first, then overlay only workspace-owned fields.
+      // This preserves measurements, scale, cableRoutes, rotation etc. from the viewer.
       if (planId) {
+        const stored = (await getPlanAnnotations(planId)) || {}
         await savePlanAnnotations(planId, {
+          ...stored,
           markers: pdfMarkers,
-          measurements: [],
-          scale: { calibrated: false },
-          cableRoutes: [],
           wallSplits,
           variantOverrides,
         })
