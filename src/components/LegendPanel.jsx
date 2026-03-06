@@ -138,7 +138,7 @@ function TemplateThumbnail({ template, onDelete }) {
 }
 
 // ─── LegendPanel ──────────────────────────────────────────────────────────────
-export default function LegendPanel({ onClose, projectId, legendPlanId }) {
+export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDetection }) {
   const [mode, setMode] = useState('manual') // 'manual' | 'auto' | 'auto-review'
   const [pdfDoc, setPdfDoc] = useState(null)
   const [pageNum, setPageNum] = useState(1)
@@ -842,8 +842,21 @@ export default function LegendPanel({ onClose, projectId, legendPlanId }) {
                 )}
               </div>
 
-              {/* Bottom: close */}
-              <div style={{ padding: '12px 14px', borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+              {/* Bottom: run detection + close */}
+              <div style={{ padding: '12px 14px', borderTop: `1px solid ${C.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {templates.length > 0 && onRunDetection && (
+                  <button
+                    onClick={() => onRunDetection({ projectId, templateCount: templates.length })}
+                    style={{
+                      fontFamily: 'DM Mono', fontSize: 12, color: '#09090B', fontWeight: 600,
+                      background: C.accent, border: 'none',
+                      borderRadius: 8, padding: '10px 0', cursor: 'pointer',
+                      width: '100%', transition: 'all 0.15s',
+                    }}
+                  >
+                    🔍 Detektálás indítása ({templates.length} sablon)
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   style={{

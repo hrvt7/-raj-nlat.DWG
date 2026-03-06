@@ -15,7 +15,7 @@ import DetectionReviewPanel from './components/DetectionReviewPanel.jsx'
 import PdfMergePanel from './components/PdfMergePanel.jsx'
 import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes } from './data/store.js'
-import { getPlanFile, getPlanMeta } from './data/planStore.js'
+import { getPlanFile, getPlanMeta, getPlansByProject } from './data/planStore.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
@@ -852,6 +852,15 @@ function SaaSShell() {
           onClose={() => setLegendPanelData(null)}
           projectId={legendPanelData.projectId}
           legendPlanId={legendPanelData.legendPlanId}
+          onRunDetection={({ projectId: projId }) => {
+            // Close legend panel, open detection with all project plans
+            setLegendPanelData(null)
+            const plans = projId ? getPlansByProject(projId) : []
+            if (plans.length === 0) return
+            setDetectPanelPlans(plans)
+            setDetectPanelProjectId(projId)
+            setDetectPanelExistingRun(null)
+          }}
         />
       )}
       {detectPanelPlans && (
