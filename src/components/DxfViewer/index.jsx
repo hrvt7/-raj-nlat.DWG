@@ -4,7 +4,7 @@ import DxfViewerCanvas from './DxfViewerCanvas.jsx'
 import DxfToolbar, { COUNT_CATEGORIES } from './DxfToolbar.jsx'
 import DxfLayerPanel from './DxfLayerPanel.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
-import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
+import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers } from '../../utils/markerModel.js'
 
 const C = {
@@ -80,6 +80,16 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
     })
   }, [planId])
 
+  // ── Subscribe to external annotation changes (e.g. DetectionReviewPanel apply) ──
+  useEffect(() => {
+    if (!planId) return
+    const unsub = onAnnotationsChanged(planId, ({ markers }) => {
+      markersRef.current = normalizeMarkers(markers)
+      setRenderTick(t => t + 1)
+    })
+    return unsub
+  }, [planId])
+
   // ── Auto-save annotations on unmount ──
   // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
   useEffect(() => {
@@ -100,7 +110,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
           ceilingHeight,
           switchHeight,
           socketHeight,
-        })
+        }, { silent: true })
       }).catch(() => {
         savePlanAnnotations(planId, {
           markers: localMarkers,
@@ -109,7 +119,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
           ceilingHeight,
           switchHeight,
           socketHeight,
-        })
+        }, { silent: true })
       })
     }
   }, [planId, ceilingHeight, socketHeight])

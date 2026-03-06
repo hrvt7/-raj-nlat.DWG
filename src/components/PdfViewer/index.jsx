@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
-import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
+import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers } from '../../utils/markerModel.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -103,6 +103,17 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     })
   }, [planId])
 
+  // ── Subscribe to external annotation changes (e.g. DetectionReviewPanel apply) ──
+  useEffect(() => {
+    if (!planId) return
+    const unsub = onAnnotationsChanged(planId, ({ markers }) => {
+      markersRef.current = normalizeMarkers(markers)
+      setRenderTick(t => t + 1)
+      if (onMarkersChange) onMarkersChange([...markersRef.current])
+    })
+    return unsub
+  }, [planId, onMarkersChange])
+
   // ── Auto-save annotations on unmount ──
   // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
   // The ref may be stale if DetectionReviewPanel applied markers while this viewer was open.
@@ -129,7 +140,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           assignments: assignmentsRef.current,
           quoteOverrides: quoteOverridesRef.current,
           rotation: rotationRef.current,
-        })
+        }, { silent: true })
       }).catch(() => {
         // Fallback: save what we have if store read fails
         savePlanAnnotations(planId, {
@@ -142,7 +153,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           assignments: assignmentsRef.current,
           quoteOverrides: quoteOverridesRef.current,
           rotation: rotationRef.current,
-        })
+        }, { silent: true })
       })
     }
   }, [planId, ceilingHeight, socketHeight, switchHeight])

@@ -9,7 +9,7 @@ const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
-import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta } from '../data/planStore.js'
+import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged } from '../data/planStore.js'
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
@@ -643,6 +643,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       }
     })()
   }, [planId, file]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Subscribe to external annotation changes (e.g. DetectionReviewPanel apply) ──
+  useEffect(() => {
+    if (!planId) return
+    const unsub = onAnnotationsChanged(planId, ({ markers }) => {
+      setPdfMarkers(normalizeMarkers(markers))
+    })
+    return unsub
+  }, [planId])
 
   // ── Resizable split panel ─────────────────────────────────────────────────
   // panelRatio: left panel width as % of the container (clamp 25–80)
