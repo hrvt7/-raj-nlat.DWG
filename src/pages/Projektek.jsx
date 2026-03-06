@@ -16,6 +16,29 @@ import { listDetectionRuns } from '../data/detectionRunStore.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
+// ─── File type support ───────────────────────────────────────────────────────
+const FILE_TYPE_MAP = {
+  'dxf': { color: '#00E5A0', label: 'DXF', bg: 'rgba(0,229,160,0.15)', border: 'rgba(0,229,160,0.3)' },
+  'dwg': { color: '#FFD166', label: 'DWG', bg: 'rgba(255,209,102,0.15)', border: 'rgba(255,209,102,0.3)' },
+  'pdf': { color: '#FF6B6B', label: 'PDF', bg: 'rgba(255,107,107,0.15)', border: 'rgba(255,107,107,0.3)' },
+}
+
+function getFileType(filename) {
+  const ext = (filename || '').toLowerCase().split('.').pop()
+  if (ext === 'dwg') return 'dwg'
+  if (ext === 'dxf') return 'dxf'
+  return 'pdf'
+}
+
+const ALLOWED_EXTENSIONS = ['.pdf', '.dxf', '.dwg']
+function isAllowedPlan(filename) {
+  const lower = (filename || '').toLowerCase()
+  return ALLOWED_EXTENSIONS.some(ext => lower.endsWith(ext))
+}
+
+const MIME_TYPES = { pdf: 'application/pdf', dxf: 'text/plain', dwg: 'application/octet-stream' }
+const FALLBACK_NAMES = { pdf: 'terv.pdf', dxf: 'terv.dxf', dwg: 'terv.dwg' }
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtSize = (bytes) => {
   if (!bytes) return ''
@@ -197,12 +220,18 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
       style={{ background: C.bgCard, border: `1px solid ${selected ? 'rgba(0,229,160,0.3)' : C.border}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s, box-shadow 0.2s' }}
     >
       <div style={{ height: 120, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}`, flexDirection: 'column', gap: 6, overflow: 'hidden', position: 'relative' }}>
-        {thumb ? <img src={thumb} alt={plan.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }} /> : (
-          <>
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15v-2h1.5a1.5 1.5 0 0 1 0 3H9"/><path d="M15 13h2M15 13v4"/></svg>
-            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>PDF terv</span>
+        {thumb ? <img src={thumb} alt={plan.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.85 }} /> : (() => {
+          const ft = plan.fileType || 'pdf'
+          const ftInfo = FILE_TYPE_MAP[ft] || FILE_TYPE_MAP.pdf
+          return <>
+            {ft === 'pdf' ? (
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke={ftInfo.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15v-2h1.5a1.5 1.5 0 0 1 0 3H9"/><path d="M15 13h2M15 13v4"/></svg>
+            ) : (
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke={ftInfo.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>
+            )}
+            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{ftInfo.label} terv</span>
           </>
-        )}
+        })()}
         <div style={{ position: 'absolute', top: 7, left: 7 }}><Checkbox checked={selected} onChange={onSelect} /></div>
         {(markerCount > 0 || hasScale || detected > 0) && (
           <div style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -215,7 +244,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
       <div style={{ padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <div style={{ color: C.text, fontSize: 13, fontWeight: 600, fontFamily: 'Syne', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190 }}>{plan.name || plan.fileName || 'Névtelen'}</div>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 4, background: 'rgba(255,107,107,0.15)', border: '1px solid rgba(255,107,107,0.3)', color: '#FF6B6B' }}>PDF</span>
+          {(() => { const ftInfo = FILE_TYPE_MAP[plan.fileType] || FILE_TYPE_MAP.pdf; return <span style={{ fontFamily: 'DM Mono', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 4, background: ftInfo.bg, border: `1px solid ${ftInfo.border}`, color: ftInfo.color }}>{ftInfo.label}</span> })()}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: hasCalc ? 6 : 10 }}>
           <span>{fmtSize(plan.fileSize)}</span><span>{fmtDate(plan.uploadedAt || plan.createdAt)}</span>
@@ -317,7 +346,7 @@ function ProjectListView({ onOpenProject }) {
     const allTemplates = loadTemplates()
     const stats = {}
     for (const p of prjs) {
-      const plans = allPlans.filter(pl => pl.projectId === p.id && (pl.name || '').toLowerCase().endsWith('.pdf'))
+      const plans = allPlans.filter(pl => pl.projectId === p.id)
       const templates = allTemplates.filter(t => t.projectId === p.id)
       stats[p.id] = { planCount: plans.length, templateCount: templates.length }
     }
@@ -539,7 +568,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const reload = useCallback(async () => {
     const prj = getProject(projectId)
     setProject(prj)
-    const prjPlans = getPlansByProject(projectId).filter(p => (p.name || '').toLowerCase().endsWith('.pdf'))
+    const prjPlans = getPlansByProject(projectId)
     // Exclude legend plan from the plans grid
     const filtered = prj?.legendPlanId ? prjPlans.filter(p => p.id !== prj.legendPlanId) : prjPlans
     setPlans(filtered)
@@ -560,18 +589,22 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
 
   // Upload plan PDFs to this project
   const handlePlanFiles = useCallback(async (files) => {
-    const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'))
-    if (pdfs.length === 0) return
+    const accepted = Array.from(files).filter(f => isAllowedPlan(f.name))
+    if (accepted.length === 0) return
     setUploading(true)
-    for (const file of pdfs) {
+    for (const file of accepted) {
       const id = generatePlanId()
+      const ft = getFileType(file.name)
       const plan = {
-        id, name: file.name, fileName: file.name, fileType: 'pdf', fileSize: file.size,
+        id, name: file.name, fileName: file.name, fileType: ft, fileSize: file.size,
         projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
         markerCount: 0, measureCount: 0, hasScale: false, detectedCount: 0, detectionReviewed: false,
       }
       await savePlan(plan, file)
-      generatePdfThumb(file, id).then(d => { if (d) setThumbnails(prev => ({ ...prev, [id]: d })) }).catch(() => {})
+      // Thumbnail only for PDF — DXF/DWG get fallback icon
+      if (ft === 'pdf') {
+        generatePdfThumb(file, id).then(d => { if (d) setThumbnails(prev => ({ ...prev, [id]: d })) }).catch(() => {})
+      }
     }
     setUploading(false)
     reload()
@@ -598,7 +631,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     try {
       const blob = await getPlanFile(plan.id)
       if (!blob) { setOpeningId(null); return }
-      const file = new File([blob], plan.name || 'terv.pdf', { type: 'application/pdf' })
+      const ft = plan.fileType || getFileType(plan.name)
+      const file = new File([blob], plan.name || FALLBACK_NAMES[ft] || 'terv.pdf', { type: MIME_TYPES[ft] || 'application/octet-stream' })
       onOpenFile(file, plan)
     } catch { setOpeningId(null) }
   }, [onOpenFile])
@@ -664,11 +698,11 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           }}
         >
           <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>
-            {dragging ? 'Engedd el a PDF fájlokat' : '+ PDF tervrajz hozzáadása'}
+            {dragging ? 'Engedd el a fájlokat' : '+ Tervrajz hozzáadása'}
           </div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>Húzd ide vagy kattints · Több fájl egyszerre</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>PDF, DXF, DWG · Húzd ide vagy kattints</div>
           {uploading && <div style={{ marginTop: 6, color: C.accent, fontSize: 11, fontFamily: 'DM Mono' }}>Feltöltés…</div>}
-          <input ref={planInputRef} type="file" accept=".pdf" multiple style={{ display: 'none' }} onChange={e => { handlePlanFiles(e.target.files); e.target.value = '' }} />
+          <input ref={planInputRef} type="file" accept=".pdf,.dxf,.dwg" multiple style={{ display: 'none' }} onChange={e => { handlePlanFiles(e.target.files); e.target.value = '' }} />
         </div>
 
         {/* Plans grid */}
