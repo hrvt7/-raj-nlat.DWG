@@ -5,6 +5,7 @@ import { getPlanFile, getPlanAnnotations, savePlanAnnotations, updatePlanMeta } 
 import { loadTemplatesWithImages, getTemplatesByProject } from '../data/legendStore.js'
 import { detectAllTemplates } from '../utils/templateMatching.js'
 import { createMarker, normalizeMarkers } from '../utils/markerModel.js'
+import { createDetectionRun, updateDetectionRun, linkDetectionToMarker } from '../data/detectionRunStore.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -179,6 +180,7 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const [progressLabel, setProgressLabel] = useState('')
   const [allDetections, setAllDetections] = useState([]) // { id, planId, pageNum, x, y, score, category, color, templateId, accepted }
   const [error, setError] = useState(null)
+  const runIdRef = useRef(null) // DetectionRun.id for persistence
 
   // ── Load templates and start detection ──
   useEffect(() => {
@@ -196,6 +198,15 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
       }
 
       setPhase('detecting')
+
+      // ── Persist DetectionRun ──
+      const run = await createDetectionRun({
+        projectId: projectId || null,
+        planIds: plans.map(p => p.id),
+        templateIds: tpls.map(t => t.id),
+      })
+      runIdRef.current = run.id
+
       const detections = []
       let globalDone = 0
       const totalWork = plans.length * tpls.length
@@ -247,6 +258,28 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
       setAllDetections(detections)
       setProgress(1)
 
+      // ── Persist detection results into run ──
+      if (runIdRef.current) {
+        await updateDetectionRun(runIdRef.current, {
+          status: 'completed',
+          completedAt: new Date().toISOString(),
+          results: detections.map(d => ({
+            id: d.id,
+            planId: d.planId,
+            pageNum: d.pageNum,
+            x: d.x,
+            y: d.y,
+            score: d.score,
+            category: d.category,
+            color: d.color,
+            templateId: d.templateId,
+            label: d.label,
+            accepted: d.accepted,
+            markerId: null, // filled after apply
+          })),
+        })
+      }
+
       if (detections.length === 0) {
         setPhase('review') // show review panel with empty state
       } else {
@@ -255,6 +288,9 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
     })().catch(err => {
       console.error('[DetectionReview] error:', err)
       setError(err.message)
+      if (runIdRef.current) {
+        updateDetectionRun(runIdRef.current, { status: 'failed', completedAt: new Date().toISOString() })
+      }
       setPhase('review')
     })
   }, [plans])
@@ -299,6 +335,7 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
         source: 'detection',
         confidence: d.score,
         detectionId: d.id,
+        detectionRunId: runIdRef.current,
         templateId: d.templateId,
         label: d.label,
       }))
@@ -313,6 +350,37 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
         markerCount: merged.length,
         detectedCount: dets.length,
         detectionReviewed: true,
+        lastDetectionRunId: runIdRef.current,
+      })
+
+      // Back-reference: link each detection result to its created marker
+      for (const marker of newMarkers) {
+        if (marker.detectionId && runIdRef.current) {
+          // Fire-and-forget: non-blocking back-ref update
+          linkDetectionToMarker(runIdRef.current, marker.detectionId, marker.id)
+        }
+      }
+    }
+
+    // Update run status
+    if (runIdRef.current) {
+      // Sync final review decisions into run results
+      await updateDetectionRun(runIdRef.current, {
+        status: 'applied',
+        results: allDetections.map(d => ({
+          id: d.id,
+          planId: d.planId,
+          pageNum: d.pageNum,
+          x: d.x,
+          y: d.y,
+          score: d.score,
+          category: d.category,
+          color: d.color,
+          templateId: d.templateId,
+          label: d.label,
+          accepted: d.accepted !== false,
+          markerId: null, // linkDetectionToMarker fills this async
+        })),
       })
     }
 

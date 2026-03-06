@@ -39,9 +39,10 @@ export const MARKER_SOURCES = Object.freeze(['manual', 'detection', 'import'])
  * @param {string|null} [fields.asmId]       — assembly reference
  * @param {number|null} [fields.pageNum]     — 1-indexed page
  * @param {number|null} [fields.confidence]  — 0–1 (detection only)
- * @param {string|null} [fields.detectionId] — ref to DetectionResult
- * @param {string|null} [fields.templateId]  — which template matched
- * @param {string|null} [fields.label]       — display label from detection
+ * @param {string|null} [fields.detectionId]    — ref to DetectionResult
+ * @param {string|null} [fields.detectionRunId] — ref to DetectionRun
+ * @param {string|null} [fields.templateId]     — which template matched
+ * @param {string|null} [fields.label]          — display label from detection
  * @returns {object} unified marker
  */
 export function createMarker(fields) {
@@ -60,11 +61,12 @@ export function createMarker(fields) {
     asmId:        fields.asmId ?? null,
 
     // ── origin tracking (new) ──────────────────────
-    source:       fields.source || 'manual',
-    confidence:   fields.confidence ?? null,
-    detectionId:  fields.detectionId ?? null,
-    templateId:   fields.templateId ?? null,
-    label:        fields.label ?? null,
+    source:         fields.source || 'manual',
+    confidence:     fields.confidence ?? null,
+    detectionId:    fields.detectionId ?? null,
+    detectionRunId: fields.detectionRunId ?? null,
+    templateId:     fields.templateId ?? null,
+    label:          fields.label ?? null,
 
     // ── audit ──────────────────────────────────────
     createdAt:    fields.createdAt || new Date().toISOString(),
@@ -89,11 +91,12 @@ export function normalizeMarker(m) {
     category:     m.category,
     color:        m.color,
     asmId:        m.asmId      ?? null,
-    source:       m.source     || 'manual',
-    confidence:   m.confidence ?? null,
-    detectionId:  m.detectionId ?? null,
-    templateId:   m.templateId ?? null,
-    label:        m.label      ?? null,
+    source:         m.source         || 'manual',
+    confidence:     m.confidence     ?? null,
+    detectionId:    m.detectionId    ?? null,
+    detectionRunId: m.detectionRunId ?? null,
+    templateId:     m.templateId     ?? null,
+    label:          m.label          ?? null,
     createdAt:    m.createdAt  || new Date().toISOString(),
   }
 }
