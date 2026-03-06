@@ -109,6 +109,20 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
                 >
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted }}>{q.id}</span>
+                    {q.bundleId && (
+                      <div
+                        title={`Bundle: ${q.bundleId}`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 3,
+                          marginLeft: 6, padding: '1px 6px', borderRadius: 4,
+                          background: 'rgba(168,130,255,0.1)', border: '1px solid rgba(168,130,255,0.2)',
+                          fontFamily: 'DM Mono', fontSize: 9, color: '#A882FF',
+                          verticalAlign: 'middle', cursor: 'default',
+                        }}
+                      >
+                        📦 Bundle
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <button onClick={() => onOpenQuote(q)} style={{
