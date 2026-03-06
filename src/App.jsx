@@ -15,6 +15,7 @@ import DetectionReviewPanel from './components/DetectionReviewPanel.jsx'
 import PdfMergePanel from './components/PdfMergePanel.jsx'
 import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes } from './data/store.js'
+import { getPlanFile, getPlanMeta } from './data/planStore.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
@@ -842,7 +843,40 @@ function SaaSShell() {
           existingRun={detectPanelExistingRun}
           onClose={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null); setDetectPanelExistingRun(null) }}
           onDone={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null); setDetectPanelExistingRun(null) }}
-          onLocateDetection={(target) => setViewerFocusTarget({ ...target, _ts: Date.now() })}
+          onLocateDetection={async (target) => {
+            // Multi-plan locate: if target is on a different plan, switch to it first
+            const needsPlanSwitch = target.planId && target.planId !== (felmeresOpenPlan?.id || null)
+            if (needsPlanSwitch) {
+              try {
+                const blob = await getPlanFile(target.planId)
+                if (blob) {
+                  const meta = getPlanMeta(target.planId) || {}
+                  const file = new File([blob], meta.name || 'terv.pdf', { type: 'application/pdf' })
+                  setFelmeresOpenPlan({ id: target.planId, name: meta.name || 'Terv' })
+                  setFelmeresFile(file)
+                  setPage('felmeres-workspace')
+                }
+              } catch (e) {
+                console.warn('[App] multi-plan locate: plan load failed', e)
+              }
+            } else if (!felmeresOpenPlan && target.planId) {
+              // No workspace open at all — open the target plan
+              try {
+                const blob = await getPlanFile(target.planId)
+                if (blob) {
+                  const meta = getPlanMeta(target.planId) || {}
+                  const file = new File([blob], meta.name || 'terv.pdf', { type: 'application/pdf' })
+                  setFelmeresOpenPlan({ id: target.planId, name: meta.name || 'Terv' })
+                  setFelmeresFile(file)
+                  setPage('felmeres-workspace')
+                }
+              } catch (e) {
+                console.warn('[App] plan open for locate failed', e)
+              }
+            }
+            // Always set focus target — PdfViewer pendingFocus handles timing
+            setViewerFocusTarget({ ...target, _ts: Date.now() })
+          }}
         />
       )}
       {mergePanelPlans && (

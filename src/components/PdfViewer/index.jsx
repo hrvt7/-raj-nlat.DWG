@@ -116,27 +116,36 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   }, [planId, onMarkersChange])
 
   // ── Focus on target marker (from review panel locate) ──
+  // Pending focus: saved when focusTarget arrives before PDF is rendered.
+  // Consumed by renderPage after the page loads.
+  const pendingFocusRef = useRef(null)
+
+  const applyFocus = useCallback((target) => {
+    const v = viewRef.current
+    if (!v.pageWidth || !containerRef.current) return false
+    if (target.pageNum && target.pageNum !== pageNum) {
+      setPageNum(target.pageNum)
+    }
+    const cw = containerRef.current.clientWidth
+    const ch = containerRef.current.clientHeight
+    const targetZoom = Math.max(v.zoom, 2.0)
+    v.zoom = targetZoom
+    v.offsetX = cw / 2 - target.x * targetZoom
+    v.offsetY = ch / 2 - target.y * targetZoom
+    highlightRef.current = { x: target.x, y: target.y, startTime: Date.now() }
+    setRenderTick(t => t + 1)
+    return true
+  }, [pageNum])
+
   useEffect(() => {
     if (!focusTarget || !focusTarget.x || !focusTarget.y) return
-    const v = viewRef.current
-    if (!v.pageWidth) return // PDF not rendered yet
-    // If focusTarget has pageNum and it differs from current, switch page first
-    if (focusTarget.pageNum && focusTarget.pageNum !== pageNum) {
-      setPageNum(focusTarget.pageNum)
+    const applied = applyFocus(focusTarget)
+    if (!applied) {
+      // PDF not rendered yet — store as pending, renderPage will pick it up
+      pendingFocusRef.current = focusTarget
+      return
     }
-    // Center viewport on target coordinates with comfortable zoom
-    const container = containerRef.current
-    if (!container) return
-    const cw = container.clientWidth
-    const ch = container.clientHeight
-    const targetZoom = Math.max(v.zoom, 2.0) // zoom in at least to 2x for visibility
-    v.zoom = targetZoom
-    v.offsetX = cw / 2 - focusTarget.x * targetZoom
-    v.offsetY = ch / 2 - focusTarget.y * targetZoom
-    // Start highlight pulse
-    highlightRef.current = { x: focusTarget.x, y: focusTarget.y, startTime: Date.now() }
-    setRenderTick(t => t + 1)
-    // Auto-clear highlight after 2s
+    pendingFocusRef.current = null
     const timer = setTimeout(() => {
       highlightRef.current = null
       setRenderTick(t => t + 1)
@@ -250,10 +259,24 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         viewRef.current.offsetY = (ch - ph * zoom) / 2
       }
       drawOverlay()
+
+      // ── Consume pending focus after page render ──
+      if (pendingFocusRef.current) {
+        const pf = pendingFocusRef.current
+        pendingFocusRef.current = null
+        // Small delay to ensure layout is settled
+        setTimeout(() => {
+          applyFocus(pf)
+          setTimeout(() => {
+            highlightRef.current = null
+            setRenderTick(t => t + 1)
+          }, 2000)
+        }, 50)
+      }
     } catch (err) {
       console.error('Page render error:', err)
     }
-  }, [])
+  }, [applyFocus])
 
   useEffect(() => {
     if (pdfDoc && pageNum > 0) renderPage(pdfDoc, pageNum)
