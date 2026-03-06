@@ -1111,7 +1111,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Save quote ────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!pricing || !takeoffRows.length) return
+    if (!takeoffRows.length) {
+      setSaveError('Nincs felvett elem — jelölj ki elemeket a tervrajzon!')
+      return
+    }
+    if (!pricing) {
+      setSaveError('Árkalkuláció nem elérhető — ellenőrizd az assemblyket!')
+      return
+    }
     setSaving(true); setSaveError(null)
     try {
       // Map computed lines to items with unitPrice + hours for QuoteView
@@ -1398,6 +1405,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       // Markers cleared — fall back to pdf_takeoff or null
                       setCableEstimate(null)
                     }
+                  }}
+                  onCreateQuote={() => {
+                    // Triggered from EstimationPanel inside PdfViewer —
+                    // delegate to TakeoffWorkspace's handleSave which uses
+                    // the assembly-based takeoffRows + pricing pipeline
+                    handleSave()
                   }}
                 />
               </Suspense>
