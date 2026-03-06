@@ -536,6 +536,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Cable estimate (auto) ─────────────────────────────────────────────────
   const [cableEstimate, setCableEstimate] = useState(null)
 
+  // ── PDF manual markers (assembly-based counting from PdfViewer) ─────────
+  const [pdfMarkers, setPdfMarkers] = useState([])
+  const prevMarkerCountRef = useRef(0)
+  useEffect(() => {
+    const asmMarkers = pdfMarkers.filter(m => m.asmId || (m.category && m.category.startsWith('ASM-')))
+    if (asmMarkers.length > 0 && prevMarkerCountRef.current === 0) {
+      setRightTab('takeoff')
+    }
+    prevMarkerCountRef.current = asmMarkers.length
+  }, [pdfMarkers])
+
   // ── Effective units (auto or manual override) ────────────────────────────
   const UNIT_FACTORS = { mm: 0.001, cm: 0.01, m: 1.0, inches: 0.0254, feet: 0.3048 }
   const effectiveParsedDxf = useMemo(() => {
@@ -683,6 +694,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setVariantOverrides({})
     setWallSplits({})
     setCableEstimate(null)
+    setPdfMarkers([])
     setDwgStatus(null)
     setDwgError(null)
     setViewerFile(null)
@@ -877,7 +889,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
 
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
-  const takeoffRows = useMemo(() => {
+  // From DXF/PDF auto-recognition pipeline
+  const recognitionTakeoffRows = useMemo(() => {
     const rowMap = {}
     for (const item of effectiveItems) {
       const asmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
@@ -891,6 +904,38 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     }
     return Object.values(rowMap)
   }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
+
+  // From PDF manual markers (assembly-based counting)
+  const markerTakeoffRows = useMemo(() => {
+    if (!pdfMarkers.length) return []
+    const rowMap = {}
+    for (const m of pdfMarkers) {
+      // Only count markers that have an assembly ID (ASM-xxx)
+      const asmId = m.asmId || (m.category?.startsWith('ASM-') ? m.category : null)
+      if (!asmId) continue
+      if (!rowMap[asmId]) rowMap[asmId] = { asmId, qty: 0, variantId: variantOverrides[asmId] || null, wallSplits: wallSplits[asmId] || null, _fromMarkers: true }
+      rowMap[asmId].qty += 1
+    }
+    return Object.values(rowMap)
+  }, [pdfMarkers, variantOverrides, wallSplits])
+
+  // Merged takeoff rows: recognition + manual markers (no duplicates)
+  const takeoffRows = useMemo(() => {
+    const rowMap = {}
+    // Recognition rows first
+    for (const row of recognitionTakeoffRows) {
+      rowMap[row.asmId] = { ...row }
+    }
+    // Marker rows add to or create new entries
+    for (const row of markerTakeoffRows) {
+      if (rowMap[row.asmId]) {
+        rowMap[row.asmId].qty += row.qty
+      } else {
+        rowMap[row.asmId] = { ...row }
+      }
+    }
+    return Object.values(rowMap)
+  }, [recognitionTakeoffRows, markerTakeoffRows])
 
   // ── Auto-compute cable estimate for DXF (3-priority system) ─────────────
   // Priority 1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
@@ -1286,6 +1331,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 <PdfViewerPanel
                   file={file}
                   style={{ height: '100%', border: 'none', borderRadius: 0 }}
+                  assemblies={assemblies}
+                  onMarkersChange={(markers) => {
+                    setPdfMarkers(markers)
+                  }}
                   onCableData={(data) => {
                     if (data) {
                       setCableEstimate(data)

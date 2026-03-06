@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { COUNT_CATEGORIES, CategoryDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
+import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -21,7 +21,7 @@ function formatDist(m) {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -39,7 +39,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
   // ── Tools ──
   const [activeTool, setActiveTool] = useState(null)
-  const [activeCategory, setActiveCategory] = useState('socket')
+  // activeCategory can be an assembly ID (ASM-xxx) or a special key (panel, junction, other)
+  const [activeCategory, setActiveCategory] = useState('ASM-001')
 
   // ── Page rotation ──
   const [rotation, setRotation] = useState(0) // 0, 90, 180, 270
@@ -83,7 +84,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   useEffect(() => {
     if (!planId) return
     getPlanAnnotations(planId).then(ann => {
-      if (ann.markers?.length) { markersRef.current = ann.markers; setRenderTick(t => t + 1) }
+      if (ann.markers?.length) { markersRef.current = ann.markers; setRenderTick(t => t + 1); if (onMarkersChange) onMarkersChange([...ann.markers]) }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
@@ -254,6 +255,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           // Cable trays are structural — don't draw individual cable runs for them
           const mCatDef = COUNT_CATEGORIES.find(c => c.key === m.category)
           if (mCatDef?.isCableTray) continue
+          // Skip junction/other specials
+          if (m.category === 'junction' || m.category === 'other') continue
           const mp = proj(m.x, m.y)
           ctx.save()
           ctx.strokeStyle = (m.color || C.accent) + '60'
@@ -329,10 +332,18 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
 
     if (activeTool === 'count') {
-      const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
-      markersRef.current.push({ x: pdf.x, y: pdf.y, category: activeCategory, color: cat.color })
+      // Determine color from assembly or special items
+      const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B' }
+      const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
+      const asm = (assembliesProp || []).find(a => a.id === activeCategory)
+      const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[activeCategory] || '#9CA3AF')
+      markersRef.current.push({ x: pdf.x, y: pdf.y, category: activeCategory, color, asmId: asm ? asm.id : null })
       setRenderTick(t => t + 1)
       drawOverlay()
+      // Notify parent of marker change
+      if (onMarkersChange) {
+        onMarkersChange([...markersRef.current])
+      }
       return
     }
 
@@ -424,10 +435,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       measuresRef.current.pop()
     } else if (markersRef.current.length > 0) {
       markersRef.current.pop()
+      if (onMarkersChange) onMarkersChange([...markersRef.current])
     }
     setRenderTick(t => t + 1)
     drawOverlay()
-  }, [drawOverlay])
+  }, [drawOverlay, onMarkersChange])
 
   const handleClearAll = useCallback(() => {
     markersRef.current = []
@@ -435,7 +447,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     activeStartRef.current = null
     setRenderTick(t => t + 1)
     drawOverlay()
-  }, [drawOverlay])
+    if (onMarkersChange) onMarkersChange([])
+  }, [drawOverlay, onMarkersChange])
 
   // ── Calibration submit ──
   const handleCalibSubmit = useCallback(() => {
@@ -520,11 +533,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // Cable tray markers don't get individual cable runs
       const catDef = COUNT_CATEGORIES.find(c => c.key === m.category)
       if (catDef?.isCableTray) continue
+      // Skip junction/other specials
+      if (m.category === 'junction' || m.category === 'other') continue
 
       const dist = (Math.abs(m.x - panel.x) + Math.abs(m.y - panel.y)) * sf.factor * ROUTING_FACTOR
-      if (m.category === 'light') { lightM += dist; lightN++ }
-      else if (m.category === 'socket') { socketM += dist; socketN++ }
-      else if (m.category === 'switch') { switchM += dist; switchN++ }
+      // Assembly-based categorization: look up the assembly category
+      const asm = (assembliesProp || []).find(a => a.id === m.category)
+      const asmCat = asm?.category
+      if (asmCat === 'vilagitas' || m.category === 'light') { lightM += dist; lightN++ }
+      else if (m.category === 'socket' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('dugalj'))) { socketM += dist; socketN++ }
+      else if (m.category === 'switch' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('kapcsol'))) { switchM += dist; switchN++ }
       else { otherM += dist; otherN++ }
     }
 
@@ -577,6 +595,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         rotation={rotation}
         onRotateLeft={() => setRotation(r => (r - 90 + 360) % 360)}
         onRotateRight={() => setRotation(r => (r + 90) % 360)}
+        assemblies={assembliesProp}
       />
 
       {/* Main area */}
@@ -625,20 +644,29 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           <div style={{
             position: 'absolute', top: 8, right: 8, zIndex: 20,
             background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10,
-            padding: 14, minWidth: 180, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            padding: 14, minWidth: 200, maxWidth: 280, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
           }}>
             <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
               Összesítő ({markerCount})
             </div>
-            {COUNT_CATEGORIES.filter(c => countSummary[c.key]).map(c => (
-              <div key={c.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.color }} />
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: c.color }}>{c.label}</span>
+            {Object.entries(countSummary).map(([key, count]) => {
+              // Resolve label + color from assembly or fallback to COUNT_CATEGORIES
+              const asm = (assembliesProp || []).find(a => a.id === key)
+              const catDef = COUNT_CATEGORIES.find(c => c.key === key)
+              const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B' }
+              const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
+              const label = asm ? asm.name : (catDef?.label || key)
+              const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[key] || catDef?.color || '#9CA3AF')
+              return (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                  </div>
+                  <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color, flexShrink: 0 }}>{count}</span>
                 </div>
-                <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: c.color }}>{countSummary[c.key]}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -814,6 +842,7 @@ function PdfToolbar({
   onToggleEstimation, estimationOpen,
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
+  assemblies,
 }) {
   const TOOLS = [
     { id: 'count', label: 'Számlálás', key: 'C' },
@@ -851,8 +880,14 @@ function PdfToolbar({
         )
       })}
 
-      {/* Category picker — shown for count + measure (measure tags cable tray segments) */}
-      {(activeTool === 'count' || activeTool === 'measure') && (
+      {/* Assembly/Category picker — shown for count + measure */}
+      {activeTool === 'count' && assemblies?.length > 0 && (
+        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
+      )}
+      {activeTool === 'count' && (!assemblies || !assemblies.length) && (
+        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
+      )}
+      {activeTool === 'measure' && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
