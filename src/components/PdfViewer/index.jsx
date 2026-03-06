@@ -136,7 +136,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const v = viewRef.current
     if (!v.pageWidth || !containerRef.current) return false
     if (target.pageNum && target.pageNum !== pageNum) {
+      // Page switch needed → defer focus to after renderPage completes.
+      // Setting zoom/offset now would be overwritten by renderPage's fit-to-view.
+      pendingFocusRef.current = target
       setPageNum(target.pageNum)
+      return true // signal that we're handling it (page switch initiated)
     }
     const cw = containerRef.current.clientWidth
     const ch = containerRef.current.clientHeight
@@ -276,14 +280,25 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (pendingFocusRef.current) {
         const pf = pendingFocusRef.current
         pendingFocusRef.current = null
-        // Small delay to ensure layout is settled
-        setTimeout(() => {
-          applyFocus(pf)
+        // Apply focus directly using fresh viewRef (no applyFocus to avoid stale pageNum closure).
+        // viewRef.current.pageWidth/pageHeight are set above from the just-rendered page.
+        requestAnimationFrame(() => {
+          const vv = viewRef.current
+          const ct = containerRef.current
+          if (!vv.pageWidth || !ct) return
+          const cw = ct.clientWidth
+          const ch = ct.clientHeight
+          const targetZoom = Math.max(vv.zoom, 2.0)
+          vv.zoom = targetZoom
+          vv.offsetX = cw / 2 - pf.x * targetZoom
+          vv.offsetY = ch / 2 - pf.y * targetZoom
+          highlightRef.current = { x: pf.x, y: pf.y, startTime: Date.now() }
+          setRenderTick(t => t + 1)
           setTimeout(() => {
             highlightRef.current = null
             setRenderTick(t => t + 1)
           }, 2000)
-        }, 50)
+        })
       }
     } catch (err) {
       console.error('Page render error:', err)
