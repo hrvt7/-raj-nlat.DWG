@@ -826,7 +826,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // Priority 3: Eszközszám × átlagos kábelhossz  (fallback, confidence 0.55)
   // PDF pipeline sets cableEstimate directly, so never overwrite it here.
   useEffect(() => {
-    if (cableEstimate?._source === 'pdf_takeoff') return  // PDF már megvan
+    if (cableEstimate?._source === 'pdf_markers') return   // Kézi jelölés — legmagasabb prioritás
+    if (cableEstimate?._source === 'pdf_takeoff') return  // PDF API már megvan
 
     if (!takeoffRows.length) {
       if (cableEstimate?._source !== 'pdf_takeoff') setCableEstimate(null)
@@ -1219,6 +1220,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 <PdfViewerPanel
                   file={file}
                   style={{ height: '100%', border: 'none', borderRadius: 0 }}
+                  onCableData={(data) => {
+                    if (data) {
+                      setCableEstimate(data)
+                    } else if (cableEstimate?._source === 'pdf_markers') {
+                      // Markers cleared — fall back to pdf_takeoff or null
+                      setCableEstimate(null)
+                    }
+                  }}
                 />
               </Suspense>
             ) : null
@@ -1470,7 +1479,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   🔌 Kábelbecslés
                 </div>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 16 }}>
-                  Ha a DXF tartalmaz kábelvonalakat (réteg neve alapján felismeri), azokat méri. Ha nem, MST-algoritmussal becsül eszközpozíciók alapján, végső esetben eszközszám × átlagos kábelhossz értékkel.
+                  {isPdf
+                    ? 'Jelöld be az elosztót és az eszközöket a tervrajzon, majd kalibráld a léptéket — a kábelhossz a kijelölt pozíciókból számolódik. Ha nincs jelölés, eszközszám × átlagos kábelhossz alapján becsül.'
+                    : 'Ha a DXF tartalmaz kábelvonalakat (réteg neve alapján felismeri), azokat méri. Ha nem, MST-algoritmussal becsül eszközpozíciók alapján, végső esetben eszközszám × átlagos kábelhossz értékkel.'
+                  }
                 </div>
 
                 {cableEstimate ? (
@@ -1512,16 +1524,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       <span style={{
                         fontFamily: 'DM Mono', fontSize: 10, padding: '1px 7px', borderRadius: 10,
                         background: cableEstimate._source === 'dxf_layers' ? C.accentDim
+                          : cableEstimate._source === 'pdf_markers' ? C.accentDim
                           : cableEstimate._source === 'dxf_mst' ? 'rgba(76,201,240,0.12)'
                           : cableEstimate._source === 'pdf_takeoff' ? 'rgba(255,209,102,0.15)'
                           : 'rgba(255,255,255,0.05)',
                         color: cableEstimate._source === 'dxf_layers' ? C.accent
+                          : cableEstimate._source === 'pdf_markers' ? C.accent
                           : cableEstimate._source === 'dxf_mst' ? C.blue
                           : cableEstimate._source === 'pdf_takeoff' ? C.yellow
                           : C.muted,
                         border: `1px solid currentColor`,
                       }}>
                         {cableEstimate._source === 'dxf_layers' ? 'mért'
+                          : cableEstimate._source === 'pdf_markers' ? 'jelölt'
                           : cableEstimate._source === 'dxf_mst' ? 'MST'
                           : cableEstimate._source === 'pdf_takeoff' ? 'PDF'
                           : 'becslés'}

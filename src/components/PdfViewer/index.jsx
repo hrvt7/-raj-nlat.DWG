@@ -21,7 +21,7 @@ function formatDist(m) {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -496,6 +496,58 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote }) {
   })()
   const markerCount = markersRef.current.length
   const measureCount = measuresRef.current.length
+
+  // ── Report cable data to parent when markers/scale change ──
+  useEffect(() => {
+    if (!onCableData) return
+    const markers = markersRef.current
+    const sf = scaleRef.current
+    if (!markers.length || !sf.calibrated || !sf.factor) {
+      onCableData(null)
+      return
+    }
+    // Find panel marker
+    const panel = markers.find(m => m.category === 'panel')
+    if (!panel) { onCableData(null); return }
+
+    // Compute Manhattan cable lengths from panel to each device
+    let lightM = 0, socketM = 0, switchM = 0, otherM = 0
+    let lightN = 0, socketN = 0, switchN = 0, otherN = 0
+    const ROUTING_FACTOR = 1.25 // wall routing + vertical drops overhead
+
+    for (const m of markers) {
+      if (m.category === 'panel') continue
+      // Cable tray markers don't get individual cable runs
+      const catDef = COUNT_CATEGORIES.find(c => c.key === m.category)
+      if (catDef?.isCableTray) continue
+
+      const dist = (Math.abs(m.x - panel.x) + Math.abs(m.y - panel.y)) * sf.factor * ROUTING_FACTOR
+      if (m.category === 'light') { lightM += dist; lightN++ }
+      else if (m.category === 'socket') { socketM += dist; socketN++ }
+      else if (m.category === 'switch') { switchM += dist; switchN++ }
+      else { otherM += dist; otherN++ }
+    }
+
+    const totalM = lightM + socketM + switchM + otherM
+    const deviceCount = lightN + socketN + switchN + otherN
+    if (deviceCount === 0) { onCableData(null); return }
+
+    onCableData({
+      cable_total_m: Math.round(totalM * 10) / 10,
+      cable_total_m_p50: Math.round(totalM * 10) / 10,
+      cable_total_m_p90: Math.round(totalM * 1.2 * 10) / 10,
+      cable_by_type: {
+        light_m: Math.round(lightM * 10) / 10,
+        socket_m: Math.round(socketM * 10) / 10,
+        switch_m: Math.round(switchM * 10) / 10,
+        other_m: Math.round(otherM * 10) / 10,
+      },
+      method: `Kézi jelölés alapján (${deviceCount} eszköz, Manhattan-távolság × ${ROUTING_FACTOR})`,
+      confidence: 0.92,
+      _source: 'pdf_markers',
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderTick, scale, onCableData])
 
   // ═══════════════════════════════════════════════════════════════════════════
   return (
