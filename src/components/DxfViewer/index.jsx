@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react'
 import * as three from 'three'
 import DxfViewerCanvas from './DxfViewerCanvas.jsx'
 import DxfToolbar, { COUNT_CATEGORIES } from './DxfToolbar.jsx'
@@ -23,10 +23,26 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, focusTarget, assemblies: assembliesProp }) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, focusTarget, assemblies: assembliesProp }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
+
+  // Expose inner DxfViewerCanvas imperative API so parents (e.g. DxfBlockOverlay) can use
+  // sceneToScreen, getViewer, subscribe, etc. through the forwarded ref.
+  useImperativeHandle(ref, () => ({
+    getViewer: () => canvasRef.current?.getViewer?.(),
+    sceneToScreen: (sx, sy) => canvasRef.current?.sceneToScreen?.(sx, sy),
+    screenToScene: (sx, sy) => canvasRef.current?.screenToScene?.(sx, sy),
+    subscribe: (event, handler) => canvasRef.current?.subscribe?.(event, handler),
+    getLayers: (nonEmpty) => canvasRef.current?.getLayers?.(nonEmpty),
+    showLayer: (name, show) => canvasRef.current?.showLayer?.(name, show),
+    fitView: () => canvasRef.current?.fitView?.(),
+    getOrigin: () => canvasRef.current?.getOrigin?.(),
+    getBounds: () => canvasRef.current?.getBounds?.(),
+    getCamera: () => canvasRef.current?.getCamera?.(),
+    getRendererElement: () => canvasRef.current?.getRendererElement?.(),
+  }))
 
   // ── UI State ──
   const [activeTool, setActiveTool] = useState(null)
@@ -776,7 +792,9 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
       )}
     </div>
   )
-}
+})
+
+export default DxfViewerPanel
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Canvas2D drawing helpers

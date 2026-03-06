@@ -4,7 +4,7 @@
 // Kábelbecslés: 1. mért DXF rétegek → 2. MST pozíciókból → 3. eszközszám alapján.
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
-const DxfViewerCanvas = lazy(() => import('./DxfViewer/DxfViewerCanvas.jsx'))
+const DxfViewerPanel = lazy(() => import('./DxfViewer/index.jsx'))
 const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
@@ -1376,16 +1376,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         <div style={{ flex: isMobile ? '0 0 100%' : `0 0 ${panelRatio}%`, position: 'relative', background: '#050507', display: (isMobile && !showDxfOnMobile) ? 'none' : undefined }}>
           {isDxf && viewerFile && (
             <Suspense fallback={<div style={{ width: '100%', height: '100%', background: '#050507' }} />}>
-              <DxfViewerCanvas
+              <DxfViewerPanel
                 ref={canvasRef}
                 file={viewerFile}
-                clearColor="#050507"
-                style={{ width: '100%', height: '100%' }}
+                planId={planId}
+                assemblies={assemblies}
+                focusTarget={focusTarget}
+                style={{ height: '100%', border: 'none', borderRadius: 0 }}
               />
             </Suspense>
           )}
 
-          {/* SVG overlay with block position dots */}
+          {/* SVG overlay with block position dots (uses canvasRef proxied through DxfViewerPanel forwardRef) */}
           {isDxf && effectiveParsedDxf?.inserts?.length > 0 && (
             <DxfBlockOverlay
               inserts={effectiveParsedDxf.inserts}
