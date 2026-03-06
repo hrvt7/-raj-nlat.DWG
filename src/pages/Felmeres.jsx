@@ -185,6 +185,9 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
   const markerCount = plan.markerCount || 0
   const detected = plan.detectedCount || 0
   const hasScale = plan.hasScale
+  const hasCalc = plan.calcTotal != null && plan.calcTotal > 0
+  const calcTotal = plan.calcTotal || 0
+  const calcItems = plan.calcItemCount || 0
 
   return (
     <div
@@ -213,12 +216,26 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           <div style={{ color: C.text, fontSize: 13, fontWeight: 600, fontFamily: 'Syne', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190 }}>{plan.name || plan.fileName || 'Névtelen'}</div>
           <span style={{ fontFamily: 'DM Mono', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 4, background: 'rgba(255,107,107,0.15)', border: '1px solid rgba(255,107,107,0.3)', color: '#FF6B6B' }}>PDF</span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: hasCalc ? 6 : 10 }}>
           <span>{fmtSize(plan.fileSize)}</span><span>{fmtDate(plan.uploadedAt || plan.createdAt)}</span>
         </div>
+        {hasCalc && (
+          <div style={{
+            background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)',
+            borderRadius: 6, padding: '6px 10px', marginBottom: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.accent }}>
+              {Number(calcTotal).toLocaleString('hu-HU')} Ft
+            </span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>
+              {calcItems} elem
+            </span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 7 }}>
           <button onClick={e => { e.stopPropagation(); onOpen(plan) }} disabled={isOpening} style={{ flex: 1, padding: '6px 0', borderRadius: 5, background: isOpening ? 'transparent' : `${C.accent}12`, border: `1px solid ${isOpening ? C.border : `${C.accent}30`}`, color: isOpening ? C.muted : C.accent, fontSize: 11, fontFamily: 'Syne', fontWeight: 600, cursor: isOpening ? 'wait' : 'pointer', transition: 'all 0.15s' }}>
-            {isOpening ? 'Töltés…' : 'Megnyitás'}
+            {isOpening ? 'Töltés…' : hasCalc ? 'Szerkesztés' : 'Megnyitás'}
           </button>
           <button onClick={e => { e.stopPropagation(); if (confirm('Biztosan törlöd?')) onDelete(plan.id) }}
             style={{ padding: '6px 10px', borderRadius: 5, background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
@@ -501,7 +518,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
       const blob = await getPlanFile(plan.id)
       if (!blob) { setOpeningId(null); return }
       const file = new File([blob], plan.name || 'terv.pdf', { type: 'application/pdf' })
-      onOpenFile(file)
+      onOpenFile(file, plan)
     } catch { setOpeningId(null) }
   }, [onOpenFile])
 
@@ -530,74 +547,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz · {templates.length} szimbólum sablon</p>
       </div>
 
-      {/* ── Legend section ── */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-          Jelmagyarázat
-        </div>
-        {!project.legendPlanId ? (
-          <div
-            onDragOver={e => { e.preventDefault(); setLegendDragging(true) }}
-            onDragLeave={() => setLegendDragging(false)}
-            onDrop={e => { e.preventDefault(); setLegendDragging(false); handleLegendFile(e.dataTransfer.files) }}
-            onClick={() => legendInputRef.current?.click()}
-            style={{
-              border: `2px dashed ${legendDragging ? C.yellow : C.border}`, borderRadius: 10, padding: '24px 20px',
-              textAlign: 'center', cursor: 'pointer', background: legendDragging ? 'rgba(255,209,102,0.04)' : C.bgCard,
-              transition: 'all 0.2s',
-            }}
-          >
-            <BookIcon size={28} color={C.yellow} />
-            <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text, marginTop: 8 }}>Jelmagyarázat feltöltése</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 4 }}>A szimbólumok automatikusan felismerésre kerülnek</div>
-            <input ref={legendInputRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => { handleLegendFile(e.target.files); e.target.value = '' }} />
-          </div>
-        ) : (
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: templates.length > 0 ? 14 : 0 }}>
-              <BookIcon size={20} color={C.accent} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>Jelmagyarázat feltöltve</div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{templates.length} szimbólum felismerve</div>
-              </div>
-              <button onClick={() => onLegendPanel && onLegendPanel({ projectId, legendPlanId: project.legendPlanId })} style={{
-                fontFamily: 'DM Mono', fontSize: 10, color: C.yellow,
-                background: 'rgba(255,209,102,0.08)', border: '1px solid rgba(255,209,102,0.25)',
-                borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
-              }}>
-                Újrafeldolgozás
-              </button>
-              <button onClick={() => { legendInputRef.current?.click() }} style={{
-                fontFamily: 'DM Mono', fontSize: 10, color: C.muted,
-                background: 'transparent', border: `1px solid ${C.border}`,
-                borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
-              }}>
-                Csere
-              </button>
-              <input ref={legendInputRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => { handleLegendFile(e.target.files); e.target.value = '' }} />
-            </div>
-            {/* Mini template grid */}
-            {templates.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {templates.slice(0, 12).map(t => (
-                  <div key={t.id} style={{
-                    width: 48, height: 48, borderRadius: 6, overflow: 'hidden',
-                    border: `1px solid ${C.border}`, background: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {t.imageDataUrl && <img src={t.imageDataUrl} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt={t.label} />}
-                  </div>
-                ))}
-                {templates.length > 12 && (
-                  <div style={{ width: 48, height: 48, borderRadius: 6, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
-                    +{templates.length - 12}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Legend section removed */}
 
       {/* ── Selection toolbar ── */}
       {selectedCount > 0 && (

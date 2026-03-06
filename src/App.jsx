@@ -583,6 +583,7 @@ function SaaSShell() {
   }
 
   const [felmeresFile, setFelmeresFile] = useState(null)
+  const [felmeresOpenPlan, setFelmeresOpenPlan] = useState(null) // plan object when opening from Felmérés
   // Felmérés project navigation
   const [activeProjectId, setActiveProjectId] = useState(null)
   // Felmérés modal panels
@@ -763,8 +764,14 @@ function SaaSShell() {
                   settings={settings}
                   materials={materials}
                   initialFile={felmeresFile}
-                  onSaved={quote => { setFelmeresFile(null); handleQuoteSaved(quote) }}
-                  onCancel={() => { setFelmeresFile(null); setPage('felmeres') }}
+                  planId={felmeresOpenPlan?.id || null}
+                  onSaved={() => {
+                    // Per-plan save: go back to Felmérés (NOT to Ajánlatok)
+                    setFelmeresFile(null)
+                    setFelmeresOpenPlan(null)
+                    setPage('felmeres')
+                  }}
+                  onCancel={() => { setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('felmeres') }}
                 />
               )}
             </ErrorBoundary>
@@ -788,7 +795,7 @@ function SaaSShell() {
                 <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
               ) : page === 'felmeres' ? (
                 <FelmeresPage
-                  onOpenFile={f => { setFelmeresFile(f); setPage('felmeres-workspace') }}
+                  onOpenFile={(f, plan) => { setFelmeresFile(f); setFelmeresOpenPlan(plan || null); setPage('felmeres-workspace') }}
                   onLegendPanel={(data) => setLegendPanelData(data || {})}
                   onDetectPanel={(plans, projId) => { setDetectPanelPlans(plans); setDetectPanelProjectId(projId || null) }}
                   onMergePanel={plans => setMergePanelPlans(plans)}

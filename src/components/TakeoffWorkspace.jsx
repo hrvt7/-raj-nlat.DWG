@@ -9,6 +9,7 @@ const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
+import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta } from '../data/planStore.js'
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
@@ -511,7 +512,7 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 }
 
 // ─── Main TakeoffWorkspace ────────────────────────────────────────────────────
-export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile }) {
+export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId }) {
   // ── File & parse state ────────────────────────────────────────────────────
   const [file, setFile] = useState(null)
   const [parsedDxf, setParsedDxf] = useState(null)
@@ -627,6 +628,20 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   useEffect(() => {
     if (initialFile && !file) handleFile(initialFile)
   }, [initialFile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Restore saved annotations when opening a plan with a planId ───────────
+  useEffect(() => {
+    if (!planId || !file) return
+    ;(async () => {
+      const ann = await getPlanAnnotations(planId)
+      if (ann && ann.markers && ann.markers.length > 0) {
+        setPdfMarkers(ann.markers)
+        if (ann.wallSplits) setWallSplits(ann.wallSplits)
+        if (ann.variantOverrides) setVariantOverrides(ann.variantOverrides)
+        setRightTab('takeoff')
+      }
+    })()
+  }, [planId, file]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Resizable split panel ─────────────────────────────────────────────────
   // panelRatio: left panel width as % of the container (clamp 25–80)
@@ -1109,7 +1124,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setRightTab('takeoff')
   }
 
-  // ── Save quote ────────────────────────────────────────────────────────────
+  // ── Save (per-plan or quote) ──────────────────────────────────────────────
   const handleSave = async () => {
     if (!takeoffRows.length) {
       setSaveError('Nincs felvett elem — jelölj ki elemeket a tervrajzon!')
@@ -1121,7 +1136,34 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     }
     setSaving(true); setSaveError(null)
     try {
-      // Map computed lines to items with unitPrice + hours for QuoteView
+      // ── Per-plan save (Felmérés flow): save annotations + calc to planStore ──
+      if (planId) {
+        await savePlanAnnotations(planId, {
+          markers: pdfMarkers,
+          measurements: [],
+          scale: { calibrated: false },
+          cableRoutes: [],
+          wallSplits,
+          variantOverrides,
+        })
+        // Persist pricing summary on plan metadata for card display
+        updatePlanMeta(planId, {
+          calcTotal: Math.round(pricing.total),
+          calcItemCount: takeoffRows.reduce((s, r) => s + r.qty, 0),
+          calcDate: new Date().toISOString(),
+          calcTakeoffRows: takeoffRows,
+          calcPricing: {
+            total: pricing.total,
+            materialCost: pricing.materialCost,
+            laborCost: pricing.laborCost,
+            laborHours: pricing.laborHours,
+          },
+        })
+        onSaved?.()
+        return
+      }
+
+      // ── Full quote save (new-quote flow or merge fallback) ──
       const items = (pricing.lines || []).map(line => ({
         name:        line.name,
         qty:         line.qty,
@@ -1132,7 +1174,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         materialCost: line.materialCost || 0,
       }))
 
-      // Build per-assembly summary for PDF Összesített / Részletes views
       const assemblySummary = takeoffRows.map(row => {
         const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
         const rowPricing = computePricing({
@@ -1156,27 +1197,25 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
       const quote = {
         id:           generateQuoteId(),
-        projectName:  displayName,   // QuoteView (App.jsx) reads projectName
-        project_name: displayName,   // Quotes.jsx list reads project_name
-        name:         displayName,   // compat alias
+        projectName:  displayName,
+        project_name: displayName,
+        name:         displayName,
         clientName,
-        client_name:  clientName,    // Quotes.jsx list reads client_name
+        client_name:  clientName,
         createdAt:    new Date().toISOString(),
-        created_at:   new Date().toISOString(),  // Quotes.jsx list reads created_at
+        created_at:   new Date().toISOString(),
         status:      'draft',
-        // Top-level fields QuoteView reads directly
         gross:          Math.round(pricing.total),
         totalMaterials: Math.round(pricing.materialCost),
         totalLabor:     Math.round(pricing.laborCost),
         totalHours:     pricing.laborHours,
-        // Summary for Quotes list view (q.summary?.grandTotal)
         summary: {
           grandTotal:     Math.round(pricing.total),
           totalWorkHours: pricing.laborHours,
         },
         pricingData: { hourlyRate, markup_pct: markup },
         items,
-        assemblySummary,   // per-assembly breakdown for PDF
+        assemblySummary,
         context,
         cableEstimate,
         source:   'takeoff-workspace',
@@ -1300,7 +1339,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 opacity: saving ? 0.6 : 1,
               }}
             >
-              {saving ? '...' : '📄 Ajánlat mentése'}
+              {saving ? '...' : planId ? '💾 Kalkuláció mentése' : '📄 Ajánlat mentése'}
             </button>
           </>
         ) : (

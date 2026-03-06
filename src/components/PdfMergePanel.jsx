@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { getPlanAnnotations } from '../data/planStore.js'
-import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings } from '../data/store.js'
+import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings, saveQuote } from '../data/store.js'
 import { computePricing } from '../utils/pricing.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -167,21 +167,55 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
     if (!pricing) return
     setSaving(true)
     const planNames = plans.map(p => p.name || p.fileName || 'Terv').join(', ')
+    const displayName = `Projekt: ${planNames}`
+    const totalCount = Object.values(aggregated).reduce((a, b) => a + b, 0)
+
+    // Build items from pricing lines
+    const items = (pricing.lines || []).map(line => ({
+      name:        line.name,
+      qty:         line.qty,
+      unit:        line.unit,
+      type:        line.type,
+      unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
+      hours:       line.hours || 0,
+      materialCost: line.materialCost || 0,
+    }))
+
     const quote = {
       id: 'Q-' + Date.now().toString(36),
-      name: `Felmérés: ${planNames}`,
+      projectName:  displayName,
+      project_name: displayName,
+      name:         displayName,
       note: quoteNote,
       createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
       status: 'draft',
-      pricing,
+      gross:          Math.round(pricing.total),
+      totalMaterials: Math.round(pricing.materialCost),
+      totalLabor:     Math.round(pricing.laborCost),
+      totalHours:     pricing.laborHours,
+      summary: {
+        grandTotal:     Math.round(pricing.total),
+        totalWorkHours: pricing.laborHours,
+      },
+      pricingData: {
+        hourlyRate: settings?.hourlyRate ?? 8000,
+        markup_pct: settings?.markup ?? 0.15,
+      },
+      items,
       sourceType: 'pdf_merge',
       sourcePlans: plans.map(p => p.id),
-      totalCount: Object.values(aggregated).reduce((a, b) => a + b, 0),
+      totalCount,
+      source: 'merge-panel',
     }
+
+    // Save to localStorage
+    saveQuote(quote)
+
     if (onSaved) onSaved(quote)
     setSaving(false)
     setSaved(true)
-  }, [pricing, plans, quoteNote, aggregated, onSaved])
+  }, [pricing, plans, quoteNote, aggregated, onSaved, settings])
 
   const categoriesWithCounts = Object.entries(aggregated).filter(([, c]) => c > 0)
   const totalMarkers = Object.values(aggregated).reduce((a, b) => a + b, 0)
