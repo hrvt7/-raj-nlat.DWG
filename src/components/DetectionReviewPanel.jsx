@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { getPlanFile, getPlanAnnotations, savePlanAnnotations, updatePlanMeta } from '../data/planStore.js'
-import { loadTemplatesWithImages } from '../data/legendStore.js'
+import { loadTemplatesWithImages, getTemplatesByProject } from '../data/legendStore.js'
 import { detectAllTemplates } from '../utils/templateMatching.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
@@ -171,7 +171,7 @@ function NoTemplatesWarning({ onClose }) {
 }
 
 // ─── DetectionReviewPanel ─────────────────────────────────────────────────────
-export default function DetectionReviewPanel({ plans, onClose, onDone }) {
+export default function DetectionReviewPanel({ plans, onClose, onDone, projectId }) {
   const [phase, setPhase] = useState('loading') // loading | no_templates | detecting | review | saving | done
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState(0)
@@ -183,7 +183,10 @@ export default function DetectionReviewPanel({ plans, onClose, onDone }) {
   useEffect(() => {
     ;(async () => {
       setPhase('loading')
-      const tpls = await loadTemplatesWithImages()
+      // Load project-scoped templates if projectId provided, otherwise global
+      const tpls = projectId
+        ? await getTemplatesByProject(projectId)
+        : await loadTemplatesWithImages()
       setTemplates(tpls)
 
       if (tpls.length === 0) {

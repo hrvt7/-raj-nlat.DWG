@@ -583,9 +583,12 @@ function SaaSShell() {
   }
 
   const [felmeresFile, setFelmeresFile] = useState(null)
+  // Felmérés project navigation
+  const [activeProjectId, setActiveProjectId] = useState(null)
   // Felmérés modal panels
-  const [legendPanelOpen, setLegendPanelOpen] = useState(false)
+  const [legendPanelData, setLegendPanelData] = useState(null) // null = closed, { projectId?, legendPlanId? }
   const [detectPanelPlans, setDetectPanelPlans] = useState(null) // null = closed, [] = plans
+  const [detectPanelProjectId, setDetectPanelProjectId] = useState(null)
   const [mergePanelPlans, setMergePanelPlans] = useState(null)   // null = closed, [] = plans
 
   const [workItems, setWorkItems] = useState(loadWorkItems)
@@ -786,9 +789,12 @@ function SaaSShell() {
               ) : page === 'felmeres' ? (
                 <FelmeresPage
                   onOpenFile={f => { setFelmeresFile(f); setPage('felmeres-workspace') }}
-                  onLegendPanel={() => setLegendPanelOpen(true)}
-                  onDetectPanel={plans => setDetectPanelPlans(plans)}
+                  onLegendPanel={(data) => setLegendPanelData(data || {})}
+                  onDetectPanel={(plans, projId) => { setDetectPanelPlans(plans); setDetectPanelProjectId(projId || null) }}
                   onMergePanel={plans => setMergePanelPlans(plans)}
+                  activeProjectId={activeProjectId}
+                  onOpenProject={id => setActiveProjectId(id)}
+                  onBackToProjects={() => setActiveProjectId(null)}
                 />
               ) : page === 'plans' ? (
                 <PlansPage onNavigate={(p, data) => { if (data) setPrefillData(data); setPage(p) }} />
@@ -805,14 +811,19 @@ function SaaSShell() {
       </div>
 
       {/* ── Felmérés modal panels ─────────────────────────────────────────── */}
-      {legendPanelOpen && (
-        <LegendPanel onClose={() => setLegendPanelOpen(false)} />
+      {legendPanelData && (
+        <LegendPanel
+          onClose={() => setLegendPanelData(null)}
+          projectId={legendPanelData.projectId}
+          legendPlanId={legendPanelData.legendPlanId}
+        />
       )}
       {detectPanelPlans && (
         <DetectionReviewPanel
           plans={detectPanelPlans}
-          onClose={() => setDetectPanelPlans(null)}
-          onDone={() => setDetectPanelPlans(null)}
+          projectId={detectPanelProjectId}
+          onClose={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null) }}
+          onDone={() => { setDetectPanelPlans(null); setDetectPanelProjectId(null) }}
         />
       )}
       {mergePanelPlans && (

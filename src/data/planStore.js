@@ -100,6 +100,14 @@ export function loadPlans() {
 }
 
 /**
+ * Load plans belonging to a specific project.
+ * @param {string} projectId
+ */
+export function getPlansByProject(projectId) {
+  return loadPlansMeta().filter(p => p.projectId === projectId)
+}
+
+/**
  * Get a plan file blob from IndexedDB
  * @param {string} planId
  * @returns {Promise<Blob|null>}

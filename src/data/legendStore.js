@@ -106,3 +106,48 @@ export async function clearAllTemplates() {
   saveMeta([])
   await legendTemplateStore.clear()
 }
+
+/**
+ * Load templates for a specific project (with images).
+ * @param {string} projectId
+ * @returns {Promise<Array>}
+ */
+export async function getTemplatesByProject(projectId) {
+  const metas = loadMeta().filter(t => t.projectId === projectId)
+  const result = []
+  for (const meta of metas) {
+    const imageDataUrl = await legendTemplateStore.getItem(meta.id)
+    result.push({ ...meta, imageDataUrl })
+  }
+  return result
+}
+
+/**
+ * Delete all templates belonging to a project.
+ * @param {string} projectId
+ */
+export async function deleteTemplatesByProject(projectId) {
+  const all = loadMeta()
+  const toDelete = all.filter(t => t.projectId === projectId)
+  const remaining = all.filter(t => t.projectId !== projectId)
+  saveMeta(remaining)
+  for (const t of toDelete) {
+    await legendTemplateStore.removeItem(t.id)
+  }
+}
+
+/**
+ * Batch save templates (for auto-extraction).
+ * @param {Array} templates - [{ id, category, label, color, width, height, projectId, imageDataUrl }]
+ */
+export async function saveTemplateBatch(templates) {
+  const all = loadMeta()
+  for (const t of templates) {
+    const { imageDataUrl, ...meta } = t
+    all.unshift(meta)
+    if (imageDataUrl) {
+      await legendTemplateStore.setItem(meta.id, imageDataUrl)
+    }
+  }
+  saveMeta(all)
+}
