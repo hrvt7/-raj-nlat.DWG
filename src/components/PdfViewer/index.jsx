@@ -22,7 +22,7 @@ function formatDist(m) {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -66,6 +66,15 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [renderTick, setRenderTick] = useState(0)
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
 
+  // ── Dirty state tracking (unsaved local changes) ──
+  const dirtyRef = useRef(false)
+  const markDirty = useCallback(() => {
+    if (!dirtyRef.current) {
+      dirtyRef.current = true
+      if (onDirtyChange) onDirtyChange(true)
+    }
+  }, [onDirtyChange])
+
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
   const [estimationOpen, setEstimationOpen] = useState(false)
@@ -101,6 +110,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         quoteOverridesRef.current = ann.quoteOverrides
       }
       if (ann.rotation != null) setRotation(ann.rotation)
+      // Reset dirty after hydration from store
+      dirtyRef.current = false
+      if (onDirtyChange) onDirtyChange(false)
     })
   }, [planId])
 
@@ -458,6 +470,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const asm = (assembliesProp || []).find(a => a.id === activeCategory)
       const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[activeCategory] || '#9CA3AF')
       markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, category: activeCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
+      markDirty()
       setRenderTick(t => t + 1)
       drawOverlay()
       // Notify parent of marker change
@@ -484,6 +497,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           const activeCatDef = COUNT_CATEGORIES.find(c => c.key === activeCategory)
           const measCategory = activeCatDef?.isCableTray ? activeCategory : undefined
           measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist, ...(measCategory ? { category: measCategory } : {}) })
+          markDirty()
           activeStartRef.current = null
           setRenderTick(t => t + 1)
         }
@@ -553,22 +567,25 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const handleUndo = useCallback(() => {
     if (measuresRef.current.length > 0) {
       measuresRef.current.pop()
+      markDirty()
     } else if (markersRef.current.length > 0) {
       markersRef.current.pop()
+      markDirty()
       if (onMarkersChange) onMarkersChange([...markersRef.current])
     }
     setRenderTick(t => t + 1)
     drawOverlay()
-  }, [drawOverlay, onMarkersChange])
+  }, [drawOverlay, onMarkersChange, markDirty])
 
   const handleClearAll = useCallback(() => {
     markersRef.current = []
     measuresRef.current = []
     activeStartRef.current = null
+    markDirty()
     setRenderTick(t => t + 1)
     drawOverlay()
     if (onMarkersChange) onMarkersChange([])
-  }, [drawOverlay, onMarkersChange])
+  }, [drawOverlay, onMarkersChange, markDirty])
 
   // ── Calibration submit ──
   const handleCalibSubmit = useCallback(() => {
@@ -582,22 +599,24 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
     const factor = meters / calibDialog.pxDistance
     setScale({ factor, calibrated: true })
+    markDirty()
     // Update existing measurements
     measuresRef.current = measuresRef.current.map(seg => ({ ...seg }))
     setCalibDialog(null)
     setCalibInput('')
     setRenderTick(t => t + 1)
     drawOverlay()
-  }, [calibDialog, calibInput, calibUnit, drawOverlay])
+  }, [calibDialog, calibInput, calibUnit, drawOverlay, markDirty])
 
   // ── Measurement category reassignment (retroactive tagging of existing measurements) ──
   const handleMeasureCategoryChange = useCallback((idx, category) => {
     if (idx >= 0 && idx < measuresRef.current.length) {
       measuresRef.current[idx] = { ...measuresRef.current[idx], category: category || undefined }
+      markDirty()
       setRenderTick(t => t + 1)
       drawOverlay()
     }
-  }, [drawOverlay])
+  }, [drawOverlay, markDirty])
 
   // ── Fit view ──
   const handleFitView = useCallback(() => {

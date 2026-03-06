@@ -585,6 +585,16 @@ function SaaSShell() {
 
   const [felmeresFile, setFelmeresFile] = useState(null)
   const [felmeresOpenPlan, setFelmeresOpenPlan] = useState(null) // plan object when opening from Felmérés
+  // ── Unsaved changes guard ──────────────────────────────────────────────────
+  const viewerDirtyRef = useRef(false)
+  const [autoSaveToast, setAutoSaveToast] = useState(false)
+  const handleViewerDirtyChange = useCallback((dirty) => {
+    viewerDirtyRef.current = dirty
+  }, [])
+  const showAutoSaveToast = useCallback(() => {
+    setAutoSaveToast(true)
+    setTimeout(() => setAutoSaveToast(false), 2500)
+  }, [])
   // Felmérés project navigation
   const [activeProjectId, setActiveProjectId] = useState(null)
   // Felmérés modal panels
@@ -769,13 +779,18 @@ function SaaSShell() {
                   initialFile={felmeresFile}
                   planId={felmeresOpenPlan?.id || null}
                   focusTarget={viewerFocusTarget}
+                  onDirtyChange={handleViewerDirtyChange}
                   onSaved={() => {
                     // Per-plan save: go back to Felmérés (NOT to Ajánlatok)
+                    viewerDirtyRef.current = false
                     setFelmeresFile(null)
                     setFelmeresOpenPlan(null)
                     setPage('felmeres')
                   }}
-                  onCancel={() => { setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('felmeres') }}
+                  onCancel={() => {
+                    viewerDirtyRef.current = false
+                    setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('felmeres')
+                  }}
                 />
               )}
             </ErrorBoundary>
@@ -800,7 +815,10 @@ function SaaSShell() {
                 <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
               ) : page === 'felmeres' ? (
                 <FelmeresPage
-                  onOpenFile={(f, plan) => { setFelmeresFile(f); setFelmeresOpenPlan(plan || null); setPage('felmeres-workspace') }}
+                  onOpenFile={(f, plan) => {
+                    if (viewerDirtyRef.current) { showAutoSaveToast(); viewerDirtyRef.current = false }
+                    setFelmeresFile(f); setFelmeresOpenPlan(plan || null); setPage('felmeres-workspace')
+                  }}
                   onLegendPanel={(data) => setLegendPanelData(data || {})}
                   onDetectPanel={(plans, projId) => { setDetectPanelPlans(plans); setDetectPanelProjectId(projId || null) }}
                   onMergePanel={plans => setMergePanelPlans(plans)}
@@ -846,6 +864,11 @@ function SaaSShell() {
           onLocateDetection={async (target) => {
             // Multi-plan locate: if target is on a different plan, switch to it first
             const needsPlanSwitch = target.planId && target.planId !== (felmeresOpenPlan?.id || null)
+            if (needsPlanSwitch && viewerDirtyRef.current) {
+              // Inform user that unsaved changes are being auto-saved (unmount save handles persistence)
+              showAutoSaveToast()
+              viewerDirtyRef.current = false
+            }
             if (needsPlanSwitch) {
               try {
                 const blob = await getPlanFile(target.planId)
@@ -887,13 +910,29 @@ function SaaSShell() {
           onSaved={quote => { handleQuoteSaved(quote); setMergePanelPlans(null) }}
         />
       )}
+      {/* ── Auto-save toast (informative guard on plan switch) ────────────── */}
+      {autoSaveToast && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#1A3A2A', color: '#00E5A0', border: '1px solid #00E5A044',
+          borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 500,
+          zIndex: 9999, boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          animation: 'fadeInUp 0.25s ease-out',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 16 }}>✓</span> Módosítások automatikusan mentve
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── CSS animations ────────────────────────────────────────────────────────────
 const styleEl = document.createElement('style')
-styleEl.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`
+styleEl.textContent = `
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateX(-50%) translateY(12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+`
 document.head.appendChild(styleEl)
 
 // ─── Root App ──────────────────────────────────────────────────────────────────
