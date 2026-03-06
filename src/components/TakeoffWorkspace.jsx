@@ -291,7 +291,10 @@ function DropZone({ onFile }) {
 }
 
 // ─── Recognition row ──────────────────────────────────────────────────────────
-function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, isHighlighted, onHover }) {
+function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, onQtyChange, onDelete, isHighlighted, onHover }) {
+  const [showDelete, setShowDelete] = React.useState(false)
+  const [editing, setEditing] = React.useState(false)
+  const [editVal, setEditVal] = React.useState(String(item.qty))
   const asmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
   const asm = assemblies.find(a => a.id === asmId)
   const rule = BLOCK_ASM_RULES.find(r => r.asmId === asmId)
@@ -299,17 +302,42 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
   const confColor = item.confidence >= 0.8 ? C.accent : item.confidence >= 0.5 ? C.yellow : C.red
   const confPct = Math.round(item.confidence * 100)
 
+  const handleQtyBlur = () => {
+    setEditing(false)
+    const v = parseInt(editVal, 10)
+    if (!isNaN(v) && v > 0 && v !== item.qty) {
+      onQtyChange?.(item.blockName, v)
+    } else {
+      setEditVal(String(item.qty))
+    }
+  }
+
   return (
     <div
-      onMouseEnter={() => onHover(item.blockName)}
-      onMouseLeave={() => onHover(null)}
+      onMouseEnter={() => { onHover(item.blockName); setShowDelete(true) }}
+      onMouseLeave={() => { onHover(null); setShowDelete(false) }}
       style={{
         padding: '10px 14px', borderRadius: 8, marginBottom: 4,
         background: isHighlighted ? 'rgba(0,229,160,0.08)' : C.bgCard,
         border: `1px solid ${isHighlighted ? C.accent : C.border}`,
         display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s',
+        position: 'relative',
       }}
     >
+      {/* Delete button — visible on hover */}
+      {showDelete && onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(item.blockName) }}
+          title="Elem törlése"
+          style={{
+            position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
+            background: C.red, border: `2px solid ${C.bgCard}`, color: '#fff',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0, zIndex: 2,
+          }}
+        >×</button>
+      )}
+
       {/* Confidence badge */}
       <div style={{
         width: 40, height: 20, borderRadius: 4, background: confColor + '22',
@@ -329,10 +357,35 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
         </div>
       </div>
 
-      {/* Count */}
-      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, flexShrink: 0 }}>
-        {item.qty} db
-      </div>
+      {/* Editable count */}
+      {editing ? (
+        <input
+          autoFocus
+          value={editVal}
+          onChange={e => setEditVal(e.target.value)}
+          onBlur={handleQtyBlur}
+          onKeyDown={e => { if (e.key === 'Enter') handleQtyBlur(); if (e.key === 'Escape') { setEditing(false); setEditVal(String(item.qty)) } }}
+          style={{
+            width: 52, fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.accent,
+            background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 6,
+            padding: '2px 6px', textAlign: 'right', outline: 'none',
+          }}
+        />
+      ) : (
+        <div
+          onClick={() => { setEditing(true); setEditVal(String(item.qty)) }}
+          title="Kattints a darabszám módosításához"
+          style={{
+            fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, flexShrink: 0,
+            cursor: 'pointer', padding: '2px 6px', borderRadius: 6,
+            border: `1px solid transparent`, transition: 'border-color 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = C.borderLight}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'}
+        >
+          {item.qty} db
+        </div>
+      )}
 
       {/* Override select */}
       <select
@@ -463,6 +516,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [asmOverrides, setAsmOverrides] = useState({})       // blockName → asmId
   const [variantOverrides, setVariantOverrides] = useState({}) // asmId → variantId
   const [qtyOverrides, setQtyOverrides] = useState({})       // asmId → qty
+  const [itemQtyOverrides, setItemQtyOverrides] = useState({}) // blockName → qty (per-item override)
+  const [deletedItems, setDeletedItems] = useState(new Set())   // blockNames removed by user
   // wallSplits[asmId] = { drywall: N, ytong: N, brick: N, concrete: N }
   // Sum of values = total qty for that assembly; individual values = qty per wall material
   const [wallSplits, setWallSplits] = useState({})
@@ -623,6 +678,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setRecognizedItems([])
     setAsmOverrides({})
     setQtyOverrides({})
+    setItemQtyOverrides({})
+    setDeletedItems(new Set())
     setVariantOverrides({})
     setWallSplits({})
     setCableEstimate(null)
@@ -807,7 +864,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
   const takeoffRows = useMemo(() => {
     const rowMap = {}
-    for (const item of recognizedItems) {
+    for (const item of effectiveItems) {
       const asmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
       if (!asmId) continue
       const splits = wallSplits[asmId] || null
@@ -818,7 +875,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       rowMap[asmId] = { asmId, qty, variantId: variantOverrides[asmId] || null, wallSplits: splits }
     }
     return Object.values(rowMap)
-  }, [recognizedItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
+  }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
 
   // ── Auto-compute cable estimate for DXF (3-priority system) ─────────────
   // Priority 1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
@@ -925,7 +982,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const acceptAllHighConf = () => {
     const newOverrides = { ...asmOverrides }
     let changed = false
-    for (const item of recognizedItems) {
+    for (const item of effectiveItems) {
       if (item.confidence >= 0.8 && item.asmId && newOverrides[item.blockName] === undefined) {
         // Explicitly confirm the auto-matched assembly so manual overrides won't revert it
         newOverrides[item.blockName] = item.asmId
@@ -1011,11 +1068,20 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const highConf = recognizedItems.filter(i => i.confidence >= 0.8)
-  const midConf  = recognizedItems.filter(i => i.confidence >= 0.5 && i.confidence < 0.8)
-  const lowConf  = recognizedItems.filter(i => i.confidence < 0.5)
-  const totalItems = recognizedItems.reduce((s, i) => s + i.qty, 0)
+  // ── Effective items (filtered + overridden) ──────────────────────────────
+  const effectiveItems = useMemo(() => {
+    return recognizedItems
+      .filter(i => !deletedItems.has(i.blockName))
+      .map(i => itemQtyOverrides[i.blockName] != null
+        ? { ...i, qty: itemQtyOverrides[i.blockName] }
+        : i
+      )
+  }, [recognizedItems, deletedItems, itemQtyOverrides])
+
+  const highConf = effectiveItems.filter(i => i.confidence >= 0.8)
+  const midConf  = effectiveItems.filter(i => i.confidence >= 0.5 && i.confidence < 0.8)
+  const lowConf  = effectiveItems.filter(i => i.confidence < 0.5)
+  const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
 
   // ── Render: upload screen ─────────────────────────────────────────────────
   if (!file) {
@@ -1270,7 +1336,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0 }}>
             {[
-              { id: 'recognize', label: '🔍 Elemek',     badge: recognizedItems.length },
+              { id: 'recognize', label: '🔍 Elemek',     badge: effectiveItems.length },
               { id: 'takeoff',   label: '📋 Felmérés',   badge: takeoffRows.length },
               { id: 'cable',     label: '🔌 Kábel' },
               { id: 'context',   label: '⚙️ Beállítás' },
@@ -1340,7 +1406,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                       <div>
                         <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text }}>
-                          {highConf.length + midConf.length} / {recognizedItems.length} felismerve
+                          {highConf.length + midConf.length} / {effectiveItems.length} felismerve
                         </div>
                         <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
                           {highConf.length} biztos · {midConf.length} közepes · {lowConf.length} ismeretlen
@@ -1358,6 +1424,23 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       </button>
                     </div>
 
+                    {/* Deleted items restore */}
+                    {deletedItems.size > 0 && (
+                      <div style={{ marginBottom: 10, padding: '6px 10px', borderRadius: 6, background: 'rgba(255,107,107,0.08)', border: `1px solid ${C.red}25` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red }}>
+                            {deletedItems.size} elem törölve
+                          </span>
+                          <button
+                            onClick={() => setDeletedItems(new Set())}
+                            style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono', textDecoration: 'underline' }}
+                          >
+                            Mindent visszaállít
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* High confidence group */}
                     {highConf.length > 0 && (
                       <div style={{ marginBottom: 12 }}>
@@ -1371,6 +1454,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                             assemblies={assemblies}
                             onAccept={() => {}}
                             onOverride={(name, id) => setAsmOverrides(p => ({ ...p, [name]: id }))}
+                            onQtyChange={(name, qty) => setItemQtyOverrides(p => ({ ...p, [name]: qty }))}
+                            onDelete={(name) => setDeletedItems(p => new Set([...p, name]))}
                             isHighlighted={highlightBlock === item.blockName}
                             onHover={setHighlightBlock}
                           />
@@ -1391,6 +1476,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                             assemblies={assemblies}
                             onAccept={() => {}}
                             onOverride={(name, id) => setAsmOverrides(p => ({ ...p, [name]: id }))}
+                            onQtyChange={(name, qty) => setItemQtyOverrides(p => ({ ...p, [name]: qty }))}
+                            onDelete={(name) => setDeletedItems(p => new Set([...p, name]))}
                             isHighlighted={highlightBlock === item.blockName}
                             onHover={setHighlightBlock}
                           />
@@ -1419,6 +1506,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                                 addUserOverride(name, asmType?.key || id)
                               }
                             }}
+                            onQtyChange={(name, qty) => setItemQtyOverrides(p => ({ ...p, [name]: qty }))}
+                            onDelete={(name) => setDeletedItems(p => new Set([...p, name]))}
                             isHighlighted={highlightBlock === item.blockName}
                             onHover={setHighlightBlock}
                           />
@@ -1447,7 +1536,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         variantId={row.variantId}
                         wallSplits={row.wallSplits}
                         assemblies={assemblies}
-                        isHighlighted={highlightBlock && recognizedItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
+                        isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
                         unitCostByWall={unitCostByAsmByWall[row.asmId] || {}}
