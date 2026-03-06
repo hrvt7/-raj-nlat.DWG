@@ -851,7 +851,7 @@ function PdfToolbar({
   ]
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap', position: 'relative', zIndex: 10 }}>
       {/* Page nav */}
       {numPages > 1 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 8 }}>

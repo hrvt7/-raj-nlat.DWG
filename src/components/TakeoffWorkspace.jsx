@@ -434,7 +434,14 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
     const base = wallSplits || { brick: qty }
     const current = base[wallKey] ?? 0
     const newVal = Math.max(0, current + delta)
-    onSplitChange(asmId, { ...base, [wallKey]: newVal })
+    const updated = { ...base, [wallKey]: newVal }
+
+    // If adding to a non-default wall type and base was just initialized,
+    // reduce brick to keep total = qty (move items between wall types, don't add new)
+    if (!wallSplits && wallKey !== 'brick' && delta > 0) {
+      updated.brick = Math.max(0, (updated.brick || 0) - delta)
+    }
+    onSplitChange(asmId, updated)
   }
 
   if (!asm) return null
@@ -913,8 +920,46 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       // Only count markers that have an assembly ID (ASM-xxx)
       const asmId = m.asmId || (m.category?.startsWith('ASM-') ? m.category : null)
       if (!asmId) continue
-      if (!rowMap[asmId]) rowMap[asmId] = { asmId, qty: 0, variantId: variantOverrides[asmId] || null, wallSplits: wallSplits[asmId] || null, _fromMarkers: true }
+      if (!rowMap[asmId]) rowMap[asmId] = { asmId, qty: 0, variantId: variantOverrides[asmId] || null, _fromMarkers: true }
       rowMap[asmId].qty += 1
+    }
+    // Reconcile wallSplits: if splits exist, adjust to match actual marker count
+    for (const row of Object.values(rowMap)) {
+      const splits = wallSplits[row.asmId]
+      if (splits) {
+        const splitTotal = Object.values(splits).reduce((s, n) => s + n, 0)
+        const diff = row.qty - splitTotal
+        if (diff > 0) {
+          // New markers added — put extra in 'brick' (default)
+          row.wallSplits = { ...splits, brick: (splits.brick || 0) + diff }
+        } else if (diff < 0) {
+          // Markers removed — reduce from 'brick' first, then others
+          const adjusted = { ...splits }
+          let toRemove = Math.abs(diff)
+          // Remove from brick first
+          if (adjusted.brick && adjusted.brick > 0) {
+            const take = Math.min(adjusted.brick, toRemove)
+            adjusted.brick -= take
+            toRemove -= take
+          }
+          // Remove from others if still needed
+          if (toRemove > 0) {
+            for (const k of Object.keys(adjusted)) {
+              if (toRemove <= 0) break
+              if (adjusted[k] > 0) {
+                const take = Math.min(adjusted[k], toRemove)
+                adjusted[k] -= take
+                toRemove -= take
+              }
+            }
+          }
+          row.wallSplits = adjusted
+        } else {
+          row.wallSplits = splits
+        }
+      } else {
+        row.wallSplits = null
+      }
     }
     return Object.values(rowMap)
   }, [pdfMarkers, variantOverrides, wallSplits])
@@ -929,7 +974,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     // Marker rows add to or create new entries
     for (const row of markerTakeoffRows) {
       if (rowMap[row.asmId]) {
-        rowMap[row.asmId].qty += row.qty
+        const existing = rowMap[row.asmId]
+        existing.qty += row.qty
+        // Merge wallSplits
+        if (row.wallSplits && existing.wallSplits) {
+          const merged = { ...existing.wallSplits }
+          for (const [k, v] of Object.entries(row.wallSplits)) {
+            merged[k] = (merged[k] || 0) + v
+          }
+          existing.wallSplits = merged
+        } else if (row.wallSplits) {
+          existing.wallSplits = { ...row.wallSplits }
+        }
       } else {
         rowMap[row.asmId] = { ...row }
       }
@@ -1573,7 +1629,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               <div>
                 {takeoffRows.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-                    Még nincs felvett elem. Az Elemek fülön fogadd el a felismert blokkokat, vagy adj hozzá manuálisan.
+                    Még nincs felvett elem. Használd a Számlálás eszközt a tervrajzon, vagy az Elemek fülön fogadd el a felismert blokkokat.
                   </div>
                 ) : (
                   <>

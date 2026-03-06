@@ -75,7 +75,7 @@ export function CategoryDropdown({ activeCategory, onCategoryChange }) {
   )
 
   return (
-    <div ref={ref} style={{ position: 'relative', marginLeft: 2 }}>
+    <div ref={ref} style={{ position: 'relative', marginLeft: 2 }} onMouseDown={e => e.stopPropagation()}>
       <button onClick={() => setOpen(!open)} style={{
         padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
         display: 'flex', alignItems: 'center', gap: 6,
@@ -85,9 +85,9 @@ export function CategoryDropdown({ activeCategory, onCategoryChange }) {
         {cat.label} <span style={{ fontSize: 9, opacity: 0.6 }}>▼</span>
       </button>
       {open && (
-        <div style={{
+        <div onMouseDown={e => e.stopPropagation()} style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#111113',
-          border: `1px solid #1E1E22`, borderRadius: 8, padding: 4, zIndex: 50, minWidth: 170,
+          border: `1px solid #1E1E22`, borderRadius: 8, padding: 4, zIndex: 100, minWidth: 170,
           boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
         }}>
           {/* Regular categories */}
@@ -171,7 +171,7 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies 
   )
 
   return (
-    <div ref={ref} style={{ position: 'relative', marginLeft: 2 }}>
+    <div ref={ref} style={{ position: 'relative', marginLeft: 2 }} onMouseDown={e => e.stopPropagation()}>
       <button onClick={() => setOpen(!open)} style={{
         padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
         display: 'flex', alignItems: 'center', gap: 6, maxWidth: 200,
@@ -183,9 +183,9 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies 
         <span style={{ fontSize: 9, opacity: 0.6, flexShrink: 0 }}>▼</span>
       </button>
       {open && (
-        <div style={{
+        <div onMouseDown={e => e.stopPropagation()} style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#111113',
-          border: `1px solid #1E1E22`, borderRadius: 8, padding: 4, zIndex: 50, minWidth: 240, maxWidth: 320,
+          border: `1px solid #1E1E22`, borderRadius: 8, padding: 4, zIndex: 100, minWidth: 240, maxWidth: 320,
           boxShadow: '0 8px 32px rgba(0,0,0,0.6)', maxHeight: 400, overflowY: 'auto',
         }}>
           {/* Assembly groups by category */}
