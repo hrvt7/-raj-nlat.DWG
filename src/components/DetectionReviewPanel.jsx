@@ -4,6 +4,7 @@ import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { getPlanFile, getPlanAnnotations, savePlanAnnotations, updatePlanMeta } from '../data/planStore.js'
 import { loadTemplatesWithImages, getTemplatesByProject } from '../data/legendStore.js'
 import { detectAllTemplates } from '../utils/templateMatching.js'
+import { createMarker, normalizeMarkers } from '../utils/markerModel.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -288,17 +289,22 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
 
     for (const [planId, dets] of Object.entries(byPlan)) {
       const annotations = await getPlanAnnotations(planId)
-      // Build new markers from accepted detections — same format as manual markers
-      const newMarkers = dets.map(d => ({
+      // Build new markers from accepted detections — unified marker model preserves origin
+      const newMarkers = dets.map(d => createMarker({
         x: d.x,
         y: d.y,
         category: d.category,
         color: d.color,
-        // pageNum stored for multi-page awareness
         pageNum: d.pageNum,
+        source: 'detection',
+        confidence: d.score,
+        detectionId: d.id,
+        templateId: d.templateId,
+        label: d.label,
       }))
       // Merge with existing markers (avoid duplicates by proximity)
-      const merged = mergeMarkers(annotations.markers || [], newMarkers)
+      const existing = normalizeMarkers(annotations.markers)
+      const merged = mergeMarkers(existing, newMarkers)
       await savePlanAnnotations(planId, {
         ...annotations,
         markers: merged,

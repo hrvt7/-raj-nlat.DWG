@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
+import { createMarker, normalizeMarkers } from '../../utils/markerModel.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -84,7 +85,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   useEffect(() => {
     if (!planId) return
     getPlanAnnotations(planId).then(ann => {
-      if (ann.markers?.length) { markersRef.current = ann.markers; setRenderTick(t => t + 1); if (onMarkersChange) onMarkersChange([...ann.markers]) }
+      if (ann.markers?.length) { markersRef.current = normalizeMarkers(ann.markers); setRenderTick(t => t + 1); if (onMarkersChange) onMarkersChange([...markersRef.current]) }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
@@ -337,7 +338,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
       const asm = (assembliesProp || []).find(a => a.id === activeCategory)
       const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[activeCategory] || '#9CA3AF')
-      markersRef.current.push({ x: pdf.x, y: pdf.y, category: activeCategory, color, asmId: asm ? asm.id : null })
+      markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, category: activeCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
       setRenderTick(t => t + 1)
       drawOverlay()
       // Notify parent of marker change

@@ -7,6 +7,7 @@ import { computePricing } from '../utils/pricing.js'
 import { ASSEMBLY_TYPES, addUserOverride, getAssemblyTypeLabel } from '../data/symbolDictionary.js'
 import { mergeParseResults, getAggregatedRows, deduplicateUnknowns } from '../utils/mergeParseResults.js'
 import { downloadCSV } from '../utils/csvExport.js'
+import { normalizeMarker } from '../utils/markerModel.js'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MergePlansView — Combine annotations from multiple plans into one estimate
@@ -127,7 +128,7 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf }) {
     for (const id of selectedIds) {
       const ann = annotations[id]
       if (ann?.markers) {
-        for (const m of ann.markers) all.push({ ...m, sourcePlan: id })
+        for (const m of ann.markers) all.push({ ...normalizeMarker(m), sourcePlan: id })
       }
     }
     return all

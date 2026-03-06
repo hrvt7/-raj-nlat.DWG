@@ -5,6 +5,7 @@ import DxfToolbar, { COUNT_CATEGORIES } from './DxfToolbar.jsx'
 import DxfLayerPanel from './DxfLayerPanel.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
+import { createMarker, normalizeMarkers } from '../../utils/markerModel.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -70,7 +71,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
   useEffect(() => {
     if (!planId) return
     getPlanAnnotations(planId).then(ann => {
-      if (ann.markers?.length) { markersRef.current = ann.markers; setRenderTick(t => t + 1) }
+      if (ann.markers?.length) { markersRef.current = normalizeMarkers(ann.markers); setRenderTick(t => t + 1) }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
@@ -252,7 +253,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
 
     if (tool === 'count') {
       const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
-      markersRef.current = [...markersRef.current, { x: sx, y: sy, category: activeCategory, color: cat.color }]
+      markersRef.current = [...markersRef.current, createMarker({ x: sx, y: sy, category: activeCategory, color: cat.color, source: 'manual' })]
       setRenderTick(t => t + 1)
     }
 
