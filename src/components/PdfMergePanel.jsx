@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getPlanAnnotations } from '../data/planStore.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings, saveQuote } from '../data/store.js'
 import { computePricing } from '../utils/pricing.js'
 
@@ -11,22 +10,6 @@ const C = {
   accentDim: 'rgba(0,229,160,0.08)', accentBorder: 'rgba(0,229,160,0.2)',
 }
 
-// ─── COUNT_CATEGORIES ─────────────────────────────────────────────────────────
-const COUNT_CATEGORIES = [
-  { key: 'socket',     label: 'Dugalj',        color: '#FF8C42', asmHint: 'dugalj' },
-  { key: 'switch',     label: 'Kapcsoló',       color: '#A78BFA', asmHint: 'kapcsolo' },
-  { key: 'light',      label: 'Lámpa',          color: '#FFD166', asmHint: 'lampa' },
-  { key: 'panel',      label: 'Elosztó',        color: '#FF6B6B', asmHint: 'eloszto' },
-  { key: 'junction',   label: 'Kötődoboz',      color: '#4CC9F0', asmHint: 'kotodoboz' },
-  { key: 'conduit',    label: 'Cső/Védőcs.',    color: '#06B6D4', asmHint: 'cso' },
-  { key: 'cable_tray', label: 'Kábeltálca',     color: '#818CF8', asmHint: 'kabeltalca' },
-  { key: 'other',      label: 'Egyéb',          color: '#71717A', asmHint: null },
-]
-
-function getCat(key) {
-  return COUNT_CATEGORIES.find(c => c.key === key) || COUNT_CATEGORIES[COUNT_CATEGORIES.length - 1]
-}
-
 function fmt(n) { return Number(n || 0).toLocaleString('hu-HU') }
 function fmtFt(n) { return fmt(Math.round(n || 0)) + ' Ft' }
 
@@ -35,52 +18,24 @@ function XIcon({ size = 16, color = C.muted }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 }
 
-// ─── Assembly selector for a category ────────────────────────────────────────
-function AsmSelect({ catKey, assemblies, selected, onSelect }) {
-  const cat = getCat(catKey)
-  // Filter assemblies relevant to this category by hint or trade
-  const relevant = assemblies.filter(a => {
-    const name = (a.name || '').toLowerCase()
-    const hint = cat.asmHint
-    if (!hint) return true
-    return name.includes(hint) || (a.tags || []).some(t => t.toLowerCase().includes(hint))
-  })
-  const options = relevant.length > 0 ? relevant : assemblies.slice(0, 20)
-
-  return (
-    <select
-      value={selected || ''}
-      onChange={e => onSelect(catKey, e.target.value)}
-      style={{
-        fontFamily: 'DM Mono', fontSize: 10, color: C.text,
-        background: C.bgCard, border: `1px solid ${C.border}`,
-        borderRadius: 6, padding: '4px 8px', flex: 1,
-        maxWidth: 220, cursor: 'pointer',
-      }}
-    >
-      <option value="">— Assembly kiválasztása</option>
-      {options.map(a => (
-        <option key={a.id} value={a.id}>{a.name}</option>
-      ))}
-    </select>
-  )
-}
-
 // ─── PdfMergePanel ────────────────────────────────────────────────────────────
+// Reads pre-computed calcTakeoffRows & calcPricing from plan metadata,
+// merges rows by asmId, recomputes combined pricing.
 export default function PdfMergePanel({ plans, materials: propMaterials, onClose, onSaved }) {
   const [loading, setLoading] = useState(true)
-  const [aggregated, setAggregated] = useState({}) // { category: count }
   const [assemblies, setAssemblies] = useState([])
   const [workItems, setWorkItems] = useState([])
   const [materials, setMaterials] = useState(propMaterials || [])
   const [settings, setSettings] = useState(null)
-  const [asmMap, setAsmMap] = useState({}) // { category: asmId }
+  const [mergedRows, setMergedRows] = useState([])   // [{ asmId, qty, wallType }]
+  const [perPlanSummary, setPerPlanSummary] = useState([]) // [{ planName, total, itemCount }]
   const [pricing, setPricing] = useState(null)
   const [quoteNote, setQuoteNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [plansWithoutCalc, setPlansWithoutCalc] = useState([])
 
-  // ── Load assemblies + aggregate markers ──
+  // ── Load data + merge calcTakeoffRows from plan metadata ──
   useEffect(() => {
     ;(async () => {
       setLoading(true)
@@ -93,74 +48,65 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       setMaterials(mats)
       setSettings(stg)
 
-      // Aggregate markers across all selected plans
-      const counts = {}
-      for (const plan of plans) {
-        const ann = await getPlanAnnotations(plan.id)
-        for (const marker of (ann.markers || [])) {
-          const cat = marker.category || 'other'
-          counts[cat] = (counts[cat] || 0) + 1
-        }
-      }
-      setAggregated(counts)
+      // Merge calcTakeoffRows from all selected plans
+      const rowMap = {} // asmId → { asmId, qty, wallType }
+      const planSums = []
+      const noCalc = []
 
-      // Auto-assign assemblies by hint
-      const autoMap = {}
-      for (const [cat] of Object.entries(counts)) {
-        const catDef = getCat(cat)
-        const hint = catDef.asmHint
-        if (hint) {
-          const match = asms.find(a => {
-            const name = (a.name || '').toLowerCase()
-            return name.includes(hint) || (a.tags || []).some(t => t.toLowerCase().includes(hint))
-          })
-          if (match) autoMap[cat] = match.id
+      for (const plan of plans) {
+        const rows = plan.calcTakeoffRows
+        if (!rows || rows.length === 0) {
+          noCalc.push(plan)
+          continue
+        }
+        const planTotal = plan.calcTotal || 0
+        const planItems = plan.calcItemCount || 0
+        planSums.push({
+          planName: plan.name || plan.fileName || 'Terv',
+          total: planTotal,
+          itemCount: planItems,
+        })
+        for (const row of rows) {
+          const key = row.asmId + '|' + (row.wallType || 'brick')
+          if (rowMap[key]) {
+            rowMap[key].qty += (row.qty || 0)
+          } else {
+            rowMap[key] = { asmId: row.asmId, qty: row.qty || 0, wallType: row.wallType || 'brick' }
+          }
         }
       }
-      setAsmMap(autoMap)
+
+      const merged = Object.values(rowMap).filter(r => r.qty > 0)
+      setMergedRows(merged)
+      setPerPlanSummary(planSums)
+      setPlansWithoutCalc(noCalc)
+
+      // Compute combined pricing
+      if (merged.length > 0) {
+        try {
+          const result = computePricing({
+            takeoffRows: merged,
+            assemblies: asms,
+            workItems: wis,
+            materials: mats,
+            context: null,
+            markup: stg?.markup ?? 0.15,
+            hourlyRate: stg?.hourlyRate ?? 8000,
+            cableEstimate: null,
+            difficultyMode: 'normal',
+          })
+          setPricing(result)
+        } catch (err) {
+          console.error('[PdfMergePanel] pricing error:', err)
+          setPricing(null)
+        }
+      } else {
+        setPricing(null)
+      }
 
       setLoading(false)
     })()
   }, [plans, propMaterials])
-
-  // ── Compute pricing whenever asmMap or counts change ──
-  useEffect(() => {
-    if (loading || assemblies.length === 0) return
-    const categories = Object.entries(aggregated).filter(([, cnt]) => cnt > 0)
-    if (categories.length === 0) { setPricing(null); return }
-
-    const takeoffRows = []
-    for (const [cat, qty] of categories) {
-      const asmId = asmMap[cat]
-      if (!asmId) continue
-      takeoffRows.push({ asmId, qty, wallType: 'brick' })
-    }
-
-    if (takeoffRows.length === 0) { setPricing(null); return }
-
-    try {
-      const result = computePricing({
-        takeoffRows,
-        assemblies,
-        workItems,
-        materials,
-        context: null,
-        markup: settings?.markup ?? 0.15,
-        hourlyRate: settings?.hourlyRate ?? 8000,
-        cableEstimate: null,
-        difficultyMode: 'normal',
-      })
-      setPricing(result)
-    } catch (err) {
-      console.error('[PdfMergePanel] pricing error:', err)
-      setPricing(null)
-    }
-  }, [aggregated, asmMap, assemblies, workItems, materials, settings, loading])
-
-  // ── Assembly selection ──
-  const handleAsmSelect = useCallback((catKey, asmId) => {
-    setAsmMap(prev => ({ ...prev, [catKey]: asmId || undefined }))
-  }, [])
 
   // ── Save quote ──
   const handleSave = useCallback(() => {
@@ -168,7 +114,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
     setSaving(true)
     const planNames = plans.map(p => p.name || p.fileName || 'Terv').join(', ')
     const displayName = `Projekt: ${planNames}`
-    const totalCount = Object.values(aggregated).reduce((a, b) => a + b, 0)
+    const totalCount = mergedRows.reduce((s, r) => s + r.qty, 0)
 
     // Build items from pricing lines
     const items = (pricing.lines || []).map(line => ({
@@ -209,17 +155,13 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       source: 'merge-panel',
     }
 
-    // Save to localStorage
     saveQuote(quote)
-
     if (onSaved) onSaved(quote)
     setSaving(false)
     setSaved(true)
-  }, [pricing, plans, quoteNote, aggregated, onSaved, settings])
+  }, [pricing, plans, quoteNote, mergedRows, onSaved, settings])
 
-  const categoriesWithCounts = Object.entries(aggregated).filter(([, c]) => c > 0)
-  const totalMarkers = Object.values(aggregated).reduce((a, b) => a + b, 0)
-  const mappedCount = categoriesWithCounts.filter(([cat]) => !!asmMap[cat]).length
+  const totalItems = mergedRows.reduce((s, r) => s + r.qty, 0)
 
   return (
     <div style={{
@@ -243,7 +185,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
               Összevonás kalkulációhoz
             </div>
             <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 2 }}>
-              {plans.length} terv · {totalMarkers} jelölés összesítve
+              {plans.length} terv · {totalItems} elem összesítve
             </div>
           </div>
           <div style={{ flex: 1 }} />
@@ -272,78 +214,92 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-              {/* Plans summary */}
+              {/* Per-plan breakdown */}
               <div style={{
                 background: C.bgCard, border: `1px solid ${C.border}`,
                 borderRadius: 10, padding: '12px 16px',
               }}>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
-                  Kijelölt tervek
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                  Tervrajzok kalkulációi
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {plans.map(p => (
-                    <span key={p.id} style={{
-                      fontFamily: 'DM Mono', fontSize: 10, color: C.textSub,
-                      background: C.bgCard, border: `1px solid ${C.border}`,
-                      borderRadius: 6, padding: '3px 8px',
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {perPlanSummary.map((ps, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
+                      background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+                      borderRadius: 8,
                     }}>
-                      📄 {p.name || p.fileName || 'Terv'}
-                      {(p.markerCount || 0) > 0 && <span style={{ color: C.accent, marginLeft: 5 }}>· {p.markerCount}</span>}
-                    </span>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, flex: 1 }}>
+                        📄 {ps.planName}
+                      </span>
+                      <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.accent }}>
+                        {fmtFt(ps.total)}
+                      </span>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>
+                        {ps.itemCount} elem
+                      </span>
+                    </div>
+                  ))}
+                  {plansWithoutCalc.length > 0 && plansWithoutCalc.map(p => (
+                    <div key={p.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
+                      background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.2)',
+                      borderRadius: 8,
+                    }}>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, flex: 1 }}>
+                        📄 {p.name || p.fileName || 'Terv'}
+                      </span>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red }}>
+                        ⚠ Nincs kalkuláció
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>
 
-              {/* Aggregated counts + assembly mapping */}
-              {categoriesWithCounts.length === 0 ? (
+              {/* Merged items detail */}
+              {mergedRows.length === 0 ? (
                 <div style={{
                   background: C.bgCard, border: `1px solid ${C.border}`,
                   borderRadius: 10, padding: '24px', textAlign: 'center',
                 }}>
                   <div style={{ fontSize: 28, marginBottom: 12 }}>📭</div>
                   <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 6 }}>
-                    Nincsenek jelölések a kijelölt terveken
+                    Nincsenek kalkulált elemek
                   </div>
                   <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-                    Nyisd meg a terveket és adj hozzá jelöléseket, vagy futtass szimbólumdetektálást.
+                    Nyisd meg a terveket és készíts kalkulációt, mielőtt összevonod.
                   </div>
                 </div>
               ) : (
                 <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
                   <div style={{ padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                      Összesített jelölések · Assembly hozzárendelés
+                      Összesített elemek · {mergedRows.length} tétel · {totalItems} db
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    {categoriesWithCounts.map(([cat, count], idx) => {
-                      const catDef = getCat(cat)
+                    {mergedRows.map((row, idx) => {
+                      const asm = assemblies.find(a => a.id === row.asmId)
+                      const name = asm?.name || row.asmId
                       return (
                         <div
-                          key={cat}
+                          key={row.asmId + '|' + row.wallType}
                           style={{
-                            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
-                            borderBottom: idx < categoriesWithCounts.length - 1 ? `1px solid ${C.border}` : 'none',
+                            display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
+                            borderBottom: idx < mergedRows.length - 1 ? `1px solid ${C.border}` : 'none',
                           }}
                         >
-                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: catDef.color, flexShrink: 0 }} />
-                          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text, width: 100, flexShrink: 0 }}>
-                            {catDef.label}
+                          <div style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: asm?.color || C.accent, flexShrink: 0,
+                          }} />
+                          <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 11, color: C.text, flex: 1 }}>
+                            {name}
                           </div>
-                          <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.accent, width: 50, flexShrink: 0, textAlign: 'right' }}>
-                            {count} db
+                          <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent, flexShrink: 0 }}>
+                            {row.qty} db
                           </div>
-                          <AsmSelect
-                            catKey={cat}
-                            assemblies={assemblies}
-                            selected={asmMap[cat]}
-                            onSelect={handleAsmSelect}
-                          />
-                          {asmMap[cat] ? (
-                            <span style={{ fontSize: 14 }}>✅</span>
-                          ) : (
-                            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>nincs</span>
-                          )}
                         </div>
                       )
                     })}
@@ -358,7 +314,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                   borderRadius: 12, padding: '16px 18px',
                 }}>
                   <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
-                    Kalkuláció ({mappedCount}/{categoriesWithCounts.length} kategória hozzárendelve)
+                    Összesített kalkuláció
                   </div>
                   <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16 }}>
                     {[
@@ -389,7 +345,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
               )}
 
               {/* Note */}
-              {categoriesWithCounts.length > 0 && (
+              {mergedRows.length > 0 && (
                 <div>
                   <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 6 }}>
                     Megjegyzés az árajánlathoz (opcionális)
@@ -413,13 +369,13 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
         </div>
 
         {/* ── Footer ── */}
-        {!loading && !saved && categoriesWithCounts.length > 0 && (
+        {!loading && !saved && mergedRows.length > 0 && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
             borderTop: `1px solid ${C.border}`, flexShrink: 0,
           }}>
             <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flex: 1 }}>
-              {mappedCount}/{categoriesWithCounts.length} kategória hozzárendelve
+              {mergedRows.length} tétel · {totalItems} elem
               {pricing && ` · Végösszeg: ${fmtFt(pricing.total)}`}
             </span>
             <button
