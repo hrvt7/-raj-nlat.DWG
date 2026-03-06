@@ -23,14 +23,18 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, focusTarget }) {
+export default function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, focusTarget, assemblies: assembliesProp }) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
 
   // ── UI State ──
   const [activeTool, setActiveTool] = useState(null)
-  const [activeCategory, setActiveCategory] = useState('socket')
+  // Assembly-first: default to first assembly ID if available, fallback to 'socket'
+  const [activeCategory, setActiveCategory] = useState(() => {
+    const mainAsms = (assembliesProp || []).filter(a => !a.variantOf)
+    return mainAsms.length > 0 ? mainAsms[0].id : 'socket'
+  })
   const [layers, setLayers] = useState([])
   const [layerVisibility, setLayerVisibility] = useState({})
   const [layersPanelOpen, setLayersPanelOpen] = useState(false)
@@ -330,8 +334,17 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
     const sy = event.position.y
 
     if (tool === 'count') {
-      const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
-      markersRef.current = [...markersRef.current, createMarker({ x: sx, y: sy, category: activeCategory, color: cat.color, source: 'manual' })]
+      // Assembly-first: resolve assembly for color + asmId, fallback to category
+      const asm = (assembliesProp || []).find(a => a.id === activeCategory)
+      const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', '_special': '#FFD166' }
+      const SPECIAL_COLORS = { 'panel': '#FF6B6B', 'junction': '#4CC9F0', 'other': '#71717A' }
+      const color = asm
+        ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF')
+        : (SPECIAL_COLORS[activeCategory] || (COUNT_CATEGORIES.find(c => c.key === activeCategory)?.color) || '#9CA3AF')
+      markersRef.current = [...markersRef.current, createMarker({
+        x: sx, y: sy, category: activeCategory, color,
+        asmId: asm ? asm.id : null, source: 'manual',
+      })]
       setRenderTick(t => t + 1)
     }
 
@@ -530,6 +543,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
         countPanelOpen={countPanelOpen}
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
+        assemblies={assembliesProp}
         scale={scale}
         markerCount={markersRef.current.length}
         measureCount={measuresRef.current.length}
@@ -579,20 +593,27 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
             <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, marginBottom: 10 }}>
               Számláló összesítő
             </div>
-            {COUNT_CATEGORIES.filter(c => countSummary[c.key]).map(c => (
-              <div key={c.key} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '5px 0', borderBottom: `1px solid ${C.border}`,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color }} />
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{c.label}</span>
+            {Object.keys(countSummary).map(key => {
+              const asm = (assembliesProp || []).find(a => a.id === key)
+              const cat = COUNT_CATEGORIES.find(c => c.key === key)
+              const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B' }
+              const label = asm?.name || cat?.label || key
+              const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (cat?.color || '#9CA3AF')
+              return (
+                <div key={key} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '5px 0', borderBottom: `1px solid ${C.border}`,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{label}</span>
+                  </div>
+                  <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color }}>
+                    {countSummary[key]}
+                  </span>
                 </div>
-                <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: c.color }}>
-                  {countSummary[c.key]}
-                </span>
-              </div>
-            ))}
+              )
+            })}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '8px 0 0', marginTop: 4,
@@ -670,7 +691,7 @@ export default function DxfViewerPanel({ file, unitFactor, unitName, style, comp
       }}>
         <span>
           {activeTool === 'count'
-            ? `Számlálás: ${markersRef.current.length} db  •  Kategória: ${COUNT_CATEGORIES.find(c => c.key === activeCategory)?.label || ''}  •  Jobb klikk = törlés`
+            ? `Számlálás: ${markersRef.current.length} db  •  ${(assembliesProp || []).find(a => a.id === activeCategory)?.name || COUNT_CATEGORIES.find(c => c.key === activeCategory)?.label || activeCategory}  •  Jobb klikk = törlés`
             : activeTool === 'measure'
             ? activeStartRef.current
               ? 'Kattints a végpontra a mérés lezárásához'

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { C, Button, Badge } from '../components/ui.jsx'
 const DxfViewerPanel = lazy(() => import('../components/DxfViewer/index.jsx'))
 const PdfViewerPanel = lazy(() => import('../components/PdfViewer/index.jsx'))
 import MergePlansView from '../components/MergePlansView.jsx'
 import { loadPlans, savePlan, getPlanFile, deletePlan, generatePlanId, savePlanThumbnail, getPlanThumbnail, updatePlanMeta, getOrParse, FLOOR_OPTIONS, DISCIPLINE_OPTIONS } from '../data/planStore.js'
+import { loadAssemblies } from '../data/store.js'
 import { normalizeBlocks } from '../data/symbolDictionary.js'
 import { getDxfParserPool } from '../utils/workerPool.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -72,6 +73,7 @@ export default function Plans({ onNavigate }) {
   const batchCancelRef = useRef(false) // set to true to stop queuing new parses
   const [pdfParsing, setPdfParsing] = useState({})   // { planId: true } while running
   const inputRef = useRef()
+  const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
 
   // Load plans + thumbnails on mount
   useEffect(() => {
@@ -288,6 +290,7 @@ export default function Plans({ onNavigate }) {
               <PdfViewerPanel
                 file={activeFile}
                 planId={activePlan.id}
+                assemblies={assemblies}
                 onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
                 style={{ height: '100%' }}
               />
@@ -297,6 +300,7 @@ export default function Plans({ onNavigate }) {
                 unitFactor={activePlan.units?.factor}
                 unitName={activePlan.units?.name}
                 planId={activePlan.id}
+                assemblies={assemblies}
                 onCreateQuote={(data) => { onNavigate?.('new-quote', { ...data, planName: activePlan.name }) }}
                 style={{ height: '100%' }}
               />

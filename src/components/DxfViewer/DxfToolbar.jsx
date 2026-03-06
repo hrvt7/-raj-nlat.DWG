@@ -247,6 +247,7 @@ export default function DxfToolbar({
   onToggleLayers, layersPanelOpen,
   onToggleCountPanel, countPanelOpen,
   activeCategory, onCategoryChange,
+  assemblies,
   scale, markerCount, measureCount,
   onUndo, onClearAll,
 }) {
@@ -271,8 +272,11 @@ export default function DxfToolbar({
         )
       })}
 
-      {/* Category picker when counting */}
-      {activeTool === 'count' && (
+      {/* Assembly/Category picker when counting — assembly-first when available */}
+      {activeTool === 'count' && assemblies?.length > 0 && (
+        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
+      )}
+      {activeTool === 'count' && (!assemblies || !assemblies.length) && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
