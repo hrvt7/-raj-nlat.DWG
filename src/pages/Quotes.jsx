@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, QuoteStatusBadge, Badge, EmptyState, Input } from '../components/ui.jsx'
-import { saveQuotes } from '../data/store.js'
+// saveQuotes handled by parent via onQuotesChange
 
 const STATUS_TABS = [
   { key: 'all',     label: 'Összes' },
@@ -24,14 +24,12 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
   const updateStatus = (id, status) => {
     const updated = quotes.map(q => q.id === id ? { ...q, status } : q)
     onQuotesChange(updated)
-    saveQuotes(updated)
   }
 
   const deleteQuote = (id) => {
     if (!confirm('Törlöd ezt az ajánlatot?')) return
     const updated = quotes.filter(q => q.id !== id)
     onQuotesChange(updated)
-    saveQuotes(updated)
   }
 
   const totalValue = filtered.reduce((s, q) => s + (q.summary?.grandTotal || 0), 0)
@@ -166,6 +164,7 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
 
 function StatusDropdown({ status, onChange }) {
   const [open, setOpen] = useState(false)
+  const ref = React.useRef(null)
   const options = [
     { key: 'draft',   label: 'Piszkozat',  color: 'gray' },
     { key: 'sent',    label: 'Elküldve',   color: 'blue' },
@@ -173,17 +172,24 @@ function StatusDropdown({ status, onChange }) {
     { key: 'lost',    label: 'Elveszett',  color: 'red' },
     { key: 'expired', label: 'Lejárt',     color: 'yellow' },
   ]
-  const current = options.find(o => o.key === status) || options[0]
+
+  // Close on outside click
+  React.useEffect(() => {
+    if (!open) return
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }} ref={ref}>
       <div onClick={e => { e.stopPropagation(); setOpen(!open) }} style={{ cursor: 'pointer' }}>
         <QuoteStatusBadge status={status} />
       </div>
       {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, zIndex: 200,
-          background: '#1A1A1E', border: `1px solid ${C.border}`,
+          background: C.bgCard, border: `1px solid ${C.border}`,
           borderRadius: 8, padding: 6, marginTop: 4,
           boxShadow: '0 8px 24px rgba(0,0,0,0.6)', minWidth: 130
         }}>

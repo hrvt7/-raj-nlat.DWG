@@ -82,7 +82,7 @@ export function computePricing({
     const cableData = [
       { code: 'MAT-020', fallback: 'NYM-J 3×1.5', m: cableTypes.light_m  || 0 },
       { code: 'MAT-021', fallback: 'NYM-J 3×2.5', m: cableTypes.socket_m || 0 },
-      { code: 'MAT-021', fallback: 'NYM-J 3×2.5', m: cableTypes.switch_m || 0 },
+      { code: 'MAT-020', fallback: 'NYM-J 3×1.5 (kapcsoló)', m: cableTypes.switch_m || 0 },
       { code: 'MAT-022', fallback: 'NYM-J 5×2.5', m: cableTypes.other_m  || 0 },
     ]
     for (const c of cableData) {

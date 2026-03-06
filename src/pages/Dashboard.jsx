@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react'
 import { C, fmt, StatCard, Card, QuoteStatusBadge, Button, EmptyState } from '../components/ui.jsx'
 import { loadWorkItems, loadMaterials, loadAssemblies } from '../data/store.js'
 
-export default function Dashboard({ quotes, settings, onNavigate }) {
+export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote }) {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
@@ -40,7 +40,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
       {/* Page header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-          {settings.company.name ? `${settings.company.name}` : 'Dashboard'}
+          {settings?.company?.name ? `${settings?.company?.name}` : 'Dashboard'}
         </h1>
         <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>
           Villanyszerelési árajánlat rendszer
@@ -118,7 +118,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
         />
         <DbStatCard
           label="Rezsióradíj"
-          value={`${fmt(settings.labor.hourly_rate)}`}
+          value={`${fmt(settings?.labor?.hourly_rate)}`}
           suffix="Ft/ó"
           icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>}
           color={C.accent}
@@ -159,7 +159,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
                     style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={e => e.currentTarget.style.background = C.bgHover}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    onClick={() => onNavigate('quotes', q.id)}
+                    onClick={() => onOpenQuote?.(q) || onNavigate('quotes')}
                   >
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>{q.project_name || 'Névtelen projekt'}</div>
@@ -190,7 +190,7 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
         {/* Right column – info cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Settings reminder */}
-          {!settings.company.name && (
+          {!settings?.company?.name && (
             <Card style={{ padding: 18, border: `1px solid rgba(255,209,102,0.2)`, background: 'rgba(255,209,102,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.yellow} strokeWidth="2.5" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -209,10 +209,10 @@ export default function Dashboard({ quotes, settings, onNavigate }) {
           <Card style={{ padding: 18 }}>
             <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Aktív óradíj</div>
             <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent }}>
-              {fmt(settings.labor.hourly_rate)} Ft<span style={{ fontSize: 14, color: C.textSub }}>/ó</span>
+              {fmt(settings?.labor?.hourly_rate)} Ft<span style={{ fontSize: 14, color: C.textSub }}>/ó</span>
             </div>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, marginTop: 6 }}>
-              Árrés: {settings.labor.markup_percent ?? 15}% {settings.labor.markup_type === "margin" ? "(margin)" : "(markup)"} · ÁFA: {settings.labor.vat_percent}%
+              Árrés: {settings?.labor?.markup_percent ?? 15}% {settings?.labor?.markup_type === "margin" ? "(margin)" : "(markup)"} · ÁFA: {settings?.labor?.vat_percent}%
             </div>
           </Card>
 

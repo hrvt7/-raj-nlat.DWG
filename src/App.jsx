@@ -784,7 +784,8 @@ function SaaSShell() {
                   onStatusChange={handleStatusChange} />
               ) : page === 'dashboard' ? (
                 <Dashboard quotes={quotes} settings={settings}
-                  onNavigate={p => { setViewingQuote(null); setPage(p) }} />
+                  onNavigate={p => { setViewingQuote(null); setPage(p) }}
+                  onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
               ) : page === 'quotes' ? (
                 <Quotes quotes={quotes} onQuotesChange={handleQuotesChange}
                   onNavigate={p => setPage(p)}

@@ -250,7 +250,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
 }
 
 // ─── Project card ────────────────────────────────────────────────────────────
-function ProjectCard({ project, planCount, templateCount, hasLegend, onOpen, onDelete }) {
+function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
   const [hov, setHov] = useState(false)
   return (
     <div
@@ -266,7 +266,7 @@ function ProjectCard({ project, planCount, templateCount, hasLegend, onOpen, onD
     >
       {/* Thumbnail area */}
       <div style={{ height: 120, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}`, flexDirection: 'column', gap: 6 }}>
-        <FolderIcon size={42} color={hov ? C.accent : '#17C7FF'} />
+        <FolderIcon size={42} color={hov ? C.accent : C.blue} />
         <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{planCount} tervrajz</span>
       </div>
       {/* Info */}
@@ -274,16 +274,11 @@ function ProjectCard({ project, planCount, templateCount, hasLegend, onOpen, onD
         <div style={{ color: C.text, fontSize: 14, fontWeight: 700, fontFamily: 'Syne', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {project.name}
         </div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-          {hasLegend ? (
-            <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(0,229,160,0.15)', color: C.accent }}>Jelmagyarázat ✓</span>
-          ) : (
-            <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(255,107,107,0.1)', color: C.red }}>Nincs jelmagyarázat</span>
-          )}
-          {templateCount > 0 && (
+        {templateCount > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(76,201,240,0.15)', color: C.blue }}>{templateCount} szimbólum</span>
-          )}
-        </div>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: 10 }}>
           <span>{fmtDate(project.createdAt)}</span>
         </div>
@@ -323,7 +318,7 @@ function ProjectListView({ onOpenProject }) {
     for (const p of prjs) {
       const plans = allPlans.filter(pl => pl.projectId === p.id && (pl.name || '').toLowerCase().endsWith('.pdf'))
       const templates = allTemplates.filter(t => t.projectId === p.id)
-      stats[p.id] = { planCount: plans.length, templateCount: templates.length, hasLegend: !!p.legendPlanId }
+      stats[p.id] = { planCount: plans.length, templateCount: templates.length }
     }
     setProjectStats(stats)
   }, [])
@@ -358,7 +353,7 @@ function ProjectListView({ onOpenProject }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}>Felmérés</h1>
-          <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>Projektek — építkezésenként külön mappa, jelmagyarázat és tervrajzok</p>
+          <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>Projektek — építkezésenként külön mappa és tervrajzok</p>
         </div>
         {projects.length > 0 && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>{projects.length} projekt</span>}
       </div>
@@ -374,7 +369,7 @@ function ProjectListView({ onOpenProject }) {
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(0,229,160,0.4)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = C.border }}
         >
-          <ScannerSVG label="Új projekt létrehozása" sublabel="Hozz létre egy mappát az építkezésnek" tags={['Jelmagyarázat', 'Tervrajzok', 'Detekció']} />
+          <ScannerSVG label="Új projekt létrehozása" sublabel="Hozz létre egy mappát az építkezésnek" tags={['Tervrajzok', 'Kalkuláció', 'Összevonás']} />
         </div>
       ) : (
         <div style={{
@@ -428,7 +423,6 @@ function ProjectListView({ onOpenProject }) {
               project={p}
               planCount={projectStats[p.id]?.planCount || 0}
               templateCount={projectStats[p.id]?.templateCount || 0}
-              hasLegend={projectStats[p.id]?.hasLegend || false}
               onOpen={onOpenProject}
               onDelete={handleDelete}
             />

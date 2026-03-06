@@ -87,7 +87,7 @@ function Field({ label, children, full }) {
 }
 
 function CompanyTab({ settings, update }) {
-  const c = settings.company
+  const c = settings?.company || {}
   const logoRef = React.useRef(null)
 
   const handleLogoUpload = (e) => {
@@ -163,7 +163,7 @@ function CompanyTab({ settings, update }) {
 }
 
 function LaborTab({ settings, update }) {
-  const l = settings.labor
+  const l = settings?.labor || {}
   const hrFt = parseFloat(l.hourly_rate) || 0
   const minFt = hrFt / 60
   const markupPct  = parseFloat(l.markup_percent) || 15
@@ -417,7 +417,7 @@ function MaterialModal({ item, onSave, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
-      <div style={{ background: '#111113', border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: '100%', maxWidth: 480 }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color: C.text, marginBottom: 22 }}>
           {form._isNew ? 'Új anyag' : 'Anyag szerkesztése'}
         </h3>
@@ -476,7 +476,7 @@ function ProductivityTab({ settings, update }) {
     if (opt) combined *= opt.factor
   }
   const combinedPct = ((combined - 1) * 100).toFixed(1)
-  const combinedColor = combined <= 1.0 ? '#4ade80' : combined <= 1.3 ? C.yellow : C.red
+  const combinedColor = combined <= 1.0 ? C.accent : combined <= 1.3 ? C.yellow : C.red
 
   return (
     <div style={{ maxWidth: 700 }}>
@@ -531,7 +531,7 @@ function ProductivityTab({ settings, update }) {
                         {factorDef.label}
                       </div>
                       <div style={{ fontFamily: 'DM Mono', fontSize: 12,
-                        color: selectedOpt.factor === 1.0 ? C.textSub : selectedOpt.factor < 1 ? '#4ade80' : C.yellow,
+                        color: selectedOpt.factor === 1.0 ? C.textSub : selectedOpt.factor < 1 ? C.accent : C.yellow,
                         background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 10px', flexShrink: 0, marginLeft: 12 }}>
                         ×{selectedOpt.factor.toFixed(2)}
                       </div>
@@ -570,10 +570,10 @@ function ProductivityTab({ settings, update }) {
 
 function OverheadTab({ settings, update }) {
   const o = settings.overhead
-  const totalPerVisit = o.minutes_per_visit + (o.travel_cost_per_visit / (settings.labor.hourly_rate / 60))
+  const totalPerVisit = o.minutes_per_visit + (o.travel_cost_per_visit / ((settings?.labor?.hourly_rate || 0) / 60))
   const totalMinutes = o.visits * o.minutes_per_visit
   const travelCost = o.visits * (o.travel_cost_per_visit || 0)
-  const laborCost = (totalMinutes / 60) * settings.labor.hourly_rate
+  const laborCost = (totalMinutes / 60) * (settings?.labor?.hourly_rate || 0)
 
   return (
     <div style={{ maxWidth: 620 }}>
@@ -606,7 +606,7 @@ function OverheadTab({ settings, update }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           {[
             { label: 'Össz overhead idő', value: `${totalMinutes} perc`, sub: `= ${(totalMinutes/60).toFixed(1)} óra` },
-            { label: 'Overhead munkadíj', value: `${fmt(laborCost)} Ft`, sub: `${o.visits} × ${o.minutes_per_visit} perc × ${fmt(settings.labor.hourly_rate/60)} Ft/perc` },
+            { label: 'Overhead munkadíj', value: `${fmt(laborCost)} Ft`, sub: `${o.visits} × ${o.minutes_per_visit} perc × ${fmt((settings?.labor?.hourly_rate || 0)/60)} Ft/perc` },
             { label: 'Útiköltség összesen', value: `${fmt(travelCost)} Ft`, sub: `${o.visits} kiszállás × ${fmt(o.travel_cost_per_visit || 0)} Ft` },
           ].map(stat => (
             <div key={stat.label} style={{ background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 8, padding: '14px 16px' }}>

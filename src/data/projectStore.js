@@ -10,7 +10,7 @@ function loadMeta() {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return []
     return JSON.parse(raw)
-  } catch { return [] }
+  } catch (err) { console.warn('[projectStore] load failed:', err); return [] }
 }
 
 function saveMeta(projects) {
@@ -18,6 +18,7 @@ function saveMeta(projects) {
     localStorage.setItem(LS_KEY, JSON.stringify(projects))
   } catch (err) {
     console.error('[projectStore] save failed:', err)
+    window.dispatchEvent(new CustomEvent('takeoffpro:storage-error', { detail: { error: err.message } }))
   }
 }
 
