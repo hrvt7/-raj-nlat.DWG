@@ -1231,6 +1231,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         cableEstimate,
         source:   'takeoff-workspace',
         fileName: file?.name,
+        // ── Bundle back-reference (from MergePlansView) ──────────────
+        bundleId: initialData?.bundleId || null,
       }
       saveQuote(quote)
       onSaved?.(quote)

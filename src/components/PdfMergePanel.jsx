@@ -153,6 +153,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       sourcePlans: plans.map(p => p.id),
       totalCount,
       source: 'merge-panel',
+      bundleId: null,   // PdfMergePanel has no bundle context (added for model consistency)
     }
 
     saveQuote(quote)
