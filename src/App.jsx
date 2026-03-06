@@ -595,6 +595,12 @@ function SaaSShell() {
     setAutoSaveToast(true)
     setTimeout(() => setAutoSaveToast(false), 2500)
   }, [])
+  // ── General-purpose toast (icon + message) ──
+  const [genToast, setGenToast] = useState(null) // { icon, msg, color? }
+  const showToast = useCallback((icon, msg, color) => {
+    setGenToast({ icon, msg, color: color || '#FFD166' })
+    setTimeout(() => setGenToast(null), 3200)
+  }, [])
   // Felmérés project navigation
   const [activeProjectId, setActiveProjectId] = useState(null)
   // Felmérés modal panels
@@ -856,7 +862,10 @@ function SaaSShell() {
             // Close legend panel, open detection with all project plans
             setLegendPanelData(null)
             const plans = projId ? getPlansByProject(projId) : []
-            if (plans.length === 0) return
+            if (plans.length === 0) {
+              showToast('📄', 'Nincs tervrajz a projektben — tölts fel PDF-et a detektáláshoz.')
+              return
+            }
             setDetectPanelPlans(plans)
             setDetectPanelProjectId(projId)
             setDetectPanelExistingRun(null)
@@ -930,6 +939,20 @@ function SaaSShell() {
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <span style={{ fontSize: 16 }}>✓</span> Módosítások automatikusan mentve
+        </div>
+      )}
+      {/* ── General toast (edge case warnings) ───────────────────────────── */}
+      {genToast && (
+        <div style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#1A2A3A', color: genToast.color, border: `1px solid ${genToast.color}44`,
+          borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 500,
+          zIndex: 9999, boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          animation: 'fadeInUp 0.25s ease-out',
+          display: 'flex', alignItems: 'center', gap: 8, maxWidth: 420,
+          fontFamily: 'DM Mono',
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>{genToast.icon}</span> {genToast.msg}
         </div>
       )}
     </div>

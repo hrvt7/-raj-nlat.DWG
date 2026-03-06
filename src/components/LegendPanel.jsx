@@ -844,7 +844,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
 
               {/* Bottom: run detection + close */}
               <div style={{ padding: '12px 14px', borderTop: `1px solid ${C.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {templates.length > 0 && onRunDetection && (
+                {templates.length > 0 && onRunDetection ? (
                   <button
                     onClick={() => onRunDetection({ projectId, templateCount: templates.length })}
                     style={{
@@ -856,7 +856,14 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
                   >
                     🔍 Detektálás indítása ({templates.length} sablon)
                   </button>
-                )}
+                ) : onRunDetection ? (
+                  <div style={{
+                    fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textAlign: 'center',
+                    padding: '6px 0',
+                  }}>
+                    Adj hozzá sablonokat a detektálás indításához
+                  </div>
+                ) : null}
                 <button
                   onClick={onClose}
                   style={{
