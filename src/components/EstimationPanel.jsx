@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react'
 import { COUNT_CATEGORIES, CABLE_TRAY_COLOR } from './DxfViewer/DxfToolbar.jsx'
 import { loadAssemblies, loadMaterials, loadWorkItems, loadSettings, trackAsmUsage } from '../data/store.js'
 import { getAssemblyComponents, calcProductivityFactor, getComponentQty } from '../data/workItemsDb.js'
+import { saveCategoryAssemblyDefault } from '../data/categoryAssemblyMap.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -168,6 +169,8 @@ export default function EstimationPanel({
       ...prev,
       [category]: { ...(prev[category] || {}), assemblyId: assemblyId || null },
     }))
+    // Persist as default for future detection runs (cross-project learning)
+    saveCategoryAssemblyDefault(category, assemblyId || null)
   }, [onAssignmentsChange])
 
   const handleOverride = useCallback((category, field, value) => {

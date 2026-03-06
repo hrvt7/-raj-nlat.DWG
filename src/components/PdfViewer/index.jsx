@@ -3,6 +3,7 @@ import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR 
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
+import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -101,10 +102,17 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
       if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
+      let loadedAssignments = {}
       if (ann.assignments && typeof ann.assignments === 'object') {
-        setAssignments(ann.assignments)
-        assignmentsRef.current = ann.assignments
+        loadedAssignments = ann.assignments
       }
+      // Auto-fill assignments from saved category→assembly defaults
+      // (detection markers come in with category like 'socket' but no assignment)
+      const defaults = loadCategoryAssemblyMap()
+      const merged = applyDefaultAssignments(loadedAssignments, defaults)
+      setAssignments(merged)
+      assignmentsRef.current = merged
+
       if (ann.quoteOverrides && typeof ann.quoteOverrides === 'object') {
         setQuoteOverrides(ann.quoteOverrides)
         quoteOverridesRef.current = ann.quoteOverrides
@@ -119,10 +127,18 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   // ── Subscribe to external annotation changes (e.g. DetectionReviewPanel apply) ──
   useEffect(() => {
     if (!planId) return
-    const unsub = onAnnotationsChanged(planId, ({ markers }) => {
+    const unsub = onAnnotationsChanged(planId, ({ markers, assignments: extAssignments }) => {
       markersRef.current = normalizeMarkers(markers)
       setRenderTick(t => t + 1)
       if (onMarkersChange) onMarkersChange([...markersRef.current])
+      // Auto-fill assignments from saved defaults when new detection markers arrive
+      const currentAsgn = extAssignments || assignmentsRef.current
+      const defaults = loadCategoryAssemblyMap()
+      const merged = applyDefaultAssignments(currentAsgn, defaults)
+      if (merged !== currentAsgn) {
+        setAssignments(merged)
+        assignmentsRef.current = merged
+      }
     })
     return unsub
   }, [planId, onMarkersChange])
