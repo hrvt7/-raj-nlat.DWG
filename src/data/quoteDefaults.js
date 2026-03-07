@@ -51,3 +51,66 @@ export const CABLE_TYPE_TO_SYSTEM_TYPE = {
   switch_m: 'power',
   other_m:  'general',
 }
+
+// ─── Grouping ─────────────────────────────────────────────────────────────────
+
+/** Valid groupBy values for quotes */
+export const GROUP_BY_OPTIONS = ['none', 'system']
+
+/** Hungarian labels for groupBy modes */
+export const GROUP_BY_LABELS = {
+  none:   'Nincs csoportosítás',
+  system: 'Rendszer szerint',
+}
+
+/** Extended labels including 'mixed' for merge edge-case */
+export const SYSTEM_GROUP_LABELS = {
+  ...SYSTEM_TYPE_LABELS,
+  mixed: 'Vegyes rendszer',
+}
+
+/**
+ * Resolve the effective system type for a quote item.
+ * Priority: item.systemType → item.sourcePlanSystemType → 'general'
+ */
+export function resolveItemSystemType(item) {
+  const st = item?.systemType
+  if (st && st !== 'general' && st !== 'mixed') return st
+  const spt = item?.sourcePlanSystemType
+  if (spt && spt !== 'general' && spt !== 'mixed') return spt
+  return st || spt || 'general'
+}
+
+/**
+ * Group quote items by system type.
+ * Returns array of { key, label, items, subtotalMaterial, subtotalLabor, subtotalHours }
+ * Ordered: known systems first (in SYSTEM_TYPES order), then general last.
+ */
+export function groupItemsBySystem(items) {
+  const groups = {}
+  for (const item of (items || [])) {
+    const key = resolveItemSystemType(item)
+    if (!groups[key]) groups[key] = []
+    groups[key].push(item)
+  }
+  // Sort: known system types in canonical order, then general/mixed last
+  const ORDER = ['power', 'lighting', 'fire_alarm', 'low_voltage', 'security', 'general', 'mixed']
+  const sorted = ORDER.filter(k => groups[k]).map(k => ({
+    key: k,
+    label: SYSTEM_GROUP_LABELS[k] || k,
+    items: groups[k],
+    subtotalMaterial: groups[k].reduce((s, i) => s + (i.materialCost || 0), 0),
+    subtotalLabor:    groups[k].reduce((s, i) => s + (i.hours || 0), 0),
+  }))
+  // Any unknown keys not in ORDER
+  for (const k of Object.keys(groups)) {
+    if (!ORDER.includes(k)) {
+      sorted.push({
+        key: k, label: SYSTEM_GROUP_LABELS[k] || k, items: groups[k],
+        subtotalMaterial: groups[k].reduce((s, i) => s + (i.materialCost || 0), 0),
+        subtotalLabor:    groups[k].reduce((s, i) => s + (i.hours || 0), 0),
+      })
+    }
+  }
+  return sorted
+}

@@ -157,6 +157,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       created_at: new Date().toISOString(),
       status: 'draft',
       outputMode: mergePrjDefault,
+      groupBy: 'none',
       inclusions: _ieD.inclusions || _qs.default_inclusions,
       exclusions: _ieD.exclusions || _qs.default_exclusions,
       validityText: _qs.default_validity_text,

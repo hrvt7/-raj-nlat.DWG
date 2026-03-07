@@ -21,7 +21,7 @@ import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, f
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
-import { OUTPUT_MODE_INCLEXCL } from './data/quoteDefaults.js'
+import { OUTPUT_MODE_INCLEXCL, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, resolveItemSystemType } from './data/quoteDefaults.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -131,6 +131,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const [pdfLevel, setPdfLevel] = useState('summary')
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [outputMode, setOutputMode] = useState(quote.outputMode || 'combined')
+  const [groupBy, setGroupBy] = useState(quote.groupBy || 'none')
 
   // ── Editable meta state ────────────────────────────────────────────────────
   const [editName, setEditName] = useState(quote.projectName || '')
@@ -151,6 +152,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       setEditRate(Number(quote.pricingData?.hourlyRate) || 9000)
       setEditMarkup(((quote.pricingData?.markup_pct) || 0) * 100)
       setOutputMode(quote.outputMode || 'combined')
+      setGroupBy(quote.groupBy || 'none')
       setEditInclusions(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
       setEditExclusions(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
       setEditValidity(quote.validityText ?? '')
@@ -165,6 +167,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || Number(editRate) !== (Number(quote.pricingData?.hourlyRate) || 9000)
     || Math.abs(Number(editMarkup) - ((quote.pricingData?.markup_pct || 0) * 100)) > 0.001
     || outputMode !== (quote.outputMode || 'combined')
+    || groupBy !== (quote.groupBy || 'none')
     || editInclusions !== (quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
     || editExclusions !== (quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
     || editValidity !== (quote.validityText ?? '')
@@ -187,6 +190,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     const updated = {
       ...quote,
       outputMode,
+      groupBy,
       projectName: editName,
       project_name: editName,
       name: editName,
@@ -215,6 +219,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     const liveQuote = {
       ...quote,
       outputMode,
+      groupBy,
       projectName: editName, project_name: editName, name: editName,
       clientName: editClient, client_name: editClient,
       gross: net, totalLabor: newTotalLabor,
@@ -224,7 +229,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       validityText: editValidity,
       paymentTermsText: editPaymentTerms,
     }
-    try { generatePdf(liveQuote, settings, pdfLevel, outputMode) }
+    try { generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy) }
     finally { setTimeout(() => setPdfGenerating(false), 1200) }
   }
 
@@ -334,8 +339,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         </div>
       )}
 
-      {/* ── Controls card grid (4 cards) ──────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+      {/* ── Controls card grid (5 cards) ──────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
 
         {/* Card A — Ajánlat mód (outputMode) */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -443,6 +448,28 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             })}
           </div>
         </div>
+
+        {/* Card E — Csoportosítás */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Csoportosítás</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {GROUP_BY_OPTIONS.map(opt => (
+              <button key={opt} onClick={() => setGroupBy(opt)} style={{
+                padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                background: groupBy === opt ? 'rgba(255,209,102,0.10)' : C.bg,
+                border: `1px solid ${groupBy === opt ? 'rgba(255,209,102,0.30)' : C.border}`,
+                color: groupBy === opt ? C.yellow : C.textSub,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                {GROUP_BY_LABELS[opt]}
+                {groupBy === opt && (
+                  <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* ── Main body: left (items) + right (sidebar) ────────────────────── */}
@@ -501,6 +528,70 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             </div>
           )}
 
+          {/* ── Items render: flat (none) or grouped (system) ──────── */}
+          {groupBy === 'system' ? (
+            // ── Grouped by system type ──
+            groupItemsBySystem(quote.items || []).map(group => {
+              const grpLabor = group.items.filter(i => i.type === 'labor')
+              const grpMat   = group.items.filter(i => i.type === 'material' || i.type === 'cable')
+              const grpLaborTotal  = grpLabor.reduce((s, i) => s + (i.hours || 0) * Number(editRate), 0)
+              const grpMatTotal    = grpMat.reduce((s, i) => s + (i.unitPrice || 0) * i.qty, 0)
+              const grpTotal       = outputMode === 'labor_only' ? grpLaborTotal : (grpLaborTotal + grpMatTotal)
+              return (
+                <div key={group.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Group header */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 16px', background: 'rgba(255,209,102,0.06)',
+                    border: `1px solid rgba(255,209,102,0.15)`, borderRadius: 10,
+                  }}>
+                    <span style={{ width: 4, height: 20, borderRadius: 2, background: C.yellow, flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.yellow }}>{group.label}</span>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{group.items.length} tétel</span>
+                    <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.text }}>
+                      {fmt(Math.round(grpTotal))} Ft
+                    </span>
+                  </div>
+                  {/* Labor items in this group */}
+                  {grpLabor.length > 0 && (
+                    <ItemsGroup
+                      title={`${group.label} · Munka`} count={grpLabor.length} accentColor={C.blue}
+                      items={grpLabor}
+                      renderRow={item => {
+                        const total = (item.hours || 0) * Number(editRate)
+                        return [
+                          item.name,
+                          `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
+                          `${fmt(Number(editRate))} Ft/ó`,
+                          `${(item.hours || 0).toFixed(2)} ó`,
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.blue }}>{fmt(Math.round(total))} Ft</span>,
+                        ]
+                      }}
+                    />
+                  )}
+                  {/* Material items in this group */}
+                  {outputMode !== 'labor_only' && grpMat.length > 0 && (
+                    <ItemsGroup
+                      title={`${group.label} · Anyagok`} count={grpMat.length} accentColor={C.text}
+                      items={grpMat}
+                      renderRow={item => {
+                        const total = (item.unitPrice || 0) * item.qty
+                        return [
+                          item.name,
+                          `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
+                          `${fmt(Math.round(item.unitPrice || 0))} Ft`,
+                          '—',
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.text }}>{fmt(Math.round(total))} Ft</span>,
+                        ]
+                      }}
+                    />
+                  )}
+                </div>
+              )
+            })
+          ) : (
+            // ── Flat (no grouping) ──
+            <>
           {/* Labor items — first */}
           {laborItems.length > 0 && (
             <ItemsGroup
@@ -535,6 +626,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                 ]
               }}
             />
+          )}
+            </>
           )}
 
           {/* ── Inclusions / Exclusions block ───────────────────────────── */}
@@ -1013,6 +1106,7 @@ function SaaSShell() {
       created_at:     new Date().toISOString(),
       status:         'draft',
       outputMode:     planPrjDefault,
+      groupBy:        'none',
       inclusions:     planDefaults.inclusions || qs.default_inclusions,
       exclusions:     planDefaults.exclusions || qs.default_exclusions,
       validityText:   qs.default_validity_text,

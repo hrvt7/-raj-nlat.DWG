@@ -1251,6 +1251,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         created_at:   new Date().toISOString(),
         status:      'draft',
         outputMode:   prjDefault,
+        groupBy:      'none',
         inclusions:   _ieD.inclusions || _qs.default_inclusions,
         exclusions:   _ieD.exclusions || _qs.default_exclusions,
         validityText: _qs.default_validity_text,

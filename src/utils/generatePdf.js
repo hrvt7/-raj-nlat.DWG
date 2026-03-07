@@ -13,6 +13,8 @@ const fmtDate = iso => {
   } catch { return new Date().toLocaleDateString('hu-HU') }
 }
 
+import { groupItemsBySystem, SYSTEM_GROUP_LABELS } from '../data/quoteDefaults.js'
+
 const WALL_LABELS = { drywall: 'GK', ytong: 'Ytong', brick: 'Tégla', concrete: 'Beton' }
 
 function escHtml(s) {
@@ -21,7 +23,7 @@ function escHtml(s) {
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 // outputMode: 'combined' | 'labor_only' | 'split_material_labor'
-export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined') {
+export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
   const vatPct    = Number(settings?.labor?.vat_percent) || 27
   const net       = Math.round(Number(quote.gross) || 0)
   const vatAmt    = Math.round(net * vatPct / 100)
@@ -70,7 +72,7 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     [`ÁFA (${vatPct}%)`, fmtHU(dVat) + ' Ft'],
   ].filter(Boolean)
 
-  const finTableRows = finRows.map(([label, val]) => `
+  let finTableRows = finRows.map(([label, val]) => `
     <tr>
       <td class="fin-label">${escHtml(label)}</td>
       <td class="fin-val">${val}</td>
@@ -80,109 +82,113 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
       <td class="fin-val">${fmtHU(dGross)} Ft</td>
     </tr>`
 
-  // ── Assembly summary (Összesített + Részletes) — outputMode aware ──────────
-  let assemblySectionHtml = ''
-  const assemblyRows = quote.assemblySummary || []
-  if (detailLevel !== 'compact' && assemblyRows.length > 0) {
-    const isSplit = outputMode === 'split_material_labor'
-    const isLaborOnly = outputMode === 'labor_only'
+  // ── Shared render helpers for assembly + detailed sections ──────────────────
+  const isSplit = outputMode === 'split_material_labor'
+  const isLaborOnly = outputMode === 'labor_only'
 
-    const rows = assemblyRows.map(a => {
+  const renderAssemblyTable = (asmRows, titleOverride) => {
+    if (!asmRows || asmRows.length === 0) return ''
+    const rows = asmRows.map(a => {
       const wallInfo = a.wallSplits
-        ? Object.entries(a.wallSplits)
-            .filter(([, n]) => n > 0)
-            .map(([k, n]) => `${WALL_LABELS[k] || k}: ${n}`)
-            .join(', ')
+        ? Object.entries(a.wallSplits).filter(([, n]) => n > 0).map(([k, n]) => `${WALL_LABELS[k] || k}: ${n}`).join(', ')
         : ''
-      const matCost   = Math.round(a.materialCost || 0)
+      const matCost = Math.round(a.materialCost || 0)
       const laborCost = Math.round(a.laborCost || (a.totalPrice || 0) - matCost)
       const displayTotal = isLaborOnly ? laborCost : (a.totalPrice || 0)
-      return `
-        <tr>
-          <td class="asm-name">${escHtml(a.name || '—')}</td>
-          <td class="td-center td-mono">${a.qty}</td>
-          <td class="td-center td-mono td-muted">${escHtml(wallInfo || '—')}</td>
-          ${isSplit ? `
-          <td class="td-right td-mono">${fmtHU(matCost)} Ft</td>
-          <td class="td-right td-mono">${fmtHU(laborCost)} Ft</td>` : ''}
-          <td class="td-right td-price">${fmtHU(displayTotal)} Ft</td>
-        </tr>`
+      return `<tr>
+        <td class="asm-name">${escHtml(a.name || '—')}</td>
+        <td class="td-center td-mono">${a.qty}</td>
+        <td class="td-center td-mono td-muted">${escHtml(wallInfo || '—')}</td>
+        ${isSplit ? `<td class="td-right td-mono">${fmtHU(matCost)} Ft</td><td class="td-right td-mono">${fmtHU(laborCost)} Ft</td>` : ''}
+        <td class="td-right td-price">${fmtHU(displayTotal)} Ft</td>
+      </tr>`
     }).join('')
-
     const lastColLabel = isLaborOnly ? 'Munkadíj (nettó)' : isSplit ? 'Összesen (nettó)' : 'Összeg (nettó)'
-    assemblySectionHtml = `
-      <div class="section-header">${isLaborOnly ? 'Munkadíj összesítő' : 'Munkák összesítő'}</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Munkacsoport / Tevékenység</th>
-            <th class="th-center">Menny.</th>
-            <th class="th-center">Falbontás</th>
-            ${isSplit ? '<th class="th-right">Anyag (nettó)</th><th class="th-right">Munkadíj (nettó)</th>' : ''}
-            <th class="th-right">${lastColLabel}</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`
+    const title = titleOverride || (isLaborOnly ? 'Munkadíj összesítő' : 'Munkák összesítő')
+    return `<div class="section-header">${escHtml(title)}</div>
+      <table class="data-table"><thead><tr>
+        <th>Munkacsoport / Tevékenység</th><th class="th-center">Menny.</th><th class="th-center">Falbontás</th>
+        ${isSplit ? '<th class="th-right">Anyag (nettó)</th><th class="th-right">Munkadíj (nettó)</th>' : ''}
+        <th class="th-right">${lastColLabel}</th>
+      </tr></thead><tbody>${rows}</tbody></table>`
   }
 
-  // ── Detailed line items (Részletes) — outputMode aware ────────────────────
+  const renderDetailRows = items => items.map(item => {
+    const unitPrice = Number(item.unitPrice) || 0
+    const qty = Number(item.qty) || 0
+    const hours = Number(item.hours) || 0
+    const total = item.type === 'labor' ? hours * hourlyRate : unitPrice * qty
+    return `<tr>
+      <td class="td-name">${escHtml(item.name || '—')}</td>
+      <td class="td-center td-mono">${fmtHU(+qty.toFixed(2))} ${escHtml(item.unit || '')}</td>
+      <td class="td-right td-mono">${item.type === 'labor' ? fmtHU(hourlyRate) + ' Ft/ó' : fmtHU(Math.round(unitPrice)) + ' Ft'}</td>
+      <td class="td-right td-mono">${hours > 0 ? hours.toFixed(2) + ' ó' : '—'}</td>
+      <td class="td-price td-right">${fmtHU(Math.round(total))} Ft</td>
+    </tr>`
+  }).join('')
+
+  const renderDetailTables = (items, groupLabel) => {
+    const materials = items.filter(i => i.type === 'material' || i.type === 'cable')
+    const labors = items.filter(i => i.type === 'labor')
+    const prefix = groupLabel ? groupLabel + ' · ' : ''
+    let html = ''
+    if (outputMode !== 'labor_only' && materials.length > 0) {
+      html += `<div class="section-header">${escHtml(prefix)}Részletes tételek – Anyagok</div>
+        <table class="data-table"><thead><tr>
+          <th>Megnevezés</th><th class="th-center">Mennyiség</th><th class="th-right">Egységár</th>
+          <th class="th-right">Munkaóra</th><th class="th-right">Összeg (nettó)</th>
+        </tr></thead><tbody>${renderDetailRows(materials)}</tbody></table>`
+    }
+    if (labors.length > 0) {
+      html += `<div class="section-header">${escHtml(prefix + (isLaborOnly ? 'Részletes tételek – Szerelési munka' : 'Részletes tételek – Munka'))}</div>
+        <table class="data-table"><thead><tr>
+          <th>Megnevezés</th><th class="th-center">Mennyiség</th><th class="th-right">Óradíj</th>
+          <th class="th-right">Munkaóra</th><th class="th-right">${isLaborOnly ? 'Munkadíj (nettó)' : 'Összeg (nettó)'}</th>
+        </tr></thead><tbody>${renderDetailRows(labors)}</tbody></table>`
+    }
+    return html
+  }
+
+  // ── Assembly summary + Detailed items — with optional system grouping ──────
+  let assemblySectionHtml = ''
   let detailedSectionHtml = ''
-  if (detailLevel === 'detailed' && (quote.items || []).length > 0) {
-    // Group items by type
-    const materials = (quote.items || []).filter(i => i.type === 'material' || i.type === 'cable')
-    const labors    = (quote.items || []).filter(i => i.type === 'labor')
+  const assemblyRows = quote.assemblySummary || []
+  const allItems = quote.items || []
 
-    const renderRows = items => items.map(item => {
-      const unitPrice = Number(item.unitPrice) || 0
-      const qty       = Number(item.qty) || 0
-      const hours     = Number(item.hours) || 0
-      const matTotal  = unitPrice * qty
-      const laborTotal = hours * hourlyRate
-      const total = item.type === 'labor' ? laborTotal : matTotal
-      return `
-        <tr>
-          <td class="td-name">${escHtml(item.name || '—')}</td>
-          <td class="td-center td-mono">${fmtHU(+qty.toFixed(2))} ${escHtml(item.unit || '')}</td>
-          <td class="td-right td-mono">${item.type === 'labor' ? fmtHU(hourlyRate) + ' Ft/ó' : fmtHU(Math.round(unitPrice)) + ' Ft'}</td>
-          <td class="td-right td-mono">${hours > 0 ? hours.toFixed(2) + ' ó' : '—'}</td>
-          <td class="td-price td-right">${fmtHU(Math.round(total))} Ft</td>
-        </tr>`
+  if (groupBy === 'system') {
+    // ── System-grouped rendering ──
+    const groups = groupItemsBySystem(allItems)
+
+    // Financial subtotals per group (inserted before grand total)
+    const groupSubtotals = groups.map(g => {
+      const grpMat = g.items.filter(i => i.type === 'material' || i.type === 'cable').reduce((s, i) => s + (i.unitPrice || 0) * i.qty, 0)
+      const grpLabor = g.items.filter(i => i.type === 'labor').reduce((s, i) => s + (i.hours || 0) * hourlyRate, 0)
+      const grpTotal = isLaborOnly ? grpLabor : (grpMat + grpLabor)
+      return `<tr class="fin-subtotal"><td class="fin-label">${escHtml(g.label)}</td><td class="fin-val">${fmtHU(Math.round(grpTotal))} Ft</td></tr>`
     }).join('')
+    // Inject group subtotals into financial table
+    finTableRows = groupSubtotals + finTableRows
 
-    // Material table — hidden in labor_only mode
-    const materialTableHtml = outputMode !== 'labor_only' && materials.length > 0 ? `
-      <div class="section-header">Részletes tételek – Anyagok</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Megnevezés</th>
-            <th class="th-center">Mennyiség</th>
-            <th class="th-right">Egységár</th>
-            <th class="th-right">Munkaóra</th>
-            <th class="th-right">Összeg (nettó)</th>
-          </tr>
-        </thead>
-        <tbody>${renderRows(materials)}</tbody>
-      </table>` : ''
+    // Assembly summary — grouped
+    if (detailLevel !== 'compact' && assemblyRows.length > 0) {
+      // We don't have systemType on assembly rows, so render flat but wrapped
+      assemblySectionHtml = renderAssemblyTable(assemblyRows, null)
+    }
 
-    // Labor table — always shown
-    const laborTableHtml = labors.length > 0 ? `
-      <div class="section-header">${outputMode === 'labor_only' ? 'Részletes tételek – Szerelési munka' : 'Részletes tételek – Munka'}</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Megnevezés</th>
-            <th class="th-center">Mennyiség</th>
-            <th class="th-right">Óradíj</th>
-            <th class="th-right">Munkaóra</th>
-            <th class="th-right">${outputMode === 'labor_only' ? 'Munkadíj (nettó)' : 'Összeg (nettó)'}</th>
-          </tr>
-        </thead>
-        <tbody>${renderRows(labors)}</tbody>
-      </table>` : ''
-
-    detailedSectionHtml = materialTableHtml + laborTableHtml
+    // Detailed items — grouped by system
+    if (detailLevel === 'detailed' && allItems.length > 0) {
+      detailedSectionHtml = groups.map(g =>
+        `<div class="group-header-pdf">${escHtml(g.label)}</div>` + renderDetailTables(g.items, g.label)
+      ).join('')
+    }
+  } else {
+    // ── Flat (no grouping) ──
+    if (detailLevel !== 'compact' && assemblyRows.length > 0) {
+      assemblySectionHtml = renderAssemblyTable(assemblyRows, null)
+    }
+    if (detailLevel === 'detailed' && allItems.length > 0) {
+      detailedSectionHtml = renderDetailTables(allItems, '')
+    }
   }
 
   // ── OutputMode customer-facing note ──────────────────────────────────────
@@ -283,6 +289,13 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     .fin-total-row { border-top: 2px solid #D1D5DB !important; border-bottom: none !important; }
     .fin-total-row .fin-label { font-family: 'Syne', sans-serif; font-size: 13pt; font-weight: 800; color: #047857; padding-top: 10px; }
     .fin-total-row .fin-val   { font-family: 'Syne', sans-serif; font-size: 13pt; font-weight: 800; color: #047857; padding-top: 10px; }
+
+    /* ── GROUP HEADER (system grouping) ──────────────────────────────── */
+    .group-header-pdf {
+      font-family: 'Syne', sans-serif; font-size: 10pt; font-weight: 800;
+      color: #92400E; background: #FFFBEB; border: 1px solid #FDE68A;
+      border-radius: 6px; padding: 7px 12px; margin-top: 16px; margin-bottom: 8px;
+    }
 
     /* ── SECTION HEADER ───────────────────────────────────────────────── */
     .section-header {
