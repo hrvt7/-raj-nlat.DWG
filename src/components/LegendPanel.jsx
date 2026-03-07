@@ -685,7 +685,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}
                           >
-                            {sym.accepted && <span style={{ color: '#000', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                            {sym.accepted && <span style={{ color: '#09090B', fontSize: 11, fontWeight: 700 }}>✓</span>}
                           </button>
 
                           {/* Symbol image */}
@@ -721,7 +721,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
                               <div style={{ fontFamily: 'DM Mono', fontSize: 8, color: C.muted, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                                 title={sym.sourceText}
                               >
-                                📄 {sym.sourceText}
+                                {sym.sourceText}
                               </div>
                             )}
                             {/* Label input */}
@@ -885,7 +885,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
                       width: '100%', transition: 'all 0.15s',
                     }}
                   >
-                    🔍 Detektálás indítása ({templates.length} sablon)
+                    Detektálás indítása ({templates.length} sablon)
                   </button>
                 ) : onRunDetection ? (
                   <div style={{

@@ -204,11 +204,11 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
             </div>
           ) : saved ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '40px 0' }}>
-              <div style={{ fontSize: 40 }}>✅</div>
+              <div style={{ fontSize: 28, color: C.accent, fontWeight: 700 }}>✓</div>
               <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.text }}>Árajánlat létrehozva!</div>
               <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Az árajánlat megjelenik az Árajánlatok listában.</div>
               <button onClick={onClose} style={{
-                fontFamily: 'DM Mono', fontSize: 12, color: '#000',
+                fontFamily: 'DM Mono', fontSize: 12, color: '#09090B',
                 background: C.accent, border: 'none', borderRadius: 8, padding: '10px 28px', cursor: 'pointer',
               }}>Bezárás</button>
             </div>
@@ -231,7 +231,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                       borderRadius: 8,
                     }}>
                       <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, flex: 1 }}>
-                        📄 {ps.planName}
+                        {ps.planName}
                       </span>
                       <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.accent }}>
                         {fmtFt(ps.total)}
@@ -248,7 +248,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                       borderRadius: 8,
                     }}>
                       <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        📄 {p.name || p.fileName || 'Terv'}
+                        {p.name || p.fileName || 'Terv'}
                       </span>
                       <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red, flexShrink: 0 }}>
                         ⚠ Nincs kalkuláció
@@ -295,7 +295,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                           borderRadius: 8,
                         }}>
                           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            📄 {p.name || p.fileName || 'Terv'}
+                            {p.name || p.fileName || 'Terv'}
                           </span>
                           <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red, flexShrink: 0 }}>⚠ Nincs kalkuláció</span>
                           {onOpenPlan && (
@@ -440,14 +440,14 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
               disabled={!pricing || saving}
               style={{
                 fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-                color: pricing ? '#000' : C.muted,
+                color: pricing ? '#09090B' : C.muted,
                 background: pricing ? C.accent : 'rgba(113,113,122,0.1)',
                 border: 'none', borderRadius: 8, padding: '8px 20px',
                 cursor: pricing ? 'pointer' : 'default',
                 transition: 'all 0.15s',
               }}
             >
-              {saving ? 'Mentés…' : '📋 Árajánlat létrehozása'}
+              {saving ? 'Mentés…' : 'Árajánlat létrehozása'}
             </button>
           </div>
         )}

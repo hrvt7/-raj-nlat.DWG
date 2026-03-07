@@ -372,7 +372,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                 fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
                 opacity: isDirty ? 1 : 0.5, transition: 'all 0.15s',
               }}>
-              {isDirty ? '💾 Mentés' : '✓ Mentve'}
+              {isDirty ? 'Mentés' : '✓ Mentve'}
             </button>
           </div>
 
@@ -435,7 +435,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               opacity: pdfGenerating ? 0.7 : 1, transition: 'all 0.15s',
             }}>
-              {pdfGenerating ? '⏳ Generálás...' : '📄 PDF letöltése'}
+              {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
             </button>
           </div>
 
@@ -588,7 +588,7 @@ function AuthModal({ onAuth }) {
           disabled={loading || !email || !password}
           style={{
             width: '100%', padding: '11px', borderRadius: 8, border: 'none',
-            background: loading ? C.accentDim : C.accent, color: '#0A0E1A',
+            background: loading ? C.accentDim : C.accent, color: '#09090B',
             fontWeight: 700, fontSize: 15, cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
@@ -893,7 +893,7 @@ function SaaSShell() {
                   background: C.accentDim, border: `1px solid ${C.accentBorder}`,
                   borderRadius: 20, padding: '3px 10px', maxWidth: 160,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  ⚡ {userEmail}
+                  {userEmail}
                 </span>
                 <button onClick={handleSignOut} style={{
                   background: 'transparent', border: `1px solid ${C.border}`,
@@ -907,7 +907,7 @@ function SaaSShell() {
                   fontFamily: 'DM Mono', fontSize: 10, color: '#FFD166',
                   background: 'rgba(255,209,102,0.1)', border: '1px solid rgba(255,209,102,0.3)',
                   borderRadius: 20, padding: '2px 8px',
-                }}>⚠️ TESZT – vendég mód</span>
+                }}>TESZT – vendég mód</span>
                 <button onClick={() => setShowAuth(true)} style={{
                   background: C.accentDim, border: `1px solid ${C.accentBorder}`,
                   borderRadius: 7, padding: '5px 14px', cursor: 'pointer',
@@ -1034,7 +1034,7 @@ function SaaSShell() {
               setLegendPanelData(null)
               const plans = projId ? getPlansByProject(projId) : []
               if (plans.length === 0) {
-                showToast('📄', 'Nincs tervrajz a projektben — tölts fel PDF-et a detektáláshoz.')
+                showToast('', 'Nincs tervrajz a projektben — tölts fel PDF-et a detektáláshoz.')
                 return
               }
               setDetectPanelPlans(plans)

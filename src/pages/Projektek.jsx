@@ -422,7 +422,7 @@ function ProjectListView({ onOpenProject }) {
             }}
           />
           <button onClick={handleCreate} style={{
-            background: C.accent, color: '#000', border: 'none', borderRadius: 6,
+            background: C.accent, color: '#09090B', border: 'none', borderRadius: 6,
             padding: '8px 16px', fontFamily: 'Syne', fontWeight: 700, fontSize: 12, cursor: 'pointer',
           }}>
             Létrehozás
@@ -467,7 +467,7 @@ function ProjectListView({ onOpenProject }) {
 // ── DETECTION HISTORY MINI ──────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const STATUS_LABEL = { running: '⏳ Fut', completed: '✅ Kész', applied: '✅ Alkalmazva', failed: '❌ Hiba' }
+const STATUS_LABEL = { running: 'Fut…', completed: 'Kész', applied: 'Alkalmazva', failed: 'Hiba' }
 const STATUS_COLOR = { running: C.yellow, completed: C.accent, applied: C.accent, failed: '#FF6B6B' }
 
 function DetectionHistoryMini({ projectId, onReopen }) {
@@ -491,7 +491,7 @@ function DetectionHistoryMini({ projectId, onReopen }) {
           cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
         }}
       >
-        📋 Korábbi detekciók
+        Korábbi detekciók
         <span style={{ fontSize: 9, color: C.muted }}>{open ? '▲' : '▼'}</span>
       </button>
 
@@ -692,9 +692,9 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         if (phase === 'done') return null
 
         const PHASES = {
-          upload: { idx: 0, icon: '📂', text: 'Töltsd fel a tervrajzokat', sub: 'PDF, DXF vagy DWG fájlok', color: C.accent, border: 'rgba(0,229,160,0.25)', bg: 'rgba(0,229,160,0.04)' },
-          legend: { idx: 1, icon: '📖', text: 'Adj hozzá jelmagyarázatot', sub: 'Szimbólum sablonok automatikus felismerése', color: C.blue, border: 'rgba(76,201,240,0.25)', bg: 'rgba(76,201,240,0.04)' },
-          work:   { idx: 2, icon: '⚡', text: 'Nyisd meg a tervrajzokat → detektálás → kalkuláció', sub: `${noCalcPlans} tervrajz vár kalkulációra`, color: C.textSub, border: C.border, bg: 'rgba(255,255,255,0.02)' },
+          upload: { idx: 0, icon: '›', text: 'Töltsd fel a tervrajzokat', sub: 'PDF, DXF vagy DWG fájlok', color: C.accent, border: 'rgba(0,229,160,0.25)', bg: 'rgba(0,229,160,0.04)' },
+          legend: { idx: 1, icon: '›', text: 'Adj hozzá jelmagyarázatot', sub: 'Szimbólum sablonok automatikus felismerése', color: C.blue, border: 'rgba(76,201,240,0.25)', bg: 'rgba(76,201,240,0.04)' },
+          work:   { idx: 2, icon: '›', text: 'Nyisd meg a tervrajzokat → detektálás → kalkuláció', sub: `${noCalcPlans} tervrajz vár kalkulációra`, color: C.textSub, border: C.border, bg: 'rgba(255,255,255,0.02)' },
         }
         const p = PHASES[phase]
         const dots = [0, 1, 2].map(i => i <= p.idx ? p.color : C.border)
