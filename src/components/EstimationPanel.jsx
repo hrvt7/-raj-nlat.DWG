@@ -89,6 +89,21 @@ export default function EstimationPanel({
     return map
   }, [markers])
 
+  // ── Count by assembly ID (unified source of truth for pricing) ──
+  // Groups markers by their asmId. Markers without asmId fall back to
+  // the assignments dict (for detection markers or legacy data).
+  const countByAsmId = useMemo(() => {
+    const map = {}  // { [asmId]: { qty, category } }
+    for (const m of markers) {
+      if (m.category === 'panel') continue  // panel is reference only
+      const asmId = m.asmId || assignments[m.category]?.assemblyId
+      if (!asmId) continue
+      if (!map[asmId]) map[asmId] = { qty: 0, category: m.category }
+      map[asmId].qty += 1
+    }
+    return map
+  }, [markers, assignments])
+
   const totalMarkers = markers.length
   const panelMarker  = markers.find(m => m.category === 'panel')
 
@@ -205,25 +220,25 @@ export default function EstimationPanel({
   }, [cableData])
 
   // ── Cost estimate ──
+  // UNIFIED: groups by asmId (from markers directly) instead of category,
+  // ensuring alignment with TakeoffWorkspace's markerTakeoffRows.
   const costEstimate = useMemo(() => {
     // ── 1.5 NECA Produktivitási faktor kiszámítása ──
     const contextDefaults = settings?.context_defaults || {}
     const productivityFactor = calcProductivityFactor(contextDefaults)
 
     let totalMaterial = 0, totalLaborMinutes = 0
-    const categoryDetails = [] // per-category breakdown for summary
+    const categoryDetails = [] // per-assembly breakdown for summary
 
-    for (const cat of Object.keys(countByCategory)) {
-      if (cat === 'panel') continue // panel doesn't directly cost (its assembly handles it)
-      const asgn = assignments[cat]
-      if (!asgn?.assemblyId) continue
-      const asm = assemblies.find(a => a.id === asgn.assemblyId)
+    // ── Primary: iterate by asmId (unified with TakeoffWorkspace) ──
+    for (const [asmId, info] of Object.entries(countByAsmId)) {
+      const asm = assemblies.find(a => a.id === asmId)
       if (!asm) continue
 
+      const cat    = info.category
       const catDef = COUNT_CATEGORIES.find(c => c.key === cat)
-      const qty    = countByCategory[cat]
-      const ov     = quoteOverrides[cat]
-      // Pass COUNT var for formula evaluation (1.2)
+      const qty    = info.qty
+      const ov     = quoteOverrides[cat] || quoteOverrides[asmId]
       const formulaVars = { COUNT: qty, METER: 0 }
 
       if (catDef?.isCableTray) {
@@ -242,15 +257,16 @@ export default function EstimationPanel({
         const labMin   = labPerM * totalMeters
         totalMaterial     += matCost
         totalLaborMinutes += labMin
-        categoryDetails.push({ key: cat, label: catDef.label, color: catDef.color, qty, matCost, labMin, isCT: true, totalMeters })
+        categoryDetails.push({ key: asmId, label: asm.name || catDef?.label || cat, color: catDef?.color || C.muted, qty, matCost, labMin, isCT: true, totalMeters })
       } else {
+        const asgn = assignments[cat] || {}
         const matPerUnit = ov?.matPerUnit != null ? ov.matPerUnit : (asgn.materialOverride != null ? asgn.materialOverride : getAsmMaterialCost(asm, formulaVars))
         const labPerUnit = ov?.laborMin   != null ? ov.laborMin   : getAsmLaborMinutes(asm, formulaVars, productivityFactor)
         const matCost    = matPerUnit * qty
         const labMin     = labPerUnit * qty
         totalMaterial     += matCost
         totalLaborMinutes += labMin
-        categoryDetails.push({ key: cat, label: catDef?.label || cat, color: catDef?.color || C.muted, qty, matCost, labMin, isCT: false })
+        categoryDetails.push({ key: asmId, label: asm.name || catDef?.label || cat, color: catDef?.color || C.muted, qty, matCost, labMin, isCT: false })
       }
     }
 
@@ -292,7 +308,7 @@ export default function EstimationPanel({
       // Legacy compat aliases
       marginPercent: markupPercent, overheadCost: markupAmount,
     }
-  }, [assignments, quoteOverrides, countByCategory, assemblies, cableData, measurements, scale, settings, getAsmMaterialCost, getAsmLaborMinutes])
+  }, [countByAsmId, assignments, quoteOverrides, countByCategory, assemblies, cableData, measurements, scale, settings, getAsmMaterialCost, getAsmLaborMinutes])
 
   const TABS = [
     { id: 'summary', label: 'Összesítő' },

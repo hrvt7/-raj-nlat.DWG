@@ -554,16 +554,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (onMarkersChange) {
         onMarkersChange([...markersRef.current])
       }
-      // Auto-populate assignment: when user marks with a specific assembly,
-      // automatically assign that assembly to the resolved category in EstimationPanel
+      // Auto-populate assignment: always update to match the LAST-used assembly
+      // for this category. This keeps the AssignTab dropdown in sync.
+      // Pricing now uses countByAsmId (from markers directly), so this is
+      // for UI display only — not the pricing source of truth.
       if (asm && resolvedCategory) {
         setAssignments(prev => {
           const existing = prev[resolvedCategory]
-          // Only auto-assign if no assignment exists yet, or if it's the same assembly
-          if (!existing?.assemblyId || existing.assemblyId === asm.id) {
-            return { ...prev, [resolvedCategory]: { ...(existing || {}), assemblyId: asm.id } }
-          }
-          return prev
+          return { ...prev, [resolvedCategory]: { ...(existing || {}), assemblyId: asm.id } }
         })
       }
       return
@@ -728,13 +726,15 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   }, [drawOverlay])
 
   // ── Count summary ──
-  // Groups markers by category key, also collects asmId for label resolution
+  // UNIFIED: groups markers by asmId for assembly-level detail.
+  // Markers without asmId (panel, detection) group by category as fallback.
   const countSummary = (() => {
-    const map = {}       // { [category]: count }
-    const asmMap = {}    // { [category]: asmId } — first asmId seen per category
+    const map = {}       // { [groupKey]: count }
+    const asmMap = {}    // { [groupKey]: asmId }
     for (const m of markersRef.current) {
-      map[m.category] = (map[m.category] || 0) + 1
-      if (m.asmId && !asmMap[m.category]) asmMap[m.category] = m.asmId
+      const groupKey = m.asmId || m.category
+      map[groupKey] = (map[groupKey] || 0) + 1
+      if (m.asmId) asmMap[groupKey] = m.asmId
     }
     return { counts: map, asmIds: asmMap }
   })()
