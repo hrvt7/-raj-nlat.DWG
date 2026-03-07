@@ -201,6 +201,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const matItems   = (quote.items || []).filter(i => i.type === 'material' || i.type === 'cable')
   const laborItems = (quote.items || []).filter(i => i.type === 'labor')
 
+  // ── Display values per outputMode (internal data untouched) ──────────────
+  const displayNet   = outputMode === 'labor_only' ? newTotalLabor + Math.round(newTotalLabor * (Number(editMarkup) / 100)) : net
+  const displayVat   = Math.round(displayNet * vatPct / 100)
+  const displayGross = displayNet + displayVat
+
   // Label style reused throughout
   const labelStyle = { fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5, display: 'block' }
   const monoVal    = { fontFamily: 'DM Mono', fontSize: 13, color: C.text, fontWeight: 500 }
@@ -230,18 +235,20 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           background: `linear-gradient(135deg, ${C.accent}18, ${C.blue}0a)`,
           border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '18px 20px', gridColumn: 'span 1',
         }}>
-          <span style={labelStyle}>Bruttó végösszeg</span>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent, lineHeight: 1 }}>{fmt(gross)} Ft</div>
+          <span style={labelStyle}>Bruttó végösszeg{outputMode === 'labor_only' ? ' (munkadíj)' : ''}</span>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent, lineHeight: 1 }}>{fmt(displayGross)} Ft</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>
-            Nettó {fmt(net)} + ÁFA {vatPct}%
+            Nettó {fmt(displayNet)} + ÁFA {vatPct}%
           </div>
         </div>
-        {/* Materials */}
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
-          <span style={labelStyle}>Anyagköltség</span>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.text }}>{fmt(Math.round(quote.totalMaterials || 0))} Ft</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>nettó</div>
-        </div>
+        {/* Materials — hidden in labor_only */}
+        {outputMode !== 'labor_only' && (
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+            <span style={labelStyle}>Anyagköltség</span>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.text }}>{fmt(Math.round(quote.totalMaterials || 0))} Ft</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>nettó</div>
+          </div>
+        )}
         {/* Labor */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
           <span style={labelStyle}>Munkadíj</span>
@@ -272,7 +279,10 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: C.bg }}>
-                    {['Tevékenység', 'db', 'Összeg (nettó)'].map((h, i) => (
+                    {(outputMode === 'split_material_labor'
+                      ? ['Tevékenység', 'db', 'Anyag', 'Munkadíj', 'Összesen']
+                      : ['Tevékenység', 'db', outputMode === 'labor_only' ? 'Munkadíj (nettó)' : 'Összeg (nettó)']
+                    ).map((h, i) => (
                       <th key={h} style={{
                         padding: '8px 14px', fontFamily: 'DM Mono', fontSize: 10, color: C.muted,
                         textAlign: i === 0 ? 'left' : 'right', fontWeight: 500,
@@ -283,13 +293,27 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {quote.assemblySummary.map((a, i) => (
-                    <tr key={a.id || i} style={{ borderBottom: `1px solid ${C.border}20` }}>
-                      <td style={{ padding: '10px 14px', fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>{a.name}</td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 11, color: C.muted, textAlign: 'right' }}>{a.qty}</td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 500, textAlign: 'right' }}>{fmt(a.totalPrice || 0)} Ft</td>
-                    </tr>
-                  ))}
+                  {quote.assemblySummary.map((a, i) => {
+                    const matCost   = Math.round(a.materialCost || 0)
+                    const laborCost = Math.round(a.laborCost || (a.totalPrice || 0) - matCost)
+                    return (
+                      <tr key={a.id || i} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                        <td style={{ padding: '10px 14px', fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>{a.name}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 11, color: C.muted, textAlign: 'right' }}>{a.qty}</td>
+                        {outputMode === 'split_material_labor' ? (
+                          <>
+                            <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 12, color: C.muted, textAlign: 'right' }}>{fmt(matCost)} Ft</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 12, color: C.blue, textAlign: 'right' }}>{fmt(laborCost)} Ft</td>
+                            <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 500, textAlign: 'right' }}>{fmt(a.totalPrice || 0)} Ft</td>
+                          </>
+                        ) : (
+                          <td style={{ padding: '10px 14px', fontFamily: 'DM Mono', fontSize: 12, color: outputMode === 'labor_only' ? C.blue : C.text, fontWeight: 500, textAlign: 'right' }}>
+                            {fmt(outputMode === 'labor_only' ? laborCost : (a.totalPrice || 0))} Ft
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -313,8 +337,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             />
           )}
 
-          {/* Material items — second */}
-          {matItems.length > 0 && (
+          {/* Material items — second (hidden in labor_only mode) */}
+          {outputMode !== 'labor_only' && matItems.length > 0 && (
             <ItemsGroup
               title="Anyagok" count={matItems.length} accentColor={C.text}
               items={matItems}

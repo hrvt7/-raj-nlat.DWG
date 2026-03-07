@@ -21,12 +21,19 @@ function escHtml(s) {
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 // outputMode: 'combined' | 'labor_only' | 'split_material_labor'
-// Currently passed through for future rendering logic; does not alter output yet.
 export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined') {
   const vatPct    = Number(settings?.labor?.vat_percent) || 27
   const net       = Math.round(Number(quote.gross) || 0)
   const vatAmt    = Math.round(net * vatPct / 100)
   const gross     = net + vatAmt
+
+  // Display-only values for labor_only mode (internal data unchanged)
+  const laborNet   = outputMode === 'labor_only' ? Math.round(Number(quote.totalLabor) || 0) : net
+  const laborVat   = Math.round(laborNet * vatPct / 100)
+  const laborGross = laborNet + laborVat
+  const dNet   = outputMode === 'labor_only' ? laborNet   : net
+  const dVat   = outputMode === 'labor_only' ? laborVat   : vatAmt
+  const dGross = outputMode === 'labor_only' ? laborGross : gross
   const company   = settings?.company || {}
   const qSettings = settings?.quote   || {}
   const validity  = parseInt(qSettings.validity_days) || 30
@@ -41,25 +48,26 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     ? `<img src="${logoSrc}" style="max-height:56px;max-width:180px;object-fit:contain;display:block;" />`
     : `<span class="company-name-text">${escHtml(company.name || 'TakeoffPro')}</span>`
 
-  // ── KPI cards ─────────────────────────────────────────────────────────────
-  const kpiCards = [
-    { label: 'Anyagköltség (nettó)', value: fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft', accent: false },
+  // ── KPI cards (filtered by outputMode) ────────────────────────────────────
+  const kpiCardDefs = [
+    outputMode !== 'labor_only' && { label: 'Anyagköltség (nettó)', value: fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft', accent: false },
     { label: 'Munkadíj (nettó)',     value: fmtHU(Math.round(quote.totalLabor || 0))     + ' Ft', accent: false },
     { label: 'Munkaóra',             value: (quote.totalHours || 0).toFixed(1)             + ' ó',  accent: false },
-    { label: 'Bruttó végösszeg',     value: fmtHU(gross)                                  + ' Ft', accent: true  },
-  ].map(k => `
+    { label: outputMode === 'labor_only' ? 'Bruttó végösszeg (munkadíj)' : 'Bruttó végösszeg', value: fmtHU(dGross) + ' Ft', accent: true },
+  ].filter(Boolean)
+  const kpiCards = kpiCardDefs.map(k => `
     <div class="kpi-card${k.accent ? ' kpi-accent' : ''}">
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-value">${k.value}</div>
     </div>`).join('')
 
-  // ── Financial summary table (no markup/margin disclosed to client) ────────
+  // ── Financial summary table (filtered by outputMode) ─────────────────────
   const finRows = [
-    ['Anyagköltség',       fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft'],
+    outputMode !== 'labor_only' && ['Anyagköltség', fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft'],
     ['Munkadíj',           fmtHU(Math.round(quote.totalLabor || 0))     + ' Ft'],
-    ['Nettó összköltség',  fmtHU(net)                                   + ' Ft'],
-    [`ÁFA (${vatPct}%)`,   fmtHU(vatAmt)                                + ' Ft'],
-  ]
+    ['Nettó összköltség',  fmtHU(dNet)                                  + ' Ft'],
+    [`ÁFA (${vatPct}%)`,   fmtHU(dVat)                                  + ' Ft'],
+  ].filter(Boolean)
 
   const finTableRows = finRows.map(([label, val]) => `
     <tr>
@@ -68,13 +76,16 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     </tr>`).join('') + `
     <tr class="fin-total-row">
       <td class="fin-label">BRUTTÓ VÉGÖSSZEG</td>
-      <td class="fin-val">${fmtHU(gross)} Ft</td>
+      <td class="fin-val">${fmtHU(dGross)} Ft</td>
     </tr>`
 
-  // ── Assembly summary (Összesített + Részletes) ─────────────────────────────
+  // ── Assembly summary (Összesített + Részletes) — outputMode aware ──────────
   let assemblySectionHtml = ''
   const assemblyRows = quote.assemblySummary || []
   if (detailLevel !== 'compact' && assemblyRows.length > 0) {
+    const isSplit = outputMode === 'split_material_labor'
+    const isLaborOnly = outputMode === 'labor_only'
+
     const rows = assemblyRows.map(a => {
       const wallInfo = a.wallSplits
         ? Object.entries(a.wallSplits)
@@ -82,15 +93,22 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
             .map(([k, n]) => `${WALL_LABELS[k] || k}: ${n}`)
             .join(', ')
         : ''
+      const matCost   = Math.round(a.materialCost || 0)
+      const laborCost = Math.round(a.laborCost || (a.totalPrice || 0) - matCost)
+      const displayTotal = isLaborOnly ? laborCost : (a.totalPrice || 0)
       return `
         <tr>
           <td class="asm-name">${escHtml(a.name || '—')}</td>
           <td class="td-center td-mono">${a.qty}</td>
           <td class="td-center td-mono td-muted">${escHtml(wallInfo || '—')}</td>
-          <td class="td-right td-price">${fmtHU(a.totalPrice || 0)} Ft</td>
+          ${isSplit ? `
+          <td class="td-right td-mono">${fmtHU(matCost)} Ft</td>
+          <td class="td-right td-mono">${fmtHU(laborCost)} Ft</td>` : ''}
+          <td class="td-right td-price">${fmtHU(displayTotal)} Ft</td>
         </tr>`
     }).join('')
 
+    const lastColLabel = isLaborOnly ? 'Munkadíj (nettó)' : 'Összeg (nettó)'
     assemblySectionHtml = `
       <div class="section-header">Munkák összesítő</div>
       <table class="data-table">
@@ -99,14 +117,15 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
             <th>Munkacsoport / Tevékenység</th>
             <th class="th-center">Menny.</th>
             <th class="th-center">Falbontás</th>
-            <th class="th-right">Összeg (nettó)</th>
+            ${isSplit ? '<th class="th-right">Anyag</th><th class="th-right">Munkadíj</th>' : ''}
+            <th class="th-right">${lastColLabel}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>`
   }
 
-  // ── Detailed line items (Részletes) ───────────────────────────────────────
+  // ── Detailed line items (Részletes) — outputMode aware ────────────────────
   let detailedSectionHtml = ''
   if (detailLevel === 'detailed' && (quote.items || []).length > 0) {
     // Group items by type
@@ -130,7 +149,8 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
         </tr>`
     }).join('')
 
-    detailedSectionHtml = `
+    // Material table — hidden in labor_only mode
+    const materialTableHtml = outputMode !== 'labor_only' && materials.length > 0 ? `
       <div class="section-header">Részletes tételek – Anyagok</div>
       <table class="data-table">
         <thead>
@@ -143,7 +163,10 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
           </tr>
         </thead>
         <tbody>${renderRows(materials)}</tbody>
-      </table>
+      </table>` : ''
+
+    // Labor table — always shown
+    const laborTableHtml = labors.length > 0 ? `
       <div class="section-header">Részletes tételek – Munka</div>
       <table class="data-table">
         <thead>
@@ -156,7 +179,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
           </tr>
         </thead>
         <tbody>${renderRows(labors)}</tbody>
-      </table>`
+      </table>` : ''
+
+    detailedSectionHtml = materialTableHtml + laborTableHtml
   }
 
   // ── Notes ─────────────────────────────────────────────────────────────────
