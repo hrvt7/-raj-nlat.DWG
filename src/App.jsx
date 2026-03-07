@@ -1023,7 +1023,11 @@ function SaaSShell() {
       totalHours:     p.laborHours,
       summary:        { grandTotal: Math.round(p.total), totalWorkHours: p.laborHours },
       pricingData:    { hourlyRate: meta.calcHourlyRate || 9000, markup_pct: meta.calcMarkup || 0 },
-      items:          meta.calcPricingLines,
+      items:          (meta.calcPricingLines || []).map(item => ({
+        ...item,
+        systemType: item.systemType || 'general',
+        sourcePlanSystemType: item.sourcePlanSystemType || meta.inferredMeta?.systemType || 'general',
+      })),
       assemblySummary: meta.calcAssemblySummary || [],
       source:         'plan-takeoff',
       fileName:       meta.fileName || meta.name,

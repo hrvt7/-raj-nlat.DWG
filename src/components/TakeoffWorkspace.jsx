@@ -1148,8 +1148,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           variantOverrides,
         })
         // Persist pricing summary + snapshot for quote generation on plan metadata
+        // Resolve plan-level system type from filename inference (fallback: 'general')
+        const _planMeta = getPlanMeta(planId)
+        const _planSysType = _planMeta?.inferredMeta?.systemType || 'general'
         const snapshotItems = (pricing.lines || []).map(line => ({
           name: line.name, code: line.code || '', qty: line.qty, unit: line.unit, type: line.type,
+          systemType: line.systemType || 'general',
+          sourcePlanSystemType: _planSysType,
           unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
           hours: line.hours || 0, materialCost: line.materialCost || 0,
         }))
@@ -1192,6 +1197,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       }
 
       // ── Full quote save (new-quote flow or merge fallback) ──
+      // Note: planId may be null in pure new-quote flow (no plan association)
+      const _fqPlanMeta = planId ? getPlanMeta(planId) : null
+      const _fqPlanSysType = _fqPlanMeta?.inferredMeta?.systemType || 'general'
       const items = (pricing.lines || []).map(line => ({
         name:        line.name,
         code:        line.code || '',
@@ -1199,6 +1207,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         unit:        line.unit,
         type:        line.type,
         systemType:  line.systemType || 'general',
+        sourcePlanSystemType: _fqPlanSysType,
         unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
         hours:       line.hours || 0,
         materialCost: line.materialCost || 0,

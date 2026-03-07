@@ -118,6 +118,14 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
     const displayName = `Projekt: ${planNames}`
     const totalCount = mergedRows.reduce((s, r) => s + r.qty, 0)
 
+    // Resolve merged plan-level system type: unanimous → that type, mixed → 'mixed'
+    const _mergePlanSysTypes = [...new Set(
+      plans.map(p => p.inferredMeta?.systemType).filter(Boolean)
+    )]
+    const _mergePlanSysType = _mergePlanSysTypes.length === 1
+      ? _mergePlanSysTypes[0]
+      : _mergePlanSysTypes.length > 1 ? 'mixed' : 'general'
+
     // Build items from pricing lines
     const items = (pricing.lines || []).map(line => ({
       name:        line.name,
@@ -126,6 +134,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       unit:        line.unit,
       type:        line.type,
       systemType:  line.systemType || 'general',
+      sourcePlanSystemType: _mergePlanSysType,
       unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
       hours:       line.hours || 0,
       materialCost: line.materialCost || 0,
