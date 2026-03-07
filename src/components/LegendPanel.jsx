@@ -237,6 +237,27 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
     }
   }, [])
 
+  // ── Bind legend plan: save uploaded PDF as plan record + set project.legendPlanId ──
+  // NOTE: Must be declared before handleSaveAllExtracted and handleSave which depend on it.
+  const bindLegendPlan = useCallback(async () => {
+    if (activeLegendPlanId || !legendFileRef.current || !projectId) return
+    const planId = generatePlanId()
+    const file = legendFileRef.current
+    const plan = {
+      id: planId,
+      name: `[Jelmagyarázat] ${file.name}`,
+      fileName: file.name,
+      fileType: 'pdf',
+      fileSize: file.size,
+      projectId,
+      uploadedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    }
+    await savePlan(plan, file)
+    updateProject(projectId, { legendPlanId: planId })
+    setActiveLegendPlanId(planId)
+  }, [activeLegendPlanId, projectId])
+
   // ── Save all auto-extracted symbols ──
   const handleSaveAllExtracted = useCallback(async () => {
     const accepted = extractedSymbols.filter(s => s.accepted)
@@ -413,26 +434,6 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
     const delta = e.deltaY > 0 ? 0.85 : 1.18
     setZoom(z => Math.max(0.3, Math.min(8, z * delta)))
   }, [])
-
-  // ── Bind legend plan: save uploaded PDF as plan record + set project.legendPlanId ──
-  const bindLegendPlan = useCallback(async () => {
-    if (activeLegendPlanId || !legendFileRef.current || !projectId) return
-    const planId = generatePlanId()
-    const file = legendFileRef.current
-    const plan = {
-      id: planId,
-      name: `[Jelmagyarázat] ${file.name}`,
-      fileName: file.name,
-      fileType: 'pdf',
-      fileSize: file.size,
-      projectId,
-      uploadedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    }
-    await savePlan(plan, file)
-    updateProject(projectId, { legendPlanId: planId })
-    setActiveLegendPlanId(planId)
-  }, [activeLegendPlanId, projectId])
 
   // ── File upload ──
   const handleFileChange = useCallback(async (e) => {

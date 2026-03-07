@@ -1021,23 +1021,28 @@ function SaaSShell() {
 
       {/* ── Felmérés modal panels ─────────────────────────────────────────── */}
       {legendPanelData && (
-        <LegendPanel
-          onClose={() => setLegendPanelData(null)}
-          projectId={legendPanelData.projectId}
-          legendPlanId={legendPanelData.legendPlanId}
-          onRunDetection={({ projectId: projId }) => {
-            // Close legend panel, open detection with all project plans
-            setLegendPanelData(null)
-            const plans = projId ? getPlansByProject(projId) : []
-            if (plans.length === 0) {
-              showToast('📄', 'Nincs tervrajz a projektben — tölts fel PDF-et a detektáláshoz.')
-              return
-            }
-            setDetectPanelPlans(plans)
-            setDetectPanelProjectId(projId)
-            setDetectPanelExistingRun(null)
-          }}
-        />
+        <ErrorBoundary
+          fallbackLabel="Jelmagyarázat panel hiba"
+          onManualMode={() => setLegendPanelData(null)}
+        >
+          <LegendPanel
+            onClose={() => setLegendPanelData(null)}
+            projectId={legendPanelData.projectId}
+            legendPlanId={legendPanelData.legendPlanId}
+            onRunDetection={({ projectId: projId }) => {
+              // Close legend panel, open detection with all project plans
+              setLegendPanelData(null)
+              const plans = projId ? getPlansByProject(projId) : []
+              if (plans.length === 0) {
+                showToast('📄', 'Nincs tervrajz a projektben — tölts fel PDF-et a detektáláshoz.')
+                return
+              }
+              setDetectPanelPlans(plans)
+              setDetectPanelProjectId(projId)
+              setDetectPanelExistingRun(null)
+            }}
+          />
+        </ErrorBoundary>
       )}
       {detectPanelPlans && (
         <DetectionReviewPanel

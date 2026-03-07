@@ -794,15 +794,22 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           onDrop={e => { e.preventDefault(); setDragging(false); handlePlanFiles(e.dataTransfer.files) }}
           onClick={() => planInputRef.current?.click()}
           style={{
-            border: `2px dashed ${dragging ? C.accent : C.border}`, borderRadius: 10, padding: '20px 16px',
+            border: `2px dashed ${dragging ? C.accent : C.border}`, borderRadius: 10, padding: '24px 16px',
             textAlign: 'center', cursor: 'pointer', background: dragging ? `${C.accent}08` : C.bgCard,
             marginBottom: 16, transition: 'all 0.2s',
           }}
         >
-          <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>
-            {dragging ? 'Engedd el a fájlokat' : '+ Tervrajz hozzáadása'}
-          </div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>PDF, DXF, DWG · Húzd ide vagy kattints</div>
+          {dragging ? (
+            <div style={{ fontFamily: 'Syne', fontSize: 14, fontWeight: 700, color: C.accent, padding: '12px 0' }}>
+              Engedd el a fájlokat
+            </div>
+          ) : (
+            <ScannerSVG
+              label="+ Tervrajz hozzáadása"
+              sublabel="PDF, DXF, DWG · Húzd ide vagy kattints"
+              tags={['Tervrajz', 'Alaprajz', 'Villamosság']}
+            />
+          )}
           {uploading && <div style={{ marginTop: 6, color: C.accent, fontSize: 11, fontFamily: 'DM Mono' }}>Feltöltés…</div>}
           <input ref={planInputRef} type="file" accept=".pdf,.dxf,.dwg" multiple style={{ display: 'none' }} onChange={e => { handlePlanFiles(e.target.files); e.target.value = '' }} />
         </div>
