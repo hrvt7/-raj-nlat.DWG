@@ -32,6 +32,12 @@ const C = {
 }
 
 // ─── PDF Detail Level Selector ────────────────────────────────────────────────
+const OUTPUT_MODES = [
+  { key: 'combined',              label: 'Teljes',                     desc: 'Anyag + munkadíj összesítve' },
+  { key: 'labor_only',            label: 'Csak munkadíj',              desc: 'Csak munkadíj jelenik meg' },
+  { key: 'split_material_labor',  label: 'Anyag + munkadíj külön',     desc: 'Anyag és munkadíj külön bontásban' },
+]
+
 const PDF_LEVELS = [
   { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },
   { key: 'summary',  label: 'Összesített',  icon: '▤', desc: '+ Munkacsoport-bontás' },
@@ -62,8 +68,15 @@ const PDF_PREVIEW_SECTIONS = {
   ],
 }
 
-function PdfPreview({ level }) {
+const OUTPUT_MODE_LABELS = {
+  combined: 'Anyag + munkadíj összesítve',
+  labor_only: 'Csak munkadíj jelenik meg',
+  split_material_labor: 'Anyag és munkadíj külön bontásban',
+}
+
+function PdfPreview({ level, outputMode = 'combined' }) {
   const rows = PDF_PREVIEW_SECTIONS[level] || PDF_PREVIEW_SECTIONS.compact
+  const modeLabel = OUTPUT_MODE_LABELS[outputMode] || OUTPUT_MODE_LABELS.combined
   return (
     <div style={{
       background: C.bg, border: `1px solid ${C.border}`,
@@ -72,6 +85,12 @@ function PdfPreview({ level }) {
       <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
         Tartalom előnézet
       </div>
+      {/* Output mode description */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3.5px 0', marginBottom: 4 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: C.blue, boxShadow: `0 0 5px ${C.blue}60` }} />
+        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.blue }}>{modeLabel}</span>
+      </div>
+      <div style={{ height: 1, background: C.border, margin: '4px 0 6px' }} />
       {rows.map((row, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3.5px 0' }}>
           <span style={{
@@ -100,6 +119,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const statusColors = { draft: C.muted, sent: C.blue, won: C.accent, lost: C.red }
   const [pdfLevel, setPdfLevel] = useState('summary')
   const [pdfGenerating, setPdfGenerating] = useState(false)
+  const [outputMode, setOutputMode] = useState(quote.outputMode || 'combined')
 
   // ── Editable meta state ────────────────────────────────────────────────────
   const [editName, setEditName] = useState(quote.projectName || '')
@@ -115,15 +135,17 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       setEditClient(quote.clientName || '')
       setEditRate(Number(quote.pricingData?.hourlyRate) || 9000)
       setEditMarkup(((quote.pricingData?.markup_pct) || 0) * 100)
+      setOutputMode(quote.outputMode || 'combined')
       prevQuoteRef.current = quote.id
     }
-  }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct])
+  }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
 
   // ── Dirty check (normalized numeric comparison) ────────────────────────────
   const isDirty = editName !== (quote.projectName || '')
     || editClient !== (quote.clientName || '')
     || Number(editRate) !== (Number(quote.pricingData?.hourlyRate) || 9000)
     || Math.abs(Number(editMarkup) - ((quote.pricingData?.markup_pct || 0) * 100)) > 0.001
+    || outputMode !== (quote.outputMode || 'combined')
 
   // ── Derived pricing from editable rate + markup ────────────────────────────
   const vatPct = Number(settings?.labor?.vat_percent) || 27
@@ -141,6 +163,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     if (!isDirty || !onSaveQuote) return
     const updated = {
       ...quote,
+      outputMode,
       projectName: editName,
       project_name: editName,
       name: editName,
@@ -164,12 +187,13 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     // Build a live quote snapshot for PDF so it uses current edits (even unsaved)
     const liveQuote = {
       ...quote,
+      outputMode,
       projectName: editName, project_name: editName, name: editName,
       clientName: editClient, client_name: editClient,
       gross: net, totalLabor: newTotalLabor,
       pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
     }
-    try { generatePdf(liveQuote, settings, pdfLevel) }
+    try { generatePdf(liveQuote, settings, pdfLevel, outputMode) }
     finally { setTimeout(() => setPdfGenerating(false), 1200) }
   }
 
@@ -403,8 +427,30 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
 
           {/* PDF export card */}
           <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 4 }}>PDF Árajánlat</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14 }}>Részletezési szint</div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 14 }}>PDF Árajánlat</div>
+
+            {/* Output mode selector */}
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Ajánlat mód</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 16 }}>
+              {OUTPUT_MODES.map(mode => (
+                <button key={mode.key} onClick={() => setOutputMode(mode.key)} style={{
+                  padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                  background: outputMode === mode.key ? 'rgba(76,201,240,0.10)' : C.bg,
+                  border: `1px solid ${outputMode === mode.key ? 'rgba(76,201,240,0.30)' : C.border}`,
+                  color: outputMode === mode.key ? C.blue : C.textSub,
+                  fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  {mode.label}
+                  {outputMode === mode.key && (
+                    <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Detail level selector */}
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Részletezési szint</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
               {PDF_LEVELS.map(lvl => (
                 <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} style={{
@@ -418,14 +464,14 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                   <span style={{ fontSize: 12, opacity: 0.8 }}>{lvl.icon}</span>
                   {lvl.label}
                   {pdfLevel === lvl.key && (
-                    <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>✓</span>
+                    <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
                   )}
                 </button>
               ))}
             </div>
 
             {/* Live content preview */}
-            <PdfPreview level={pdfLevel} />
+            <PdfPreview level={pdfLevel} outputMode={outputMode} />
 
             <button onClick={handlePdf} disabled={pdfGenerating} style={{
               width: '100%', padding: '11px', borderRadius: 9, cursor: pdfGenerating ? 'wait' : 'pointer',

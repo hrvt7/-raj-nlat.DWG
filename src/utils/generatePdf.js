@@ -20,7 +20,9 @@ function escHtml(s) {
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
-export function generatePdf(quote, settings, detailLevel = 'summary') {
+// outputMode: 'combined' | 'labor_only' | 'split_material_labor'
+// Currently passed through for future rendering logic; does not alter output yet.
+export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined') {
   const vatPct    = Number(settings?.labor?.vat_percent) || 27
   const net       = Math.round(Number(quote.gross) || 0)
   const vatAmt    = Math.round(net * vatPct / 100)
