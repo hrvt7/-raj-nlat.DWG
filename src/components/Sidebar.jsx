@@ -6,7 +6,7 @@ import { TRADES, isTradeUnlocked } from '../data/trades.js'
 const MAIN_NAV = [
   { key: 'dashboard',  label: 'Dashboard' },
   { key: 'quotes',     label: 'Ajánlatok' },
-  { key: 'new-quote',  label: 'Új ajánlat', highlight: true },
+  { key: 'new-project', label: 'Új ajánlat', highlight: true, navTarget: 'projektek' },
   { key: 'projektek',  label: 'Projektek' },
 ]
 
@@ -18,7 +18,7 @@ const SETTINGS_NAV = [
 const NAV_PATHS = {
   dashboard:    'M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z',
   quotes:       ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2z','M14 2v6h6M9 13h6M9 17h4'],
-  'new-quote':  'M12 5v14M5 12h14',
+  'new-project': 'M12 5v14M5 12h14',
   projektek:    ['M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2','M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z','M9 12h6M9 16h4'],
   'work-items': 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   materials:    ['M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z','M7 7h.01'],
@@ -89,7 +89,7 @@ export default function Sidebar({ active, onNavigate, activeTrade, mobileOpen, o
     return (
       <button
         key={item.key}
-        onClick={() => !locked && handleNav(item.key, item.tradeId)}
+        onClick={() => !locked && handleNav(item.navTarget || item.key, item.tradeId)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center',
           gap: isExpanded ? 10 : 0,
