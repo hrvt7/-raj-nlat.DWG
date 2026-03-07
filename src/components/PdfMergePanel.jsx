@@ -125,6 +125,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       qty:         line.qty,
       unit:        line.unit,
       type:        line.type,
+      systemType:  line.systemType || 'general',
       unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
       hours:       line.hours || 0,
       materialCost: line.materialCost || 0,

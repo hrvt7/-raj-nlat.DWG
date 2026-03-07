@@ -3,6 +3,7 @@
 // so both views always produce identical numbers.
 
 import { calcProductivityFactor, WALL_FACTORS } from '../data/workItemsDb.js'
+import { CATEGORY_TO_SYSTEM_TYPE } from '../data/quoteDefaults.js'
 
 /**
  * computePricing — core pricing calculation.
@@ -41,6 +42,9 @@ export function computePricing({
     const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
     if (!asm) continue
 
+    // Resolve system type from assembly category (fallback: 'general')
+    const systemType = CATEGORY_TO_SYSTEM_TYPE[asm.category] || 'general'
+
     // Build per-wall-type splits: [[wallKey, qty], ...]
     const splits = row.wallSplits
       ? Object.entries(row.wallSplits).filter(([, n]) => n > 0)
@@ -63,14 +67,14 @@ export function computePricing({
           const normMin = baseNorm * ctxMultiplier * wallFactor
           const hours = (normMin * compQty) / 60
           laborHours += hours
-          lines.push({ name: comp.name, code: comp.itemCode || '', qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
+          lines.push({ name: comp.name, code: comp.itemCode || '', qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor', systemType })
         } else {
           const mat = materials.find(m => m.code === comp.itemCode)
                    || materials.find(m => m.name === comp.name)
           const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
           const cost = unitPrice * compQty
           materialCost += cost
-          lines.push({ name: comp.name, code: mat?.code || comp.itemCode || '', qty: compQty, unit: comp.unit, hours: 0, materialCost: cost, type: 'material' })
+          lines.push({ name: comp.name, code: mat?.code || comp.itemCode || '', qty: compQty, unit: comp.unit, hours: 0, materialCost: cost, type: 'material', systemType })
         }
       }
     }
@@ -80,10 +84,10 @@ export function computePricing({
   if (cableEstimate && cableEstimate.cable_total_m > 0) {
     const cableTypes = cableEstimate.cable_by_type || {}
     const cableData = [
-      { code: 'MAT-020', fallback: 'NYM-J 3×1.5', m: cableTypes.light_m  || 0 },
-      { code: 'MAT-021', fallback: 'NYM-J 3×2.5', m: cableTypes.socket_m || 0 },
-      { code: 'MAT-020', fallback: 'NYM-J 3×1.5 (kapcsoló)', m: cableTypes.switch_m || 0 },
-      { code: 'MAT-022', fallback: 'NYM-J 5×2.5', m: cableTypes.other_m  || 0 },
+      { code: 'MAT-020', fallback: 'NYM-J 3×1.5', m: cableTypes.light_m  || 0, systemType: 'lighting' },
+      { code: 'MAT-021', fallback: 'NYM-J 3×2.5', m: cableTypes.socket_m || 0, systemType: 'power' },
+      { code: 'MAT-020', fallback: 'NYM-J 3×1.5 (kapcsoló)', m: cableTypes.switch_m || 0, systemType: 'power' },
+      { code: 'MAT-022', fallback: 'NYM-J 5×2.5', m: cableTypes.other_m  || 0, systemType: 'general' },
     ]
     for (const c of cableData) {
       if (c.m <= 0) continue
@@ -92,7 +96,7 @@ export function computePricing({
       const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
       const cost = unitPrice * c.m
       materialCost += cost
-      lines.push({ name: c.fallback, code: mat?.code || c.code || '', qty: Math.round(c.m), unit: 'm', hours: 0, materialCost: cost, type: 'cable' })
+      lines.push({ name: c.fallback, code: mat?.code || c.code || '', qty: Math.round(c.m), unit: 'm', hours: 0, materialCost: cost, type: 'cable', systemType: c.systemType })
     }
     const cableNormMin = 3  // min/m average
     const cableHours = (cableEstimate.cable_total_m * cableNormMin * ctxMultiplier) / 60
