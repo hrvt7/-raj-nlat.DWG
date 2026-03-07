@@ -88,6 +88,45 @@ function FolderIcon({ size = 38, color = C.accent }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
 }
 
+// ─── Blueprint / villamos tervlap ikon (projektkártyákhoz) ───────────────────
+function BlueprintIcon({ size = 48 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bp-s" x1="18" y1="16" x2="98" y2="102" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#37E6FF"/><stop offset="1" stopColor="#16C7E8"/>
+        </linearGradient>
+        <linearGradient id="bp-g" x1="24" y1="20" x2="92" y2="96" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#37E6FF" stopOpacity="0.18"/><stop offset="1" stopColor="#16C7E8" stopOpacity="0.04"/>
+        </linearGradient>
+        <filter id="bp-gl" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <rect x="22" y="18" width="60" height="78" rx="10" fill="url(#bp-g)" stroke="url(#bp-s)" strokeWidth="2"/>
+      <path d="M82 34L66 34C63.8 34 62 32.2 62 30V18" stroke="url(#bp-s)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M32 42H72" stroke="#37E6FF" strokeOpacity="0.12" strokeWidth="1"/>
+      <path d="M32 54H72" stroke="#37E6FF" strokeOpacity="0.12" strokeWidth="1"/>
+      <path d="M32 66H72" stroke="#37E6FF" strokeOpacity="0.12" strokeWidth="1"/>
+      <path d="M32 78H72" stroke="#37E6FF" strokeOpacity="0.12" strokeWidth="1"/>
+      <path d="M40 28V88" stroke="#37E6FF" strokeOpacity="0.08" strokeWidth="1"/>
+      <path d="M52 28V88" stroke="#37E6FF" strokeOpacity="0.08" strokeWidth="1"/>
+      <path d="M64 28V88" stroke="#37E6FF" strokeOpacity="0.08" strokeWidth="1"/>
+      <g filter="url(#bp-gl)">
+        <path d="M34 63H46V54H58" stroke="url(#bp-s)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+        <circle cx="46" cy="54" r="3.2" stroke="url(#bp-s)" strokeWidth="2"/>
+        <path d="M58 54L64 48" stroke="url(#bp-s)" strokeWidth="2.2" strokeLinecap="round"/>
+        <path d="M58 54L64 60" stroke="url(#bp-s)" strokeWidth="2.2" strokeLinecap="round"/>
+      </g>
+      <rect x="30" y="84" width="44" height="6" rx="3" fill="#37E6FF" fillOpacity="0.18" stroke="#37E6FF" strokeOpacity="0.35"/>
+      <circle cx="90" cy="88" r="10" fill="#37E6FF" fillOpacity="0.06"/>
+      <path d="M86 88H94" stroke="url(#bp-s)" strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M90 84V92" stroke="url(#bp-s)" strokeWidth="2.2" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
 // ─── Checkbox ──────────────────────────────────────────────────────────────────
 function Checkbox({ checked, onChange }) {
   return (
@@ -296,7 +335,7 @@ function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
     >
       {/* Thumbnail area */}
       <div style={{ height: 120, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}`, flexDirection: 'column', gap: 6 }}>
-        <FolderIcon size={42} color={hov ? C.accent : C.blue} />
+        <BlueprintIcon size={48} />
         <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{planCount} tervrajz</span>
       </div>
       {/* Info */}
