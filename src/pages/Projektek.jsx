@@ -562,6 +562,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const [selected, setSelected] = useState({})
   const [dragging, setDragging] = useState(false)
   const [legendDragging, setLegendDragging] = useState(false)
+  const [uploadWarning, setUploadWarning] = useState(null)
   const planInputRef = useRef(null)
   const legendInputRef = useRef(null)
 
@@ -596,7 +597,17 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
 
   // Upload plan PDFs to this project
   const handlePlanFiles = useCallback(async (files) => {
-    const accepted = Array.from(files).filter(f => isAllowedPlan(f.name))
+    const all = Array.from(files)
+    const accepted = all.filter(f => isAllowedPlan(f.name))
+    const rejected = all.filter(f => !isAllowedPlan(f.name))
+    if (rejected.length > 0) {
+      const names = rejected.map(f => f.name).slice(0, 3).join(', ') + (rejected.length > 3 ? ` (+${rejected.length - 3})` : '')
+      const msg = accepted.length > 0
+        ? `⚠ ${names} — nem támogatott. Csak PDF, DXF, DWG tölthető fel.`
+        : `Csak PDF, DXF és DWG fájlok tölthetők fel. (${names})`
+      setUploadWarning(msg)
+      setTimeout(() => setUploadWarning(null), 4500)
+    }
     if (accepted.length === 0) return
     setUploading(true)
     for (const file of accepted) {
@@ -795,6 +806,21 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           {uploading && <div style={{ marginTop: 6, color: C.accent, fontSize: 11, fontFamily: 'DM Mono' }}>Feltöltés…</div>}
           <input ref={planInputRef} type="file" accept=".pdf,.dxf,.dwg" multiple style={{ display: 'none' }} onChange={e => { handlePlanFiles(e.target.files); e.target.value = '' }} />
         </div>
+        {uploadWarning && (
+          <div style={{
+            background: 'rgba(255,107,107,0.10)', border: `1px solid rgba(255,107,107,0.25)`,
+            borderRadius: 8, padding: '8px 12px', marginBottom: 12, marginTop: -8,
+            fontFamily: 'DM Mono', fontSize: 11, color: '#FF6B6B',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span style={{ flexShrink: 0 }}>⚠</span>
+            <span style={{ flex: 1 }}>{uploadWarning}</span>
+            <button onClick={() => setUploadWarning(null)} style={{
+              background: 'transparent', border: 'none', color: '#FF6B6B',
+              cursor: 'pointer', fontSize: 13, padding: '0 2px', flexShrink: 0,
+            }}>✕</button>
+          </div>
+        )}
 
         {/* Plans grid */}
         {plans.length > 0 && (
