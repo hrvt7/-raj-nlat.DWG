@@ -192,6 +192,79 @@ function TlBtn({ icon, label, color, onClick }) {
   )
 }
 
+// ─── Upload ring SVG (project creation card) ────────────────────────────────
+function UploadRingSVG({ label, sublabel, tags }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ width: 96, height: 96, margin: '0 auto 12px' }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+          <style>{`
+            .ur-grid-circle { stroke: rgba(255,255,255,0.18); stroke-width: 1; opacity: 0.4; fill: none; }
+            .ur-ring-bg { stroke: rgba(255,255,255,0.18); stroke-width: 3; fill: none; stroke-dasharray: 4 8; }
+            .ur-ring-progress {
+              stroke: #21F3A3; stroke-width: 4; fill: none; stroke-linecap: round;
+              stroke-dasharray: 350; filter: url(#ur-glow-ring);
+              animation: ur-spin-load 3s ease-in-out infinite;
+              transform-origin: 256px 224px;
+            }
+            .ur-upload-arrow {
+              stroke: #17C7FF; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round;
+              animation: ur-float 3s ease-in-out infinite;
+            }
+            .ur-data-line { stroke: rgba(255,255,255,0.18); stroke-width: 2; fill: none; }
+            .ur-data-pulse {
+              stroke: #21F3A3; stroke-width: 2; fill: none; stroke-linecap: round;
+              stroke-dasharray: 15 50; animation: ur-up-flow 2s linear infinite;
+            }
+            @keyframes ur-spin-load {
+              0% { stroke-dashoffset: 350; transform: rotate(-90deg); }
+              60% { stroke-dashoffset: 0; transform: rotate(270deg); }
+              100% { stroke-dashoffset: 350; transform: rotate(270deg); }
+            }
+            @keyframes ur-float {
+              0%, 100% { transform: translateY(0); }
+              50% { transform: translateY(-8px); }
+            }
+            @keyframes ur-up-flow {
+              0% { stroke-dashoffset: 65; }
+              100% { stroke-dashoffset: 0; }
+            }
+          `}</style>
+          <defs>
+            <pattern id="ur-grid3" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M 64 0 L 0 0 0 64" stroke="rgba(255,255,255,0.18)" strokeWidth="0.5" fill="none" opacity="0.5"/></pattern>
+            <filter id="ur-glow-ring" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="4" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter>
+          </defs>
+          <rect width="512" height="512" fill="url(#ur-grid3)"/>
+          <circle cx="256" cy="224" r="180" className="ur-grid-circle"/>
+          <circle cx="256" cy="224" r="120" className="ur-grid-circle"/>
+          <path d="M 196 336 L 316 336 M 226 352 L 286 352" stroke="#17C7FF" strokeWidth="3" strokeLinecap="round"/>
+          <circle cx="256" cy="224" r="72" className="ur-ring-bg"/>
+          <circle cx="256" cy="224" r="56" className="ur-ring-progress"/>
+          <g className="ur-upload-arrow">
+            <path d="M 256 190 L 256 256"/>
+            <path d="M 230 216 L 256 190 L 282 216"/>
+          </g>
+          <path d="M 256 368 L 256 512" className="ur-data-line"/>
+          <path d="M 256 368 L 256 512" className="ur-data-pulse"/>
+          <path d="M 226 368 L 226 512" className="ur-data-line" opacity="0.6"/>
+          <path d="M 226 368 L 226 512" className="ur-data-pulse" style={{ animationDelay: '-0.5s' }}/>
+          <path d="M 286 368 L 286 512" className="ur-data-line" opacity="0.6"/>
+          <path d="M 286 368 L 286 512" className="ur-data-pulse" style={{ animationDelay: '-1s' }}/>
+        </svg>
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Syne', background: 'linear-gradient(90deg, #21F3A3 0%, #17C7FF 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+        {label}
+      </div>
+      {sublabel && <div style={{ color: '#17C7FF', fontSize: 12, marginTop: 4, opacity: 0.65, fontFamily: 'DM Mono', letterSpacing: '0.03em' }}>{sublabel}</div>}
+      {tags && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+          {tags.map(t => <span key={t} style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono', background: 'rgba(33,243,163,0.07)', border: '1px solid rgba(33,243,163,0.25)', color: '#21F3A3' }}>{t}</span>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Animated scanner SVG ─────────────────────────────────────────────────────
 function ScannerSVG({ label, sublabel, tags }) {
   return (
@@ -438,7 +511,7 @@ function ProjectListView({ onOpenProject }) {
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(0,229,160,0.4)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = C.border }}
         >
-          <ScannerSVG label="Új projekt létrehozása" sublabel="Hozz létre egy mappát az építkezésnek" tags={['Tervrajzok', 'Kalkuláció', 'Árajánlat']} />
+          <UploadRingSVG label="Új projekt létrehozása" sublabel="Hozz létre egy mappát az építkezésnek" tags={['Tervrajzok', 'Kalkuláció', 'Árajánlat']} />
         </div>
       ) : (
         <div style={{
