@@ -395,49 +395,28 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           </button>
         </div>
 
-        {/* Card D — Feltételek áttekintés */}
+        {/* Card D — Státusz */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Feltételek</div>
-          {/* Inclusions preview */}
-          {editInclusions.trim() && (
-            <div>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tartalmazza</span>
-              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                {editInclusions.trim()}
-              </div>
-            </div>
-          )}
-          {/* Exclusions preview */}
-          {editExclusions.trim() && (
-            <div>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.yellow, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nem tartalmazza</span>
-              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                {editExclusions.trim()}
-              </div>
-            </div>
-          )}
-          {/* Validity preview */}
-          {editValidity.trim() && (
-            <div>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.blue, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Érvényesség</span>
-              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
-                {editValidity.trim()}
-              </div>
-            </div>
-          )}
-          {/* Payment preview */}
-          {editPaymentTerms.trim() && (
-            <div>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.blue, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fizetés</span>
-              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
-                {editPaymentTerms.trim()}
-              </div>
-            </div>
-          )}
-          {/* Empty state */}
-          {!editInclusions.trim() && !editExclusions.trim() && !editValidity.trim() && !editPaymentTerms.trim() && (
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, fontStyle: 'italic' }}>Nincs kitöltve — szerkeszd lent ↓</div>
-          )}
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Státusz</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {statuses.map(s => {
+              const active = quote.status === s
+              const col = statusColors[s]
+              return (
+                <button key={s} onClick={() => onStatusChange(quote.id, s)} style={{
+                  padding: '7px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                  background: active ? col + '18' : C.bg,
+                  border: `1px solid ${active ? col + '60' : C.border}`,
+                  color: active ? col : C.textSub,
+                  fontFamily: 'Syne', fontWeight: active ? 800 : 600, fontSize: 11,
+                  display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? col : C.border, flexShrink: 0 }} />
+                  {statusLabels[s]}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -664,30 +643,6 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             </button>
           </div>
 
-          {/* Status card */}
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 12 }}>Státusz</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {statuses.map(s => {
-                const active = quote.status === s
-                const col = statusColors[s]
-                return (
-                  <button key={s} onClick={() => onStatusChange(quote.id, s)} style={{
-                    padding: '9px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                    background: active ? col + '18' : C.bg,
-                    border: `1px solid ${active ? col + '60' : C.border}`,
-                    color: active ? col : C.textSub,
-                    fontFamily: 'Syne', fontWeight: active ? 800 : 600, fontSize: 12,
-                    display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.15s',
-                  }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: active ? col : C.border, flexShrink: 0 }} />
-                    {statusLabels[s]}
-                    {active && <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.7 }}>✓ aktív</span>}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
 
 
         </div>
