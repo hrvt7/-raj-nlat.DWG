@@ -137,6 +137,7 @@ export default function EstimationPanel({
       else if (dev.category === 'light')    deviceHeight = 0           // ceiling mount
       else if (dev.category === 'junction') deviceHeight = ceilingHeight - 0.3
       else if (dev.category === 'conduit')  deviceHeight = ceilingHeight - 0.1
+      else if (dev.category === 'elosztok')  deviceHeight = ceilingHeight * 0.5
       else if (dev.category === 'panel')    deviceHeight = ceilingHeight * 0.5
 
       const verticalRun  = (ceilingHeight - deviceHeight) + (ceilingHeight - 0.1)
@@ -616,7 +617,7 @@ const CATEGORY_ASM_MAP = {
   light:    'vilagitas',
   switch:   'szerelveny',
   socket:   'szerelveny',
-  panel:    'elosztok',
+  elosztok: 'elosztok',
   junction: 'szerelveny',
   conduit:  'egyeb',
   other:    'egyeb',
@@ -629,7 +630,7 @@ const CATEGORY_KEYWORDS_MAP = {
   socket:   ['dugalj', 'aljzat', 'cee', 'ipari'],
   light:    ['lámpa', 'lámpatest', 'downlight', 'fali', 'led', 'vész', 'reflektor', 'spot'],
   junction: ['kötő', 'doboz', 'elosztó doboz'],
-  panel:    ['elosztó', 'tábla', 'szekrény'],
+  elosztok: ['elosztó', 'tábla', 'szekrény'],
 }
 
 function getRecommendedAssemblies(catKey, isCableTray, assemblies) {

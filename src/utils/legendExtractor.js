@@ -51,7 +51,7 @@ const CATEGORY_KEYWORDS = [
     ],
   },
   {
-    key: 'panel', label: 'Elosztó', color: '#FF6B6B',
+    key: 'elosztok', label: 'Elosztó', color: '#FF6B6B',
     patterns: [
       'elosztó', 'főelosztó', 'alelosztó', 'mérőhely',
       'tábla', 'szekrény', 'kapcsolótábla', 'biztosíték',

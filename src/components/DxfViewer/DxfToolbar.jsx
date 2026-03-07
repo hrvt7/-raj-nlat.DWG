@@ -34,7 +34,8 @@ export const COUNT_CATEGORIES = [
   { key: 'socket',   label: 'Dugalj',      color: '#FF8C42' },
   { key: 'switch',   label: 'Kapcsoló',    color: '#A78BFA' },
   { key: 'light',    label: 'Lámpa',       color: '#FFD166' },
-  { key: 'panel',    label: 'Elosztó',     color: '#FF6B6B' },
+  { key: 'elosztok', label: 'Elosztó',     color: '#FF6B6B' },
+  { key: 'panel',    label: 'Elosztó (ref.)', color: '#FF6B6B' },
   { key: 'junction', label: 'Kötődoboz',   color: '#4CC9F0' },
   { key: 'conduit',  label: 'Cső/Védőcs.', color: '#06B6D4' },
   ...CABLE_TRAY_SIZES.map(s => ({

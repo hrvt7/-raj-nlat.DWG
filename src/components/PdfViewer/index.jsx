@@ -21,7 +21,7 @@ function resolveCountCategory(assemblyId, assemblies) {
   const asm = assemblies?.find(a => a.id === assemblyId)
   if (!asm) return 'other'
   if (asm.category === 'vilagitas') return 'light'
-  if (asm.category === 'elosztok') return 'panel'
+  if (asm.category === 'elosztok') return 'elosztok'
   if (asm.category === 'szerelvenyek') {
     const up = (asm.name || '').toUpperCase()
     if (up.includes('DUGALJ') || up.includes('ALJZAT') || up.includes('SOCKET') || up.includes('KONNEKTOR')) return 'socket'
