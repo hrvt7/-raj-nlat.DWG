@@ -7,6 +7,8 @@ from http.server import BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.error
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+# SECURITY: Set ALLOWED_ORIGIN to your production domain in Vercel env vars.
+# Default '*' is acceptable for development but should be restricted in production.
 ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '*')
 
 # Max request body: ~4 MB (base64-encoded JPEG of a plan page is typically 200-800 KB)

@@ -2,6 +2,10 @@
 // Sends a first-page PDF image to the backend proxy which calls OpenAI Vision
 // to extract structured metadata. The API key lives server-side only.
 //
+// SECURITY: This module MUST NOT import or reference any AI API keys directly.
+//           All AI calls go through VITE_API_URL/api/meta-vision (Vercel serverless).
+//           The OpenAI API key is stored exclusively as a Vercel environment variable.
+//
 // Isolated module — no side effects, no state, easy to test or swap backend.
 // ─────────────────────────────────────────────────────────────────────────────
 
