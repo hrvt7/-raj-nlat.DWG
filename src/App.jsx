@@ -264,37 +264,62 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       </div>
 
       {/* ── Hero KPI strip ───────────────────────────────────────────────── */}
+      <style>{`
+        .kpi-card {
+          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .kpi-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 20px rgba(0,229,160,0.07), 0 1px 6px rgba(0,0,0,0.25);
+          border-color: rgba(255,255,255,0.12) !important;
+        }
+        .kpi-card-hero:hover {
+          box-shadow: 0 4px 24px rgba(0,229,160,0.13), 0 1px 6px rgba(0,0,0,0.25);
+        }
+      `}</style>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         {/* Gross — accent hero card */}
-        <div style={{
+        <div className="kpi-card kpi-card-hero" style={{
           background: `linear-gradient(135deg, ${C.accent}18, ${C.blue}0a)`,
           border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '18px 20px', gridColumn: 'span 1',
         }}>
           <span style={labelStyle}>{outputMode === 'labor_only' ? 'Bruttó munkadíj összeg' : 'Bruttó végösszeg'}</span>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent, lineHeight: 1 }}>{fmt(displayGross)} Ft</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent, lineHeight: 1, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span>{fmt(displayGross)}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.8 }}>Ft</span>
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>
             {outputMode === 'labor_only' ? 'Nettó munkadíj' : 'Nettó'} {fmt(displayNet)} + ÁFA {vatPct}%
           </div>
         </div>
         {/* Materials — hidden in labor_only */}
         {outputMode !== 'labor_only' && (
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+          <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
             <span style={labelStyle}>Anyagköltség (nettó)</span>
-            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.text }}>{fmt(Math.round(quote.totalMaterials || 0))} Ft</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{outputMode === 'split_material_labor' ? 'anyag bontás' : 'nettó'}</div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.text, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span>{fmt(Math.round(quote.totalMaterials || 0))}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>Ft</span>
+            </div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>nettó anyag összesen</div>
           </div>
         )}
         {/* Labor */}
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+        <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
           <span style={labelStyle}>{outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)'}</span>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.blue }}>{fmt(newTotalLabor)} Ft</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{outputMode === 'split_material_labor' ? 'munkadíj bontás' : 'nettó'}</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.blue, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <span>{fmt(newTotalLabor)}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>Ft</span>
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>nettó munkadíj összesen</div>
         </div>
         {/* Hours */}
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+        <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
           <span style={labelStyle}>Munkaóra</span>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.yellow }}>{(quote.totalHours || 0).toFixed(1)} ó</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{fmt(Number(editRate))} Ft/ó</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.yellow, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <span>{(quote.totalHours || 0).toFixed(1)}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>ó</span>
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>{fmt(Number(editRate))} Ft/ó óradíj</div>
         </div>
       </div>
 
