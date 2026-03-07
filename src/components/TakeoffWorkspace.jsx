@@ -11,6 +11,7 @@ import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId, loadSettings } from '../data/store.js'
 import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
+import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
@@ -1226,8 +1227,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       // ── Resolve project-level default output mode ──────────────────
       const planMeta = planId ? getPlanMeta(planId) : null
       const prjDefault = planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
-      const _inclExclDefaults = { combined: { inclusions: '', exclusions: '' }, labor_only: { inclusions: '', exclusions: 'Az anyagköltség nem része az ajánlatnak.\nAz anyagbiztosítás a megrendelő feladata.' }, split_material_labor: { inclusions: '', exclusions: '' } }
-      const _ieD = _inclExclDefaults[prjDefault] || _inclExclDefaults.combined
+      const _ieD = OUTPUT_MODE_INCLEXCL[prjDefault] || OUTPUT_MODE_INCLEXCL.combined
       const _qs = loadSettings().quote
 
       const quote = {

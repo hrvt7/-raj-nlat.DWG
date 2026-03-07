@@ -21,6 +21,7 @@ import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, f
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { OUTPUT_MODE_INCLEXCL } from './data/quoteDefaults.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -46,12 +47,7 @@ const OUTPUT_MODE_NOTES = {
   split_material_labor: 'Az ajánlat az anyag- és munkadíj költségeket külön bontásban tartalmazza.',
 }
 
-// ─── Default inclusions/exclusions per outputMode ────────────────────────────
-const OUTPUT_MODE_INCLEXCL = {
-  combined:              { inclusions: '', exclusions: '' },
-  labor_only:            { inclusions: '', exclusions: 'Az anyagköltség nem része az ajánlatnak.\nAz anyagbiztosítás a megrendelő feladata.' },
-  split_material_labor:  { inclusions: '', exclusions: '' },
-}
+// OUTPUT_MODE_INCLEXCL imported from ./data/quoteDefaults.js
 
 const PDF_LEVELS = [
   { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },

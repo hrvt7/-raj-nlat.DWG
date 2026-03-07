@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings, saveQuote } from '../data/store.js'
+import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings, saveQuote, generateQuoteId } from '../data/store.js'
 import { computePricing } from '../utils/pricing.js'
 import { getProject } from '../data/projectStore.js'
+import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -132,12 +133,12 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
     // ── Resolve project-level default output mode from first plan ──────
     const firstProjId = plans.find(p => p.projectId)?.projectId
     const mergePrjDefault = firstProjId ? (getProject(firstProjId)?.defaultQuoteOutputMode || 'combined') : 'combined'
-    const _inclExclDefaults = { combined: { inclusions: '', exclusions: '' }, labor_only: { inclusions: '', exclusions: 'Az anyagköltség nem része az ajánlatnak.\nAz anyagbiztosítás a megrendelő feladata.' }, split_material_labor: { inclusions: '', exclusions: '' } }
-    const _ieD = _inclExclDefaults[mergePrjDefault] || _inclExclDefaults.combined
-    const _qs = loadSettings().quote
+    const _ieD = OUTPUT_MODE_INCLEXCL[mergePrjDefault] || OUTPUT_MODE_INCLEXCL.combined
+    const _allSettings = loadSettings()
+    const _qs = _allSettings.quote
 
     const quote = {
-      id: 'Q-' + Date.now().toString(36),
+      id: generateQuoteId(),
       projectName:  displayName,
       project_name: displayName,
       name:         displayName,
@@ -159,8 +160,8 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
         totalWorkHours: pricing.laborHours,
       },
       pricingData: {
-        hourlyRate: settings?.hourlyRate ?? 8000,
-        markup_pct: settings?.markup ?? 0.15,
+        hourlyRate: settings?.hourlyRate ?? _allSettings.labor.hourly_rate,
+        markup_pct: settings?.markup ?? (_allSettings.labor.markup_percent / 100),
       },
       items,
       sourceType: 'pdf_merge',
