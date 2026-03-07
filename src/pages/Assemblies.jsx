@@ -388,33 +388,32 @@ function AssemblyGridCard({ assembly, onClick }) {
       style={{
         background: hovered ? 'rgba(0,229,160,0.04)' : C.bgCard,
         border: `1px solid ${hovered ? 'rgba(0,229,160,0.25)' : C.border}`,
-        borderRadius: 14, padding: '20px 20px 16px', cursor: 'pointer',
+        borderRadius: 14, padding: '20px 36px 16px 20px', cursor: 'pointer',
         transition: 'all 0.18s',
         transform: hovered ? 'translateY(-2px)' : 'none',
         boxShadow: hovered ? '0 8px 32px rgba(0,0,0,0.35)' : 'none',
         position: 'relative',
       }}
     >
-      {/* Variant badge */}
-      {hasVariants && (
-        <div style={{
-          position: 'absolute', top: 10, right: 10,
-          background: 'rgba(56,189,248,0.15)', border: `1px solid ${C.blue}25`,
-          borderRadius: 12, padding: '2px 8px', fontSize: 9,
-          fontFamily: 'Syne', fontWeight: 700, color: C.blue,
-        }}>
-          {variantCount} variáns
-        </div>
-      )}
-
-      {/* Category badge + ID */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      {/* Category badge + right meta (ID + variant) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         {cat ? (
           <Badge color="green">{cat.icon} {cat.label}</Badge>
         ) : (
           <span />
         )}
-        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{assembly.id}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{assembly.id}</span>
+          {hasVariants && (
+            <span style={{
+              background: 'rgba(56,189,248,0.15)', border: `1px solid ${C.blue}25`,
+              borderRadius: 12, padding: '2px 8px', fontSize: 9,
+              fontFamily: 'Syne', fontWeight: 700, color: C.blue,
+            }}>
+              {variantCount} variáns
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Name */}
