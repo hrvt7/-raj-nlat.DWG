@@ -13,7 +13,7 @@ const fmtDate = iso => {
   } catch { return new Date().toLocaleDateString('hu-HU') }
 }
 
-import { groupItemsBySystem, SYSTEM_GROUP_LABELS } from '../data/quoteDefaults.js'
+import { groupItemsBySystem, groupItemsByFloor, SYSTEM_GROUP_LABELS } from '../data/quoteDefaults.js'
 
 const WALL_LABELS = { drywall: 'GK', ytong: 'Ytong', brick: 'Tégla', concrete: 'Beton' }
 
@@ -155,9 +155,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
   const assemblyRows = quote.assemblySummary || []
   const allItems = quote.items || []
 
-  if (groupBy === 'system') {
-    // ── System-grouped rendering ──
-    const groups = groupItemsBySystem(allItems)
+  if (groupBy === 'system' || groupBy === 'floor') {
+    // ── Grouped rendering (system or floor) ──
+    const groups = groupBy === 'system' ? groupItemsBySystem(allItems) : groupItemsByFloor(allItems)
 
     // Financial subtotals per group (inserted before grand total)
     const groupSubtotals = groups.map(g => {
@@ -169,13 +169,12 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     // Inject group subtotals into financial table
     finTableRows = groupSubtotals + finTableRows
 
-    // Assembly summary — grouped
+    // Assembly summary — grouped (flat, since assemblies don't carry group metadata)
     if (detailLevel !== 'compact' && assemblyRows.length > 0) {
-      // We don't have systemType on assembly rows, so render flat but wrapped
       assemblySectionHtml = renderAssemblyTable(assemblyRows, null)
     }
 
-    // Detailed items — grouped by system
+    // Detailed items — grouped
     if (detailLevel === 'detailed' && allItems.length > 0) {
       detailedSectionHtml = groups.map(g =>
         `<div class="group-header-pdf">${escHtml(g.label)}</div>` + renderDetailTables(g.items, g.label)

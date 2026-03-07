@@ -55,13 +55,18 @@ export const CABLE_TYPE_TO_SYSTEM_TYPE = {
 // ─── Grouping ─────────────────────────────────────────────────────────────────
 
 /** Valid groupBy values for quotes */
-export const GROUP_BY_OPTIONS = ['none', 'system']
+export const GROUP_BY_OPTIONS = ['none', 'system', 'floor']
 
 /** Hungarian labels for groupBy modes */
 export const GROUP_BY_LABELS = {
   none:   'Nincs csoportosítás',
   system: 'Rendszer szerint',
+  floor:  'Szint szerint',
 }
+
+/** Fallback label for items with no floor metadata */
+export const FLOOR_UNKNOWN_KEY = '_unknown_floor'
+export const FLOOR_UNKNOWN_LABEL = 'Nem meghatározott'
 
 /** Extended labels including 'mixed' for merge edge-case */
 export const SYSTEM_GROUP_LABELS = {
@@ -113,4 +118,64 @@ export function groupItemsBySystem(items) {
     }
   }
   return sorted
+}
+
+// ─── Floor grouping ──────────────────────────────────────────────────────────
+
+/**
+ * Resolve the floor key for a quote item.
+ * Priority: item.sourcePlanFloor → FLOOR_UNKNOWN_KEY
+ */
+export function resolveItemFloor(item) {
+  return item?.sourcePlanFloor || FLOOR_UNKNOWN_KEY
+}
+
+/**
+ * Resolve the floor label for a quote item.
+ * Priority: item.sourcePlanFloorLabel → FLOOR_UNKNOWN_LABEL
+ */
+export function resolveItemFloorLabel(item) {
+  return item?.sourcePlanFloorLabel || FLOOR_UNKNOWN_LABEL
+}
+
+/**
+ * Sort floor keys in logical building order.
+ * Order: pince → fsz → 1_emelet → 2_emelet → ... → teto → _unknown_floor
+ */
+function floorSortOrder(key) {
+  if (!key || key === FLOOR_UNKNOWN_KEY) return 9000
+  if (key === 'pince') return 0
+  if (key === 'fsz') return 100
+  if (key === 'teto') return 8000
+  // Numeric floors: "2_emelet" → 200+2=202
+  const m = key.match(/^(\d+)_emelet$/)
+  if (m) return 200 + parseInt(m[1], 10)
+  // Fallback: sort alphabetically after known floors
+  return 5000
+}
+
+/**
+ * Group quote items by floor.
+ * Returns array of { key, label, items, subtotalMaterial, subtotalLabor }
+ * Ordered in logical building order (basement → ground → floors → roof → unknown).
+ */
+export function groupItemsByFloor(items) {
+  const groups = {}
+  const labels = {}
+  for (const item of (items || [])) {
+    const key = resolveItemFloor(item)
+    const label = resolveItemFloorLabel(item)
+    if (!groups[key]) { groups[key] = []; labels[key] = label }
+    groups[key].push(item)
+  }
+  // Sort by logical building order
+  return Object.keys(groups)
+    .sort((a, b) => floorSortOrder(a) - floorSortOrder(b))
+    .map(key => ({
+      key,
+      label: labels[key] || key,
+      items: groups[key],
+      subtotalMaterial: groups[key].reduce((s, i) => s + (i.materialCost || 0), 0),
+      subtotalLabor:    groups[key].reduce((s, i) => s + (i.hours || 0), 0),
+    }))
 }

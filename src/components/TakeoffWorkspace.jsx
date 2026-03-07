@@ -1151,10 +1151,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         // Resolve plan-level system type from filename inference (fallback: 'general')
         const _planMeta = getPlanMeta(planId)
         const _planSysType = _planMeta?.inferredMeta?.systemType || 'general'
+        const _planFloor = _planMeta?.inferredMeta?.floor || null
+        const _planFloorLabel = _planMeta?.inferredMeta?.floorLabel || null
         const snapshotItems = (pricing.lines || []).map(line => ({
           name: line.name, code: line.code || '', qty: line.qty, unit: line.unit, type: line.type,
           systemType: line.systemType || 'general',
           sourcePlanSystemType: _planSysType,
+          sourcePlanFloor: _planFloor,
+          sourcePlanFloorLabel: _planFloorLabel,
           unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
           hours: line.hours || 0, materialCost: line.materialCost || 0,
         }))
@@ -1200,6 +1204,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       // Note: planId may be null in pure new-quote flow (no plan association)
       const _fqPlanMeta = planId ? getPlanMeta(planId) : null
       const _fqPlanSysType = _fqPlanMeta?.inferredMeta?.systemType || 'general'
+      const _fqPlanFloor = _fqPlanMeta?.inferredMeta?.floor || null
+      const _fqPlanFloorLabel = _fqPlanMeta?.inferredMeta?.floorLabel || null
       const items = (pricing.lines || []).map(line => ({
         name:        line.name,
         code:        line.code || '',
@@ -1208,6 +1214,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         type:        line.type,
         systemType:  line.systemType || 'general',
         sourcePlanSystemType: _fqPlanSysType,
+        sourcePlanFloor: _fqPlanFloor,
+        sourcePlanFloorLabel: _fqPlanFloorLabel,
         unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
         hours:       line.hours || 0,
         materialCost: line.materialCost || 0,

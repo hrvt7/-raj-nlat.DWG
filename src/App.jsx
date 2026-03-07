@@ -21,7 +21,7 @@ import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, f
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
-import { OUTPUT_MODE_INCLEXCL, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, resolveItemSystemType } from './data/quoteDefaults.js'
+import { OUTPUT_MODE_INCLEXCL, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, groupItemsByFloor, resolveItemSystemType } from './data/quoteDefaults.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -528,10 +528,14 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             </div>
           )}
 
-          {/* ── Items render: flat (none) or grouped (system) ──────── */}
-          {groupBy === 'system' ? (
-            // ── Grouped by system type ──
-            groupItemsBySystem(quote.items || []).map(group => {
+          {/* ── Items render: flat (none) or grouped (system/floor) ── */}
+          {(groupBy === 'system' || groupBy === 'floor') ? (
+            // ── Grouped render (system or floor) ──
+            (() => {
+              const _grpColor = groupBy === 'floor' ? C.accent : C.yellow
+              const _grpBg = groupBy === 'floor' ? 'rgba(0,229,160,0.06)' : 'rgba(255,209,102,0.06)'
+              const _grpBorder = groupBy === 'floor' ? 'rgba(0,229,160,0.15)' : 'rgba(255,209,102,0.15)'
+              return (groupBy === 'system' ? groupItemsBySystem : groupItemsByFloor)(quote.items || []).map(group => {
               const grpLabor = group.items.filter(i => i.type === 'labor')
               const grpMat   = group.items.filter(i => i.type === 'material' || i.type === 'cable')
               const grpLaborTotal  = grpLabor.reduce((s, i) => s + (i.hours || 0) * Number(editRate), 0)
@@ -542,11 +546,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                   {/* Group header */}
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 16px', background: 'rgba(255,209,102,0.06)',
-                    border: `1px solid rgba(255,209,102,0.15)`, borderRadius: 10,
+                    padding: '10px 16px', background: _grpBg,
+                    border: `1px solid ${_grpBorder}`, borderRadius: 10,
                   }}>
-                    <span style={{ width: 4, height: 20, borderRadius: 2, background: C.yellow, flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.yellow }}>{group.label}</span>
+                    <span style={{ width: 4, height: 20, borderRadius: 2, background: _grpColor, flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: _grpColor }}>{group.label}</span>
                     <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{group.items.length} tétel</span>
                     <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.text }}>
                       {fmt(Math.round(grpTotal))} Ft
@@ -589,6 +593,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                 </div>
               )
             })
+            })()
           ) : (
             // ── Flat (no grouping) ──
             <>
@@ -1121,6 +1126,8 @@ function SaaSShell() {
         ...item,
         systemType: item.systemType || 'general',
         sourcePlanSystemType: item.sourcePlanSystemType || meta.inferredMeta?.systemType || 'general',
+        sourcePlanFloor: item.sourcePlanFloor || meta.inferredMeta?.floor || null,
+        sourcePlanFloorLabel: item.sourcePlanFloorLabel || meta.inferredMeta?.floorLabel || null,
       })),
       assemblySummary: meta.calcAssemblySummary || [],
       source:         'plan-takeoff',

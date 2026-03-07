@@ -126,6 +126,16 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       ? _mergePlanSysTypes[0]
       : _mergePlanSysTypes.length > 1 ? 'mixed' : 'general'
 
+    // Resolve merged plan-level floor: unanimous → that floor, mixed → 'mixed'
+    const _mergeFloors = [...new Set(plans.map(p => p.inferredMeta?.floor).filter(Boolean))]
+    const _mergePlanFloor = _mergeFloors.length === 1
+      ? _mergeFloors[0]
+      : _mergeFloors.length > 1 ? 'mixed' : null
+    const _mergeFloorLabels = [...new Set(plans.map(p => p.inferredMeta?.floorLabel).filter(Boolean))]
+    const _mergePlanFloorLabel = _mergeFloorLabels.length === 1
+      ? _mergeFloorLabels[0]
+      : _mergeFloorLabels.length > 1 ? 'Vegyes szint' : null
+
     // Build items from pricing lines
     const items = (pricing.lines || []).map(line => ({
       name:        line.name,
@@ -135,6 +145,8 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       type:        line.type,
       systemType:  line.systemType || 'general',
       sourcePlanSystemType: _mergePlanSysType,
+      sourcePlanFloor: _mergePlanFloor,
+      sourcePlanFloorLabel: _mergePlanFloorLabel,
       unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
       hours:       line.hours || 0,
       materialCost: line.materialCost || 0,
