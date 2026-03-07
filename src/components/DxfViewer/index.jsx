@@ -788,14 +788,14 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
               }}>
                 {showCableRoutes ? 'Kábelvonalak ✓' : 'Kábelvonalak'}
               </button>
-              <button onClick={() => setEstimationOpen(p => !p)} style={{
-                padding: '2px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 10,
-                fontFamily: 'Syne', fontWeight: 700,
-                background: estimationOpen ? C.accent : 'rgba(0,229,160,0.12)',
-                border: `1px solid ${estimationOpen ? C.accent : 'rgba(0,229,160,0.3)'}`,
-                color: estimationOpen ? C.bg : C.accent,
+              <button onClick={() => setEstimationOpen(p => !p)} title="Régi kalkulációs panel (a fő kalkuláció a jobb oldali panelben van)" style={{
+                padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 9,
+                fontFamily: 'DM Mono', fontWeight: 600,
+                background: estimationOpen ? 'rgba(255,209,102,0.15)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${estimationOpen ? 'rgba(255,209,102,0.4)' : C.border}`,
+                color: estimationOpen ? '#FFD166' : C.muted,
               }}>
-                Kalkuláció →
+                📊 Részletek
               </button>
             </>
           )}

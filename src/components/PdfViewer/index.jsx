@@ -1169,16 +1169,16 @@ function PdfToolbar({
         </button>
       )}
 
-      {/* Estimation button */}
+      {/* Estimation button (legacy — primary calc is now in right panel Kalkuláció tab) */}
       {markerCount > 0 && (
-        <button onClick={onToggleEstimation} style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
-          fontFamily: 'Syne', fontWeight: 700,
-          background: estimationOpen ? C.accent : 'rgba(0,229,160,0.12)',
-          border: `1px solid ${estimationOpen ? C.accent : 'rgba(0,229,160,0.3)'}`,
-          color: estimationOpen ? C.bg : C.accent,
+        <button onClick={onToggleEstimation} title="Régi kalkulációs panel (a fő kalkuláció a jobb oldali panelben van)" style={{
+          padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 10,
+          fontFamily: 'DM Mono', fontWeight: 600,
+          background: estimationOpen ? 'rgba(255,209,102,0.15)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${estimationOpen ? 'rgba(255,209,102,0.4)' : C.border}`,
+          color: estimationOpen ? '#FFD166' : C.muted,
         }}>
-          Kalkuláció
+          📊 Részletek
         </button>
       )}
 

@@ -12,7 +12,7 @@ import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteI
 import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
 import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
-import { WALL_FACTORS } from '../data/workItemsDb.js'
+import { WALL_FACTORS, calcProductivityFactor } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
@@ -541,6 +541,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const difficultyMode = settings?.labor?.difficulty_mode || 'normal'
   const [quoteName, setQuoteName] = useState('')
   const [clientName, setClientName] = useState('')
+  // ── Calc tab state (ported from EstimationPanel popup) ──────────────────
+  const [markupType, setMarkupType] = useState(settings?.labor?.markup_type || 'markup') // 'markup' | 'margin'
+  const [cablePricePerM, setCablePricePerM] = useState(settings?.labor?.cable_price_per_m || 800)
+  const vatPercent = settings?.labor?.vat_percent || 27
 
   // ── Unit override ────────────────────────────────────────────────────────
   const [unitOverride, setUnitOverride] = useState(null) // null = auto, or 'mm'|'cm'|'m'|'inches'|'feet'
@@ -1092,6 +1096,62 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode })
   }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode])
 
+  // ── Extended calc (adds markup/margin, cable $/m override, VAT, NECA badge) ──
+  const fullCalc = useMemo(() => {
+    if (!pricing) return null
+    const productivityFactor = calcProductivityFactor(context || {})
+    // Cable cost from cable price per meter
+    const cableTotalM = cableEstimate?.cable_total_m || 0
+    const cableCost = cableTotalM * cablePricePerM
+    // Recalculate subtotal with explicit cable cost
+    const subtotal = pricing.materialCost + pricing.laborCost + cableCost
+    // Markup vs margin
+    let grandTotal
+    const markupPct = markup * 100
+    if (markupType === 'margin') {
+      const marginRatio = markupPct / 100
+      grandTotal = marginRatio >= 1 ? subtotal * 10 : subtotal / (1 - marginRatio)
+    } else {
+      grandTotal = subtotal * (1 + markupPct / 100)
+    }
+    if (!Number.isFinite(grandTotal)) grandTotal = subtotal
+    const markupAmount = grandTotal - subtotal
+    const bruttoTotal = grandTotal * (1 + vatPercent / 100)
+    // Group pricing lines by systemType for per-category breakdown
+    const bySystem = {}
+    for (const line of (pricing.lines || [])) {
+      const sys = line.systemType || 'general'
+      if (!bySystem[sys]) bySystem[sys] = { materialCost: 0, laborHours: 0, lines: [] }
+      bySystem[sys].materialCost += line.materialCost || 0
+      bySystem[sys].laborHours += line.hours || 0
+      bySystem[sys].lines.push(line)
+    }
+    // Group by assembly for summary
+    const byAssembly = {}
+    for (const row of takeoffRows) {
+      const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
+      if (!asm) continue
+      const rowP = computePricing({
+        takeoffRows: [row], assemblies, workItems, materials, context, markup: 0, hourlyRate,
+        cableEstimate: null, difficultyMode,
+      })
+      byAssembly[row.asmId] = {
+        name: asm.name || row.asmId,
+        category: asm.category || '',
+        qty: row.qty,
+        materialCost: rowP.materialCost,
+        laborCost: rowP.laborCost,
+        laborHours: rowP.laborHours,
+      }
+    }
+    return {
+      ...pricing,
+      cableTotalM, cablePricePerM, cableCost,
+      subtotal, markupType, markupPct, markupAmount, grandTotal, bruttoTotal, vatPercent,
+      productivityFactor, bySystem, byAssembly,
+    }
+  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode])
+
   // ── Per-assembly unit cost ────────────────────────────────────────────────
   // Compute unit cost for each assembly × each wall type (for per-split pricing display in TakeoffRow)
   const unitCostByAsmByWall = useMemo(() => {
@@ -1381,7 +1441,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         {saveSuccess && planId ? (
           <>
             <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent, display: 'flex', alignItems: 'center', gap: 6 }}>
-              ✓ Kalkuláció mentve · {Math.round(pricing?.total || 0).toLocaleString('hu-HU')} Ft
+              ✓ Kalkuláció mentve · {Math.round(fullCalc?.grandTotal || pricing?.total || 0).toLocaleString('hu-HU')} Ft
             </div>
             <button
               onClick={async () => {
@@ -1410,29 +1470,38 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               ← Vissza a projekthez
             </button>
           </>
-        ) : pricing ? (
+        ) : fullCalc ? (
           <>
-            <PricingPill label="Anyag" value={pricing.materialCost} color={C.blue} />
-            <div style={{ width: 1, height: 32, background: C.border, margin: '0 16px' }} />
-            <PricingPill label="Munka" value={pricing.laborCost} color={C.yellow} />
-            <div style={{ width: 1, height: 32, background: C.border, margin: '0 16px' }} />
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Összesen</div>
-              <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.accent }}>
-                {Math.round(pricing.total).toLocaleString('hu-HU')} Ft
+            <PricingPill label="Anyag" value={fullCalc.materialCost} color={C.blue} />
+            <div style={{ width: 1, height: 32, background: C.border, margin: '0 12px' }} />
+            <PricingPill label="Munka" value={fullCalc.laborCost} color={C.yellow} />
+            {fullCalc.cableCost > 0 && (
+              <>
+                <div style={{ width: 1, height: 32, background: C.border, margin: '0 12px' }} />
+                <PricingPill label="Kábel" value={fullCalc.cableCost} color={C.blue} />
+              </>
+            )}
+            <div style={{ width: 1, height: 32, background: C.border, margin: '0 12px' }} />
+            <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setRightTab('calc')} title="Nyisd meg a Kalkuláció fület">
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Nettó</div>
+              <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color: C.accent }}>
+                {Math.round(fullCalc.grandTotal).toLocaleString('hu-HU')} Ft
+              </div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>
+                bruttó: {Math.round(fullCalc.bruttoTotal).toLocaleString('hu-HU')} Ft
               </div>
             </div>
             <button
               onClick={handleSave}
               disabled={saving}
               style={{
-                marginLeft: 20, padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                marginLeft: 16, padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
                 background: C.accent, border: 'none', color: C.bg,
                 fontFamily: 'Syne', fontWeight: 800, fontSize: 14,
                 opacity: saving ? 0.6 : 1,
               }}
             >
-              {saving ? '...' : planId ? '💾 Kalkuláció mentése' : '📄 Ajánlat mentése'}
+              {saving ? '...' : planId ? '💾 Mentés' : '📄 Ajánlat'}
             </button>
           </>
         ) : (
@@ -1609,6 +1678,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               { id: 'recognize', label: '🔍 Elemek',     badge: effectiveItems.length },
               { id: 'takeoff',   label: '📋 Felmérés',   badge: takeoffRows.length },
               { id: 'cable',     label: '🔌 Kábel' },
+              { id: 'calc',      label: '🧮 Kalkuláció' },
               { id: 'context',   label: '⚙️ Beállítás' },
             ].map(tab => (
               <button
@@ -1910,6 +1980,189 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
                     Adj hozzá elemeket a Felmérés fülön a kábelbecslés elindításához.
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* ── CALC TAB ─────────────────────────────────────────────────── */}
+            {rightTab === 'calc' && (
+              <div>
+                {!fullCalc ? (
+                  <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
+                    Adj hozzá elemeket a Felmérés fülön a kalkuláció elindításához.
+                  </div>
+                ) : (
+                  <>
+                    {/* ── Per-assembly cost breakdown ── */}
+                    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+                      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Assembly költségbontás</div>
+                      {Object.entries(fullCalc.byAssembly).map(([asmId, info]) => (
+                        <div key={asmId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 600 }}>{info.name}</div>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{info.qty} db · {info.laborHours.toFixed(1)} óra</div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.blue }}>{Math.round(info.materialCost).toLocaleString('hu-HU')} Ft</div>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.yellow }}>{Math.round(info.laborCost).toLocaleString('hu-HU')} Ft</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── Cable cost ── */}
+                    {fullCalc.cableTotalM > 0 && (
+                      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: 14 }}>🔌</span>
+                          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>Kábel költség</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Kábel ár (Ft/m)</div>
+                            <input
+                              type="number" min={0} step={50}
+                              value={cablePricePerM}
+                              onChange={e => setCablePricePerM(Math.max(0, parseFloat(e.target.value) || 0))}
+                              style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                            />
+                          </div>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Összesen ({Math.round(fullCalc.cableTotalM)} m)</div>
+                            <div style={{ padding: '5px 7px', borderRadius: 4, background: 'rgba(76,201,240,0.07)', border: '1px solid rgba(76,201,240,0.18)', fontSize: 11, fontFamily: 'DM Mono', color: C.blue, fontWeight: 700 }}>
+                              {Math.round(fullCalc.cableCost).toLocaleString('hu-HU')} Ft
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Rate settings ── */}
+                    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+                      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Általános díjak</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Munkadíj (Ft/óra)</div>
+                          <input
+                            type="number" min={0} step={500}
+                            value={hourlyRate}
+                            onChange={e => setHourlyRate(Math.max(0, parseInt(e.target.value) || 0))}
+                            style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Feláras %</div>
+                          <input
+                            type="number" min={0} max={99} step={1}
+                            value={Math.round(markup * 100)}
+                            onChange={e => setMarkup(Math.max(0, Math.min(99, parseInt(e.target.value) || 0)) / 100)}
+                            style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Markup vs Margin toggle */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                        <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono' }}>Számítási mód:</div>
+                        {[
+                          { key: 'markup', label: 'Markup', tip: `Cost × (1+${fullCalc.markupPct.toFixed(0)}%)` },
+                          { key: 'margin', label: 'Margin', tip: `Cost ÷ (1−${fullCalc.markupPct.toFixed(0)}%)` },
+                        ].map(opt => (
+                          <button key={opt.key}
+                            title={opt.tip}
+                            onClick={() => setMarkupType(opt.key)}
+                            style={{
+                              padding: '3px 10px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono',
+                              border: `1px solid ${markupType === opt.key ? C.accent : C.border}`,
+                              background: markupType === opt.key ? C.accentDim : 'transparent',
+                              color: markupType === opt.key ? C.accent : C.muted,
+                              cursor: 'pointer',
+                            }}>{opt.label}</button>
+                        ))}
+                        <span style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginLeft: 4 }}>
+                          +{Math.round(fullCalc.markupAmount).toLocaleString('hu-HU')} Ft
+                        </span>
+                      </div>
+
+                      {/* NECA productivity factor badge */}
+                      {fullCalc.productivityFactor !== 1.0 && (
+                        <div style={{ marginTop: 8, padding: '5px 10px', borderRadius: 6,
+                          background: fullCalc.productivityFactor > 1.2 ? 'rgba(255,107,107,0.1)' : 'rgba(255,209,102,0.1)',
+                          border: `1px solid ${fullCalc.productivityFactor > 1.2 ? 'rgba(255,107,107,0.3)' : 'rgba(255,209,102,0.3)'}`,
+                          display: 'flex', alignItems: 'center', gap: 6,
+                        }}>
+                          <span style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono' }}>NECA produktivitás:</span>
+                          <span style={{ fontSize: 10, fontFamily: 'DM Mono', fontWeight: 700,
+                            color: fullCalc.productivityFactor > 1.2 ? '#FF6B6B' : '#FFD166' }}>
+                            ×{fullCalc.productivityFactor.toFixed(2)}
+                          </span>
+                          <span style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono' }}>
+                            ({fullCalc.productivityFactor > 1 ? '+' : ''}{Math.round((fullCalc.productivityFactor - 1) * 100)}% a normaidőre)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Grand total summary ── */}
+                    <div style={{ background: C.bgCard, border: `1px solid ${C.accent}30`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+                      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 12 }}>Összefoglaló</div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>Anyagköltség</span>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{Math.round(fullCalc.materialCost).toLocaleString('hu-HU')} Ft</span>
+                      </div>
+                      {fullCalc.cableCost > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>Kábel ({Math.round(fullCalc.cableTotalM)} m × {cablePricePerM.toLocaleString('hu-HU')} Ft/m)</span>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{Math.round(fullCalc.cableCost).toLocaleString('hu-HU')} Ft</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>Munkadíj ({fullCalc.laborHours.toFixed(1)} óra × {hourlyRate.toLocaleString('hu-HU')} Ft/óra)</span>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{Math.round(fullCalc.laborCost).toLocaleString('hu-HU')} Ft</span>
+                      </div>
+
+                      {/* Subtotal */}
+                      <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, fontWeight: 600 }}>Részösszeg</span>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 600 }}>{Math.round(fullCalc.subtotal).toLocaleString('hu-HU')} Ft</span>
+                      </div>
+
+                      {/* Markup/Margin */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#FF8C42' }}>
+                          + Rezsi/árrés ({fullCalc.markupPct.toFixed(0)}% {markupType})
+                        </span>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#FF8C42', fontWeight: 600 }}>
+                          {Math.round(fullCalc.markupAmount).toLocaleString('hu-HU')} Ft
+                        </span>
+                      </div>
+
+                      {/* Grand total (nettó) */}
+                      <div style={{ borderTop: `2px solid ${C.accent}40`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontFamily: 'Syne', fontSize: 15, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
+                        <span style={{ fontFamily: 'Syne', fontSize: 15, fontWeight: 800, color: C.accent }}>{Math.round(fullCalc.grandTotal).toLocaleString('hu-HU')} Ft</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Bruttó ({vatPercent}% ÁFA)</span>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 600 }}>{Math.round(fullCalc.bruttoTotal).toLocaleString('hu-HU')} Ft</span>
+                      </div>
+                    </div>
+
+                    {/* ── Action: create quote ── */}
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      style={{
+                        width: '100%', padding: '13px 16px', borderRadius: 8, cursor: 'pointer',
+                        background: C.accent, border: 'none', color: C.bg,
+                        fontSize: 14, fontFamily: 'Syne', fontWeight: 700, marginBottom: 8,
+                        opacity: saving ? 0.5 : 1,
+                      }}
+                    >
+                      {saving ? '...' : planId ? '💾 Kalkuláció mentése' : '📄 Ajánlat létrehozása →'}
+                    </button>
+                  </>
                 )}
               </div>
             )}
