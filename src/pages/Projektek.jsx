@@ -5,6 +5,7 @@ import { C } from '../components/ui.jsx'
 import {
   loadPlans, getPlanFile, savePlan, deletePlan,
   generatePlanId, savePlanThumbnail, getPlanThumbnail, getPlansByProject,
+  updatePlanMeta,
 } from '../data/planStore.js'
 import {
   loadProjects, saveProject, deleteProject, generateProjectId, getProject, updateProject,
@@ -13,7 +14,8 @@ import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
 } from '../data/legendStore.js'
 import { listDetectionRuns } from '../data/detectionRunStore.js'
-import { inferPlanMeta, formatInferredMeta } from '../utils/planMetaInference.js'
+import { inferPlanMeta, inferMetaFromText, mergeMeta, extractPdfText, formatInferredMeta } from '../utils/planMetaInference.js'
+import { parseDxfFile } from '../dxfParser.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -750,18 +752,41 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     for (const file of accepted) {
       const id = generatePlanId()
       const ft = getFileType(file.name)
-      const inferred = inferPlanMeta(file.name)
+      const layer1 = inferPlanMeta(file.name)
       const plan = {
         id, name: file.name, fileName: file.name, fileType: ft, fileSize: file.size,
         projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
         markerCount: 0, measureCount: 0, hasScale: false, detectedCount: 0, detectionReviewed: false,
-        inferredMeta: inferred.metaConfidence > 0 ? inferred : null,
+        inferredMeta: layer1.metaConfidence > 0 ? layer1 : null,
       }
       await savePlan(plan, file)
       // Thumbnail only for PDF — DXF/DWG get fallback icon
       if (ft === 'pdf') {
         generatePdfThumb(file, id).then(d => { if (d) setThumbnails(prev => ({ ...prev, [id]: d })) }).catch(() => {})
       }
+      // ── Layer 2: async text-based metadata enrichment (non-blocking) ──
+      ;(async () => {
+        try {
+          let textLines = []
+          if (ft === 'pdf') {
+            const buf = await file.arrayBuffer()
+            textLines = await extractPdfText(buf)
+          } else if (ft === 'dxf') {
+            const parseResult = await parseDxfFile(file, () => {})
+            // Prefer title_block text (higher signal), then all_text as fallback
+            const tbTexts = Object.values(parseResult.title_block || {}).flat()
+            textLines = tbTexts.length > 0 ? tbTexts : (parseResult.all_text || [])
+          }
+          if (textLines.length === 0) return
+          const layer2 = inferMetaFromText(textLines)
+          if (layer2.metaConfidence === 0) return
+          const merged = mergeMeta(layer1, layer2)
+          if (merged.metaConfidence > (layer1.metaConfidence || 0)) {
+            updatePlanMeta(id, { inferredMeta: merged })
+            reload()
+          }
+        } catch { /* silent — Layer 2 is best-effort */ }
+      })()
     }
     setUploading(false)
     reload()

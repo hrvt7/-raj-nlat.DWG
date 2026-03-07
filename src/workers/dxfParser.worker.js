@@ -82,6 +82,7 @@ function parseDxfText(text) {
   const allLayers     = new Set()
   const layerInfo     = {}
   const titleBlock    = {}
+  const allText       = []
 
   const insertPositions = []
   const lineGeom        = []
@@ -171,10 +172,14 @@ function parseDxfText(text) {
     }
 
     if ((entityType==='TEXT'||entityType==='MTEXT') && code===1) {
-      const lu = entityLayer.toUpperCase()
-      if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
-        if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
-        if (val.trim().length > 1) titleBlock[entityLayer].push(val.trim())
+      const trimmed = val.trim()
+      if (trimmed.length > 1) {
+        allText.push(trimmed)
+        const lu = entityLayer.toUpperCase()
+        if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
+          if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
+          titleBlock[entityLayer].push(trimmed)
+        }
       }
     }
 
@@ -231,6 +236,7 @@ function parseDxfText(text) {
     layers: [...allLayers].sort(),
     units: { insunits, name: unitName, factor: unitFactor, auto_detected: true },
     title_block: titleBlock,
+    all_text: allText,
     inserts: insertPositions,
     lineGeom,
     polylineGeom,
