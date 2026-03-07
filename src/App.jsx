@@ -39,6 +39,13 @@ const OUTPUT_MODES = [
   { key: 'split_material_labor',  label: 'Anyag + munkadíj külön',     desc: 'Anyag és munkadíj külön bontásban' },
 ]
 
+// ─── Customer-facing notes per outputMode ─────────────────────────────────────
+const OUTPUT_MODE_NOTES = {
+  combined: null,
+  labor_only: 'Az ajánlat kizárólag a szerelési munkadíjat tartalmazza. Az anyagköltség nem része az ajánlatnak.',
+  split_material_labor: 'Az ajánlat az anyag- és munkadíj költségeket külön bontásban tartalmazza.',
+}
+
 const PDF_LEVELS = [
   { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },
   { key: 'summary',  label: 'Összesített',  icon: '▤', desc: '+ Munkacsoport-bontás' },
@@ -267,6 +274,17 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{fmt(Number(editRate))} Ft/ó</div>
         </div>
       </div>
+
+      {/* ── OutputMode customer-facing note ─────────────────────────────── */}
+      {OUTPUT_MODE_NOTES[outputMode] && (
+        <div style={{
+          background: `${C.blue}0a`, border: `1px solid ${C.blue}25`,
+          borderRadius: 10, padding: '12px 16px',
+          fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.55,
+        }}>
+          {OUTPUT_MODE_NOTES[outputMode]}
+        </div>
+      )}
 
       {/* ── Main body: left (items) + right (sidebar) ────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 260px', gap: 20, alignItems: 'start' }}>

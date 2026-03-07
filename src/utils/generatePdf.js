@@ -184,6 +184,17 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     detailedSectionHtml = materialTableHtml + laborTableHtml
   }
 
+  // ── OutputMode customer-facing note ──────────────────────────────────────
+  const modeNotes = {
+    combined: null,
+    labor_only: 'Az ajánlat kizárólag a szerelési munkadíjat tartalmazza. Az anyagköltség nem része az ajánlatnak.',
+    split_material_labor: 'Az ajánlat az anyag- és munkadíj költségeket külön bontásban tartalmazza.',
+  }
+  const modeNote = modeNotes[outputMode] || null
+  const modeNoteHtml = modeNote
+    ? `<div class="mode-note">${escHtml(modeNote)}</div>`
+    : ''
+
   // ── Notes ─────────────────────────────────────────────────────────────────
   const notes = quote.notes || qSettings.default_notes || ''
   const notesHtml = notes
@@ -292,6 +303,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     .td-right  { text-align: right; }
     .td-price  { font-family: 'DM Mono', monospace; font-size: 8.5pt; font-weight: 500; color: #111827; }
 
+    /* ── MODE NOTE ────────────────────────────────────────────────────── */
+    .mode-note { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 7px; padding: 10px 13px; margin-bottom: 14px; font-family: 'Inter', sans-serif; font-size: 8.5pt; color: #1E40AF; line-height: 1.6; }
+
     /* ── NOTES / TERMS ────────────────────────────────────────────────── */
     .notes-box { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 7px; padding: 10px 13px; margin-bottom: 12px; font-size: 8.5pt; color: #92400E; line-height: 1.6; }
     .terms-box { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 7px; padding: 10px 13px; margin-bottom: 14px; font-size: 8pt; color: #4B5563; line-height: 1.7; }
@@ -354,6 +368,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
 
     <!-- ── KPI CARDS ──────────────────────────────────────────────────── -->
     <div class="kpi-row">${kpiCards}</div>
+
+    <!-- ── OUTPUT MODE NOTE ──────────────────────────────────────────── -->
+    ${modeNoteHtml}
 
     <!-- ── FINANCIAL TABLE ───────────────────────────────────────────── -->
     <div class="fin-table-wrap">
