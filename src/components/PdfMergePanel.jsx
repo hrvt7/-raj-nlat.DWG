@@ -119,6 +119,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
     // Build items from pricing lines
     const items = (pricing.lines || []).map(line => ({
       name:        line.name,
+      code:        line.code || '',
       qty:         line.qty,
       unit:        line.unit,
       type:        line.type,

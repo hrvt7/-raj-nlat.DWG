@@ -63,14 +63,14 @@ export function computePricing({
           const normMin = baseNorm * ctxMultiplier * wallFactor
           const hours = (normMin * compQty) / 60
           laborHours += hours
-          lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
+          lines.push({ name: comp.name, code: comp.itemCode || '', qty: compQty, unit: comp.unit, hours, materialCost: 0, type: 'labor' })
         } else {
           const mat = materials.find(m => m.code === comp.itemCode)
                    || materials.find(m => m.name === comp.name)
           const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
           const cost = unitPrice * compQty
           materialCost += cost
-          lines.push({ name: comp.name, qty: compQty, unit: comp.unit, hours: 0, materialCost: cost, type: 'material' })
+          lines.push({ name: comp.name, code: mat?.code || comp.itemCode || '', qty: compQty, unit: comp.unit, hours: 0, materialCost: cost, type: 'material' })
         }
       }
     }
@@ -92,7 +92,7 @@ export function computePricing({
       const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
       const cost = unitPrice * c.m
       materialCost += cost
-      lines.push({ name: c.fallback, qty: Math.round(c.m), unit: 'm', hours: 0, materialCost: cost, type: 'cable' })
+      lines.push({ name: c.fallback, code: mat?.code || c.code || '', qty: Math.round(c.m), unit: 'm', hours: 0, materialCost: cost, type: 'cable' })
     }
     const cableNormMin = 3  // min/m average
     const cableHours = (cableEstimate.cable_total_m * cableNormMin * ctxMultiplier) / 60

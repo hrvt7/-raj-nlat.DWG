@@ -1147,7 +1147,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         })
         // Persist pricing summary + snapshot for quote generation on plan metadata
         const snapshotItems = (pricing.lines || []).map(line => ({
-          name: line.name, qty: line.qty, unit: line.unit, type: line.type,
+          name: line.name, code: line.code || '', qty: line.qty, unit: line.unit, type: line.type,
           unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
           hours: line.hours || 0, materialCost: line.materialCost || 0,
         }))
@@ -1192,6 +1192,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       // ── Full quote save (new-quote flow or merge fallback) ──
       const items = (pricing.lines || []).map(line => ({
         name:        line.name,
+        code:        line.code || '',
         qty:         line.qty,
         unit:        line.unit,
         type:        line.type,

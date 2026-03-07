@@ -2,16 +2,23 @@
 // Exports aggregated material + cable items from a quote snapshot.
 // Independent of customer-facing outputMode — always exports the full BOM.
 
-/** Aggregate material/cable items from quote.items by name+unit key. */
+/** Aggregate material/cable items from quote.items.
+ *  Primary key: code + unit (stable material identifier).
+ *  Fallback key: name + unit (for old quotes without code). */
 export function generateBOMRows(quote) {
   const items = (quote.items || []).filter(
     i => i.type === 'material' || i.type === 'cable'
   )
 
-  // Aggregate by normalised name + unit
+  // Aggregate: prefer code+unit if code exists, otherwise name+unit
   const map = new Map()
   for (const item of items) {
-    const key = `${(item.name || '').trim().toLowerCase()}||${(item.unit || 'db').trim().toLowerCase()}`
+    const code = (item.code || '').trim()
+    const name = (item.name || '').trim()
+    const unit = (item.unit || 'db').trim().toLowerCase()
+    const key = code
+      ? `code::${code.toLowerCase()}||${unit}`
+      : `name::${name.toLowerCase()}||${unit}`
     const prev = map.get(key)
     const mc = item.materialCost != null ? item.materialCost : ((item.unitPrice || 0) * (item.qty || 0))
     if (prev) {
@@ -19,7 +26,8 @@ export function generateBOMRows(quote) {
       prev.materialCost += mc
     } else {
       map.set(key, {
-        name: (item.name || '').trim(),
+        name,
+        code,
         qty: item.qty || 0,
         unit: (item.unit || 'db').trim(),
         materialCost: mc,
@@ -46,11 +54,12 @@ export function exportBOM(quote) {
   const rows = generateBOMRows(quote)
   if (rows.length === 0) return
 
-  const headers = ['Megnevezés', 'Mennyiség', 'Egység', 'Egységár (Ft nettó)', 'Összeg (Ft nettó)']
+  const headers = ['Cikkszám', 'Megnevezés', 'Mennyiség', 'Egység', 'Egységár (Ft nettó)', 'Összeg (Ft nettó)']
   const lines = [headers]
 
   for (const r of rows) {
     lines.push([
+      csvEsc(r.code),
       csvEsc(r.name),
       fmtNum(r.qty, 2),
       csvEsc(r.unit),
@@ -62,7 +71,7 @@ export function exportBOM(quote) {
   // Summary row — own aggregate, NOT the customer-facing KPI
   const totalMat = rows.reduce((s, r) => s + r.materialCost, 0)
   lines.push([])
-  lines.push(['ÖSSZESEN', '', '', '', String(totalMat)])
+  lines.push(['', 'ÖSSZESEN', '', '', '', String(totalMat)])
 
   const BOM = '\uFEFF'
   const csv = BOM + lines.map(r => r.join(';')).join('\r\n')
