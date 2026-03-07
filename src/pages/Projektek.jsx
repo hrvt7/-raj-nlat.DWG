@@ -14,7 +14,10 @@ import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
 } from '../data/legendStore.js'
 import { listDetectionRuns } from '../data/detectionRunStore.js'
-import { inferPlanMeta, inferMetaFromText, mergeMeta, extractPdfText, formatInferredMeta } from '../utils/planMetaInference.js'
+import {
+  inferPlanMeta, inferMetaFromText, mergeMeta, extractPdfText, formatInferredMeta,
+  SYSTEM_TYPES, SYSTEM_TYPE_LABELS, DOC_TYPES, DOC_TYPE_LABELS,
+} from '../utils/planMetaInference.js'
 import { parseDxfFile } from '../dxfParser.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
@@ -324,8 +327,193 @@ function ScannerSVG({ label, sublabel, tags }) {
   )
 }
 
+// ─── Metadata Copilot strip ──────────────────────────────────────────────────
+// Confidence-based badge + inline editable metadata pills
+
+const CONFIDENCE_LEVELS = {
+  high:   { label: '✓ felismert', color: C.accent, bg: 'rgba(0,229,160,0.10)', border: 'rgba(0,229,160,0.25)' },
+  medium: { label: '? ellenőrizd', color: C.yellow, bg: 'rgba(255,209,102,0.10)', border: 'rgba(255,209,102,0.25)' },
+  low:    { label: '— kézi', color: C.textSub, bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.12)' },
+}
+
+function getConfidenceLevel(meta) {
+  if (!meta) return 'low'
+  const c = meta.metaConfidence || 0
+  if (c >= 0.85) return 'high'
+  if (c >= 0.60) return 'medium'
+  return 'low'
+}
+
+const FLOOR_SELECT_OPTIONS = [
+  { value: 'pince', label: 'Pince' },
+  { value: 'fsz', label: 'Földszint' },
+  { value: '1_emelet', label: '1. emelet' },
+  { value: '2_emelet', label: '2. emelet' },
+  { value: '3_emelet', label: '3. emelet' },
+  { value: '4_emelet', label: '4. emelet' },
+  { value: 'teto', label: 'Tetőtér' },
+]
+
+function MetaPill({ label, value, valueKey, options, onSelect, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const display = value || placeholder || '–'
+  const hasValue = !!value
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(!open) }}
+        style={{
+          fontFamily: 'DM Mono', fontSize: 8.5, letterSpacing: '0.02em',
+          padding: '2px 6px', borderRadius: 4, cursor: 'pointer',
+          background: hasValue ? 'rgba(76,201,240,0.08)' : 'rgba(255,255,255,0.03)',
+          border: `1px solid ${hasValue ? 'rgba(76,201,240,0.20)' : 'rgba(255,255,255,0.10)'}`,
+          color: hasValue ? C.blue : C.textSub,
+          transition: 'all 0.12s', whiteSpace: 'nowrap',
+          maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+        title={`${label}: ${display}`}
+      >
+        <span style={{ color: C.textSub, marginRight: 3, fontSize: 7.5 }}>{label}:</span>{display}
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 3, zIndex: 100,
+          background: '#1A1A1E', border: `1px solid ${C.border}`, borderRadius: 6,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)', minWidth: 110, maxHeight: 180, overflowY: 'auto',
+          padding: '4px 0',
+        }} onClick={e => e.stopPropagation()}>
+          {options.map(opt => (
+            <div
+              key={opt.value}
+              onClick={() => { onSelect(opt.value, opt.label); setOpen(false) }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.10)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              style={{
+                padding: '4px 10px', cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
+                color: opt.value === valueKey ? C.blue : C.text,
+                transition: 'background 0.1s',
+              }}
+            >
+              {opt.label}
+            </div>
+          ))}
+          {value && (
+            <div
+              onClick={() => { onSelect(null, null); setOpen(false) }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,107,107,0.10)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              style={{
+                padding: '4px 10px', cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
+                color: '#FF6B6B', borderTop: `1px solid ${C.border}`, marginTop: 2,
+              }}
+            >
+              Törlés
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MetaCopilotStrip({ plan, onMetaChange }) {
+  const meta = plan.inferredMeta || {}
+  const level = getConfidenceLevel(meta)
+  const conf = CONFIDENCE_LEVELS[level]
+
+  const systemOptions = SYSTEM_TYPES.filter(s => s !== 'general').map(s => ({ value: s, label: SYSTEM_TYPE_LABELS[s] }))
+  systemOptions.push({ value: 'general', label: SYSTEM_TYPE_LABELS.general })
+  const docTypeOptions = DOC_TYPES.map(d => ({ value: d, label: DOC_TYPE_LABELS[d] }))
+
+  const handleFieldChange = (field, value, labelField, labelValue) => {
+    const updates = {
+      inferredMeta: {
+        ...meta,
+        [field]: value,
+        ...(labelField ? { [labelField]: labelValue } : {}),
+        metaSource: value ? 'manual' : meta.metaSource,
+        metaConfidence: value ? 1.0 : meta.metaConfidence,
+      },
+    }
+    onMetaChange(plan.id, updates)
+  }
+
+  const handleAiFallback = (e) => {
+    e.stopPropagation()
+    alert('AI elemzés — hamarosan elérhető.\nEz a funkció a következő frissítésben lesz aktív.')
+  }
+
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
+        <span style={{
+          fontFamily: 'DM Mono', fontSize: 8, letterSpacing: '0.04em',
+          padding: '1px 6px', borderRadius: 3,
+          background: conf.bg, border: `1px solid ${conf.border}`, color: conf.color,
+        }}>
+          {conf.label}
+        </span>
+        {meta.drawingNumber && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 8.5, color: C.textSub }} title="Rajzszám">
+            {meta.drawingNumber}
+          </span>
+        )}
+        {level !== 'high' && (
+          <button
+            onClick={handleAiFallback}
+            style={{
+              fontFamily: 'DM Mono', fontSize: 7.5, marginLeft: 'auto',
+              padding: '1px 5px', borderRadius: 3, cursor: 'pointer',
+              background: 'rgba(76,201,240,0.06)', border: '1px solid rgba(76,201,240,0.18)',
+              color: C.blue, transition: 'all 0.12s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.14)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.06)' }}
+            title="AI-alapú metadata felismerés (hamarosan)"
+          >
+            AI elemzés
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <MetaPill
+          label="Szint"
+          value={meta.floorLabel || null}
+          valueKey={meta.floor || null}
+          options={FLOOR_SELECT_OPTIONS}
+          onSelect={(val, lbl) => handleFieldChange('floor', val, 'floorLabel', lbl)}
+        />
+        <MetaPill
+          label="Rendszer"
+          value={meta.systemType ? (SYSTEM_TYPE_LABELS[meta.systemType] || null) : null}
+          valueKey={meta.systemType || null}
+          options={systemOptions}
+          onSelect={(val) => handleFieldChange('systemType', val)}
+        />
+        <MetaPill
+          label="Típus"
+          value={meta.docType ? (DOC_TYPE_LABELS[meta.docType] || null) : null}
+          valueKey={meta.docType || null}
+          options={docTypeOptions}
+          onSelect={(val) => handleFieldChange('docType', val)}
+        />
+      </div>
+    </div>
+  )
+}
+
 // ─── Plan card ────────────────────────────────────────────────────────────────
-function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId }) {
+function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId, onMetaChange }) {
   const [hov, setHov] = useState(false)
   const isOpening = openingId === plan.id
   const markerCount = plan.markerCount || 0
@@ -368,16 +556,10 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           <div style={{ color: C.text, fontSize: 13, fontWeight: 600, fontFamily: 'Syne', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190 }}>{plan.name || plan.fileName || 'Névtelen'}</div>
           {(() => { const ftInfo = FILE_TYPE_MAP[plan.fileType] || FILE_TYPE_MAP.pdf; return <span style={{ fontFamily: 'DM Mono', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 4, background: ftInfo.bg, border: `1px solid ${ftInfo.border}`, color: ftInfo.color }}>{ftInfo.label}</span> })()}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: plan.inferredMeta ? 4 : (hasCalc ? 6 : 10) }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.textMuted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: 4 }}>
           <span>{fmtSize(plan.fileSize)}</span><span>{fmtDate(plan.uploadedAt || plan.createdAt)}</span>
         </div>
-        {plan.inferredMeta && formatInferredMeta(plan.inferredMeta) && (
-          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.blue, marginBottom: hasCalc ? 6 : 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            title={formatInferredMeta(plan.inferredMeta)}
-          >
-            {formatInferredMeta(plan.inferredMeta)}
-          </div>
-        )}
+        <MetaCopilotStrip plan={plan} onMetaChange={onMetaChange} />
         {hasCalc && (
           <div style={{
             background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)',
@@ -825,6 +1007,11 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     reload()
   }, [reload])
 
+  const handleMetaChange = useCallback((planId, updates) => {
+    updatePlanMeta(planId, updates)
+    reload()
+  }, [reload])
+
   const toggleSelect = useCallback((planId, val) => setSelected(prev => ({ ...prev, [planId]: val })), [])
   const deselectAll = useCallback(() => setSelected({}), [])
   const selectedIds = Object.entries(selected).filter(([, v]) => v).map(([id]) => id)
@@ -1030,6 +1217,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
                 key={plan.id} plan={plan} thumb={thumbnails[plan.id]}
                 selected={!!selected[plan.id]} onSelect={val => toggleSelect(plan.id, val)}
                 onOpen={handleOpenSaved} onDelete={handleDelete} openingId={openingId}
+                onMetaChange={handleMetaChange}
               />
             ))}
           </div>
