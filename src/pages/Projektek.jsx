@@ -18,6 +18,7 @@ import {
   inferPlanMeta, inferMetaFromText, mergeMeta, extractPdfText, formatInferredMeta,
   SYSTEM_TYPES, SYSTEM_TYPE_LABELS, DOC_TYPES, DOC_TYPE_LABELS,
 } from '../utils/planMetaInference.js'
+import { callAiMetaVision, mergeAiMeta, renderFirstPageImage } from '../utils/aiMetaVision.js'
 import { parseDxfFile } from '../dxfParser.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
@@ -430,6 +431,8 @@ function MetaCopilotStrip({ plan, onMetaChange }) {
   const meta = plan.inferredMeta || {}
   const level = getConfidenceLevel(meta)
   const conf = CONFIDENCE_LEVELS[level]
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState(null)
 
   const systemOptions = SYSTEM_TYPES.filter(s => s !== 'general').map(s => ({ value: s, label: SYSTEM_TYPE_LABELS[s] }))
   systemOptions.push({ value: 'general', label: SYSTEM_TYPE_LABELS.general })
@@ -448,9 +451,42 @@ function MetaCopilotStrip({ plan, onMetaChange }) {
     onMetaChange(plan.id, updates)
   }
 
-  const handleAiFallback = (e) => {
+  const isPdf = plan.fileType === 'pdf'
+
+  const handleAiFallback = async (e) => {
     e.stopPropagation()
-    alert('AI elemzés — hamarosan elérhető.\nEz a funkció a következő frissítésben lesz aktív.')
+    if (aiLoading) return
+    if (!isPdf) {
+      setAiError('AI elemzés jelenleg csak PDF tervekhez érhető el.')
+      setTimeout(() => setAiError(null), 4000)
+      return
+    }
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      // 1. Get image: try cached thumbnail first, render on demand if missing
+      let imageDataUrl = await getPlanThumbnail(plan.id)
+      if (!imageDataUrl) {
+        const fileBlob = await getPlanFile(plan.id)
+        if (!fileBlob) throw new Error('PDF fájl nem található.')
+        imageDataUrl = await renderFirstPageImage(fileBlob, 0.6)
+      }
+
+      // 2. Call AI Vision
+      const aiResult = await callAiMetaVision(imageDataUrl, meta)
+
+      // 3. Merge with conservative rules
+      const merged = mergeAiMeta(meta, aiResult)
+
+      // 4. Update plan metadata
+      onMetaChange(plan.id, { inferredMeta: merged })
+    } catch (err) {
+      console.error('[AI Meta Vision]', err)
+      setAiError(err.message || 'AI elemzés sikertelen.')
+      setTimeout(() => setAiError(null), 5000)
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   return (
@@ -471,18 +507,31 @@ function MetaCopilotStrip({ plan, onMetaChange }) {
         {level !== 'high' && (
           <button
             onClick={handleAiFallback}
+            disabled={aiLoading || (!isPdf)}
             style={{
               fontFamily: 'DM Mono', fontSize: 7.5, marginLeft: 'auto',
-              padding: '1px 5px', borderRadius: 3, cursor: 'pointer',
-              background: 'rgba(76,201,240,0.06)', border: '1px solid rgba(76,201,240,0.18)',
-              color: C.blue, transition: 'all 0.12s',
+              padding: '1px 5px', borderRadius: 3,
+              cursor: aiLoading || !isPdf ? 'default' : 'pointer',
+              background: aiLoading ? 'rgba(76,201,240,0.18)' : 'rgba(76,201,240,0.06)',
+              border: `1px solid ${aiLoading ? 'rgba(76,201,240,0.35)' : 'rgba(76,201,240,0.18)'}`,
+              color: !isPdf ? C.muted : C.blue, transition: 'all 0.12s',
+              opacity: !isPdf ? 0.5 : 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.14)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.06)' }}
-            title="AI-alapú metadata felismerés (hamarosan)"
+            onMouseEnter={e => { if (!aiLoading && isPdf) e.currentTarget.style.background = 'rgba(76,201,240,0.14)' }}
+            onMouseLeave={e => { if (!aiLoading) e.currentTarget.style.background = aiLoading ? 'rgba(76,201,240,0.18)' : 'rgba(76,201,240,0.06)' }}
+            title={!isPdf ? 'AI elemzés jelenleg csak PDF tervekhez' : 'AI-alapú metadata felismerés'}
           >
-            AI elemzés
+            {aiLoading ? '⏳ Elemzés…' : 'AI elemzés'}
           </button>
+        )}
+        {aiError && (
+          <span style={{
+            fontFamily: 'DM Mono', fontSize: 7, color: C.red, marginLeft: 4,
+            padding: '1px 4px', borderRadius: 3,
+            background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.2)',
+          }}>
+            {aiError}
+          </span>
         )}
       </div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
