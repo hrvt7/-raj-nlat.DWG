@@ -12,6 +12,42 @@ const C = {
   text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
 }
 
+// ── Map assembly to COUNT_CATEGORIES key ─────────────────────────────────────
+// When users select an assembly from AssemblyDropdown (e.g. ASM-001), the marker
+// must store the matching COUNT_CATEGORY key (socket, switch, light, etc.) so that
+// EstimationPanel can count and price them correctly.
+function resolveCountCategory(assemblyId, assemblies) {
+  if (!assemblyId?.startsWith?.('ASM-')) return assemblyId // already a category key
+  const asm = assemblies?.find(a => a.id === assemblyId)
+  if (!asm) return 'other'
+  if (asm.category === 'vilagitas') return 'light'
+  if (asm.category === 'elosztok') return 'panel'
+  if (asm.category === 'szerelvenyek') {
+    const up = (asm.name || '').toUpperCase()
+    if (up.includes('DUGALJ') || up.includes('ALJZAT') || up.includes('SOCKET') || up.includes('KONNEKTOR')) return 'socket'
+    if (up.includes('KAPCSOL') || up.includes('SWITCH') || up.includes('DIMMER') || up.includes('VÁLTÓ') || up.includes('VALTO')) return 'switch'
+    return 'socket' // default for szerelvenyek
+  }
+  return 'other'
+}
+
+// ── Migrate legacy markers ──────────────────────────────────────────────────
+// Older markers stored assembly IDs (ASM-xxx) as category. Convert them to
+// proper COUNT_CATEGORY keys while preserving the assembly ID in asmId.
+function migrateMarkers(markers, assemblies) {
+  if (!markers?.length || !assemblies?.length) return markers
+  let changed = false
+  const migrated = markers.map(m => {
+    if (m.category?.startsWith?.('ASM-')) {
+      changed = true
+      const resolved = resolveCountCategory(m.category, assemblies)
+      return { ...m, category: resolved, asmId: m.asmId || m.category }
+    }
+    return m
+  })
+  return changed ? migrated : markers
+}
+
 function formatDist(m) {
   if (m < 0.01) return `${(m * 1000).toFixed(1)} mm`
   if (m < 1) return `${(m * 100).toFixed(1)} cm`
@@ -96,7 +132,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   useEffect(() => {
     if (!planId) return
     getPlanAnnotations(planId).then(ann => {
-      if (ann.markers?.length) { markersRef.current = normalizeMarkers(ann.markers); setRenderTick(t => t + 1); if (onMarkersChange) onMarkersChange([...markersRef.current]) }
+      if (ann.markers?.length) {
+        const normalized = normalizeMarkers(ann.markers)
+        // Migrate legacy ASM-xxx categories to COUNT_CATEGORY keys
+        markersRef.current = migrateMarkers(normalized, assembliesProp)
+        setRenderTick(t => t + 1)
+        if (onMarkersChange) onMarkersChange([...markersRef.current])
+      }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
@@ -128,7 +170,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   useEffect(() => {
     if (!planId) return
     const unsub = onAnnotationsChanged(planId, ({ markers, assignments: extAssignments }) => {
-      markersRef.current = normalizeMarkers(markers)
+      markersRef.current = migrateMarkers(normalizeMarkers(markers), assembliesProp)
       setRenderTick(t => t + 1)
       if (onMarkersChange) onMarkersChange([...markersRef.current])
       // Auto-fill assignments from saved defaults when new detection markers arrive
@@ -500,13 +542,29 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
       const asm = (assembliesProp || []).find(a => a.id === activeCategory)
       const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[activeCategory] || '#9CA3AF')
-      markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, category: activeCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
+      // Resolve COUNT_CATEGORY key: when activeCategory is an assembly ID (ASM-xxx),
+      // map it to the proper category key (socket/switch/light/panel) so EstimationPanel
+      // can count and price them. Store assembly ID in asmId field.
+      const resolvedCategory = asm ? resolveCountCategory(asm.id, assembliesProp) : activeCategory
+      markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, category: resolvedCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
       markDirty()
       setRenderTick(t => t + 1)
       drawOverlay()
       // Notify parent of marker change
       if (onMarkersChange) {
         onMarkersChange([...markersRef.current])
+      }
+      // Auto-populate assignment: when user marks with a specific assembly,
+      // automatically assign that assembly to the resolved category in EstimationPanel
+      if (asm && resolvedCategory) {
+        setAssignments(prev => {
+          const existing = prev[resolvedCategory]
+          // Only auto-assign if no assignment exists yet, or if it's the same assembly
+          if (!existing?.assemblyId || existing.assemblyId === asm.id) {
+            return { ...prev, [resolvedCategory]: { ...(existing || {}), assemblyId: asm.id } }
+          }
+          return prev
+        })
       }
       return
     }
@@ -670,12 +728,15 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   }, [drawOverlay])
 
   // ── Count summary ──
+  // Groups markers by category key, also collects asmId for label resolution
   const countSummary = (() => {
-    const map = {}
+    const map = {}       // { [category]: count }
+    const asmMap = {}    // { [category]: asmId } — first asmId seen per category
     for (const m of markersRef.current) {
       map[m.category] = (map[m.category] || 0) + 1
+      if (m.asmId && !asmMap[m.category]) asmMap[m.category] = m.asmId
     }
-    return map
+    return { counts: map, asmIds: asmMap }
   })()
   const markerCount = markersRef.current.length
   const measureCount = measuresRef.current.length
@@ -742,7 +803,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     <div ref={containerRef} style={{
       position: 'relative', display: 'flex', flexDirection: 'column',
       background: C.bg, borderRadius: 10, border: `1px solid ${C.border}`,
-      overflow: 'hidden', ...style,
+      ...style,
     }}>
       {/* Toolbar */}
       <PdfToolbar
@@ -769,7 +830,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       />
 
       {/* Main area */}
-      <div style={{ flex: 1, position: 'relative', minHeight: 0, cursor: activeTool ? 'crosshair' : 'grab' }}>
+      <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden', borderRadius: '0 0 10px 10px', cursor: activeTool ? 'crosshair' : 'grab' }}>
         {/* Hidden PDF render canvas */}
         <canvas ref={pdfCanvasRef} style={{ display: 'none' }} />
 
@@ -819,9 +880,10 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
             <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
               Összesítő ({markerCount})
             </div>
-            {Object.entries(countSummary).map(([key, count]) => {
-              // Resolve label + color from assembly or fallback to COUNT_CATEGORIES
-              const asm = (assembliesProp || []).find(a => a.id === key)
+            {Object.entries(countSummary.counts).map(([key, count]) => {
+              // Resolve label + color: look up assembly via asmId stored in markers
+              const asmId = countSummary.asmIds[key]
+              const asm = asmId ? (assembliesProp || []).find(a => a.id === asmId) : null
               const catDef = COUNT_CATEGORIES.find(c => c.key === key)
               const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B' }
               const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
