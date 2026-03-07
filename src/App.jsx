@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Landing from './Landing.jsx'
 import { generatePdf } from './utils/generatePdf.js'
+import { exportBOM, generateBOMRows } from './utils/bomExport.js'
 import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -508,6 +509,40 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
             </button>
           </div>
+
+          {/* BOM export card */}
+          {(() => {
+            const bomRows = generateBOMRows(quote)
+            const hasBom = bomRows.length > 0
+            return (
+              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+                <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 6 }}>Anyagjegyzék (BOM)</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
+                  Belső anyagjegyzék — minden anyag- és kábeltétel, outputMode-tól függetlenül.
+                </div>
+                {hasBom && (
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginBottom: 10 }}>
+                    {bomRows.length} aggregált tétel
+                  </div>
+                )}
+                <button
+                  onClick={() => exportBOM(quote)}
+                  disabled={!hasBom}
+                  style={{
+                    width: '100%', padding: '11px', borderRadius: 9,
+                    cursor: hasBom ? 'pointer' : 'not-allowed',
+                    background: hasBom ? C.yellow : C.bgHover,
+                    border: 'none', color: hasBom ? '#09090B' : C.muted,
+                    fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                    opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s',
+                  }}
+                >
+                  {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
+                </button>
+              </div>
+            )
+          })()}
 
         </div>
       </div>
