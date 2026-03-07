@@ -30,7 +30,7 @@ export function computePricing({
   cableEstimate,
   difficultyMode,
 }) {
-  const ctxMultiplier = calcProductivityFactor(context)   // null → returns 1.0
+  const ctxMultiplier = calcProductivityFactor(context)   // null/undefined → treated as {} → returns 1.0
   const mode = difficultyMode || 'normal'
 
   let materialCost = 0

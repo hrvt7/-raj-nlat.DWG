@@ -1594,7 +1594,8 @@ export const CONTEXT_FACTORS = {
 
 // ─── Összetett produktivitási szorzó számítása ──────────────────────────────
 // context_defaults alapján kiszámolja a kombinált szorzót
-export function calcProductivityFactor(contextDefaults = {}) {
+export function calcProductivityFactor(contextDefaults) {
+  if (!contextDefaults) contextDefaults = {}
   let combined = 1.0
   for (const [factorKey, factorDef] of Object.entries(CONTEXT_FACTORS)) {
     const selectedKey = contextDefaults[factorKey] ?? factorDef.defaultKey
