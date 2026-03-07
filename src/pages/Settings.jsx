@@ -643,6 +643,39 @@ function QuoteTab({ settings, update }) {
             placeholder="pl. Az árajánlat tartalmazza a szükséges villanyszerelési munkákat..." />
         </div>
       </div>
+
+      <div style={{ marginTop: 28 }}>
+        <SectionHeader title="Ajánlat alapértelmezett szövegek" />
+        <p style={{ fontSize: 11, color: C.textSub, fontFamily: 'DM Mono', marginBottom: 16, lineHeight: 1.6 }}>
+          Új ajánlat létrehozásakor ezek a szövegek kerülnek be alapértelmezettként. A meglévő ajánlatokat nem módosítják.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={lS2}>Alapértelmezett érvényesség szöveg</label>
+            <textarea value={q.default_validity_text} onChange={e => update('quote.default_validity_text', e.target.value)}
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', color: C.text, fontFamily: 'DM Mono', fontSize: 12, outline: 'none', resize: 'vertical', minHeight: 60, lineHeight: 1.7 }}
+              placeholder="pl. Az ajánlat kiállítástól számított 30 napig érvényes." />
+          </div>
+          <div>
+            <label style={lS2}>Alapértelmezett fizetési feltételek</label>
+            <textarea value={q.default_payment_terms_text} onChange={e => update('quote.default_payment_terms_text', e.target.value)}
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', color: C.text, fontFamily: 'DM Mono', fontSize: 12, outline: 'none', resize: 'vertical', minHeight: 60, lineHeight: 1.7 }}
+              placeholder="pl. Fizetési feltételek: a teljesítést követően, számla ellenében, 8 napon belül." />
+          </div>
+          <div>
+            <label style={lS2}>Alapértelmezett „Tartalmazza" szöveg</label>
+            <textarea value={q.default_inclusions} onChange={e => update('quote.default_inclusions', e.target.value)}
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', color: C.text, fontFamily: 'DM Mono', fontSize: 12, outline: 'none', resize: 'vertical', minHeight: 60, lineHeight: 1.7 }}
+              placeholder="pl. Munkadíj, kiszállás, apróanyag..." />
+          </div>
+          <div>
+            <label style={lS2}>Alapértelmezett „Nem tartalmazza" szöveg</label>
+            <textarea value={q.default_exclusions} onChange={e => update('quote.default_exclusions', e.target.value)}
+              style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', color: C.text, fontFamily: 'DM Mono', fontSize: 12, outline: 'none', resize: 'vertical', minHeight: 60, lineHeight: 1.7 }}
+              placeholder="pl. Anyagköltség, festés, glettelés..." />
+          </div>
+        </div>
+      </div>
     </Card>
   )
 }

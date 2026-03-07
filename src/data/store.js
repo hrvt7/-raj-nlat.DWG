@@ -64,6 +64,10 @@ export const DEFAULT_SETTINGS = {
     validity_days: 30,
     footer_text: 'Az ajánlat mennyiségkimutatáson alapul. Helyszíni felmérés alapján módosítható.',
     default_notes: '',
+    default_validity_text: 'Az ajánlat kiállítástól számított 30 napig érvényes.',
+    default_payment_terms_text: 'Fizetési feltételek: a teljesítést követően, számla ellenében, 8 napon belül.',
+    default_inclusions: '',
+    default_exclusions: '',
   }
 }
 
@@ -325,6 +329,11 @@ export function loadSettings() {
   // ── Deep-merge context_defaults so new NECA factors get their defaults ──
   if (stored?.context_defaults) {
     merged.context_defaults = { ...DEFAULT_SETTINGS.context_defaults, ...stored.context_defaults }
+  }
+
+  // ── Deep-merge quote sub-object so new default text fields appear ──
+  if (stored?.quote) {
+    merged.quote = { ...DEFAULT_SETTINGS.quote, ...stored.quote }
   }
 
   return merged

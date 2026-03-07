@@ -53,10 +53,6 @@ const OUTPUT_MODE_INCLEXCL = {
   split_material_labor:  { inclusions: '', exclusions: '' },
 }
 
-// ─── Default validity / payment terms for new quotes ─────────────────────────
-const DEFAULT_VALIDITY_TEXT = 'Az ajánlat kiállítástól számított 30 napig érvényes.'
-const DEFAULT_PAYMENT_TERMS_TEXT = 'Fizetési feltételek: a teljesítést követően, számla ellenében, 8 napon belül.'
-
 const PDF_LEVELS = [
   { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },
   { key: 'summary',  label: 'Összesített',  icon: '▤', desc: '+ Munkacsoport-bontás' },
@@ -984,6 +980,7 @@ function SaaSShell() {
     const planPrjDefault = meta.projectId ? (getProject(meta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
 
     const planDefaults = OUTPUT_MODE_INCLEXCL[planPrjDefault] || OUTPUT_MODE_INCLEXCL.combined
+    const qs = loadSettings().quote
     const quote = {
       id:             generateQuoteId(),
       projectName:    displayName,
@@ -995,10 +992,10 @@ function SaaSShell() {
       created_at:     new Date().toISOString(),
       status:         'draft',
       outputMode:     planPrjDefault,
-      inclusions:     planDefaults.inclusions,
-      exclusions:     planDefaults.exclusions,
-      validityText:   DEFAULT_VALIDITY_TEXT,
-      paymentTermsText: DEFAULT_PAYMENT_TERMS_TEXT,
+      inclusions:     planDefaults.inclusions || qs.default_inclusions,
+      exclusions:     planDefaults.exclusions || qs.default_exclusions,
+      validityText:   qs.default_validity_text,
+      paymentTermsText: qs.default_payment_terms_text,
       gross:          Math.round(p.total),
       totalMaterials: Math.round(p.materialCost),
       totalLabor:     Math.round(p.laborCost),

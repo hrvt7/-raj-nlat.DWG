@@ -8,7 +8,7 @@ const DxfViewerPanel = lazy(() => import('./DxfViewer/index.jsx'))
 const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
-import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
+import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId, loadSettings } from '../data/store.js'
 import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
 import { WALL_FACTORS } from '../data/workItemsDb.js'
@@ -1228,6 +1228,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const prjDefault = planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
       const _inclExclDefaults = { combined: { inclusions: '', exclusions: '' }, labor_only: { inclusions: '', exclusions: 'Az anyagköltség nem része az ajánlatnak.\nAz anyagbiztosítás a megrendelő feladata.' }, split_material_labor: { inclusions: '', exclusions: '' } }
       const _ieD = _inclExclDefaults[prjDefault] || _inclExclDefaults.combined
+      const _qs = loadSettings().quote
 
       const quote = {
         id:           generateQuoteId(),
@@ -1240,10 +1241,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         created_at:   new Date().toISOString(),
         status:      'draft',
         outputMode:   prjDefault,
-        inclusions:   _ieD.inclusions,
-        exclusions:   _ieD.exclusions,
-        validityText: 'Az ajánlat kiállítástól számított 30 napig érvényes.',
-        paymentTermsText: 'Fizetési feltételek: a teljesítést követően, számla ellenében, 8 napon belül.',
+        inclusions:   _ieD.inclusions || _qs.default_inclusions,
+        exclusions:   _ieD.exclusions || _qs.default_exclusions,
+        validityText: _qs.default_validity_text,
+        paymentTermsText: _qs.default_payment_terms_text,
         gross:          Math.round(pricing.total),
         totalMaterials: Math.round(pricing.materialCost),
         totalLabor:     Math.round(pricing.laborCost),
