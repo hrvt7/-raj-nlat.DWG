@@ -418,9 +418,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
       if (!vText && !pText) return ''
       return `<div class="terms-box">
         <strong>Érvényesség és fizetési feltételek:</strong><br/>
-        ${vText ? escHtml(vText).replace(/\\n/g, '<br/>') : ''}
+        ${vText ? escHtml(vText).replace(/\n/g, '<br/>') : ''}
         ${vText && pText ? '<br/>' : ''}
-        ${pText ? escHtml(pText).replace(/\\n/g, '<br/>') : ''}
+        ${pText ? escHtml(pText).replace(/\n/g, '<br/>') : ''}
         ${footerText ? '<br/><br/>' + escHtml(footerText) : ''}
       </div>`
     })()}

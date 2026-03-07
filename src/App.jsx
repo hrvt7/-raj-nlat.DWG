@@ -143,8 +143,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const [editMarkup, setEditMarkup] = useState(((quote.pricingData?.markup_pct) || 0) * 100)
   const [editInclusions, setEditInclusions] = useState(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
   const [editExclusions, setEditExclusions] = useState(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
-  const [editValidity, setEditValidity] = useState(quote.validityText ?? DEFAULT_VALIDITY_TEXT)
-  const [editPaymentTerms, setEditPaymentTerms] = useState(quote.paymentTermsText ?? DEFAULT_PAYMENT_TERMS_TEXT)
+  const [editValidity, setEditValidity] = useState(quote.validityText ?? '')
+  const [editPaymentTerms, setEditPaymentTerms] = useState(quote.paymentTermsText ?? '')
 
   // ── Sync local state when quote prop changes (e.g. different quote opened, or after save) ──
   const prevQuoteRef = useRef(quote.id)
@@ -157,8 +157,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       setOutputMode(quote.outputMode || 'combined')
       setEditInclusions(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
       setEditExclusions(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
-      setEditValidity(quote.validityText ?? DEFAULT_VALIDITY_TEXT)
-      setEditPaymentTerms(quote.paymentTermsText ?? DEFAULT_PAYMENT_TERMS_TEXT)
+      setEditValidity(quote.validityText ?? '')
+      setEditPaymentTerms(quote.paymentTermsText ?? '')
       prevQuoteRef.current = quote.id
     }
   }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
@@ -171,8 +171,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || outputMode !== (quote.outputMode || 'combined')
     || editInclusions !== (quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
     || editExclusions !== (quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
-    || editValidity !== (quote.validityText ?? DEFAULT_VALIDITY_TEXT)
-    || editPaymentTerms !== (quote.paymentTermsText ?? DEFAULT_PAYMENT_TERMS_TEXT)
+    || editValidity !== (quote.validityText ?? '')
+    || editPaymentTerms !== (quote.paymentTermsText ?? '')
 
   // ── Derived pricing from editable rate + markup ────────────────────────────
   const vatPct = Number(settings?.labor?.vat_percent) || 27
@@ -312,6 +312,138 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           {OUTPUT_MODE_NOTES[outputMode]}
         </div>
       )}
+
+      {/* ── Controls card grid (4 cards) ──────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+
+        {/* Card A — Ajánlat mód (outputMode) */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Ajánlat mód</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {OUTPUT_MODES.map(mode => (
+              <button key={mode.key} onClick={() => setOutputMode(mode.key)} style={{
+                padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                background: outputMode === mode.key ? 'rgba(76,201,240,0.10)' : C.bg,
+                border: `1px solid ${outputMode === mode.key ? 'rgba(76,201,240,0.30)' : C.border}`,
+                color: outputMode === mode.key ? C.blue : C.textSub,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                {mode.label}
+                {outputMode === mode.key && (
+                  <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Card B — PDF Export */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>PDF Export</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {PDF_LEVELS.map(lvl => (
+              <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} style={{
+                padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                background: pdfLevel === lvl.key ? C.accentDim : C.bg,
+                border: `1px solid ${pdfLevel === lvl.key ? C.accentBorder : C.border}`,
+                color: pdfLevel === lvl.key ? C.accent : C.textSub,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{ fontSize: 12, opacity: 0.8 }}>{lvl.icon}</span>
+                {lvl.label}
+                {pdfLevel === lvl.key && (
+                  <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <button onClick={handlePdf} disabled={pdfGenerating} style={{
+            width: '100%', padding: '10px', borderRadius: 9, cursor: pdfGenerating ? 'wait' : 'pointer',
+            background: pdfGenerating ? C.accentDim : C.accent,
+            border: 'none', color: '#09090B',
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            opacity: pdfGenerating ? 0.7 : 1, transition: 'all 0.15s', marginTop: 'auto',
+          }}>
+            {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
+          </button>
+        </div>
+
+        {/* Card C — BOM */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Anyagjegyzék (BOM)</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, lineHeight: 1.5 }}>
+            Belső anyagjegyzék — minden anyag- és kábeltétel, outputMode-tól függetlenül.
+          </div>
+          {hasBom && (
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>
+              {bomRows.length} aggregált tétel
+            </div>
+          )}
+          <button
+            onClick={() => exportBOM(quote)}
+            disabled={!hasBom}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 9,
+              cursor: hasBom ? 'pointer' : 'not-allowed',
+              background: hasBom ? C.yellow : C.bgHover,
+              border: 'none', color: hasBom ? '#09090B' : C.muted,
+              fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s', marginTop: 'auto',
+            }}
+          >
+            {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
+          </button>
+        </div>
+
+        {/* Card D — Feltételek áttekintés */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Feltételek</div>
+          {/* Inclusions preview */}
+          {editInclusions.trim() && (
+            <div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tartalmazza</span>
+              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                {editInclusions.trim()}
+              </div>
+            </div>
+          )}
+          {/* Exclusions preview */}
+          {editExclusions.trim() && (
+            <div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.yellow, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nem tartalmazza</span>
+              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                {editExclusions.trim()}
+              </div>
+            </div>
+          )}
+          {/* Validity preview */}
+          {editValidity.trim() && (
+            <div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.blue, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Érvényesség</span>
+              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
+                {editValidity.trim()}
+              </div>
+            </div>
+          )}
+          {/* Payment preview */}
+          {editPaymentTerms.trim() && (
+            <div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.blue, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fizetés</span>
+              <div style={{ fontFamily: 'Inter', fontSize: 11, color: C.textSub, lineHeight: 1.45, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
+                {editPaymentTerms.trim()}
+              </div>
+            </div>
+          )}
+          {/* Empty state */}
+          {!editInclusions.trim() && !editExclusions.trim() && !editValidity.trim() && !editPaymentTerms.trim() && (
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, fontStyle: 'italic' }}>Nincs kitöltve — szerkeszd lent ↓</div>
+          )}
+        </div>
+      </div>
 
       {/* ── Main body: left (items) + right (sidebar) ────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 260px', gap: 20, alignItems: 'start' }}>
@@ -561,93 +693,6 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             </div>
           </div>
 
-          {/* PDF export card */}
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 14 }}>PDF Árajánlat</div>
-
-            {/* Output mode selector */}
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Ajánlat mód</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 16 }}>
-              {OUTPUT_MODES.map(mode => (
-                <button key={mode.key} onClick={() => setOutputMode(mode.key)} style={{
-                  padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                  background: outputMode === mode.key ? 'rgba(76,201,240,0.10)' : C.bg,
-                  border: `1px solid ${outputMode === mode.key ? 'rgba(76,201,240,0.30)' : C.border}`,
-                  color: outputMode === mode.key ? C.blue : C.textSub,
-                  fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  {mode.label}
-                  {outputMode === mode.key && (
-                    <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Detail level selector */}
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Részletezési szint</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
-              {PDF_LEVELS.map(lvl => (
-                <button key={lvl.key} onClick={() => setPdfLevel(lvl.key)} style={{
-                  padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                  background: pdfLevel === lvl.key ? C.accentDim : C.bg,
-                  border: `1px solid ${pdfLevel === lvl.key ? C.accentBorder : C.border}`,
-                  color: pdfLevel === lvl.key ? C.accent : C.textSub,
-                  fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  <span style={{ fontSize: 12, opacity: 0.8 }}>{lvl.icon}</span>
-                  {lvl.label}
-                  {pdfLevel === lvl.key && (
-                    <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Live content preview */}
-            <PdfPreview level={pdfLevel} outputMode={outputMode} />
-
-            <button onClick={handlePdf} disabled={pdfGenerating} style={{
-              width: '100%', padding: '11px', borderRadius: 9, cursor: pdfGenerating ? 'wait' : 'pointer',
-              background: pdfGenerating ? C.accentDim : C.accent,
-              border: 'none', color: '#09090B',
-              fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-              opacity: pdfGenerating ? 0.7 : 1, transition: 'all 0.15s',
-            }}>
-              {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
-            </button>
-          </div>
-
-          {/* BOM export card */}
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 6 }}>Anyagjegyzék (BOM)</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
-              Belső anyagjegyzék — minden anyag- és kábeltétel, outputMode-tól függetlenül.
-            </div>
-            {hasBom && (
-              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginBottom: 10 }}>
-                {bomRows.length} aggregált tétel
-              </div>
-            )}
-            <button
-              onClick={() => exportBOM(quote)}
-              disabled={!hasBom}
-              style={{
-                width: '100%', padding: '11px', borderRadius: 9,
-                cursor: hasBom ? 'pointer' : 'not-allowed',
-                background: hasBom ? C.yellow : C.bgHover,
-                border: 'none', color: hasBom ? '#09090B' : C.muted,
-                fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s',
-              }}
-            >
-              {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
-            </button>
-          </div>
 
         </div>
       </div>
