@@ -247,25 +247,25 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           background: `linear-gradient(135deg, ${C.accent}18, ${C.blue}0a)`,
           border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '18px 20px', gridColumn: 'span 1',
         }}>
-          <span style={labelStyle}>Bruttó végösszeg{outputMode === 'labor_only' ? ' (munkadíj)' : ''}</span>
+          <span style={labelStyle}>{outputMode === 'labor_only' ? 'Bruttó munkadíj összeg' : 'Bruttó végösszeg'}</span>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent, lineHeight: 1 }}>{fmt(displayGross)} Ft</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>
-            Nettó {fmt(displayNet)} + ÁFA {vatPct}%
+            {outputMode === 'labor_only' ? 'Nettó munkadíj' : 'Nettó'} {fmt(displayNet)} + ÁFA {vatPct}%
           </div>
         </div>
         {/* Materials — hidden in labor_only */}
         {outputMode !== 'labor_only' && (
           <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
-            <span style={labelStyle}>Anyagköltség</span>
+            <span style={labelStyle}>Anyagköltség (nettó)</span>
             <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.text }}>{fmt(Math.round(quote.totalMaterials || 0))} Ft</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>nettó</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{outputMode === 'split_material_labor' ? 'anyag bontás' : 'nettó'}</div>
           </div>
         )}
         {/* Labor */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
-          <span style={labelStyle}>Munkadíj</span>
+          <span style={labelStyle}>{outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)'}</span>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.blue }}>{fmt(newTotalLabor)} Ft</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>nettó</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{outputMode === 'split_material_labor' ? 'munkadíj bontás' : 'nettó'}</div>
         </div>
         {/* Hours */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
@@ -296,14 +296,14 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           {(quote.assemblySummary || []).length > 0 && (
             <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.text }}>Munkák összesítő</span>
+                <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.text }}>{outputMode === 'labor_only' ? 'Munkadíj összesítő' : 'Munkák összesítő'}</span>
                 <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{quote.assemblySummary.length} munkacsoport</span>
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: C.bg }}>
                     {(outputMode === 'split_material_labor'
-                      ? ['Tevékenység', 'db', 'Anyag', 'Munkadíj', 'Összesen']
+                      ? ['Tevékenység', 'db', 'Anyag (nettó)', 'Munkadíj (nettó)', 'Összesen (nettó)']
                       : ['Tevékenység', 'db', outputMode === 'labor_only' ? 'Munkadíj (nettó)' : 'Összeg (nettó)']
                     ).map((h, i) => (
                       <th key={h} style={{

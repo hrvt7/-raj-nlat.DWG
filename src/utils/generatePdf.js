@@ -51,9 +51,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
   // ── KPI cards (filtered by outputMode) ────────────────────────────────────
   const kpiCardDefs = [
     outputMode !== 'labor_only' && { label: 'Anyagköltség (nettó)', value: fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft', accent: false },
-    { label: 'Munkadíj (nettó)',     value: fmtHU(Math.round(quote.totalLabor || 0))     + ' Ft', accent: false },
+    { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)', value: fmtHU(Math.round(quote.totalLabor || 0)) + ' Ft', accent: false },
     { label: 'Munkaóra',             value: (quote.totalHours || 0).toFixed(1)             + ' ó',  accent: false },
-    { label: outputMode === 'labor_only' ? 'Bruttó végösszeg (munkadíj)' : 'Bruttó végösszeg', value: fmtHU(dGross) + ' Ft', accent: true },
+    { label: outputMode === 'labor_only' ? 'Bruttó munkadíj összeg' : 'Bruttó végösszeg', value: fmtHU(dGross) + ' Ft', accent: true },
   ].filter(Boolean)
   const kpiCards = kpiCardDefs.map(k => `
     <div class="kpi-card${k.accent ? ' kpi-accent' : ''}">
@@ -62,11 +62,12 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     </div>`).join('')
 
   // ── Financial summary table (filtered by outputMode) ─────────────────────
+  const isLO = outputMode === 'labor_only'
   const finRows = [
-    outputMode !== 'labor_only' && ['Anyagköltség', fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft'],
-    ['Munkadíj',           fmtHU(Math.round(quote.totalLabor || 0))     + ' Ft'],
-    ['Nettó összköltség',  fmtHU(dNet)                                  + ' Ft'],
-    [`ÁFA (${vatPct}%)`,   fmtHU(dVat)                                  + ' Ft'],
+    !isLO && ['Anyagköltség', fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft'],
+    [isLO ? 'Szerelési munkadíj' : 'Munkadíj', fmtHU(Math.round(quote.totalLabor || 0)) + ' Ft'],
+    [isLO ? 'Nettó munkadíj összesen' : 'Nettó összköltség', fmtHU(dNet) + ' Ft'],
+    [`ÁFA (${vatPct}%)`, fmtHU(dVat) + ' Ft'],
   ].filter(Boolean)
 
   const finTableRows = finRows.map(([label, val]) => `
@@ -75,7 +76,7 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
       <td class="fin-val">${val}</td>
     </tr>`).join('') + `
     <tr class="fin-total-row">
-      <td class="fin-label">BRUTTÓ VÉGÖSSZEG</td>
+      <td class="fin-label">${isLO ? 'BRUTTÓ MUNKADÍJ ÖSSZEG' : 'BRUTTÓ VÉGÖSSZEG'}</td>
       <td class="fin-val">${fmtHU(dGross)} Ft</td>
     </tr>`
 
@@ -108,16 +109,16 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
         </tr>`
     }).join('')
 
-    const lastColLabel = isLaborOnly ? 'Munkadíj (nettó)' : 'Összeg (nettó)'
+    const lastColLabel = isLaborOnly ? 'Munkadíj (nettó)' : isSplit ? 'Összesen (nettó)' : 'Összeg (nettó)'
     assemblySectionHtml = `
-      <div class="section-header">Munkák összesítő</div>
+      <div class="section-header">${isLaborOnly ? 'Munkadíj összesítő' : 'Munkák összesítő'}</div>
       <table class="data-table">
         <thead>
           <tr>
             <th>Munkacsoport / Tevékenység</th>
             <th class="th-center">Menny.</th>
             <th class="th-center">Falbontás</th>
-            ${isSplit ? '<th class="th-right">Anyag</th><th class="th-right">Munkadíj</th>' : ''}
+            ${isSplit ? '<th class="th-right">Anyag (nettó)</th><th class="th-right">Munkadíj (nettó)</th>' : ''}
             <th class="th-right">${lastColLabel}</th>
           </tr>
         </thead>
@@ -167,7 +168,7 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
 
     // Labor table — always shown
     const laborTableHtml = labors.length > 0 ? `
-      <div class="section-header">Részletes tételek – Munka</div>
+      <div class="section-header">${outputMode === 'labor_only' ? 'Részletes tételek – Szerelési munka' : 'Részletes tételek – Munka'}</div>
       <table class="data-table">
         <thead>
           <tr>
@@ -175,7 +176,7 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
             <th class="th-center">Mennyiség</th>
             <th class="th-right">Óradíj</th>
             <th class="th-right">Munkaóra</th>
-            <th class="th-right">Összeg (nettó)</th>
+            <th class="th-right">${outputMode === 'labor_only' ? 'Munkadíj (nettó)' : 'Összeg (nettó)'}</th>
           </tr>
         </thead>
         <tbody>${renderRows(labors)}</tbody>
