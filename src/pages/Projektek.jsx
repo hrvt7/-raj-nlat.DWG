@@ -669,6 +669,43 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz · {templates.length} szimbólum sablon</p>
       </div>
 
+      {/* ── Progress Hint Bar ── */}
+      {(() => {
+        const noCalcPlans = plans.filter(p => !(p.calcTotal > 0)).length
+        const phase =
+          plans.length === 0 ? 'upload' :
+          templates.length === 0 ? 'legend' :
+          (plans.length > 0 && noCalcPlans > 0) ? 'work' :
+          plans.length > 0 ? 'done' : 'upload'
+
+        if (phase === 'done') return null
+
+        const PHASES = {
+          upload: { idx: 0, icon: '📂', text: 'Töltsd fel a tervrajzokat', sub: 'PDF, DXF vagy DWG fájlok', color: C.accent, border: 'rgba(0,229,160,0.25)', bg: 'rgba(0,229,160,0.04)' },
+          legend: { idx: 1, icon: '📖', text: 'Adj hozzá jelmagyarázatot', sub: 'Szimbólum sablonok automatikus felismerése', color: C.blue, border: 'rgba(76,201,240,0.25)', bg: 'rgba(76,201,240,0.04)' },
+          work:   { idx: 2, icon: '⚡', text: 'Nyisd meg a tervrajzokat → detektálás → kalkuláció', sub: `${noCalcPlans} tervrajz vár kalkulációra`, color: C.textSub, border: C.border, bg: 'rgba(255,255,255,0.02)' },
+        }
+        const p = PHASES[phase]
+        const dots = [0, 1, 2].map(i => i <= p.idx ? p.color : C.border)
+
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            border: `1px solid ${p.border}`, borderRadius: 8,
+            background: p.bg, padding: '10px 14px', marginBottom: 12,
+          }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+              {dots.map((c, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: c, display: 'inline-block', transition: 'background 0.2s' }} />)}
+            </div>
+            <span style={{ fontSize: 15, flexShrink: 0 }}>{p.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>{p.text}</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 1 }}>{p.sub}</div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── Legend entry chip ── */}
       {project.legendPlanId || templates.length > 0 ? (
         <div
