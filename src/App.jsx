@@ -207,6 +207,10 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const displayVat   = Math.round(displayNet * vatPct / 100)
   const displayGross = displayNet + displayVat
 
+  // ── BOM rows (memoised — only recompute when items change) ──────────────
+  const bomRows = React.useMemo(() => generateBOMRows(quote), [quote.items])
+  const hasBom = bomRows.length > 0
+
   // Label style reused throughout
   const labelStyle = { fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5, display: 'block' }
   const monoVal    = { fontFamily: 'DM Mono', fontSize: 13, color: C.text, fontWeight: 500 }
@@ -511,38 +515,32 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           </div>
 
           {/* BOM export card */}
-          {(() => {
-            const bomRows = generateBOMRows(quote)
-            const hasBom = bomRows.length > 0
-            return (
-              <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-                <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 6 }}>Anyagjegyzék (BOM)</div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
-                  Belső anyagjegyzék — minden anyag- és kábeltétel, outputMode-tól függetlenül.
-                </div>
-                {hasBom && (
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginBottom: 10 }}>
-                    {bomRows.length} aggregált tétel
-                  </div>
-                )}
-                <button
-                  onClick={() => exportBOM(quote)}
-                  disabled={!hasBom}
-                  style={{
-                    width: '100%', padding: '11px', borderRadius: 9,
-                    cursor: hasBom ? 'pointer' : 'not-allowed',
-                    background: hasBom ? C.yellow : C.bgHover,
-                    border: 'none', color: hasBom ? '#09090B' : C.muted,
-                    fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s',
-                  }}
-                >
-                  {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
-                </button>
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 6 }}>Anyagjegyzék (BOM)</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, lineHeight: 1.5 }}>
+              Belső anyagjegyzék — minden anyag- és kábeltétel, outputMode-tól függetlenül.
+            </div>
+            {hasBom && (
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginBottom: 10 }}>
+                {bomRows.length} aggregált tétel
               </div>
-            )
-          })()}
+            )}
+            <button
+              onClick={() => exportBOM(quote)}
+              disabled={!hasBom}
+              style={{
+                width: '100%', padding: '11px', borderRadius: 9,
+                cursor: hasBom ? 'pointer' : 'not-allowed',
+                background: hasBom ? C.yellow : C.bgHover,
+                border: 'none', color: hasBom ? '#09090B' : C.muted,
+                fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s',
+              }}
+            >
+              {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
+            </button>
+          </div>
 
         </div>
       </div>
