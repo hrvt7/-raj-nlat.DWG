@@ -13,7 +13,7 @@ import LegendPanel from './components/LegendPanel.jsx'
 import DetectionReviewPanel from './components/DetectionReviewPanel.jsx'
 import PdfMergePanel from './components/PdfMergePanel.jsx'
 import MaterialsPage from './pages/Materials.jsx'
-import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes } from './data/store.js'
+import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote, generateQuoteId } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, loadProjects } from './data/projectStore.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
@@ -94,24 +94,84 @@ function PdfPreview({ level }) {
 }
 
 // ─── QuoteView ────────────────────────────────────────────────────────────────
-function QuoteView({ quote, settings, onBack, onStatusChange }) {
+function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const statuses = ['draft', 'sent', 'won', 'lost']
   const statusLabels = { draft: 'Piszkozat', sent: 'Elküldve', won: 'Nyertes', lost: 'Elveszett' }
   const statusColors = { draft: C.muted, sent: C.blue, won: C.accent, lost: C.red }
   const [pdfLevel, setPdfLevel] = useState('summary')
   const [pdfGenerating, setPdfGenerating] = useState(false)
 
-  const handlePdf = () => {
-    setPdfGenerating(true)
-    try { generatePdf(quote, settings, pdfLevel) }
-    finally { setTimeout(() => setPdfGenerating(false), 1200) }
+  // ── Editable meta state ────────────────────────────────────────────────────
+  const [editName, setEditName] = useState(quote.projectName || '')
+  const [editClient, setEditClient] = useState(quote.clientName || '')
+  const [editRate, setEditRate] = useState(Number(quote.pricingData?.hourlyRate) || 9000)
+  const [editMarkup, setEditMarkup] = useState(((quote.pricingData?.markup_pct) || 0) * 100)
+
+  // ── Sync local state when quote prop changes (e.g. different quote opened, or after save) ──
+  const prevQuoteRef = useRef(quote.id)
+  useEffect(() => {
+    if (quote.id !== prevQuoteRef.current) {
+      setEditName(quote.projectName || '')
+      setEditClient(quote.clientName || '')
+      setEditRate(Number(quote.pricingData?.hourlyRate) || 9000)
+      setEditMarkup(((quote.pricingData?.markup_pct) || 0) * 100)
+      prevQuoteRef.current = quote.id
+    }
+  }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct])
+
+  // ── Dirty check (normalized numeric comparison) ────────────────────────────
+  const isDirty = editName !== (quote.projectName || '')
+    || editClient !== (quote.clientName || '')
+    || Number(editRate) !== (Number(quote.pricingData?.hourlyRate) || 9000)
+    || Math.abs(Number(editMarkup) - ((quote.pricingData?.markup_pct || 0) * 100)) > 0.001
+
+  // ── Derived pricing from editable rate + markup ────────────────────────────
+  const vatPct = Number(settings?.labor?.vat_percent) || 27
+  const totalHours = quote.totalHours || 0
+  const totalMaterials = Math.round(quote.totalMaterials || 0)
+  const newTotalLabor = Math.round(totalHours * Number(editRate))
+  const newSubtotal = totalMaterials + newTotalLabor
+  const newMarkupAmount = Math.round(newSubtotal * (Number(editMarkup) / 100))
+  const net = newSubtotal + newMarkupAmount
+  const vat = Math.round(net * vatPct / 100)
+  const gross = net + vat
+
+  // ── Save handler: build updated quote, persist ─────────────────────────────
+  const handleMetaSave = () => {
+    if (!isDirty || !onSaveQuote) return
+    const updated = {
+      ...quote,
+      projectName: editName,
+      project_name: editName,
+      name: editName,
+      clientName: editClient,
+      client_name: editClient,
+      gross: net,
+      totalLabor: newTotalLabor,
+      summary: { ...quote.summary, grandTotal: net },
+      pricingData: {
+        ...quote.pricingData,
+        hourlyRate: Number(editRate),
+        markup_pct: Number(editMarkup) / 100,
+      },
+      updatedAt: new Date().toISOString(),
+    }
+    onSaveQuote(updated)
   }
 
-  const vatPct = Number(settings?.labor?.vat_percent) || 27
-  const net    = Math.round(Number(quote.gross) || 0)
-  const vat    = Math.round(net * vatPct / 100)
-  const gross  = net + vat
-  const rate   = Number(quote.pricingData?.hourlyRate) || 9000
+  const handlePdf = () => {
+    setPdfGenerating(true)
+    // Build a live quote snapshot for PDF so it uses current edits (even unsaved)
+    const liveQuote = {
+      ...quote,
+      projectName: editName, project_name: editName, name: editName,
+      clientName: editClient, client_name: editClient,
+      gross: net, totalLabor: newTotalLabor,
+      pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
+    }
+    try { generatePdf(liveQuote, settings, pdfLevel) }
+    finally { setTimeout(() => setPdfGenerating(false), 1200) }
+  }
 
   // Separate items by type for the grouped table
   const matItems   = (quote.items || []).filter(i => i.type === 'material' || i.type === 'cable')
@@ -133,7 +193,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
           transition: 'border-color 0.15s',
         }}>← Vissza</button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: C.text, lineHeight: 1.2 }}>{quote.projectName}</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: C.text, lineHeight: 1.2 }}>{editName || quote.projectName}</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>{quote.id}</div>
         </div>
         <QuoteStatusBadge status={quote.status} />
@@ -161,14 +221,14 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
         {/* Labor */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
           <span style={labelStyle}>Munkadíj</span>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.blue }}>{fmt(Math.round(quote.totalLabor || 0))} Ft</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.blue }}>{fmt(newTotalLabor)} Ft</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>nettó</div>
         </div>
         {/* Hours */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
           <span style={labelStyle}>Munkaóra</span>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.yellow }}>{(quote.totalHours || 0).toFixed(1)} ó</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{fmt(rate)} Ft/ó</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 5 }}>{fmt(Number(editRate))} Ft/ó</div>
         </div>
       </div>
 
@@ -217,11 +277,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
               title="Munka" count={laborItems.length} accentColor={C.blue}
               items={laborItems}
               renderRow={item => {
-                const total = (item.hours || 0) * rate
+                const total = (item.hours || 0) * Number(editRate)
                 return [
                   item.name,
                   `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
-                  `${fmt(rate)} Ft/ó`,
+                  `${fmt(Number(editRate))} Ft/ó`,
                   `${(item.hours || 0).toFixed(2)} ó`,
                   <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.blue }}>{fmt(Math.round(total))} Ft</span>,
                 ]
@@ -252,11 +312,48 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
         {/* RIGHT – sidebar */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* Metadata card */}
-          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 14 }}>Adatok</div>
+          {/* Metadata card — inline editable */}
+          <div style={{ background: C.bgCard, border: `1px solid ${isDirty ? C.accent + '60' : C.border}`, borderRadius: 12, padding: 18, transition: 'border-color 0.2s' }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              Adatok
+              {isDirty && <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent }}>módosítva</span>}
+            </div>
+            {/* Ajánlat neve */}
+            <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${C.border}30` }}>
+              <span style={labelStyle}>Ajánlat neve</span>
+              <input value={editName} onChange={e => setEditName(e.target.value)}
+                placeholder="Ajánlat neve…"
+                style={{ ...monoVal, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            {/* Megrendelő */}
+            <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${C.border}30` }}>
+              <span style={labelStyle}>Megrendelő</span>
+              <input value={editClient} onChange={e => setEditClient(e.target.value)}
+                placeholder="Ügyfél neve…"
+                style={{ ...monoVal, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            {/* Óradíj */}
+            <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${C.border}30` }}>
+              <span style={labelStyle}>Óradíj</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="number" value={editRate} onChange={e => setEditRate(e.target.value === '' ? '' : Number(e.target.value))}
+                  min={0} step={500}
+                  style={{ ...monoVal, width: 100, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', outline: 'none', boxSizing: 'border-box' }} />
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>Ft/ó</span>
+              </div>
+            </div>
+            {/* Árrés */}
+            <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${C.border}30` }}>
+              <span style={labelStyle}>Árrés</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="number" value={editMarkup} onChange={e => setEditMarkup(e.target.value === '' ? '' : Number(e.target.value))}
+                  min={0} max={100} step={1}
+                  style={{ ...monoVal, width: 70, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', outline: 'none', boxSizing: 'border-box' }} />
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>%</span>
+              </div>
+            </div>
+            {/* Read-only fields */}
             {[
-              ['Megrendelő',  quote.clientName || '—'],
               ['Dátum',       new Date(quote.createdAt || Date.now()).toLocaleDateString('hu-HU')],
               ['Ajánlat ID',  quote.id],
               ['ÁFA kulcs',   `${vatPct}%`],
@@ -266,6 +363,17 @@ function QuoteView({ quote, settings, onBack, onStatusChange }) {
                 <span style={monoVal}>{v}</span>
               </div>
             ))}
+            {/* Save button */}
+            <button onClick={handleMetaSave} disabled={!isDirty}
+              style={{
+                width: '100%', padding: '9px', borderRadius: 8, cursor: isDirty ? 'pointer' : 'default',
+                background: isDirty ? C.accent : C.bg, border: `1px solid ${isDirty ? C.accent : C.border}`,
+                color: isDirty ? '#09090B' : C.muted,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+                opacity: isDirty ? 1 : 0.5, transition: 'all 0.15s',
+              }}>
+              {isDirty ? '💾 Mentés' : '✓ Mentve'}
+            </button>
           </div>
 
           {/* Status card */}
@@ -650,6 +758,53 @@ function SaaSShell() {
     }
   }
 
+  // ── Build quote from per-plan snapshot (plan-takeoff flow) ─────────────
+  const buildQuoteFromPlan = (pid) => {
+    const meta = getPlanMeta(pid) || {}
+    if (!meta.calcPricing || !meta.calcPricingLines) {
+      console.warn('[App] buildQuoteFromPlan: missing calc snapshot on plan', pid)
+      return
+    }
+    const p = meta.calcPricing
+    const displayName = meta.name || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
+    const quote = {
+      id:             generateQuoteId(),
+      projectName:    displayName,
+      project_name:   displayName,
+      name:           displayName,
+      clientName:     '',
+      client_name:    '',
+      createdAt:      new Date().toISOString(),
+      created_at:     new Date().toISOString(),
+      status:         'draft',
+      gross:          Math.round(p.total),
+      totalMaterials: Math.round(p.materialCost),
+      totalLabor:     Math.round(p.laborCost),
+      totalHours:     p.laborHours,
+      summary:        { grandTotal: Math.round(p.total), totalWorkHours: p.laborHours },
+      pricingData:    { hourlyRate: meta.calcHourlyRate || 9000, markup_pct: meta.calcMarkup || 0 },
+      items:          meta.calcPricingLines,
+      assemblySummary: meta.calcAssemblySummary || [],
+      source:         'plan-takeoff',
+      fileName:       meta.fileName || meta.name,
+      planId:         pid,
+    }
+    saveQuote(quote)
+    handleQuoteSaved(quote)
+  }
+
+  // ── Save edited quote meta + pricing (QuoteView inline edit) ────────────
+  const handleSaveQuote = (updatedQuote) => {
+    saveQuote(updatedQuote)
+    setQuotes(loadQuotes())
+    setViewingQuote(updatedQuote)
+    if (session) {
+      saveQuoteRemote(updatedQuote).catch(err => {
+        console.error('[TakeoffPro] Remote quote sync failed:', err.message)
+      })
+    }
+  }
+
   const handleStatusChange = (quoteId, newStatus) => {
     // Use functional state update to avoid race condition with stale quotes
     setQuotes(prev => {
@@ -816,6 +971,11 @@ function SaaSShell() {
                     viewerDirtyRef.current = false
                     setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('projektek')
                   }}
+                  onQuoteFromPlan={(pid) => {
+                    viewerDirtyRef.current = false
+                    setFelmeresFile(null); setFelmeresOpenPlan(null)
+                    buildQuoteFromPlan(pid)
+                  }}
                 />
               )}
             </ErrorBoundary>
@@ -825,7 +985,7 @@ function SaaSShell() {
             <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
               {viewingQuote && page === 'quotes' ? (
                 <QuoteView quote={viewingQuote} settings={settings} onBack={() => setViewingQuote(null)}
-                  onStatusChange={handleStatusChange} />
+                  onStatusChange={handleStatusChange} onSaveQuote={handleSaveQuote} />
               ) : page === 'dashboard' ? (
                 <Dashboard quotes={quotes} settings={settings}
                   onNavigate={p => { setViewingQuote(null); setPage(p) }}
@@ -856,6 +1016,7 @@ function SaaSShell() {
                   activeProjectId={activeProjectId}
                   onOpenProject={id => setActiveProjectId(id)}
                   onBackToProjects={() => setActiveProjectId(null)}
+                  legendPanelOpen={!!legendPanelData}
                 />
               ) : page === 'assemblies' ? (
                 <AssembliesPage activeTrade={activeTrade} />
