@@ -634,6 +634,12 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const categories = [...new Set(allDetections.map(d => d.category))]
   const acceptedCount = allDetections.filter(d => d.accepted !== false).length
 
+  // ── First plan with accepted detections (for CTA navigate) ──
+  const firstDetectedPlanId = useMemo(() => {
+    const accepted = allDetections.filter(d => d.accepted !== false)
+    return accepted.length > 0 ? accepted[0].planId : null
+  }, [allDetections])
+
   if (phase === 'no_templates') return <NoTemplatesWarning onClose={onClose} />
 
   return (
@@ -840,17 +846,47 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
 
               {/* CTAs */}
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                <button
-                  onClick={() => { if (onDone) onDone(); else onClose() }}
-                  style={{
-                    fontFamily: 'DM Mono', fontSize: 12, color: '#000', fontWeight: 600,
-                    background: C.accent, border: 'none',
-                    borderRadius: 8, padding: '10px 0', cursor: 'pointer',
-                    flex: 1, transition: 'all 0.15s',
-                  }}
-                >
-                  {applySummary.needsManual > 0 ? 'Tovább a tervekhez' : 'Tovább a kalkulációhoz'}
-                </button>
+                {firstDetectedPlanId ? (
+                  <button
+                    onClick={async () => {
+                      if (onLocateDetection) await onLocateDetection({ planId: firstDetectedPlanId })
+                      if (onDone) onDone(); else onClose()
+                    }}
+                    style={{
+                      fontFamily: 'DM Mono', fontSize: 12, color: '#000', fontWeight: 600,
+                      background: C.accent, border: 'none',
+                      borderRadius: 8, padding: '10px 0', cursor: 'pointer',
+                      flex: 1, transition: 'all 0.15s',
+                    }}
+                  >
+                    Megnyitás a workspace-ben
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { if (onDone) onDone(); else onClose() }}
+                    style={{
+                      fontFamily: 'DM Mono', fontSize: 12, color: '#000', fontWeight: 600,
+                      background: C.accent, border: 'none',
+                      borderRadius: 8, padding: '10px 0', cursor: 'pointer',
+                      flex: 1, transition: 'all 0.15s',
+                    }}
+                  >
+                    Bezárás
+                  </button>
+                )}
+                {firstDetectedPlanId && (
+                  <button
+                    onClick={() => { if (onDone) onDone(); else onClose() }}
+                    style={{
+                      fontFamily: 'DM Mono', fontSize: 12, color: C.muted, fontWeight: 600,
+                      background: 'transparent', border: `1px solid ${C.border}`,
+                      borderRadius: 8, padding: '10px 0', cursor: 'pointer',
+                      flex: 0.6, transition: 'all 0.15s',
+                    }}
+                  >
+                    Bezárás
+                  </button>
+                )}
               </div>
             </div>
           )}

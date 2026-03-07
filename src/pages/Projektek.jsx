@@ -124,7 +124,7 @@ function SelectionToolbar({ count, onDetect, onMerge, onDeselect }) {
       </span>
       <div style={{ flex: 1, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <TlBtn icon={<ScanIcon size={13} color={C.blue} />} label="Szimbólumdetektálás" color={C.blue} onClick={onDetect} />
-        <TlBtn icon={<CalcIcon size={13} color={C.accent} />} label="Összevonás kalkulációhoz" color={C.accent} onClick={onMerge} />
+        <TlBtn icon={<CalcIcon size={13} color={C.accent} />} label={count === 1 ? "Ajánlat generálása" : "Közös ajánlat generálása"} color={C.accent} onClick={onMerge} />
       </div>
       <button onClick={onDeselect} style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>
         Mégsem
@@ -399,7 +399,7 @@ function ProjectListView({ onOpenProject }) {
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(0,229,160,0.4)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = C.border }}
         >
-          <ScannerSVG label="Új projekt létrehozása" sublabel="Hozz létre egy mappát az építkezésnek" tags={['Tervrajzok', 'Kalkuláció', 'Összevonás']} />
+          <ScannerSVG label="Új projekt létrehozása" sublabel="Hozz létre egy mappát az építkezésnek" tags={['Tervrajzok', 'Kalkuláció', 'Árajánlat']} />
         </div>
       ) : (
         <div style={{
@@ -552,7 +552,7 @@ function DetectionHistoryMini({ projectId, onReopen }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── PROJECT DETAIL VIEW ───────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, onReopenDetection }) {
+function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, onReopenDetection, legendPanelOpen }) {
   const [project, setProject] = useState(null)
   const [plans, setPlans] = useState([])
   const [thumbnails, setThumbnails] = useState({})
@@ -577,6 +577,13 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   }, [projectId])
 
   useEffect(() => { reload() }, [reload])
+
+  // Reload project + templates when LegendPanel closes (open → closed transition)
+  const prevLegendOpen = useRef(false)
+  useEffect(() => {
+    if (prevLegendOpen.current && !legendPanelOpen) reload()
+    prevLegendOpen.current = !!legendPanelOpen
+  }, [legendPanelOpen, reload])
 
   // Load thumbnails
   useEffect(() => {
@@ -662,7 +669,54 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz · {templates.length} szimbólum sablon</p>
       </div>
 
-      {/* Legend section removed */}
+      {/* ── Legend entry chip ── */}
+      {project.legendPlanId || templates.length > 0 ? (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            border: '1px solid rgba(76,201,240,0.2)', borderRadius: 8,
+            background: 'rgba(76,201,240,0.04)', padding: '10px 14px', marginBottom: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <BookIcon size={15} color={C.blue} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text }}>
+              Jelmagyarázat: <strong style={{ color: C.blue }}>{templates.length}</strong> szimbólum sablon
+            </span>
+          </div>
+          <button
+            onClick={() => onLegendPanel && onLegendPanel({ projectId, legendPlanId: project.legendPlanId })}
+            title="Jelmagyarázat szerkesztése"
+            style={{
+              background: 'transparent', border: `1px solid rgba(76,201,240,0.25)`, borderRadius: 5,
+              padding: '4px 10px', cursor: 'pointer', color: C.blue, fontSize: 11,
+              fontFamily: 'DM Mono', transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.1)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            Szerkesztés
+          </button>
+        </div>
+      ) : (
+        <div
+          onClick={() => onLegendPanel && onLegendPanel({ projectId })}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            border: `2px dashed ${C.border}`, borderRadius: 8,
+            background: C.bgCard, padding: '12px 14px', marginBottom: 12,
+            cursor: 'pointer', transition: 'all 0.2s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(76,201,240,0.4)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border }}
+        >
+          <BookIcon size={16} color={C.muted} />
+          <div>
+            <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>Jelmagyarázat hozzáadása</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 1 }}>Szimbólum sablonok automatikus felismerése</div>
+          </div>
+        </div>
+      )}
 
       {/* ── Selection toolbar ── */}
       {selectedCount > 0 && (
@@ -732,7 +786,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── MAIN EXPORT ───────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function FelmeresPage({ onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, onReopenDetection, activeProjectId, onOpenProject, onBackToProjects }) {
+export default function FelmeresPage({ onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, onReopenDetection, activeProjectId, onOpenProject, onBackToProjects, legendPanelOpen }) {
   const [currentProjectId, setCurrentProjectId] = useState(activeProjectId || null)
 
   // Sync with external prop
@@ -758,6 +812,7 @@ export default function FelmeresPage({ onOpenFile, onLegendPanel, onDetectPanel,
         onDetectPanel={onDetectPanel}
         onMergePanel={onMergePanel}
         onReopenDetection={onReopenDetection}
+        legendPanelOpen={legendPanelOpen}
       />
     )
   }

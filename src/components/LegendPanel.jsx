@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { saveTemplate, loadTemplates, getTemplateImage, deleteTemplate, generateTemplateId, saveTemplateBatch, getTemplatesByProject } from '../data/legendStore.js'
-import { getPlanFile } from '../data/planStore.js'
+import { getPlanFile, savePlan, generatePlanId } from '../data/planStore.js'
+import { updateProject } from '../data/projectStore.js'
 import { extractLegendSymbols, CATEGORIES as LEGEND_CATEGORIES } from '../utils/legendExtractor.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
@@ -169,6 +170,12 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
   const fileInputRef = useRef(null)
+  const legendFileRef = useRef(null) // raw File from manual upload (for plan save)
+
+  // Track whether we already bound a legend plan in this session
+  const [activeLegendPlanId, setActiveLegendPlanId] = useState(legendPlanId || null)
+  // Keep activeLegendPlanId in sync with prop changes (e.g. reopening for different project)
+  useEffect(() => { setActiveLegendPlanId(legendPlanId || null) }, [legendPlanId])
 
   // ── Load saved templates on mount ──
   useEffect(() => {
@@ -250,6 +257,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
       }
     })
     await saveTemplateBatch(batch)
+    await bindLegendPlan()
     // Reload templates
     if (projectId) {
       const tpls = await getTemplatesByProject(projectId)
@@ -259,7 +267,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
     }
     setAutoSaving(false)
     setMode('manual') // switch back to manual view showing saved templates
-  }, [extractedSymbols, projectId])
+  }, [extractedSymbols, projectId, bindLegendPlan])
 
   // ── Render current page ──
   useEffect(() => {
@@ -406,10 +414,31 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
     setZoom(z => Math.max(0.3, Math.min(8, z * delta)))
   }, [])
 
+  // ── Bind legend plan: save uploaded PDF as plan record + set project.legendPlanId ──
+  const bindLegendPlan = useCallback(async () => {
+    if (activeLegendPlanId || !legendFileRef.current || !projectId) return
+    const planId = generatePlanId()
+    const file = legendFileRef.current
+    const plan = {
+      id: planId,
+      name: `[Jelmagyarázat] ${file.name}`,
+      fileName: file.name,
+      fileType: 'pdf',
+      fileSize: file.size,
+      projectId,
+      uploadedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    }
+    await savePlan(plan, file)
+    updateProject(projectId, { legendPlanId: planId })
+    setActiveLegendPlanId(planId)
+  }, [activeLegendPlanId, projectId])
+
   // ── File upload ──
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    legendFileRef.current = file
     e.target.value = ''
     const arrayBuffer = await file.arrayBuffer()
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
@@ -437,6 +466,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
       createdAt: new Date().toISOString(),
     }
     await saveTemplate(meta, croppedImage)
+    await bindLegendPlan()
     if (projectId) {
       getTemplatesByProject(projectId).then(tpls => setTemplates(tpls))
     } else {
@@ -446,7 +476,7 @@ export default function LegendPanel({ onClose, projectId, legendPlanId, onRunDet
     setCropRect(null)
     setTemplateLabel('')
     setSaving(false)
-  }, [croppedImage, cropRect, selectedCategory, templateLabel, zoom, renderScale])
+  }, [croppedImage, cropRect, selectedCategory, templateLabel, zoom, renderScale, bindLegendPlan])
 
   // ── Delete template ──
   const handleDeleteTemplate = useCallback(async (id) => {

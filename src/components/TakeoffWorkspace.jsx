@@ -514,7 +514,7 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 }
 
 // ─── Main TakeoffWorkspace ────────────────────────────────────────────────────
-export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId, focusTarget, onDirtyChange }) {
+export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId, focusTarget, onDirtyChange, onQuoteFromPlan }) {
   // ── File & parse state ────────────────────────────────────────────────────
   const [file, setFile] = useState(null)
   const [parsedDxf, setParsedDxf] = useState(null)
@@ -581,6 +581,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [rightTab, setRightTab] = useState('recognize') // 'recognize' | 'takeoff' | 'cable' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
+  const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
   // ── Mobile responsive state ───────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   const [showDxfOnMobile, setShowDxfOnMobile] = useState(false)
@@ -1144,7 +1145,25 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           wallSplits,
           variantOverrides,
         })
-        // Persist pricing summary on plan metadata for card display
+        // Persist pricing summary + snapshot for quote generation on plan metadata
+        const snapshotItems = (pricing.lines || []).map(line => ({
+          name: line.name, qty: line.qty, unit: line.unit, type: line.type,
+          unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
+          hours: line.hours || 0, materialCost: line.materialCost || 0,
+        }))
+        const snapshotAssembly = takeoffRows.map(row => {
+          const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
+          const rowP = computePricing({
+            takeoffRows: [row], assemblies, workItems, materials, context, markup, hourlyRate,
+            cableEstimate: null, difficultyMode,
+          })
+          return {
+            id: row.asmId, name: asm?.name || row.asmId, category: asm?.category || '',
+            qty: row.qty, wallSplits: row.wallSplits || null,
+            totalPrice: Math.round(rowP.total), totalMaterials: Math.round(rowP.materialCost),
+            totalLabor: Math.round(rowP.laborCost), totalHours: rowP.laborHours,
+          }
+        })
         updatePlanMeta(planId, {
           calcTotal: Math.round(pricing.total),
           calcItemCount: takeoffRows.reduce((s, r) => s + r.qty, 0),
@@ -1156,8 +1175,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             laborCost: pricing.laborCost,
             laborHours: pricing.laborHours,
           },
+          calcPricingLines: snapshotItems,
+          calcAssemblySummary: snapshotAssembly,
+          calcHourlyRate: hourlyRate,
+          calcMarkup: markup,
         })
-        onSaved?.()
+        // Show save-success strip instead of immediately navigating back
+        if (onQuoteFromPlan) {
+          setSaveSuccess(true)
+        } else {
+          onSaved?.()
+        }
         return
       }
 
@@ -1316,8 +1344,40 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           </button>
         )}
 
-        {/* Pricing summary */}
-        {pricing ? (
+        {/* Pricing summary or save-success strip */}
+        {saveSuccess && planId ? (
+          <>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent, display: 'flex', alignItems: 'center', gap: 6 }}>
+              ✓ Kalkuláció mentve · {Math.round(pricing?.total || 0).toLocaleString('hu-HU')} Ft
+            </div>
+            <button
+              onClick={async () => {
+                setSaving(true)
+                try { await onQuoteFromPlan?.(planId) }
+                finally { setSaving(false) }
+              }}
+              disabled={saving}
+              style={{
+                marginLeft: 12, padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
+                background: C.accent, border: 'none', color: C.bg,
+                fontFamily: 'Syne', fontWeight: 800, fontSize: 14,
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? '...' : '📄 Ajánlat generálása'}
+            </button>
+            <button
+              onClick={() => onSaved?.()}
+              style={{
+                marginLeft: 8, padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
+                background: 'transparent', border: `1px solid ${C.border}`, color: C.muted,
+                fontFamily: 'Syne', fontWeight: 600, fontSize: 13,
+              }}
+            >
+              ← Vissza a projekthez
+            </button>
+          </>
+        ) : pricing ? (
           <>
             <PricingPill label="Anyag" value={pricing.materialCost} color={C.blue} />
             <div style={{ width: 1, height: 32, background: C.border, margin: '0 16px' }} />
