@@ -1104,6 +1104,22 @@ function SaaSShell() {
           materials={materials}
           onClose={() => setMergePanelPlans(null)}
           onSaved={quote => { handleQuoteSaved(quote); setMergePanelPlans(null) }}
+          onOpenPlan={async (plan) => {
+            setMergePanelPlans(null)
+            try {
+              const blob = await getPlanFile(plan.id)
+              if (!blob) return
+              const meta = getPlanMeta(plan.id) || {}
+              const ft = plan.fileType || (plan.name || '').toLowerCase().split('.').pop() || 'pdf'
+              const mimeMap = { pdf: 'application/pdf', dxf: 'text/plain', dwg: 'application/octet-stream' }
+              const file = new File([blob], plan.name || meta.name || 'terv.pdf', { type: mimeMap[ft] || 'application/octet-stream' })
+              setFelmeresOpenPlan(plan)
+              setFelmeresFile(file)
+              setPage('projektek-workspace')
+            } catch (e) {
+              console.warn('[App] PdfMergePanel onOpenPlan failed:', e)
+            }
+          }}
         />
       )}
       {/* ── Auto-save toast (informative guard on plan switch) ────────────── */}

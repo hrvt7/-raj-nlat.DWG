@@ -21,7 +21,7 @@ function XIcon({ size = 16, color = C.muted }) {
 // ─── PdfMergePanel ────────────────────────────────────────────────────────────
 // Reads pre-computed calcTakeoffRows & calcPricing from plan metadata,
 // merges rows by asmId, recomputes combined pricing.
-export default function PdfMergePanel({ plans, materials: propMaterials, onClose, onSaved }) {
+export default function PdfMergePanel({ plans, materials: propMaterials, onClose, onSaved, onOpenPlan }) {
   const [loading, setLoading] = useState(true)
   const [assemblies, setAssemblies] = useState([])
   const [workItems, setWorkItems] = useState([])
@@ -247,12 +247,27 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                       background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.2)',
                       borderRadius: 8,
                     }}>
-                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, flex: 1 }}>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         📄 {p.name || p.fileName || 'Terv'}
                       </span>
-                      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red }}>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red, flexShrink: 0 }}>
                         ⚠ Nincs kalkuláció
                       </span>
+                      {onOpenPlan && (
+                        <button
+                          onClick={() => onOpenPlan(p)}
+                          style={{
+                            fontFamily: 'DM Mono', fontSize: 10, color: C.blue,
+                            background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.2)',
+                            borderRadius: 5, padding: '3px 10px', cursor: 'pointer', flexShrink: 0,
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.15)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.08)' }}
+                        >
+                          Megnyitás →
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -268,9 +283,40 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                   <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 6 }}>
                     Nincsenek kalkulált elemek
                   </div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: plansWithoutCalc.length > 0 ? 14 : 0 }}>
                     Nyisd meg a terveket és készíts kalkulációt, mielőtt ajánlatot generálsz.
                   </div>
+                  {plansWithoutCalc.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left' }}>
+                      {plansWithoutCalc.map(p => (
+                        <div key={p.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                          background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.2)',
+                          borderRadius: 8,
+                        }}>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            📄 {p.name || p.fileName || 'Terv'}
+                          </span>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red, flexShrink: 0 }}>⚠ Nincs kalkuláció</span>
+                          {onOpenPlan && (
+                            <button
+                              onClick={() => onOpenPlan(p)}
+                              style={{
+                                fontFamily: 'DM Mono', fontSize: 10, color: C.blue,
+                                background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.2)',
+                                borderRadius: 5, padding: '3px 10px', cursor: 'pointer', flexShrink: 0,
+                                transition: 'all 0.15s',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.15)' }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.08)' }}
+                            >
+                              Megnyitás →
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
