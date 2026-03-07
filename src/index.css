@@ -25,24 +25,13 @@ html, body {
   background: #3A3A3A;
 }
 
-/* ── Mobile responsive overrides ─────────────────────────────────────────── */
+/* ── Mobile responsive overrides (app-wide) ─────────────────────────────── */
+/* NOTE: Landing page mobile rules live in Landing.jsx embedded <style>.    */
+/*       Only app-wide rules belong here.                                   */
 @media (max-width: 767px) {
   /* Prevent horizontal overflow on all pages */
   body {
     overflow-x: hidden;
-  }
-
-  /* Landing page: two-column grids go single column */
-  .normtime-grid,
-  .ai-grid,
-  .pdf-section-grid {
-    grid-template-columns: 1fr !important;
-    gap: 32px !important;
-  }
-
-  /* Landing page: hide nav links on mobile (hamburger territory) */
-  .nav-links {
-    display: none !important;
   }
 
   /* Tables scroll horizontally instead of overflowing */
@@ -55,10 +44,5 @@ html, body {
   /* Input/select elements don't overflow their containers */
   input, select, textarea {
     max-width: 100%;
-  }
-
-  /* Stat cards: stack tighter */
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
   }
 }

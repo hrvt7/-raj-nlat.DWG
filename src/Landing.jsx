@@ -1102,7 +1102,7 @@ function TradeSupportSection({ onStart }) {
             <TradeTextBlock trade={trade} />
           </div>
           <div className="nt-svg" style={{ order: trade.reverse ? 1 : 2 }}>
-            <div style={{
+            <div className="anim-frame-169" style={{
               aspectRatio: '16/9', borderRadius: 16, overflow: 'hidden',
               background: '#080808',
               border: `1px solid ${trade.colorBorder}`,
@@ -1967,7 +1967,7 @@ function PricingSection() {
                 </p>
 
                 {/* Phone CTA */}
-                <a href="tel:+36305252336"
+                <a href="tel:+36305252336" className="pricing-phone-cta"
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '14px 20px', borderRadius: 10,
@@ -2217,7 +2217,9 @@ export default function Landing({ onStart }) {
         /* ─ PRICING card responsive ─ */
         @media (max-width: 540px) {
           .pricing-card { padding: 36px 20px 28px !important; }
+          .pricing-card > div { gap: 28px !important; }
           .pricing-badge { font-size: 9px !important; padding: 3px 12px !important; left: 50% !important; transform: translateX(-50%) !important; white-space: normal !important; text-align: center !important; }
+          .pricing-phone-cta { width: 100% !important; justify-content: center !important; }
         }
 
         /* ─ TAB row spacing on mobile ─ */
