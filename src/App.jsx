@@ -624,7 +624,6 @@ function SaaSShell() {
   const [materials, setMaterials] = useState(loadMaterials)
   const [quotes, setQuotes] = useState(loadQuotes)
   const [viewingQuote, setViewingQuote] = useState(null)
-  const [prefillData, setPrefillData] = useState(null)
 
   // ── Auth state ─────────────────────────────────────────────────────────────
   const [session, setSession] = useState(null)
@@ -655,9 +654,9 @@ function SaaSShell() {
     }
   }, [session])
 
-  // ── Plans route redirect → projektek ───────────────────────────────────────
+  // ── Legacy route redirects → projektek ──────────────────────────────────────
   useEffect(() => {
-    if (page === 'plans') setPage('projektek')
+    if (page === 'plans' || page === 'new-quote') setPage('projektek')
   }, [page])
 
   // ── Orphan plan migration (once, on mount) ────────────────────────────────
@@ -701,7 +700,7 @@ function SaaSShell() {
     const TRADE_LABELS = { erosaram: 'Erősáram', gyengaram: 'Gyengeáram', tuzjelzo: 'Tűzjelző' }
     const tradeLabel = activeTrade ? TRADE_LABELS[activeTrade] : null
     const baseTitles = {
-      dashboard: 'Dashboard', quotes: 'Ajánlatok', 'new-quote': 'Új ajánlat',
+      dashboard: 'Dashboard', quotes: 'Ajánlatok',
       projektek: 'Projektek', 'projektek-workspace': 'Projektek',
       'work-items': 'Munkatételek', materials: 'Anyagok',
       assemblies: 'Assemblyk', settings: 'Beállítások',
@@ -938,46 +937,36 @@ function SaaSShell() {
         )}
 
         {/* ── Content — full-height for TakeoffWorkspace, padded for other pages ── */}
-        {(page === 'new-quote' || page === 'projektek-workspace') ? (
+        {page === 'projektek-workspace' ? (
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <ErrorBoundary
               fallbackLabel="TakeoffWorkspace összeomlott"
               onManualMode={() => setPage('projektek')}
             >
-              {page === 'new-quote' ? (
-                <TakeoffWorkspace
-                  settings={settings}
-                  materials={materials}
-                  initialData={prefillData}
-                  onSaved={quote => { setPrefillData(null); handleQuoteSaved(quote) }}
-                  onCancel={() => { setPrefillData(null); setPage('quotes') }}
-                />
-              ) : (
-                <TakeoffWorkspace
-                  settings={settings}
-                  materials={materials}
-                  initialFile={felmeresFile}
-                  planId={felmeresOpenPlan?.id || null}
-                  focusTarget={viewerFocusTarget}
-                  onDirtyChange={handleViewerDirtyChange}
-                  onSaved={() => {
-                    // Per-plan save: go back to Projektek (NOT to Ajánlatok)
-                    viewerDirtyRef.current = false
-                    setFelmeresFile(null)
-                    setFelmeresOpenPlan(null)
-                    setPage('projektek')
-                  }}
-                  onCancel={() => {
-                    viewerDirtyRef.current = false
-                    setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('projektek')
-                  }}
-                  onQuoteFromPlan={(pid) => {
-                    viewerDirtyRef.current = false
-                    setFelmeresFile(null); setFelmeresOpenPlan(null)
-                    buildQuoteFromPlan(pid)
-                  }}
-                />
-              )}
+              <TakeoffWorkspace
+                settings={settings}
+                materials={materials}
+                initialFile={felmeresFile}
+                planId={felmeresOpenPlan?.id || null}
+                focusTarget={viewerFocusTarget}
+                onDirtyChange={handleViewerDirtyChange}
+                onSaved={() => {
+                  // Per-plan save: go back to Projektek (NOT to Ajánlatok)
+                  viewerDirtyRef.current = false
+                  setFelmeresFile(null)
+                  setFelmeresOpenPlan(null)
+                  setPage('projektek')
+                }}
+                onCancel={() => {
+                  viewerDirtyRef.current = false
+                  setFelmeresFile(null); setFelmeresOpenPlan(null); setPage('projektek')
+                }}
+                onQuoteFromPlan={(pid) => {
+                  viewerDirtyRef.current = false
+                  setFelmeresFile(null); setFelmeresOpenPlan(null)
+                  buildQuoteFromPlan(pid)
+                }}
+              />
             </ErrorBoundary>
           </div>
         ) : (
