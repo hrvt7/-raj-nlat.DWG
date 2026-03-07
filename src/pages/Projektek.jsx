@@ -13,6 +13,7 @@ import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
 } from '../data/legendStore.js'
 import { listDetectionRuns } from '../data/detectionRunStore.js'
+import { inferPlanMeta, formatInferredMeta } from '../utils/planMetaInference.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -365,9 +366,16 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           <div style={{ color: C.text, fontSize: 13, fontWeight: 600, fontFamily: 'Syne', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190 }}>{plan.name || plan.fileName || 'Névtelen'}</div>
           {(() => { const ftInfo = FILE_TYPE_MAP[plan.fileType] || FILE_TYPE_MAP.pdf; return <span style={{ fontFamily: 'DM Mono', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 4, background: ftInfo.bg, border: `1px solid ${ftInfo.border}`, color: ftInfo.color }}>{ftInfo.label}</span> })()}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: hasCalc ? 6 : 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: plan.inferredMeta ? 4 : (hasCalc ? 6 : 10) }}>
           <span>{fmtSize(plan.fileSize)}</span><span>{fmtDate(plan.uploadedAt || plan.createdAt)}</span>
         </div>
+        {plan.inferredMeta && formatInferredMeta(plan.inferredMeta) && (
+          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.blue, marginBottom: hasCalc ? 6 : 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            title={formatInferredMeta(plan.inferredMeta)}
+          >
+            {formatInferredMeta(plan.inferredMeta)}
+          </div>
+        )}
         {hasCalc && (
           <div style={{
             background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)',
@@ -742,10 +750,12 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     for (const file of accepted) {
       const id = generatePlanId()
       const ft = getFileType(file.name)
+      const inferred = inferPlanMeta(file.name)
       const plan = {
         id, name: file.name, fileName: file.name, fileType: ft, fileSize: file.size,
         projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
         markerCount: 0, measureCount: 0, hasScale: false, detectedCount: 0, detectionReviewed: false,
+        inferredMeta: inferred.metaConfidence > 0 ? inferred : null,
       }
       await savePlan(plan, file)
       // Thumbnail only for PDF — DXF/DWG get fallback icon
