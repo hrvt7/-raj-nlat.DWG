@@ -183,7 +183,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
         }}>
           <div>
             <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 15, color: C.text }}>
-              Összevonás kalkulációhoz
+              {plans.length === 1 ? 'Ajánlat generálása' : `Közös ajánlat · ${plans.length} terv`}
             </div>
             <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 2 }}>
               {plans.length} terv · {totalItems} elem összesítve
@@ -269,7 +269,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                     Nincsenek kalkulált elemek
                   </div>
                   <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-                    Nyisd meg a terveket és készíts kalkulációt, mielőtt összevonod.
+                    Nyisd meg a terveket és készíts kalkulációt, mielőtt ajánlatot generálsz.
                   </div>
                 </div>
               ) : (
