@@ -1,162 +1,56 @@
 // ─── AI Vision Metadata Fallback (Layer 3) ──────────────────────────────────
-// Sends a first-page PDF image to OpenAI Vision API to extract structured
-// metadata when filename + text scan layers produce low-confidence results.
+// Sends a first-page PDF image to the backend proxy which calls OpenAI Vision
+// to extract structured metadata. The API key lives server-side only.
 //
 // Isolated module — no side effects, no state, easy to test or swap backend.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const OPENAI_MODEL = 'gpt-4o-mini'   // fast + cheap vision model
 const MAX_IMAGE_DIMENSION = 1024      // scale down if larger
 
-// ── Hungarian electrical drawing metadata prompt ────────────────────────────
-const SYSTEM_PROMPT = `Te egy magyar villamos tervrajz metaadat-felismerő AI vagy.
-A felhasználó egy épületvillamos tervrajz első oldalának képét küldi.
-A képen jellemzően van fejléc / title block / bélyegző a jobb alsó sarokban.
-
-Feladatod: strukturált JSON-t visszaadni az alábbi mezőkkel.
-Ha egy mezőt nem tudsz megállapítani, adj null-t.
-
-Mezők:
-- floor: emelet kódja (pl. "fsz", "pince", "1_emelet", "2_emelet", "teto")
-- floorLabel: emelet olvasható neve (pl. "Földszint", "1. emelet", "Tetőszint")
-- systemType: villamos rendszer típusa, az alábbiak egyike:
-    "power" | "lighting" | "fire_alarm" | "low_voltage" | "security" | "lightning_protection" | "general"
-- docType: dokumentum típusa, az alábbiak egyike:
-    "plan" | "single_line" | "legend" | "schedule" | "detail" | "section"
-- drawingNumber: rajzszám (pl. "E-01", "V-03", "GY-02")
-- revision: revízió (pl. "R1", "A", "Rev2")
-- confidence: 0–1 közötti szám, mennyire vagy biztos az eredményben
-
-FONTOS:
-- Csak az képen látható információt használd
-- Ne találj ki adatot
-- A confidence legyen őszinte (ha alig látsz title block-ot, adj 0.3-at)
-- Válaszolj KIZÁRÓLAG valid JSON-nel, semmi más szöveggel`
-
 /**
- * Call OpenAI Vision API to extract metadata from a plan image.
+ * Call the backend meta-vision proxy to extract metadata from a plan image.
  *
  * @param {string} imageBase64 — base64 data URL (data:image/jpeg;base64,...) or raw base64
  * @param {object} [existingMeta] — current metadata for context (optional)
  * @returns {Promise<object>} Structured metadata { floor, floorLabel, systemType, docType, drawingNumber, revision, confidence }
- * @throws {Error} If API call fails or no API key configured
+ * @throws {Error} If backend call fails or is not configured
  */
 export async function callAiMetaVision(imageBase64, existingMeta = null) {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY
   const backendUrl = import.meta.env.VITE_API_URL
 
-  // ── Try direct OpenAI call ──
-  if (apiKey) {
-    return await callOpenAiDirect(apiKey, imageBase64, existingMeta)
+  if (!backendUrl) {
+    throw new Error('AI Vision nem elérhető. A VITE_API_URL nincs beállítva.')
   }
 
-  // ── Try backend proxy ──
-  if (backendUrl) {
-    return await callBackendProxy(backendUrl, imageBase64, existingMeta)
-  }
-
-  throw new Error('AI Vision nem elérhető. Állítsd be a VITE_OPENAI_API_KEY környezeti változót.')
-}
-
-// ── Direct OpenAI Vision API call ───────────────────────────────────────────
-async function callOpenAiDirect(apiKey, imageBase64, existingMeta) {
   // Ensure proper data URL format
   const imageUrl = imageBase64.startsWith('data:')
     ? imageBase64
     : `data:image/jpeg;base64,${imageBase64}`
 
-  const userContent = [
-    {
-      type: 'image_url',
-      image_url: { url: imageUrl, detail: 'low' },  // low detail = cheaper + faster
-    },
-  ]
-
-  // Add context about existing metadata if available
-  if (existingMeta) {
-    const ctx = Object.entries(existingMeta)
-      .filter(([k, v]) => v && !k.startsWith('meta'))
-      .map(([k, v]) => `${k}: ${v}`)
-      .join(', ')
-    if (ctx) {
-      userContent.push({
-        type: 'text',
-        text: `Jelenlegi (bizonytalan) metaadatok: ${ctx}\nKérlek erősítsd meg vagy javítsd ki a kép alapján.`,
-      })
-    }
-  }
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userContent },
-      ],
-      max_tokens: 300,
-      temperature: 0.1,
-    }),
-  })
-
-  if (!res.ok) {
-    const errBody = await res.text().catch(() => '')
-    if (res.status === 401) throw new Error('Érvénytelen OpenAI API kulcs.')
-    if (res.status === 429) throw new Error('OpenAI API rate limit — próbáld újra később.')
-    throw new Error(`OpenAI API hiba (${res.status}): ${errBody.slice(0, 200)}`)
-  }
-
-  const data = await res.json()
-  const raw = data.choices?.[0]?.message?.content
-  if (!raw) throw new Error('Üres AI válasz.')
-
-  return parseAiResponse(raw)
-}
-
-// ── Backend proxy call ──────────────────────────────────────────────────────
-async function callBackendProxy(backendUrl, imageBase64, existingMeta) {
   const res = await fetch(`${backendUrl}/api/meta-vision`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: imageBase64, existingMeta }),
+    body: JSON.stringify({ image: imageUrl, existingMeta }),
   })
 
   if (!res.ok) {
-    if (res.status === 404) throw new Error('Backend /api/meta-vision végpont nem elérhető. Használj VITE_OPENAI_API_KEY-t.')
-    throw new Error(`Backend hiba (${res.status})`)
+    let errMsg = `Backend hiba (${res.status})`
+    try {
+      const errData = await res.json()
+      if (errData.error) errMsg = errData.error
+    } catch { /* ignore parse error */ }
+
+    if (res.status === 404) throw new Error('Az /api/meta-vision végpont nem elérhető.')
+    if (res.status === 413) throw new Error('A kép túl nagy. Próbálj kisebb felbontást.')
+    if (res.status === 429) throw new Error('Túl sok kérés — próbáld újra később.')
+    throw new Error(errMsg)
   }
 
   const data = await res.json()
   return validateAiResult(data)
 }
 
-// ── Parse & validate AI response ────────────────────────────────────────────
-function parseAiResponse(raw) {
-  // Strip markdown code fences if present
-  let cleaned = raw.trim()
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
-  }
-
-  let parsed
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch {
-    // Try to extract JSON from surrounding text
-    const match = cleaned.match(/\{[\s\S]*\}/)
-    if (match) {
-      try { parsed = JSON.parse(match[0]) } catch { /* fall through */ }
-    }
-    if (!parsed) throw new Error('AI válasz nem valid JSON.')
-  }
-
-  return validateAiResult(parsed)
-}
-
+// ── Validate response shape (client-side safety net) ─────────────────────────
 const VALID_SYSTEM_TYPES = ['power', 'lighting', 'fire_alarm', 'low_voltage', 'security', 'lightning_protection', 'general']
 const VALID_DOC_TYPES = ['plan', 'single_line', 'legend', 'schedule', 'detail', 'section']
 
