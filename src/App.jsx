@@ -46,6 +46,13 @@ const OUTPUT_MODE_NOTES = {
   split_material_labor: 'Az ajánlat az anyag- és munkadíj költségeket külön bontásban tartalmazza.',
 }
 
+// ─── Default inclusions/exclusions per outputMode ────────────────────────────
+const OUTPUT_MODE_INCLEXCL = {
+  combined:              { inclusions: '', exclusions: '' },
+  labor_only:            { inclusions: '', exclusions: 'Az anyagköltség nem része az ajánlatnak.\nAz anyagbiztosítás a megrendelő feladata.' },
+  split_material_labor:  { inclusions: '', exclusions: '' },
+}
+
 const PDF_LEVELS = [
   { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },
   { key: 'summary',  label: 'Összesített',  icon: '▤', desc: '+ Munkacsoport-bontás' },
@@ -134,6 +141,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const [editClient, setEditClient] = useState(quote.clientName || '')
   const [editRate, setEditRate] = useState(Number(quote.pricingData?.hourlyRate) || 9000)
   const [editMarkup, setEditMarkup] = useState(((quote.pricingData?.markup_pct) || 0) * 100)
+  const [editInclusions, setEditInclusions] = useState(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
+  const [editExclusions, setEditExclusions] = useState(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
 
   // ── Sync local state when quote prop changes (e.g. different quote opened, or after save) ──
   const prevQuoteRef = useRef(quote.id)
@@ -144,6 +153,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       setEditRate(Number(quote.pricingData?.hourlyRate) || 9000)
       setEditMarkup(((quote.pricingData?.markup_pct) || 0) * 100)
       setOutputMode(quote.outputMode || 'combined')
+      setEditInclusions(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
+      setEditExclusions(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
       prevQuoteRef.current = quote.id
     }
   }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
@@ -154,6 +165,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || Number(editRate) !== (Number(quote.pricingData?.hourlyRate) || 9000)
     || Math.abs(Number(editMarkup) - ((quote.pricingData?.markup_pct || 0) * 100)) > 0.001
     || outputMode !== (quote.outputMode || 'combined')
+    || editInclusions !== (quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
+    || editExclusions !== (quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
 
   // ── Derived pricing from editable rate + markup ────────────────────────────
   const vatPct = Number(settings?.labor?.vat_percent) || 27
@@ -185,6 +198,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         hourlyRate: Number(editRate),
         markup_pct: Number(editMarkup) / 100,
       },
+      inclusions: editInclusions,
+      exclusions: editExclusions,
       updatedAt: new Date().toISOString(),
     }
     onSaveQuote(updated)
@@ -200,6 +215,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       clientName: editClient, client_name: editClient,
       gross: net, totalLabor: newTotalLabor,
       pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
+      inclusions: editInclusions,
+      exclusions: editExclusions,
     }
     try { generatePdf(liveQuote, settings, pdfLevel, outputMode) }
     finally { setTimeout(() => setPdfGenerating(false), 1200) }
@@ -377,6 +394,37 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               }}
             />
           )}
+
+          {/* ── Inclusions / Exclusions block ───────────────────────────── */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginTop: 8 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: C.accent }}>✓</span> Tartalom és kizárások
+            </div>
+            {/* Inclusions */}
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
+                Tartalmazza
+              </span>
+              <textarea
+                value={editInclusions} onChange={e => setEditInclusions(e.target.value)}
+                placeholder="Pl. Szerelési munkadíj, vezetékezés, …"
+                rows={3}
+                style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontFamily: 'Inter', fontSize: 12, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            {/* Exclusions */}
+            <div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
+                Nem tartalmazza
+              </span>
+              <textarea
+                value={editExclusions} onChange={e => setEditExclusions(e.target.value)}
+                placeholder="Pl. Az anyagköltség nem része az ajánlatnak, …"
+                rows={3}
+                style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontFamily: 'Inter', fontSize: 12, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
 
         </div>
 
@@ -890,6 +938,7 @@ function SaaSShell() {
     // ── Resolve project-level default output mode ──────────────────
     const planPrjDefault = meta.projectId ? (getProject(meta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
 
+    const planDefaults = OUTPUT_MODE_INCLEXCL[planPrjDefault] || OUTPUT_MODE_INCLEXCL.combined
     const quote = {
       id:             generateQuoteId(),
       projectName:    displayName,
@@ -901,6 +950,8 @@ function SaaSShell() {
       created_at:     new Date().toISOString(),
       status:         'draft',
       outputMode:     planPrjDefault,
+      inclusions:     planDefaults.inclusions,
+      exclusions:     planDefaults.exclusions,
       gross:          Math.round(p.total),
       totalMaterials: Math.round(p.materialCost),
       totalLabor:     Math.round(p.laborCost),

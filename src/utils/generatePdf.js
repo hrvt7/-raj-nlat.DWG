@@ -196,6 +196,16 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     ? `<div class="mode-note">${escHtml(modeNote)}</div>`
     : ''
 
+  // ── Inclusions / Exclusions ─────────────────────────────────────────────
+  const inclusions = (quote.inclusions || '').trim()
+  const exclusions = (quote.exclusions || '').trim()
+  const hasInclExcl = inclusions || exclusions
+  const inclExclHtml = hasInclExcl ? `
+    <div class="incl-excl-row">
+      ${inclusions ? `<div class="incl-box"><strong>Tartalmazza:</strong><br/>${escHtml(inclusions).replace(/\n/g, '<br/>')}</div>` : ''}
+      ${exclusions ? `<div class="excl-box"><strong>Nem tartalmazza:</strong><br/>${escHtml(exclusions).replace(/\n/g, '<br/>')}</div>` : ''}
+    </div>` : ''
+
   // ── Notes ─────────────────────────────────────────────────────────────────
   const notes = quote.notes || qSettings.default_notes || ''
   const notesHtml = notes
@@ -307,6 +317,12 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     /* ── MODE NOTE ────────────────────────────────────────────────────── */
     .mode-note { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 7px; padding: 10px 13px; margin-bottom: 14px; font-family: 'Inter', sans-serif; font-size: 8.5pt; color: #1E40AF; line-height: 1.6; }
 
+    /* ── INCLUSIONS / EXCLUSIONS ─────────────────────────────────────── */
+    .incl-excl-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .incl-excl-row > div:only-child { grid-column: 1 / -1; }
+    .incl-box { background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 7px; padding: 10px 13px; font-size: 8.5pt; color: #065F46; line-height: 1.6; }
+    .excl-box { background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 7px; padding: 10px 13px; font-size: 8.5pt; color: #92400E; line-height: 1.6; }
+
     /* ── NOTES / TERMS ────────────────────────────────────────────────── */
     .notes-box { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 7px; padding: 10px 13px; margin-bottom: 12px; font-size: 8.5pt; color: #92400E; line-height: 1.6; }
     .terms-box { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 7px; padding: 10px 13px; margin-bottom: 14px; font-size: 8pt; color: #4B5563; line-height: 1.7; }
@@ -385,6 +401,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
 
     <!-- ── DETAILED ITEMS ────────────────────────────────────────────── -->
     ${detailedSectionHtml}
+
+    <!-- ── INCLUSIONS / EXCLUSIONS ─────────────────────────────────── -->
+    ${inclExclHtml}
 
     <!-- ── NOTES ─────────────────────────────────────────────────────── -->
     ${notesHtml}

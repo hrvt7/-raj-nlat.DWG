@@ -132,6 +132,8 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
     // ── Resolve project-level default output mode from first plan ──────
     const firstProjId = plans.find(p => p.projectId)?.projectId
     const mergePrjDefault = firstProjId ? (getProject(firstProjId)?.defaultQuoteOutputMode || 'combined') : 'combined'
+    const _inclExclDefaults = { combined: { inclusions: '', exclusions: '' }, labor_only: { inclusions: '', exclusions: 'Az anyagköltség nem része az ajánlatnak.\nAz anyagbiztosítás a megrendelő feladata.' }, split_material_labor: { inclusions: '', exclusions: '' } }
+    const _ieD = _inclExclDefaults[mergePrjDefault] || _inclExclDefaults.combined
 
     const quote = {
       id: 'Q-' + Date.now().toString(36),
@@ -143,6 +145,8 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       created_at: new Date().toISOString(),
       status: 'draft',
       outputMode: mergePrjDefault,
+      inclusions: _ieD.inclusions,
+      exclusions: _ieD.exclusions,
       gross:          Math.round(pricing.total),
       totalMaterials: Math.round(pricing.materialCost),
       totalLabor:     Math.round(pricing.laborCost),

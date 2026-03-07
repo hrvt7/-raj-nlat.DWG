@@ -1226,6 +1226,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       // ── Resolve project-level default output mode ──────────────────
       const planMeta = planId ? getPlanMeta(planId) : null
       const prjDefault = planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
+      const _inclExclDefaults = { combined: { inclusions: '', exclusions: '' }, labor_only: { inclusions: '', exclusions: 'Az anyagköltség nem része az ajánlatnak.\nAz anyagbiztosítás a megrendelő feladata.' }, split_material_labor: { inclusions: '', exclusions: '' } }
+      const _ieD = _inclExclDefaults[prjDefault] || _inclExclDefaults.combined
 
       const quote = {
         id:           generateQuoteId(),
@@ -1238,6 +1240,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         created_at:   new Date().toISOString(),
         status:      'draft',
         outputMode:   prjDefault,
+        inclusions:   _ieD.inclusions,
+        exclusions:   _ieD.exclusions,
         gross:          Math.round(pricing.total),
         totalMaterials: Math.round(pricing.materialCost),
         totalLabor:     Math.round(pricing.laborCost),
