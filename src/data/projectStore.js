@@ -1,6 +1,6 @@
 // ─── Project Store ────────────────────────────────────────────────────────────
 // Stores project metadata for organizing plans + legends per construction site.
-// Each project = { id, name, description, legendPlanId, createdAt }
+// Each project = { id, name, description, legendPlanId, createdAt, defaultQuoteOutputMode? }
 // Stored in localStorage for quick sync access.
 
 const LS_KEY = 'takeoffpro_projects_meta'

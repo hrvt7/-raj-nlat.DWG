@@ -16,7 +16,7 @@ import PdfMergePanel from './components/PdfMergePanel.jsx'
 import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote, generateQuoteId } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
-import { generateProjectId, saveProject, loadProjects } from './data/projectStore.js'
+import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
@@ -788,7 +788,7 @@ function SaaSShell() {
     const existing = loadProjects().find(p => p.name === 'Importált tervek')
     const projectId = existing ? existing.id : generateProjectId()
     if (!existing) {
-      saveProject({ id: projectId, name: 'Importált tervek', createdAt: new Date().toISOString() })
+      saveProject({ id: projectId, name: 'Importált tervek', defaultQuoteOutputMode: 'combined', createdAt: new Date().toISOString() })
     }
     orphans.forEach(p => updatePlanMeta(p.id, { projectId }))
     console.log(`[App] Migrated ${orphans.length} orphan plan(s) → "Importált tervek" project (${projectId})`)
@@ -887,6 +887,9 @@ function SaaSShell() {
     }
     const p = meta.calcPricing
     const displayName = meta.name || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
+    // ── Resolve project-level default output mode ──────────────────
+    const planPrjDefault = meta.projectId ? (getProject(meta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
+
     const quote = {
       id:             generateQuoteId(),
       projectName:    displayName,
@@ -897,6 +900,7 @@ function SaaSShell() {
       createdAt:      new Date().toISOString(),
       created_at:     new Date().toISOString(),
       status:         'draft',
+      outputMode:     planPrjDefault,
       gross:          Math.round(p.total),
       totalMaterials: Math.round(p.materialCost),
       totalLabor:     Math.round(p.laborCost),

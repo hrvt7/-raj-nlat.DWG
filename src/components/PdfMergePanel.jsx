@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings, saveQuote } from '../data/store.js'
 import { computePricing } from '../utils/pricing.js'
+import { getProject } from '../data/projectStore.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -128,6 +129,10 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       materialCost: line.materialCost || 0,
     }))
 
+    // ── Resolve project-level default output mode from first plan ──────
+    const firstProjId = plans.find(p => p.projectId)?.projectId
+    const mergePrjDefault = firstProjId ? (getProject(firstProjId)?.defaultQuoteOutputMode || 'combined') : 'combined'
+
     const quote = {
       id: 'Q-' + Date.now().toString(36),
       projectName:  displayName,
@@ -137,6 +142,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       createdAt: new Date().toISOString(),
       created_at: new Date().toISOString(),
       status: 'draft',
+      outputMode: mergePrjDefault,
       gross:          Math.round(pricing.total),
       totalMaterials: Math.round(pricing.materialCost),
       totalLabor:     Math.round(pricing.laborCost),

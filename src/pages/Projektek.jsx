@@ -487,7 +487,7 @@ function ProjectListView({ onOpenProject }) {
   const handleCreate = () => {
     if (!newName.trim()) return
     const id = generateProjectId()
-    saveProject({ id, name: newName.trim(), description: '', legendPlanId: null, createdAt: new Date().toISOString() })
+    saveProject({ id, name: newName.trim(), description: '', legendPlanId: null, defaultQuoteOutputMode: 'combined', createdAt: new Date().toISOString() })
     setNewName('')
     setShowCreate(false)
     reload()
@@ -807,6 +807,35 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         </button>
         <h1 style={{ fontFamily: 'Syne', fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>{project.name}</h1>
         <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz · {templates.length} szimbólum sablon</p>
+      </div>
+
+      {/* ── Default output mode selector ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8,
+        padding: '8px 14px', marginBottom: 12,
+      }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>Alapértelmezett ajánlat mód:</span>
+        {[
+          { key: 'combined',              label: 'Teljes' },
+          { key: 'labor_only',            label: 'Csak munkadíj' },
+          { key: 'split_material_labor',  label: 'Anyag + munkadíj külön' },
+        ].map(m => {
+          const active = (project.defaultQuoteOutputMode || 'combined') === m.key
+          return (
+            <button
+              key={m.key}
+              onClick={() => { updateProject(projectId, { defaultQuoteOutputMode: m.key }); reload() }}
+              style={{
+                fontFamily: 'DM Mono', fontSize: 11, padding: '4px 10px', borderRadius: 5,
+                border: `1px solid ${active ? C.accent + '60' : C.border}`,
+                background: active ? C.accent + '14' : 'transparent',
+                color: active ? C.accent : C.textSub,
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >{m.label}</button>
+          )
+        })}
       </div>
 
       {/* ── Progress Hint Bar ── */}

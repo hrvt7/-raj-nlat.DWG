@@ -9,7 +9,8 @@ const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId } from '../data/store.js'
-import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged } from '../data/planStore.js'
+import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
+import { getProject } from '../data/projectStore.js'
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
@@ -1222,6 +1223,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       })
 
       const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
+      // ── Resolve project-level default output mode ──────────────────
+      const planMeta = planId ? getPlanMeta(planId) : null
+      const prjDefault = planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
+
       const quote = {
         id:           generateQuoteId(),
         projectName:  displayName,
@@ -1232,6 +1237,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         createdAt:    new Date().toISOString(),
         created_at:   new Date().toISOString(),
         status:      'draft',
+        outputMode:   prjDefault,
         gross:          Math.round(pricing.total),
         totalMaterials: Math.round(pricing.materialCost),
         totalLabor:     Math.round(pricing.laborCost),
