@@ -1242,6 +1242,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         outputMode:   prjDefault,
         inclusions:   _ieD.inclusions,
         exclusions:   _ieD.exclusions,
+        validityText: 'Az ajánlat kiállítástól számított 30 napig érvényes.',
+        paymentTermsText: 'Fizetési feltételek: a teljesítést követően, számla ellenében, 8 napon belül.',
         gross:          Math.round(pricing.total),
         totalMaterials: Math.round(pricing.materialCost),
         totalLabor:     Math.round(pricing.laborCost),

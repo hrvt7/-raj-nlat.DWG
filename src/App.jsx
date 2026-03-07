@@ -53,6 +53,10 @@ const OUTPUT_MODE_INCLEXCL = {
   split_material_labor:  { inclusions: '', exclusions: '' },
 }
 
+// ─── Default validity / payment terms for new quotes ─────────────────────────
+const DEFAULT_VALIDITY_TEXT = 'Az ajánlat kiállítástól számított 30 napig érvényes.'
+const DEFAULT_PAYMENT_TERMS_TEXT = 'Fizetési feltételek: a teljesítést követően, számla ellenében, 8 napon belül.'
+
 const PDF_LEVELS = [
   { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },
   { key: 'summary',  label: 'Összesített',  icon: '▤', desc: '+ Munkacsoport-bontás' },
@@ -143,6 +147,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const [editMarkup, setEditMarkup] = useState(((quote.pricingData?.markup_pct) || 0) * 100)
   const [editInclusions, setEditInclusions] = useState(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
   const [editExclusions, setEditExclusions] = useState(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
+  const [editValidity, setEditValidity] = useState(quote.validityText ?? DEFAULT_VALIDITY_TEXT)
+  const [editPaymentTerms, setEditPaymentTerms] = useState(quote.paymentTermsText ?? DEFAULT_PAYMENT_TERMS_TEXT)
 
   // ── Sync local state when quote prop changes (e.g. different quote opened, or after save) ──
   const prevQuoteRef = useRef(quote.id)
@@ -155,6 +161,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       setOutputMode(quote.outputMode || 'combined')
       setEditInclusions(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
       setEditExclusions(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
+      setEditValidity(quote.validityText ?? DEFAULT_VALIDITY_TEXT)
+      setEditPaymentTerms(quote.paymentTermsText ?? DEFAULT_PAYMENT_TERMS_TEXT)
       prevQuoteRef.current = quote.id
     }
   }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
@@ -167,6 +175,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || outputMode !== (quote.outputMode || 'combined')
     || editInclusions !== (quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
     || editExclusions !== (quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
+    || editValidity !== (quote.validityText ?? DEFAULT_VALIDITY_TEXT)
+    || editPaymentTerms !== (quote.paymentTermsText ?? DEFAULT_PAYMENT_TERMS_TEXT)
 
   // ── Derived pricing from editable rate + markup ────────────────────────────
   const vatPct = Number(settings?.labor?.vat_percent) || 27
@@ -200,6 +210,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       },
       inclusions: editInclusions,
       exclusions: editExclusions,
+      validityText: editValidity,
+      paymentTermsText: editPaymentTerms,
       updatedAt: new Date().toISOString(),
     }
     onSaveQuote(updated)
@@ -217,6 +229,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
       inclusions: editInclusions,
       exclusions: editExclusions,
+      validityText: editValidity,
+      paymentTermsText: editPaymentTerms,
     }
     try { generatePdf(liveQuote, settings, pdfLevel, outputMode) }
     finally { setTimeout(() => setPdfGenerating(false), 1200) }
@@ -421,6 +435,37 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                 value={editExclusions} onChange={e => setEditExclusions(e.target.value)}
                 placeholder="Pl. Az anyagköltség nem része az ajánlatnak, …"
                 rows={3}
+                style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontFamily: 'Inter', fontSize: 12, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
+
+          {/* ── Validity & Payment Terms block ──────────────────────────── */}
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginTop: 8 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: C.blue }}>⏱</span> Érvényesség és feltételek
+            </div>
+            {/* Validity */}
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
+                Érvényesség
+              </span>
+              <textarea
+                value={editValidity} onChange={e => setEditValidity(e.target.value)}
+                placeholder="Pl. Az ajánlat 30 napig érvényes…"
+                rows={2}
+                style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontFamily: 'Inter', fontSize: 12, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            {/* Payment Terms */}
+            <div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
+                Fizetési feltételek
+              </span>
+              <textarea
+                value={editPaymentTerms} onChange={e => setEditPaymentTerms(e.target.value)}
+                placeholder="Pl. Számla ellenében, 8 napon belül…"
+                rows={2}
                 style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', color: C.text, fontFamily: 'Inter', fontSize: 12, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
@@ -952,6 +997,8 @@ function SaaSShell() {
       outputMode:     planPrjDefault,
       inclusions:     planDefaults.inclusions,
       exclusions:     planDefaults.exclusions,
+      validityText:   DEFAULT_VALIDITY_TEXT,
+      paymentTermsText: DEFAULT_PAYMENT_TERMS_TEXT,
       gross:          Math.round(p.total),
       totalMaterials: Math.round(p.materialCost),
       totalLabor:     Math.round(p.laborCost),

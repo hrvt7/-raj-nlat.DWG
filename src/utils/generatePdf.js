@@ -327,6 +327,9 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     .notes-box { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 7px; padding: 10px 13px; margin-bottom: 12px; font-size: 8.5pt; color: #92400E; line-height: 1.6; }
     .terms-box { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 7px; padding: 10px 13px; margin-bottom: 14px; font-size: 8pt; color: #4B5563; line-height: 1.7; }
 
+    /* ── ACCEPTANCE NOTE ──────────────────────────────────────────────── */
+    .acceptance-note { font-family: 'Inter', sans-serif; font-size: 8pt; color: #6B7280; font-style: italic; margin-top: 16px; margin-bottom: 6px; text-align: center; }
+
     /* ── SIGNATURE ────────────────────────────────────────────────────── */
     .sig-section { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 22px; padding-top: 14px; border-top: 1px solid #E5E7EB; page-break-inside: avoid; }
     .sig-block label { font-family: 'DM Mono', monospace; font-size: 6.5pt; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.07em; display: block; margin-bottom: 36px; }
@@ -409,15 +412,21 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     ${notesHtml}
 
     <!-- ── TERMS ─────────────────────────────────────────────────────── -->
-    <div class="terms-box">
-      <strong>Fizetési feltételek és érvényesség:</strong><br/>
-      Az ajánlatban szereplő árak nettó árak, ${vatPct}% ÁFA-t nem tartalmaznak. Az árajánlat ${validity} napig érvényes
-      (${validUntil.toLocaleDateString('hu-HU')}-ig). Az árak a megadott munkakörülmények és mennyiségek alapján kerültek
-      meghatározásra; eltérés esetén az ár módosítható.
-      ${footerText ? '<br/><br/>' + escHtml(footerText) : ''}
-    </div>
+    ${(() => {
+      const vText = (quote.validityText || '').trim()
+      const pText = (quote.paymentTermsText || '').trim()
+      if (!vText && !pText) return ''
+      return `<div class="terms-box">
+        <strong>Érvényesség és fizetési feltételek:</strong><br/>
+        ${vText ? escHtml(vText).replace(/\\n/g, '<br/>') : ''}
+        ${vText && pText ? '<br/>' : ''}
+        ${pText ? escHtml(pText).replace(/\\n/g, '<br/>') : ''}
+        ${footerText ? '<br/><br/>' + escHtml(footerText) : ''}
+      </div>`
+    })()}
 
-    <!-- ── SIGNATURE ─────────────────────────────────────────────────── -->
+    <!-- ── ACCEPTANCE + SIGNATURE ─────────────────────────────────────── -->
+    <div class="acceptance-note">Az ajánlat elfogadásával a Megrendelő a dokumentumban foglalt feltételeket elfogadja.</div>
     <div class="sig-section">
       <div class="sig-block">
         <label>Megrendelő aláírása és dátum</label>
