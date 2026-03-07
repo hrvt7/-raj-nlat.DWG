@@ -413,22 +413,32 @@ function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
         boxShadow: hov ? '0 4px 20px rgba(0,229,160,0.08)' : 'none',
       }}
     >
-      {/* Thumbnail area */}
-      <div style={{ height: 120, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}`, flexDirection: 'column', gap: 6 }}>
-        <ProjectCardIllustration size={48} />
-        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>{planCount} tervrajz</span>
+      {/* Thumbnail area — larger SVG, more breathing room */}
+      <div style={{ height: 148, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}` }}>
+        <ProjectCardIllustration size={72} />
       </div>
-      {/* Info */}
-      <div style={{ padding: '12px 14px' }}>
-        <div style={{ color: C.text, fontSize: 14, fontWeight: 700, fontFamily: 'Syne', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {/* Project title — centered chip/band style */}
+      <div style={{ padding: '14px 14px 0', textAlign: 'center' }}>
+        <span style={{
+          display: 'inline-block', maxWidth: '100%',
+          padding: '4px 14px', borderRadius: 6,
+          fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
+          color: C.text, letterSpacing: '0.02em',
+          background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.18)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
           {project.name}
-        </div>
-        {templateCount > 0 && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        </span>
+      </div>
+      {/* Meta info */}
+      <div style={{ padding: '10px 14px 12px' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(0,229,160,0.10)', color: C.accent }}>{planCount} tervrajz</span>
+          {templateCount > 0 && (
             <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(76,201,240,0.15)', color: C.blue }}>{templateCount} szimbólum</span>
-          </div>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: 10 }}>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', color: C.muted, fontSize: 10, fontFamily: 'DM Mono', marginBottom: 10 }}>
           <span>{fmtDate(project.createdAt)}</span>
         </div>
         <div style={{ display: 'flex', gap: 7 }}>
