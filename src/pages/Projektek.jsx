@@ -1080,25 +1080,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz</p>
       </div>
 
-      {/* ── Progress Hint Bar (only shows when plans need calculation) ── */}
-      {(() => {
-        const noCalcPlans = plans.filter(p => !(p.calcTotal > 0)).length
-        if (plans.length === 0 || noCalcPlans === 0) return null
-
-        return (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            border: `1px solid ${C.border}`, borderRadius: 8,
-            background: 'rgba(255,255,255,0.02)', padding: '10px 14px', marginBottom: 12,
-          }}>
-            <span style={{ fontSize: 15, flexShrink: 0 }}>›</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>Nyisd meg a tervrajzokat → detektálás → kalkuláció</div>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 1 }}>{noCalcPlans} tervrajz vár kalkulációra</div>
-            </div>
-          </div>
-        )
-      })()}
 
       {/* ── Selection toolbar ── */}
       {selectedCount > 0 && (
@@ -1109,11 +1090,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           onDeselect={deselectAll}
         />
       )}
-
-      {/* ── Detection history ── */}
-      <div style={{ marginBottom: 12 }}>
-        <DetectionHistoryMini projectId={projectId} onReopen={onReopenDetection} />
-      </div>
 
       {/* ── Plans section ── */}
       <div>

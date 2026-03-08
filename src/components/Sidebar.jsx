@@ -55,7 +55,7 @@ function getTradeSubItems(tradeId) {
   ]
 }
 
-export default function Sidebar({ active, onNavigate, activeTrade, mobileOpen, onMobileClose }) {
+export default function Sidebar({ active, onNavigate, activeTrade, mobileOpen, onMobileClose, onCollapsedChange }) {
   const [collapsed, setCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   const [expandedTrades, setExpandedTrades] = useState(() => {
@@ -239,7 +239,7 @@ export default function Sidebar({ active, onNavigate, activeTrade, mobileOpen, o
         {/* Collapse toggle – desktop only */}
         {!isMobile && (
           <div style={{ borderTop: `1px solid ${C.border}`, padding: collapsed ? '12px 0' : '12px 10px', display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end' }}>
-            <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', cursor: 'pointer', color: C.textMuted, fontSize: 11, fontFamily: 'DM Mono', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => { const next = !collapsed; setCollapsed(next); onCollapsedChange?.(next) }} style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', cursor: 'pointer', color: C.textMuted, fontSize: 11, fontFamily: 'DM Mono', display: 'flex', alignItems: 'center', gap: 4 }}>
               {collapsed ? '→' : '← Összehúz'}
             </button>
           </div>

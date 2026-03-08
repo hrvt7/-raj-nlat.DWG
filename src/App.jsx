@@ -1197,7 +1197,10 @@ function SaaSShell() {
     return () => window.removeEventListener('storage', handler)
   }, [])
 
-  const sidebarW = 220
+  const SIDEBAR_FULL = 220
+  const SIDEBAR_COLLAPSED = 60
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const sidebarW = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_FULL
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
       {showAuth && <AuthModal onAuth={() => setShowAuth(false)} />}
@@ -1207,8 +1210,9 @@ function SaaSShell() {
         onNavigate={handleNavigate}
         mobileOpen={sidebarMobileOpen}
         onMobileClose={() => setSidebarMobileOpen(false)}
+        onCollapsedChange={setSidebarCollapsed}
       />
-      <div style={{ marginLeft: isMobile ? 0 : sidebarW, flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', minWidth: 0 }}>
+      <div style={{ marginLeft: isMobile ? 0 : sidebarW, flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', minWidth: 0, transition: 'margin-left 0.2s ease' }}>
 
         {/* ── Top bar ───────────────────────────────────────────────────────── */}
         <div style={{
