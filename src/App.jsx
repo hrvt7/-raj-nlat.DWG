@@ -1236,8 +1236,55 @@ function SaaSShell() {
               {viewingQuote ? viewingQuote.projectName : getPageTitle()}
             </div>
           </div>
+          {/* Hero SVG strip — fills remaining top bar space */}
+          <div style={{ flex: 1, height: 52, overflow: 'hidden', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 180" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style={{ opacity: 0.7 }}>
+              <defs>
+                <filter id="glow-teal" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="5" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+                <filter id="glow-blue" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="5" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <style>{`
+                .bl{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+                .blt{fill:none;stroke:rgba(255,255,255,0.03);stroke-width:1}
+                .pt{fill:none;stroke:#00E5A0;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow-teal);stroke-dasharray:120 1480;animation:fl 4.5s linear infinite}
+                .pb{fill:none;stroke:#4CC9F0;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow-blue);stroke-dasharray:160 1240;animation:fb 5.2s linear infinite}
+                .ptf{fill:none;stroke:#00E5A0;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;filter:url(#glow-teal);stroke-dasharray:80 1120;animation:ff 3.6s linear infinite}
+                @keyframes fl{0%{stroke-dashoffset:1600}100%{stroke-dashoffset:0}}
+                @keyframes fb{0%{stroke-dashoffset:1400}100%{stroke-dashoffset:0}}
+                @keyframes ff{0%{stroke-dashoffset:1200}100%{stroke-dashoffset:0}}
+                .nb{fill:#09090B;stroke:rgba(255,255,255,0.15);stroke-width:1.5}
+                .nt{fill:#00E5A0;filter:url(#glow-teal);animation:br 3s ease-in-out infinite}
+                .nbl{fill:#4CC9F0;filter:url(#glow-blue);animation:br 4s ease-in-out infinite}
+                @keyframes br{0%,100%{opacity:0.2;transform:scale(0.9)}50%{opacity:0.8;transform:scale(1.1)}}
+                .oc{transform-box:fill-box;transform-origin:center}
+              `}</style>
+              <rect width="1600" height="180" fill="transparent"/>
+              <g><path className="blt" d="M -100 90 H 1700"/><path className="bl" d="M -100 60 H 450 L 480 90 H 1120 L 1150 60 H 1700"/><path className="bl" d="M -100 90 H 400 L 450 45 H 1150 L 1200 90 H 1700"/><path className="bl" d="M -100 120 H 350 L 400 150 H 1200 L 1250 120 H 1700"/></g>
+              <g><path className="ptf" d="M -100 90 H 1700"/><path className="pt" d="M -100 60 H 450 L 480 90 H 1120 L 1150 60 H 1700"/><path className="pb" d="M -100 90 H 400 L 450 45 H 1150 L 1200 90 H 1700"/><path className="pb" style={{animationDelay:'-2s'}} d="M -100 120 H 350 L 400 150 H 1200 L 1250 120 H 1700"/><path className="pt" style={{animationDelay:'-2.25s'}} d="M -100 60 H 450 L 480 90 H 1120 L 1150 60 H 1700"/></g>
+              <g>
+                <circle cx="400" cy="90" r="3.5" className="nb"/><circle cx="400" cy="90" r="1.5" className="nt oc"/>
+                <circle cx="450" cy="45" r="3.5" className="nb"/><circle cx="450" cy="45" r="1.5" className="nt oc" style={{animationDelay:'1.2s'}}/>
+                <circle cx="1150" cy="45" r="3.5" className="nb"/><circle cx="1150" cy="45" r="1.5" className="nt oc" style={{animationDelay:'2.4s'}}/>
+                <circle cx="1200" cy="90" r="3.5" className="nb"/><circle cx="1200" cy="90" r="1.5" className="nt oc" style={{animationDelay:'0.5s'}}/>
+                <circle cx="350" cy="120" r="3.5" className="nb"/><circle cx="350" cy="120" r="1.5" className="nbl oc" style={{animationDelay:'0.8s'}}/>
+                <circle cx="400" cy="150" r="3.5" className="nb"/><circle cx="400" cy="150" r="1.5" className="nbl oc" style={{animationDelay:'1.6s'}}/>
+                <circle cx="1200" cy="150" r="3.5" className="nb"/><circle cx="1200" cy="150" r="1.5" className="nbl oc" style={{animationDelay:'2.8s'}}/>
+                <circle cx="1250" cy="120" r="3.5" className="nb"/><circle cx="1250" cy="120" r="1.5" className="nbl oc" style={{animationDelay:'1.1s'}}/>
+                <rect x="447.5" y="57.5" width="5" height="5" className="nb oc" transform="rotate(45 450 60)"/>
+                <rect x="477.5" y="87.5" width="5" height="5" className="nb oc" transform="rotate(45 480 90)"/>
+                <rect x="1117.5" y="87.5" width="5" height="5" className="nb oc" transform="rotate(45 1120 90)"/>
+                <rect x="1147.5" y="57.5" width="5" height="5" className="nb oc" transform="rotate(45 1150 60)"/>
+              </g>
+            </svg>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {session ? (
+            {session && (
               <>
                 <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent,
                   background: C.accentDim, border: `1px solid ${C.accentBorder}`,
@@ -1250,19 +1297,6 @@ function SaaSShell() {
                   borderRadius: 7, padding: '4px 10px', cursor: 'pointer',
                   color: C.muted, fontSize: 12,
                 }}>Ki</button>
-              </>
-            ) : (
-              <>
-                <span style={{
-                  fontFamily: 'DM Mono', fontSize: 10, color: '#FFD166',
-                  background: 'rgba(255,209,102,0.1)', border: '1px solid rgba(255,209,102,0.3)',
-                  borderRadius: 20, padding: '2px 8px',
-                }}>TESZT – vendég mód</span>
-                <button onClick={() => setShowAuth(true)} style={{
-                  background: C.accentDim, border: `1px solid ${C.accentBorder}`,
-                  borderRadius: 7, padding: '5px 14px', cursor: 'pointer',
-                  color: C.accent, fontSize: 12, fontWeight: 600,
-                }}>Bejelentkezés</button>
               </>
             )}
           </div>
