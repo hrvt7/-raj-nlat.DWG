@@ -98,35 +98,57 @@ function FolderIcon({ size = 38, color = C.accent }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
 }
 
+// ─── Global animation style injection (runs once) ───────────────────────────
+// All project card SVGs share a single @keyframes from the document <head>,
+// so they stay perfectly in sync regardless of mount order.
+let _pcStyleInjected = false
+function ensurePcGlobalStyle() {
+  if (_pcStyleInjected || typeof document === 'undefined') return
+  _pcStyleInjected = true
+  const style = document.createElement('style')
+  style.textContent = `
+    @keyframes pc-scan-move {
+      0%, 100% { transform: translateY(120px); }
+      50% { transform: translateY(380px); }
+    }
+    .pc-scanner-group { animation: pc-scan-move 3s ease-in-out infinite; }
+    .pc-grid-bg { stroke: rgba(255,255,255,0.18); stroke-width: 1; opacity: 0.3; }
+    .pc-doc-outline { stroke: #17C7FF; stroke-width: 2.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+    .pc-doc-inner { stroke: rgba(255,255,255,0.18); stroke-width: 2; fill: none; stroke-dasharray: 4 6; stroke-linecap: round; }
+    .pc-scan-line { stroke: #21F3A3; stroke-width: 2; }
+  `
+  document.head.appendChild(style)
+}
+
+// ─── Instance counter for unique SVG defs ids ────────────────────────────────
+let _pcIdCounter = 0
+
 // ─── Projektkártya illusztráció (document scanner motívum) ───────────────────
 function ProjectCardIllustration({ size = 48 }) {
+  const idRef = useRef(() => ++_pcIdCounter)
+  const uid = idRef.current()
+  ensurePcGlobalStyle()
+
+  const gridId = `pc-grid-${uid}`
+  const glowId = `pc-glow-${uid}`
+  const trailId = `pc-trail-${uid}`
+
   return (
     <svg width={size} height={size} viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <style>{`
-        .pc-grid-bg { stroke: rgba(255,255,255,0.18); stroke-width: 1; opacity: 0.3; }
-        .pc-doc-outline { stroke: #17C7FF; stroke-width: 2.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
-        .pc-doc-inner { stroke: rgba(255,255,255,0.18); stroke-width: 2; fill: none; stroke-dasharray: 4 6; stroke-linecap: round; }
-        .pc-scan-line { stroke: #21F3A3; stroke-width: 2; filter: url(#pc-glow-scan); }
-        .pc-scanner-group { animation: pc-scan-move 3s ease-in-out infinite; }
-        @keyframes pc-scan-move {
-          0%, 100% { transform: translateY(120px); }
-          50% { transform: translateY(380px); }
-        }
-      `}</style>
       <defs>
-        <pattern id="pc-grid2" width="16" height="16" patternUnits="userSpaceOnUse">
+        <pattern id={gridId} width="16" height="16" patternUnits="userSpaceOnUse">
           <path d="M 16 0 L 0 0 0 16" className="pc-grid-bg" fill="none"/>
         </pattern>
-        <filter id="pc-glow-scan" x="-20%" y="-50%" width="140%" height="200%">
+        <filter id={glowId} x="-20%" y="-50%" width="140%" height="200%">
           <feGaussianBlur stdDeviation="3" result="blur" />
           <feComposite in="SourceGraphic" in2="blur" operator="over" />
         </filter>
-        <linearGradient id="pc-scan-trail" x1="0" y1="1" x2="0" y2="0">
+        <linearGradient id={trailId} x1="0" y1="1" x2="0" y2="0">
           <stop offset="0%" stopColor="#21F3A3" stopOpacity="0.25" />
           <stop offset="100%" stopColor="#21F3A3" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <rect width="512" height="512" fill="url(#pc-grid2)" />
+      <rect width="512" height="512" fill={`url(#${gridId})`} />
       <g>
         <path d="M 176 112 L 288 112 L 336 160 L 336 400 L 176 400 Z" className="pc-doc-outline" />
         <path d="M 288 112 L 288 160 L 336 160" className="pc-doc-outline" />
@@ -138,8 +160,8 @@ function ProjectCardIllustration({ size = 48 }) {
         <path d="M 320 400 L 352 400 M 336 384 L 336 416" stroke="#17C7FF" strokeWidth="1"/>
       </g>
       <g className="pc-scanner-group">
-        <rect x="156" y="-30" width="200" height="30" fill="url(#pc-scan-trail)" />
-        <line x1="156" y1="0" x2="356" y2="0" className="pc-scan-line" />
+        <rect x="156" y="-30" width="200" height="30" fill={`url(#${trailId})`} />
+        <line x1="156" y1="0" x2="356" y2="0" className="pc-scan-line" style={{ filter: `url(#${glowId})` }} />
         <polygon points="156,0 150,-5 150,5" fill="#21F3A3" />
         <polygon points="356,0 362,-5 362,5" fill="#21F3A3" />
       </g>
