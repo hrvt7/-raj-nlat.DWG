@@ -10,6 +10,7 @@ import { downloadCSV } from '../utils/csvExport.js'
 import { normalizeMarker } from '../utils/markerModel.js'
 import { createBundle, checkBundleStaleness, staleReasonLabel } from '../utils/bundleModel.js'
 import { saveBundle, listBundles, getBundle, deleteBundle } from '../data/bundleStore.js'
+import { getPlanFloor, getPlanDiscipline } from '../utils/planMetaAccessors.js'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MergePlansView — Combine annotations from multiple plans into one estimate
@@ -549,8 +550,8 @@ function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, on
   // Apply floor/discipline filter
   const filteredPlans = useMemo(() => {
     let result = selectedPlans
-    if (filterFloor) result = result.filter(p => p.floor === filterFloor)
-    if (filterDiscipline) result = result.filter(p => p.discipline === filterDiscipline)
+    if (filterFloor) result = result.filter(p => getPlanFloor(p) === filterFloor)
+    if (filterDiscipline) result = result.filter(p => getPlanDiscipline(p) === filterDiscipline)
     return result
   }, [selectedPlans, filterFloor, filterDiscipline])
 
@@ -560,8 +561,8 @@ function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, on
   const dedupedUnknowns = useMemo(() => deduplicateUnknowns(mergeResult.unknowns), [mergeResult.unknowns])
 
   // Available floors/disciplines for filters
-  const availableFloors = useMemo(() => [...new Set(selectedPlans.map(p => p.floor).filter(Boolean))], [selectedPlans])
-  const availableDisciplines = useMemo(() => [...new Set(selectedPlans.map(p => p.discipline).filter(Boolean))], [selectedPlans])
+  const availableFloors = useMemo(() => [...new Set(selectedPlans.map(p => getPlanFloor(p)).filter(Boolean))], [selectedPlans])
+  const availableDisciplines = useMemo(() => [...new Set(selectedPlans.map(p => getPlanDiscipline(p)).filter(Boolean))], [selectedPlans])
   const floorList = useMemo(() => Object.keys(mergeResult.byFloor), [mergeResult.byFloor])
 
   // Grand total count (recognized only)
@@ -716,8 +717,8 @@ function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, on
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>{plan.name}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                    {plan.floor && <MiniTag text={plan.floor} />}
-                    {plan.discipline && <MiniTag text={plan.discipline} color={C.accent} />}
+                    {getPlanFloor(plan) && <MiniTag text={getPlanFloor(plan)} />}
+                    {getPlanDiscipline(plan) && <MiniTag text={getPlanDiscipline(plan)} color={C.accent} />}
                     <MiniTag text={recognizedCount < blockCount ? `${recognizedCount}/${blockCount} blokk` : `${blockCount} blokk`} color={recognizedCount < blockCount ? '#f59e0b' : '#888'} />
                   </div>
                 </div>
@@ -1047,12 +1048,12 @@ function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId,
   const selectedIds = Object.keys(selected).filter(id => selected[id])
   const selectedPlans = recognizedPlans.filter(p => selectedIds.includes(p.id))
 
-  // Aggregate recognized items: group by _pdfType, sub-group by plan.floor
+  // Aggregate recognized items: group by _pdfType, sub-group by floor (from inferredMeta)
   const aggregated = useMemo(() => {
     // { _pdfType: { label, icon, asmId, confidences[], floors: { floorName: qty }, total } }
     const map = {}
     for (const plan of selectedPlans) {
-      const floor = plan.floor || 'Egyéb'
+      const floor = getPlanFloor(plan) || 'Egyéb'
       for (const item of (plan.pdfRecognition?.recognizedItems || [])) {
         const type = item._pdfType || item.blockName
         if (!map[type]) {
@@ -1079,7 +1080,7 @@ function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId,
   const floorList = useMemo(() => {
     const floors = new Set()
     for (const plan of selectedPlans) {
-      floors.add(plan.floor || 'Egyéb')
+      floors.add(getPlanFloor(plan) || 'Egyéb')
     }
     return [...floors]
   }, [selectedPlans])
@@ -1180,8 +1181,8 @@ function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>{plan.name}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                    {plan.floor && <MiniTag text={plan.floor} />}
-                    {plan.discipline && <MiniTag text={plan.discipline} color={C.accent} />}
+                    {getPlanFloor(plan) && <MiniTag text={getPlanFloor(plan)} />}
+                    {getPlanDiscipline(plan) && <MiniTag text={getPlanDiscipline(plan)} color={C.accent} />}
                     <MiniTag text={`${itemCount} elem`} color="#888" />
                     {cableM != null && <MiniTag text={`~${Math.round(cableM)}m kábel`} color="#4CC9F0" />}
                   </div>

@@ -1,9 +1,10 @@
 // ─── Merge Parse Results ────────────────────────────────────────────────────
 // Aggregates DXF block recognition from multiple plans by floor and assemblyType.
-// Input: plans with parseResult + floor/discipline metadata
+// Input: plans with parseResult + inferredMeta (floor/systemType read via planMetaAccessors)
 // Output: byFloor breakdown, total aggregation, unknowns list
 
 import { normalizeBlocks, mergeByAssemblyType, getAssemblyTypeLabel } from '../data/symbolDictionary.js'
+import { getPlanFloor, getPlanDiscipline } from './planMetaAccessors.js'
 
 /**
  * Merge parse results from multiple plans into an aggregated summary.
@@ -30,8 +31,8 @@ export function mergeParseResults(plans) {
     if (blocks.length === 0) continue
 
     const { normalized, unknowns } = normalizeBlocks(blocks)
-    const floor = plan.floor || 'Nincs megadva'
-    const discipline = plan.discipline || 'Nincs megadva'
+    const floor = getPlanFloor(plan) || 'Nincs megadva'
+    const discipline = getPlanDiscipline(plan) || 'Nincs megadva'
 
     // Per-plan detail
     planDetails.push({

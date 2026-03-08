@@ -69,6 +69,16 @@ describe('createPlanSnapshot', () => {
     expect(snap.hasScale).toBe(false)
     expect(snap.floor).toBe(null)
   })
+
+  it('reads floor/discipline from inferredMeta (canonical shape)', () => {
+    const plan = {
+      id: 'PLAN-003',
+      inferredMeta: { floor: 'fsz', floorLabel: 'Földszint', systemType: 'Világítás' },
+    }
+    const snap = createPlanSnapshot(plan)
+    expect(snap.floor).toBe('fsz')
+    expect(snap.discipline).toBe('Világítás')
+  })
 })
 
 // ── createBundle ─────────────────────────────────────────────────────────────

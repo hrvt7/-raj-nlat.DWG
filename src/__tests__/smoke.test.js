@@ -306,3 +306,44 @@ describe('buildQuoteRow — Supabase payload mapping', () => {
     expect(row.quote_number).toBe('Q-2026-0042')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. planMetaAccessors — unified metadata access
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { getPlanFloor, getPlanFloorLabel, getPlanDiscipline, getPlanSystemType } from '../utils/planMetaAccessors.js'
+
+describe('planMetaAccessors — unified metadata access', () => {
+  it('reads from inferredMeta (canonical shape)', () => {
+    const plan = {
+      inferredMeta: { floor: 'fsz', floorLabel: 'Földszint', systemType: 'Világítás' },
+    }
+    expect(getPlanFloor(plan)).toBe('fsz')
+    expect(getPlanFloorLabel(plan)).toBe('Földszint')
+    expect(getPlanDiscipline(plan)).toBe('Világítás')
+    expect(getPlanSystemType(plan)).toBe('Világítás')
+  })
+
+  it('falls back to flat fields (legacy compat)', () => {
+    const plan = { floor: 'pince', floorLabel: 'Pince', discipline: 'Erősáram' }
+    expect(getPlanFloor(plan)).toBe('pince')
+    expect(getPlanFloorLabel(plan)).toBe('Pince')
+    expect(getPlanDiscipline(plan)).toBe('Erősáram')
+  })
+
+  it('prefers inferredMeta over flat fields', () => {
+    const plan = {
+      floor: 'old_flat',
+      inferredMeta: { floor: 'canonical', systemType: 'Tűzjelző' },
+    }
+    expect(getPlanFloor(plan)).toBe('canonical')
+    expect(getPlanDiscipline(plan)).toBe('Tűzjelző')
+  })
+
+  it('returns null for null/undefined/empty plan', () => {
+    expect(getPlanFloor(null)).toBe(null)
+    expect(getPlanFloor(undefined)).toBe(null)
+    expect(getPlanFloor({})).toBe(null)
+    expect(getPlanDiscipline(null)).toBe(null)
+  })
+})

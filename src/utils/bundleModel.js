@@ -1,3 +1,5 @@
+import { getPlanFloor, getPlanDiscipline } from './planMetaAccessors.js'
+
 /**
  * Bundle Model — first-class entity for multi-plan combined estimation.
  *
@@ -43,8 +45,8 @@ export function createPlanSnapshot(plan) {
     markerCount:     plan.markerCount || 0,
     parseBlockCount: plan.parseResult?.blocks?.length || 0,
     hasScale:        !!plan.hasScale,
-    floor:           plan.floor || null,
-    discipline:      plan.discipline || null,
+    floor:           getPlanFloor(plan),
+    discipline:      getPlanDiscipline(plan),
     updatedAt:       plan.updatedAt || plan.parsedAt || null,
   }
 }
@@ -134,8 +136,8 @@ export function checkBundleStaleness(bundle, currentPlans) {
     }
 
     // Check metadata change (floor/discipline reassignment)
-    if ((current.floor || null) !== snapshot.floor ||
-        (current.discipline || null) !== snapshot.discipline) {
+    if (getPlanFloor(current) !== snapshot.floor ||
+        getPlanDiscipline(current) !== snapshot.discipline) {
       stale.push({ planId, reason: 'metadata_changed' })
       continue
     }

@@ -16,7 +16,7 @@ import {
 } from '../data/legendStore.js'
 import { listDetectionRuns } from '../data/detectionRunStore.js'
 import {
-  inferPlanMeta, inferMetaFromText, mergeMeta, extractPdfText, formatInferredMeta,
+  inferPlanMeta, inferMetaFromText, mergeMeta, extractPdfText,
   SYSTEM_TYPES, SYSTEM_TYPE_LABELS, DOC_TYPES, DOC_TYPE_LABELS,
 } from '../utils/planMetaInference.js'
 import { callAiMetaVision, mergeAiMeta, renderFirstPageImage } from '../utils/aiMetaVision.js'
