@@ -1421,7 +1421,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         {/* File name */}
         <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            📐 {file.name}
+            {file.name}
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
             {totalItems} elem · {takeoffRows.length} assembly · {cableEstimate ? `~${Math.round(cableEstimate.cable_total_m)} m kábel` : 'kábel: —'}
@@ -1440,7 +1440,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               fontFamily: 'Syne', fontWeight: 700, fontSize: 11, flexShrink: 0,
             }}
           >
-            {showDxfOnMobile ? '📋 Takeoff' : '📐 Terv'}
+            {showDxfOnMobile ? 'Takeoff' : 'Terv'}
           </button>
         )}
 
@@ -1464,7 +1464,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 opacity: saving ? 0.6 : 1,
               }}
             >
-              {saving ? '...' : '📄 Ajánlat generálása'}
+              {saving ? '...' : 'Ajánlat generálása'}
             </button>
             <button
               onClick={() => onSaved?.()}
@@ -1498,18 +1498,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 bruttó: {Math.round(fullCalc.bruttoTotal).toLocaleString('hu-HU')} Ft
               </div>
             </div>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                marginLeft: 16, padding: '10px 20px', borderRadius: 10, cursor: 'pointer',
-                background: C.accent, border: 'none', color: C.bg,
-                fontFamily: 'Syne', fontWeight: 800, fontSize: 14,
-                opacity: saving ? 0.6 : 1,
-              }}
-            >
-              {saving ? '...' : planId ? '💾 Mentés' : '📄 Ajánlat'}
-            </button>
           </>
         ) : (
           <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
@@ -1682,10 +1670,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0 }}>
             {[
-              { id: 'takeoff',   label: '📋 Felmérés',   badge: takeoffRows.length },
-              { id: 'cable',     label: '🔌 Kábel' },
-              { id: 'calc',      label: '🧮 Kalkuláció' },
-              { id: 'context',   label: '⚙️ Beállítás' },
+              { id: 'takeoff',   label: 'Felmérés',    badge: takeoffRows.length },
+              { id: 'cable',     label: 'Kábel' },
+              { id: 'context',   label: 'Beállítás' },
+              { id: 'calc',      label: 'Kalkuláció' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1740,7 +1728,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 8, background: 'rgba(76,201,240,0.06)', border: `1px solid rgba(76,201,240,0.2)` }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.blue }}>
-                            🔌 Kábel (auto) — ~{Math.round(cableEstimate.cable_total_m)} m
+                            Kábel (auto) — ~{Math.round(cableEstimate.cable_total_m)} m
                           </div>
                           <button onClick={() => setRightTab('cable')} style={{ background: 'none', border: 'none', color: C.blue, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono' }}>
                             részletek →
@@ -1757,7 +1745,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {rightTab === 'cable' && (
               <div>
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 6 }}>
-                  🔌 Kábelbecslés
+                  Kábelbecslés
                 </div>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 16 }}>
                   {isPdf
@@ -1769,16 +1757,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 {cableEstimate ? (
                   <>
                     {[
-                      { key: 'light_m', label: 'Világítási kör (NYM-J 3×1.5)', icon: '💡', color: C.accent },
-                      { key: 'socket_m', label: 'Dugalj kör (NYM-J 3×2.5)', icon: '🔌', color: C.blue },
-                      { key: 'switch_m', label: 'Kapcsoló kör (NYM-J 3×1.5)', icon: '🔘', color: C.yellow },
-                      { key: 'other_m', label: 'Egyéb (NYM-J 5×2.5)', icon: '⚡', color: C.textSub },
-                    ].map(({ key, label, icon, color }) => {
+                      { key: 'light_m', label: 'Világítási kör (NYM-J 3×1.5)', color: C.accent },
+                      { key: 'socket_m', label: 'Dugalj kör (NYM-J 3×2.5)', color: C.blue },
+                      { key: 'switch_m', label: 'Kapcsoló kör (NYM-J 3×1.5)', color: C.yellow },
+                      { key: 'other_m', label: 'Egyéb (NYM-J 5×2.5)', color: C.textSub },
+                    ].map(({ key, label, color }) => {
                       const m = cableEstimate.cable_by_type?.[key] || 0
                       if (!m) return null
                       return (
                         <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: C.bgCard, borderRadius: 8, marginBottom: 6, border: `1px solid ${C.border}` }}>
-                          <span style={{ fontSize: 16 }}>{icon}</span>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
                           <span style={{ flex: 1, fontFamily: 'DM Mono', fontSize: 12, color: C.textSub }}>{label}</span>
                           <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color }}>{Math.round(m)} m</span>
                         </div>
@@ -1866,7 +1854,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     {fullCalc.cableTotalM > 0 && (
                       <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                          <span style={{ fontSize: 14 }}>🔌</span>
                           <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>Kábel költség</span>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -2012,7 +1999,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         opacity: saving ? 0.5 : 1,
                       }}
                     >
-                      {saving ? '...' : planId ? '💾 Kalkuláció mentése' : '📄 Ajánlat létrehozása →'}
+                      {saving ? '...' : planId ? 'Kalkuláció mentése' : 'Ajánlat létrehozása →'}
                     </button>
                   </>
                 )}
@@ -2023,7 +2010,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {rightTab === 'context' && (
               <div>
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 16 }}>
-                  ⚙️ Projekt körülmények
+                  Projekt körülmények
                 </div>
 
                 <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, padding: '8px 10px', background: C.bgCard, borderRadius: 7, border: `1px solid ${C.border}` }}>
