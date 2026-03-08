@@ -23,6 +23,8 @@ import {
 import { callAiMetaVision, mergeAiMeta, renderFirstPageImage } from '../utils/aiMetaVision.js'
 import { parseDxfFile } from '../dxfParser.js'
 import { countQuotesForPlan } from '../utils/quoteOrphans.js'
+import { triggerAnalysis } from '../services/pdfAnalysis/analysisRunner.js'
+import { ANALYSIS_STATUS } from '../services/pdfAnalysis/analysisRunner.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -620,11 +622,12 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           </>
         })()}
         <div style={{ position: 'absolute', top: 7, left: 7 }}><Checkbox checked={selected} onChange={onSelect} /></div>
-        {(markerCount > 0 || hasScale || detected > 0) && (
+        {(markerCount > 0 || hasScale || detected > 0 || plan.pdfAnalysisStatus === 'running') && (
           <div style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {markerCount > 0 && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(0,229,160,0.2)', color: C.accent, backdropFilter: 'blur(4px)' }}>✓ {markerCount} elem</span>}
             {hasScale && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(76,201,240,0.2)', color: C.blue, backdropFilter: 'blur(4px)' }}>Kalibrálva</span>}
             {detected > 0 && !plan.detectionReviewed && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(255,209,102,0.2)', color: C.yellow, backdropFilter: 'blur(4px)' }}>⚡ {detected} det.</span>}
+            {plan.pdfAnalysisStatus === 'running' && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(76,201,240,0.2)', color: C.blue, backdropFilter: 'blur(4px)' }}>⏳ Elemzés…</span>}
           </div>
         )}
       </div>
@@ -637,6 +640,29 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           <span>{fmtSize(plan.fileSize)}</span><span>{fmtDate(plan.uploadedAt || plan.createdAt)}</span>
         </div>
         <MetaCopilotStrip plan={plan} onMetaChange={onMetaChange} />
+        {plan.fileType === 'pdf' && plan.pdfAnalysisStatus && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4,
+            padding: '3px 8px', borderRadius: 5, fontSize: 9, fontFamily: 'DM Mono',
+            ...(plan.pdfAnalysisStatus === 'done' ? {
+              background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.15)', color: C.accent,
+            } : plan.pdfAnalysisStatus === 'failed' ? {
+              background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', color: '#ff5050',
+            } : {
+              background: 'rgba(76,201,240,0.06)', border: '1px solid rgba(76,201,240,0.15)', color: C.blue,
+            }),
+          }}>
+            {plan.pdfAnalysisStatus === 'running' && <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: C.blue, animation: 'pulse 1.5s infinite' }} />}
+            {plan.pdfAnalysisStatus === 'done' && '✓'}
+            {plan.pdfAnalysisStatus === 'failed' && '✗'}
+            <span>
+              {plan.pdfAnalysisStatus === 'pending' && 'PDF elemzés várakozik…'}
+              {plan.pdfAnalysisStatus === 'running' && 'PDF elemzés folyamatban…'}
+              {plan.pdfAnalysisStatus === 'done' && `PDF elemzés kész${plan.pdfAnalysisSummary?.symbolCount ? ` · ${plan.pdfAnalysisSummary.symbolCount} szimbólum` : ''}`}
+              {plan.pdfAnalysisStatus === 'failed' && 'PDF elemzés sikertelen'}
+            </span>
+          </div>
+        )}
         {hasCalc && (
           <div style={{
             background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)',
@@ -1117,6 +1143,10 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         // Thumbnail only for PDF — DXF/DWG get fallback icon
         if (ft === 'pdf') {
           generatePdfThumb(file, id).then(d => { if (d) setThumbnails(prev => ({ ...prev, [id]: d })) }).catch(() => {})
+          // ── PDF Analysis: fire-and-forget background analysis ──
+          triggerAnalysis(id, file, {
+            onStatusChange: () => reload(),
+          })
         }
         // ── Layer 2: async text-based metadata enrichment (non-blocking) ──
         ;(async () => {
