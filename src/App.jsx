@@ -16,7 +16,7 @@ const MaterialsPage          = lazy(() => import('./pages/Materials.jsx'))
 const LegendPanel            = lazy(() => import('./components/LegendPanel.jsx'))
 const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPanel.jsx'))
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
-import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote, generateQuoteId } from './data/store.js'
+import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM, ToastProvider } from './components/ui.jsx'
@@ -26,6 +26,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, groupItemsByFloor, resolveItemSystemType } from './data/quoteDefaults.js'
 import { quoteDisplayTotals } from './utils/quoteDisplayTotals.js'
 import { generateBOMRows } from './utils/bomExport.js'
+import { createQuote } from './utils/createQuote.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -1100,42 +1101,27 @@ function SaaSShell() {
     // ── Resolve project-level default output mode ──────────────────
     const planPrjDefault = meta.projectId ? (getProject(meta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
 
-    const planDefaults = OUTPUT_MODE_INCLEXCL[planPrjDefault] || OUTPUT_MODE_INCLEXCL.combined
-    const qs = loadSettings().quote
-    const quote = {
-      id:             generateQuoteId(),
-      projectName:    displayName,
-      project_name:   displayName,
-      name:           displayName,
-      clientName:     '',
-      client_name:    '',
-      createdAt:      new Date().toISOString(),
-      created_at:     new Date().toISOString(),
-      status:         'draft',
-      outputMode:     planPrjDefault,
-      groupBy:        'none',
-      inclusions:     planDefaults.inclusions || qs.default_inclusions,
-      exclusions:     planDefaults.exclusions || qs.default_exclusions,
-      validityText:   qs.default_validity_text,
-      paymentTermsText: qs.default_payment_terms_text,
-      gross:          Math.round(p.total),
-      totalMaterials: Math.round(p.materialCost),
-      totalLabor:     Math.round(p.laborCost),
-      totalHours:     p.laborHours,
-      summary:        { grandTotal: Math.round(p.total), totalWorkHours: p.laborHours },
-      pricingData:    { hourlyRate: meta.calcHourlyRate || 9000, markup_pct: meta.calcMarkup || 0 },
-      items:          (meta.calcPricingLines || []).map(item => ({
-        ...item,
-        systemType: item.systemType || 'general',
-        sourcePlanSystemType: item.sourcePlanSystemType || meta.inferredMeta?.systemType || 'general',
-        sourcePlanFloor: item.sourcePlanFloor || meta.inferredMeta?.floor || null,
-        sourcePlanFloorLabel: item.sourcePlanFloorLabel || meta.inferredMeta?.floorLabel || null,
-      })),
-      assemblySummary: meta.calcAssemblySummary || [],
-      source:         'plan-takeoff',
-      fileName:       meta.fileName || meta.name,
-      planId:         pid,
-    }
+    const quote = createQuote({
+      displayName,
+      clientName: '',
+      outputMode: planPrjDefault,
+      pricing: p,
+      pricingParams: { hourlyRate: meta.calcHourlyRate || 9000, markupPct: meta.calcMarkup || 0 },
+      settings,
+      overrides: {
+        items: (meta.calcPricingLines || []).map(item => ({
+          ...item,
+          systemType: item.systemType || 'general',
+          sourcePlanSystemType: item.sourcePlanSystemType || meta.inferredMeta?.systemType || 'general',
+          sourcePlanFloor: item.sourcePlanFloor || meta.inferredMeta?.floor || null,
+          sourcePlanFloorLabel: item.sourcePlanFloorLabel || meta.inferredMeta?.floorLabel || null,
+        })),
+        assemblySummary: meta.calcAssemblySummary || [],
+        source: 'plan-takeoff',
+        fileName: meta.fileName || meta.name,
+        planId: pid,
+      },
+    })
     saveQuote(quote)
     handleQuoteSaved(quote)
   }

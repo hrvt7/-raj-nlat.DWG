@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings, saveQuote, generateQuoteId } from '../data/store.js'
+import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings, saveQuote } from '../data/store.js'
 import { computePricing } from '../utils/pricing.js'
 import { getProject } from '../data/projectStore.js'
-import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
+import { createQuote } from '../utils/createQuote.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -155,44 +155,27 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
     // ── Resolve project-level default output mode from first plan ──────
     const firstProjId = plans.find(p => p.projectId)?.projectId
     const mergePrjDefault = firstProjId ? (getProject(firstProjId)?.defaultQuoteOutputMode || 'combined') : 'combined'
-    const _ieD = OUTPUT_MODE_INCLEXCL[mergePrjDefault] || OUTPUT_MODE_INCLEXCL.combined
     const _allSettings = loadSettings()
-    const _qs = _allSettings.quote
 
-    const quote = {
-      id: generateQuoteId(),
-      projectName:  displayName,
-      project_name: displayName,
-      name:         displayName,
-      note: quoteNote,
-      createdAt: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      status: 'draft',
+    const quote = createQuote({
+      displayName,
       outputMode: mergePrjDefault,
-      groupBy: 'none',
-      inclusions: _ieD.inclusions || _qs.default_inclusions,
-      exclusions: _ieD.exclusions || _qs.default_exclusions,
-      validityText: _qs.default_validity_text,
-      paymentTermsText: _qs.default_payment_terms_text,
-      gross:          Math.round(pricing.total),
-      totalMaterials: Math.round(pricing.materialCost),
-      totalLabor:     Math.round(pricing.laborCost),
-      totalHours:     pricing.laborHours,
-      summary: {
-        grandTotal:     Math.round(pricing.total),
-        totalWorkHours: pricing.laborHours,
-      },
-      pricingData: {
+      pricing,
+      pricingParams: {
         hourlyRate: settings?.labor?.hourly_rate ?? _allSettings.labor.hourly_rate,
-        markup_pct: (settings?.labor?.markup_percent ?? _allSettings.labor.markup_percent) / 100,
+        markupPct:  (settings?.labor?.markup_percent ?? _allSettings.labor.markup_percent) / 100,
       },
-      items,
-      sourceType: 'pdf_merge',
-      sourcePlans: plans.map(p => p.id),
-      totalCount,
-      source: 'merge-panel',
-      bundleId: null,   // PdfMergePanel has no bundle context (added for model consistency)
-    }
+      settings: _allSettings,
+      overrides: {
+        note: quoteNote,
+        items,
+        sourceType: 'pdf_merge',
+        sourcePlans: plans.map(p => p.id),
+        totalCount,
+        source: 'merge-panel',
+        bundleId: null,
+      },
+    })
 
     saveQuote(quote)
     if (onSaved) onSaved(quote)

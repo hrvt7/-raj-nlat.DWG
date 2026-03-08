@@ -1,12 +1,13 @@
 /**
  * Smoke Test Suite — Core Flow Regression Tests
  *
- * Covers the 5 most critical pure business logic paths:
+ * Covers the 6 most critical pure business logic paths:
  * 1. planMetaInference — Hungarian filename parsing
  * 2. computePricing — quote pricing engine
  * 3. Merge settings fallback — nested settings resolution
  * 4. Project delete fallback — orphan plan → fallback project
  * 5. saveQuoteRemote payload — buildQuoteRow field mapping
+ * 6. createQuote factory — unified quote assembly consistency
  *
  * All tests are pure/unit: no DOM, no localStorage, no network.
  */
@@ -500,5 +501,199 @@ describe('Deploy safety — env guards', () => {
     expect(OUTPUT_MODE_NOTES).toHaveProperty('combined')
     expect(OUTPUT_MODE_NOTES).toHaveProperty('labor_only')
     expect(OUTPUT_MODE_NOTES).toHaveProperty('split_material_labor')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. createQuote factory — unified quote assembly consistency
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Mock generateQuoteId (depends on localStorage)
+vi.mock('../data/store.js', async (importOriginal) => {
+  const mod = await importOriginal()
+  return { ...mod, generateQuoteId: () => 'QT-TEST-001' }
+})
+
+import { createQuote } from '../utils/createQuote.js'
+
+const baseSettings = {
+  labor: { vat_percent: 27, hourly_rate: 9000, markup_percent: 10 },
+  quote: {
+    default_inclusions: 'alapértelmezett tartalom',
+    default_exclusions: 'alapértelmezett kizárás',
+    default_validity_text: '30 nap',
+    default_payment_terms_text: '50% előleg',
+  },
+}
+
+const basePricing = { total: 123456, materialCost: 45000, laborCost: 78456, laborHours: 8.5 }
+const basePricingParams = { hourlyRate: 9000, markupPct: 0.10 }
+
+describe('createQuote factory — unified quote assembly', () => {
+  it('produces all required identity fields', () => {
+    const q = createQuote({
+      displayName: 'Teszt Projekt',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: baseSettings,
+    })
+    expect(q.id).toBe('QT-TEST-001')
+    expect(q.projectName).toBe('Teszt Projekt')
+    expect(q.project_name).toBe('Teszt Projekt')
+    expect(q.name).toBe('Teszt Projekt')
+    expect(q.status).toBe('draft')
+    expect(q.createdAt).toBeTruthy()
+    expect(q.created_at).toBe(q.createdAt)
+  })
+
+  it('seeds vatPercent from settings.labor.vat_percent', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: { ...baseSettings, labor: { ...baseSettings.labor, vat_percent: 25 } },
+    })
+    expect(q.vatPercent).toBe(25)
+  })
+
+  it('defaults vatPercent to 27 when settings missing', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: {},
+    })
+    expect(q.vatPercent).toBe(27)
+  })
+
+  it('rounds financial totals to integers', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: { total: 123.7, materialCost: 45.3, laborCost: 78.4, laborHours: 2.5 },
+      pricingParams: basePricingParams,
+      settings: baseSettings,
+    })
+    expect(q.gross).toBe(124)
+    expect(q.totalMaterials).toBe(45)
+    expect(q.totalLabor).toBe(78)
+    expect(q.totalHours).toBe(2.5) // hours NOT rounded
+  })
+
+  it('seeds labor_only exclusions from OUTPUT_MODE_INCLEXCL', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'labor_only',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: baseSettings,
+    })
+    expect(q.outputMode).toBe('labor_only')
+    // labor_only has non-empty exclusions (anyagköltség related)
+    expect(q.exclusions.length).toBeGreaterThan(0)
+  })
+
+  it('passes overrides and they win over base fields', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: baseSettings,
+      overrides: {
+        source: 'merge-panel',
+        bundleId: 'B-001',
+        items: [{ name: 'Lámpa', qty: 3 }],
+        status: 'sent',   // override base status
+      },
+    })
+    expect(q.source).toBe('merge-panel')
+    expect(q.bundleId).toBe('B-001')
+    expect(q.items).toHaveLength(1)
+    expect(q.status).toBe('sent') // override wins
+  })
+
+  it('pricingData stores hourlyRate and markup_pct correctly', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: { hourlyRate: 12000, markupPct: 0.15 },
+      settings: baseSettings,
+    })
+    expect(q.pricingData.hourlyRate).toBe(12000)
+    expect(q.pricingData.markup_pct).toBe(0.15)
+  })
+
+  it('summary mirrors gross and hours', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: baseSettings,
+    })
+    expect(q.summary.grandTotal).toBe(q.gross)
+    expect(q.summary.totalWorkHours).toBe(q.totalHours)
+  })
+
+  it('seeds validityText and paymentTermsText from settings.quote', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: baseSettings,
+    })
+    expect(q.validityText).toBe('30 nap')
+    expect(q.paymentTermsText).toBe('50% előleg')
+  })
+
+  it('clientName defaults to empty string', () => {
+    const q = createQuote({
+      displayName: 'X',
+      outputMode: 'combined',
+      pricing: basePricing,
+      pricingParams: basePricingParams,
+      settings: baseSettings,
+    })
+    expect(q.clientName).toBe('')
+    expect(q.client_name).toBe('')
+  })
+
+  it('all 3 paths produce same shape (no missing keys)', () => {
+    const requiredKeys = [
+      'id', 'projectName', 'project_name', 'name', 'clientName', 'client_name',
+      'createdAt', 'created_at', 'status', 'outputMode', 'groupBy',
+      'inclusions', 'exclusions', 'validityText', 'paymentTermsText',
+      'vatPercent', 'gross', 'totalMaterials', 'totalLabor', 'totalHours',
+      'summary', 'pricingData',
+    ]
+    // Path A style (takeoff-workspace)
+    const qA = createQuote({
+      displayName: 'A', outputMode: 'combined', pricing: basePricing,
+      pricingParams: basePricingParams, settings: baseSettings,
+      overrides: { items: [], source: 'takeoff-workspace', fileName: 'E-01.pdf' },
+    })
+    // Path B style (plan-takeoff)
+    const qB = createQuote({
+      displayName: 'B', outputMode: 'labor_only', pricing: basePricing,
+      pricingParams: basePricingParams, settings: baseSettings,
+      overrides: { items: [], source: 'plan-takeoff', planId: 'P-001' },
+    })
+    // Path C style (merge-panel)
+    const qC = createQuote({
+      displayName: 'C', outputMode: 'split_material_labor', pricing: basePricing,
+      pricingParams: basePricingParams, settings: baseSettings,
+      overrides: { items: [], source: 'merge-panel', sourcePlans: ['P-001', 'P-002'] },
+    })
+    for (const key of requiredKeys) {
+      expect(qA).toHaveProperty(key)
+      expect(qB).toHaveProperty(key)
+      expect(qC).toHaveProperty(key)
+    }
   })
 })

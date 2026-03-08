@@ -25,10 +25,10 @@ const DxfViewerPanel = lazyRetry(() => import('./DxfViewer/index.jsx'))
 const PdfViewerPanel = lazyRetry(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
-import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId, loadSettings } from '../data/store.js'
+import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, loadSettings } from '../data/store.js'
+import { createQuote } from '../utils/createQuote.js'
 import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
-import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
 import { WALL_FACTORS, calcProductivityFactor } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
@@ -1330,44 +1330,24 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const planMeta = planId ? getPlanMeta(planId) : null
       const prjDefault = initialData?.quoteOverrides?._outputMode
         || (planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined')
-      const _ieD = OUTPUT_MODE_INCLEXCL[prjDefault] || OUTPUT_MODE_INCLEXCL.combined
-      const _qs = loadSettings().quote
 
-      const quote = {
-        id:           generateQuoteId(),
-        projectName:  displayName,
-        project_name: displayName,
-        name:         displayName,
+      const quote = createQuote({
+        displayName,
         clientName,
-        client_name:  clientName,
-        createdAt:    new Date().toISOString(),
-        created_at:   new Date().toISOString(),
-        status:      'draft',
-        outputMode:   prjDefault,
-        groupBy:      'none',
-        inclusions:   _ieD.inclusions || _qs.default_inclusions,
-        exclusions:   _ieD.exclusions || _qs.default_exclusions,
-        validityText: _qs.default_validity_text,
-        paymentTermsText: _qs.default_payment_terms_text,
-        vatPercent,
-        gross:          Math.round(pricing.total),
-        totalMaterials: Math.round(pricing.materialCost),
-        totalLabor:     Math.round(pricing.laborCost),
-        totalHours:     pricing.laborHours,
-        summary: {
-          grandTotal:     Math.round(pricing.total),
-          totalWorkHours: pricing.laborHours,
+        outputMode: prjDefault,
+        pricing,
+        pricingParams: { hourlyRate, markupPct: markup },
+        settings,
+        overrides: {
+          items,
+          assemblySummary,
+          context,
+          cableEstimate,
+          source: 'takeoff-workspace',
+          fileName: file?.name,
+          bundleId: initialData?.bundleId || null,
         },
-        pricingData: { hourlyRate, markup_pct: markup },
-        items,
-        assemblySummary,
-        context,
-        cableEstimate,
-        source:   'takeoff-workspace',
-        fileName: file?.name,
-        // ── Bundle back-reference (from MergePlansView) ──────────────
-        bundleId: initialData?.bundleId || null,
-      }
+      })
       saveQuote(quote)
       onSaved?.(quote)
     } catch (err) {
