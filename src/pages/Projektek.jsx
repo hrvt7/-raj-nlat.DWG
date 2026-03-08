@@ -10,7 +10,7 @@ import {
 } from '../data/planStore.js'
 import {
   loadProjects, saveProject, deleteProject, generateProjectId, getProject, updateProject,
-  ensureFallbackProject,
+  ensureFallbackProject, FALLBACK_PROJECT_ID,
 } from '../data/projectStore.js'
 import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
@@ -807,12 +807,63 @@ function ProjectListView({ onOpenProject }) {
     }
   }
 
+  // Separate fallback project from user-created projects
+  const userProjects = projects.filter(p => p.id !== FALLBACK_PROJECT_ID)
+  const fallbackProject = projects.find(p => p.id === FALLBACK_PROJECT_ID)
+  const fallbackPlanCount = fallbackProject ? (projectStats[FALLBACK_PROJECT_ID]?.planCount || 0) : 0
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub, margin: 0 }}>Projektek — építkezésenként külön mappa és tervrajzok</p>
-        {projects.length > 0 && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0, marginLeft: 12 }}>{projects.length} projekt</span>}
+        {userProjects.length > 0 && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0, marginLeft: 12 }}>{userProjects.length} projekt</span>}
       </div>
+
+      {/* ── Unassigned plans panel (fallback bucket) ── */}
+      {fallbackProject && fallbackPlanCount > 0 && (
+        <div style={{
+          background: '#12121A', border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: '14px 18px', marginBottom: 20,
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 8,
+            background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: C.text }}>Projekthez nem rendelt tervrajzok</span>
+              <span style={{
+                fontFamily: 'DM Mono', fontSize: 10, color: C.blue,
+                background: 'rgba(76,201,240,0.1)', border: '1px solid rgba(76,201,240,0.2)',
+                borderRadius: 20, padding: '1px 8px', whiteSpace: 'nowrap',
+              }}>{fallbackPlanCount} tervrajz</span>
+            </div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
+              Törölt projektekből vagy közvetlen feltöltésből származó tervek
+            </span>
+          </div>
+          <button
+            onClick={() => onOpenProject(FALLBACK_PROJECT_ID)}
+            style={{
+              padding: '7px 16px', borderRadius: 6,
+              background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.25)',
+              color: C.blue, fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
+              cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.15)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.08)' }}
+          >
+            Megnyitás
+          </button>
+        </div>
+      )}
 
       {/* Create new project zone */}
       {!showCreate ? (
@@ -862,8 +913,8 @@ function ProjectListView({ onOpenProject }) {
         </div>
       )}
 
-      {/* Project grid */}
-      {projects.length === 0 ? (
+      {/* Project grid — only user-created projects */}
+      {userProjects.length === 0 ? (
         <EmptyState
           title="Még nincsenek projektek"
           desc="Hozd létre az első projektet a fenti mezővel, vagy töltsd be a mintaadatokat a demóhoz."
@@ -885,7 +936,7 @@ function ProjectListView({ onOpenProject }) {
         />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
-          {projects.map(p => (
+          {userProjects.map(p => (
             <ProjectCard
               key={p.id}
               project={p}
