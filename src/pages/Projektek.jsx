@@ -969,6 +969,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const [uploadWarning, setUploadWarning] = useState(null)
   const planInputRef = useRef(null)
   const legendInputRef = useRef(null)
+  const toast = useToast()
 
   const reload = useCallback(async () => {
     const prj = getProject(projectId)
@@ -1123,8 +1124,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const selectedIds = Object.entries(selected).filter(([, v]) => v).map(([id]) => id)
   const selectedPlans = plans.filter(p => selectedIds.includes(p.id))
   const selectedCount = selectedPlans.length
-
-  const toast = useToast()
 
   // ── Compute workflow step from project state ──
   // 0=no plans, 1=has plans but no meta, 2=has meta but no calc, 3=has calc (ready for quote)
