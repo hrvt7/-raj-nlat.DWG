@@ -1113,7 +1113,8 @@ function PdfToolbar({
 
       {/* Tool buttons */}
       {TOOLS.map(t => {
-        const on = activeTool === t.id
+        const isRefPanelMode = activeTool === 'count' && activeCategory === 'panel'
+        const on = activeTool === t.id && !(t.id === 'count' && isRefPanelMode)
         return (
           <button key={t.id} onClick={() => onToolChange(on ? null : t.id)} title={`${t.label} (${t.key})`} style={{
             padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
@@ -1130,11 +1131,29 @@ function PdfToolbar({
         )
       })}
 
-      {/* Assembly/Category picker — shown for count + measure */}
-      {activeTool === 'count' && assemblies?.length > 0 && (
+      {/* Ref. Elosztó — standalone tab, activates count mode with 'panel' category */}
+      {(() => {
+        const isRefActive = activeTool === 'count' && activeCategory === 'panel'
+        return (
+          <button onClick={() => {
+            if (isRefActive) { onToolChange(null) } else { onToolChange('count'); onCategoryChange('panel') }
+          }} title="Ref. Elosztó (R)" style={{
+            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: isRefActive ? 'rgba(255,107,107,0.12)' : 'transparent',
+            border: `1px solid ${isRefActive ? 'rgba(255,107,107,0.3)' : 'transparent'}`,
+            color: isRefActive ? '#FF6B6B' : C.text, transition: 'all 0.12s',
+          }}>
+            <span>Ref. Elosztó</span>
+          </button>
+        )
+      })()}
+
+      {/* Assembly/Category picker — hidden when ref panel mode active */}
+      {activeTool === 'count' && activeCategory !== 'panel' && assemblies?.length > 0 && (
         <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
       )}
-      {activeTool === 'count' && (!assemblies || !assemblies.length) && (
+      {activeTool === 'count' && activeCategory !== 'panel' && (!assemblies || !assemblies.length) && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
       {activeTool === 'measure' && (
