@@ -182,6 +182,8 @@ export const WORK_ITEMS_DEFAULT = [
   { code: 'GYE-022', category: 'gyengaram',    name: 'Kültéri kábel fektetés (földbe)', unit: 'm', p50: 12, p90: 20,  heightFactor: false, desc: 'Kültéri kábel védőcsőbe, homokágy, jelzés' },
   { code: 'GYE-023', category: 'gyengaram',    name: 'Villámvédelem EPH összekötés',unit: 'db',  p50: 45,  p90: 75,  heightFactor: false, desc: 'Épületen kívüli EPH, villámvédelmi csatlakozás' },
   { code: 'GYE-024', category: 'gyengaram',    name: 'EPH gyengeáram rendezés',     unit: 'db',  p50: 30,  p90: 50,  heightFactor: false, desc: 'Gyengeáramú EPH sín, gyűjtősín bekötés' },
+  { code: 'GYE-025', category: 'gyengaram',    name: 'NVR telepítés + konfiguráció', unit: 'db',  p50: 90,  p90: 150, heightFactor: false, desc: 'Rack/polc, IP config, lemez' },
+  { code: 'GYE-026', category: 'gyengaram',    name: 'Elektromos zár beépítés',     unit: 'db',  p50: 25,  p90: 45,  heightFactor: false, desc: 'Ajtóba fúrás, bekötés' },
 
   // ─── TŰZJELZŐ RENDSZER ──────────────────────────────────────────────────
   { code: 'TUZ-001', category: 'tuzjelzo',     name: 'Optikai füstérzékelő (címezhető)', unit: 'db', p50: 15, p90: 25, heightFactor: true,  desc: 'Címezhető optikai füstérzékelő aljzatba, cím beállítás' },
@@ -1599,6 +1601,54 @@ export const ASSEMBLIES_DEFAULT = [
       { itemCode: 'ELO-015', itemType: 'workitem', name: 'Áramváltó + almérő beépítés', unit: 'db', qty: 1, sortOrder: 2 },
     ],
     tags: ['áramváltó', 'almérő', 'mérés', 'erősáram'],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  },
+
+  // ─── GYENGEÁRAM ASSEMBLY-K (Batch B) ────────────────────────────────────
+  {
+    id: 'ASM-077',
+    name: 'NVR rendszer (8 csatorna)',
+    category: 'gyengaram',
+    description: 'NVR rögzítő telepítéssel és konfigurációval',
+    symbolIds: [],
+    components: [
+      { itemCode: 'MAT-WE-NVR', itemType: 'material', name: 'NVR 8 csatornás PoE', unit: 'db', qty: 1, sortOrder: 0 },
+      { itemCode: 'GYE-025',    itemType: 'workitem', name: 'NVR telepítés + konfiguráció', unit: 'db', qty: 1, sortOrder: 1 },
+    ],
+    tags: ['nvr', 'kamera', 'rögzítő', 'gyengeáram'],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'ASM-078',
+    name: 'Kültéri sziréna (riasztó)',
+    category: 'gyengaram',
+    description: 'Kültéri riasztó sziréna kábelezéssel és szerelési munkával',
+    symbolIds: [],
+    components: [
+      { itemCode: 'MAT-WE-ALARM-SIREN', itemType: 'material', name: 'Kültéri hang-fényjelző sziréna', unit: 'db', qty: 1, sortOrder: 0 },
+      { itemCode: 'MAT-WE-ALARM-CABLE', itemType: 'material', name: 'Riasztó kábel 2×0.5+4×0.22 árnyékolt', unit: 'm', qty: 15, sortOrder: 1 },
+      { itemCode: 'GYE-009',            itemType: 'workitem', name: 'Riasztó mozgásérzékelő szerelés', unit: 'db', qty: 1, sortOrder: 2 },
+    ],
+    tags: ['sziréna', 'riasztó', 'kültéri', 'gyengeáram'],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'ASM-079',
+    name: 'Beléptetés ajtó komplett',
+    category: 'gyengaram',
+    description: 'Egy ajtó teljes beléptető rendszer: olvasó, zár, kábel, szerelés',
+    symbolIds: [],
+    components: [
+      { itemCode: 'MAT-WE-READER',      itemType: 'material', name: 'Proximity kártyaolvasó (MIFARE)', unit: 'db', qty: 1, sortOrder: 0 },
+      { itemCode: 'MAT-WE-ELOCK',       itemType: 'material', name: 'Elektromos zár 12V (ajtónyitó)', unit: 'db', qty: 1, sortOrder: 1 },
+      { itemCode: 'MAT-WE-ALARM-CABLE', itemType: 'material', name: 'Riasztó kábel 2×0.5+4×0.22 árnyékolt', unit: 'm', qty: 25, sortOrder: 2 },
+      { itemCode: 'GYE-016',            itemType: 'workitem', name: 'Beléptetés kártyaolvasó szerelés', unit: 'db', qty: 1, sortOrder: 3 },
+      { itemCode: 'GYE-026',            itemType: 'workitem', name: 'Elektromos zár beépítés', unit: 'db', qty: 1, sortOrder: 4 },
+    ],
+    tags: ['beléptetés', 'ajtó', 'olvasó', 'zár', 'gyengeáram'],
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
   },

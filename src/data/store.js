@@ -229,6 +229,10 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-WE-PA-SPEAKER',  name: 'Mennyezeti PA hangszóró 6W',            unit: 'db', price: 12000, discount: 0, category: 'gyengaram_biztonsag' },
   { code: 'MAT-WE-INTERCOM',    name: 'IP kaputelefon kültéri egység',         unit: 'db', price: 85000, discount: 0, category: 'gyengaram_biztonsag' },
   { code: 'MAT-WE-INTERCOM-IN', name: 'IP kaputelefon beltéri monitor 7"',     unit: 'db', price: 55000, discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-NVR',        name: 'NVR 8 csatornás PoE',                  unit: 'db', price: 120000,discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-ELOCK',      name: 'Elektromos zár 12V (ajtónyitó)',       unit: 'db', price: 15000, discount: 0, category: 'gyengaram_biztonsag' },
+  { code: 'MAT-WE-POE-INJ',    name: 'PoE injector 30W',                     unit: 'db', price: 8000,  discount: 0, category: 'gyengaram_halozat' },
+  { code: 'MAT-WE-CAM-BOX',    name: 'Kültéri kameradoboz IP66',             unit: 'db', price: 12000, discount: 0, category: 'gyengaram_biztonsag' },
 
   // ── Tűzjelző – Érzékelők ─────────────────────────────────────────────────
   { code: 'MAT-FA-OPT-SMOKE',   name: 'Címezhető optikai füstérzékelő',       unit: 'db', price: 18000, discount: 0, category: 'tuzjelzo_erzekelo' },
