@@ -1,3 +1,5 @@
+import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
+
 // ─── TakeoffPro Design System ─────────────────────────────────────────────────
 
 export const C = {
@@ -193,6 +195,160 @@ export function Table({ columns, rows, onRowClick }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+// ─── Inline Confirm Dialog ────────────────────────────────────────────────────
+// Replaces native confirm() for destructive actions.
+// Usage: <ConfirmDialog message="Törlöd?" onConfirm={...} onCancel={...} />
+
+export function ConfirmDialog({ message, detail, onConfirm, onCancel, confirmLabel = 'Törlés', cancelLabel = 'Mégsem' }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
+    }} onClick={onCancel}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#16161A', border: `1px solid ${C.border}`, borderRadius: 12,
+        padding: '24px 28px', maxWidth: 380, width: '90%',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+      }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 8 }}>
+          {message}
+        </div>
+        {detail && (
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, marginBottom: 16, lineHeight: 1.5 }}>
+            {detail}
+          </div>
+        )}
+        {!detail && <div style={{ marginBottom: 16 }} />}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{
+            padding: '7px 16px', borderRadius: 7, fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
+            background: 'transparent', border: `1px solid ${C.border}`, color: C.textSub, cursor: 'pointer',
+          }}>{cancelLabel}</button>
+          <button onClick={onConfirm} style={{
+            padding: '7px 16px', borderRadius: 7, fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
+            background: C.redDim, border: '1px solid rgba(255,107,107,0.3)', color: C.red, cursor: 'pointer',
+          }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Toast System ─────────────────────────────────────────────────────────────
+// Lightweight toast notifications for save/status feedback.
+// Usage: const toast = useToast(); toast.show('Mentve!', 'success')
+
+const ToastContext = createContext(null)
+
+export function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([])
+  const idRef = useRef(0)
+
+  const show = useCallback((message, type = 'info', duration = 3000) => {
+    const id = ++idRef.current
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration)
+  }, [])
+
+  return React.createElement(ToastContext.Provider, { value: { show } },
+    children,
+    React.createElement(ToastContainer, { toasts })
+  )
+}
+
+function ToastContainer({ toasts }) {
+  if (toasts.length === 0) return null
+  const typeStyles = {
+    success: { bg: 'rgba(0,229,160,0.12)', border: 'rgba(0,229,160,0.25)', color: C.accent, icon: '✓' },
+    error:   { bg: C.redDim, border: 'rgba(255,107,107,0.25)', color: C.red, icon: '✕' },
+    info:    { bg: 'rgba(76,201,240,0.12)', border: 'rgba(76,201,240,0.25)', color: C.blue, icon: 'ℹ' },
+    warning: { bg: C.yellowDim, border: 'rgba(255,209,102,0.25)', color: C.yellow, icon: '⚠' },
+  }
+  return (
+    <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 10000, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
+      {toasts.map(t => {
+        const s = typeStyles[t.type] || typeStyles.info
+        return (
+          <div key={t.id} style={{
+            background: s.bg, border: `1px solid ${s.border}`, borderRadius: 8,
+            padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8,
+            fontFamily: 'DM Mono', fontSize: 12, color: s.color,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            animation: 'toast-slide-in 0.25s ease-out',
+            pointerEvents: 'auto',
+          }}>
+            <span style={{ fontSize: 14, flexShrink: 0 }}>{s.icon}</span>
+            <span>{t.message}</span>
+          </div>
+        )
+      })}
+      <style>{`@keyframes toast-slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+    </div>
+  )
+}
+
+export function useToast() {
+  const ctx = useContext(ToastContext)
+  if (!ctx) return { show: () => {} }  // noop fallback
+  return ctx
+}
+
+// ─── Workflow Stepper ─────────────────────────────────────────────────────────
+// Non-intrusive progress indicator for the main project flow.
+
+export function WorkflowStepper({ currentStep = 0 }) {
+  const steps = [
+    { label: 'Tervek feltöltése', icon: '1' },
+    { label: 'Metadata ellenőrzés', icon: '2' },
+    { label: 'Kalkuláció', icon: '3' },
+    { label: 'Ajánlat', icon: '4' },
+  ]
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20,
+      padding: '8px 0',
+    }}>
+      {steps.map((step, i) => {
+        const isDone = i < currentStep
+        const isCurrent = i === currentStep
+        const dotColor = isDone ? C.accent : isCurrent ? C.accent : C.border
+        const labelColor = isDone ? C.textSub : isCurrent ? C.text : C.textMuted
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && (
+              <div style={{
+                flex: 1, height: 1, maxWidth: 40,
+                background: isDone ? 'rgba(0,229,160,0.35)' : C.border,
+                margin: '0 4px',
+              }} />
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                width: 20, height: 20, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontFamily: 'DM Mono', fontWeight: 700,
+                background: isDone ? 'rgba(0,229,160,0.15)' : isCurrent ? 'rgba(0,229,160,0.08)' : 'transparent',
+                border: `1.5px solid ${dotColor}`,
+                color: isDone ? C.accent : isCurrent ? C.accent : C.textMuted,
+                transition: 'all 0.2s',
+              }}>
+                {isDone ? '✓' : step.icon}
+              </div>
+              <span style={{
+                fontFamily: 'DM Mono', fontSize: 10, color: labelColor,
+                fontWeight: isCurrent ? 600 : 400,
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+              }}>{step.label}</span>
+            </div>
+          </React.Fragment>
+        )
+      })}
     </div>
   )
 }

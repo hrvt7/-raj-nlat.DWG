@@ -17,7 +17,7 @@ import MaterialsPage from './pages/Materials.jsx'
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote, generateQuoteId } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
-import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM } from './components/ui.jsx'
+import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM, ToastProvider } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -1202,6 +1202,7 @@ function SaaSShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const sidebarW = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_FULL
   return (
+    <ToastProvider>
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
       {showAuth && <AuthModal onAuth={() => setShowAuth(false)} />}
       <Sidebar
@@ -1488,6 +1489,7 @@ function SaaSShell() {
         </div>
       )}
     </div>
+    </ToastProvider>
   )
 }
 

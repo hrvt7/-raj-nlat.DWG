@@ -1,7 +1,10 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, Input, SectionHeader } from '../components/ui.jsx'
-import { saveSettings, saveMaterials, DEFAULT_MATERIALS } from '../data/store.js'
+import { saveSettings, saveMaterials, DEFAULT_MATERIALS, loadQuotes } from '../data/store.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
+import { loadProjects } from '../data/projectStore.js'
+import { loadPlans } from '../data/planStore.js'
+import { loadTemplates } from '../data/legendStore.js'
 
 const TABS = [
   { key: 'company',      label: 'Cégadatok' },
@@ -10,6 +13,7 @@ const TABS = [
   { key: 'materials',    label: 'Anyagárlista' },
   { key: 'overhead',     label: '🚗 Overhead' },
   { key: 'quote',        label: '📄 Ajánlat' },
+  { key: 'backup',       label: '💾 Mentés' },
 ]
 
 export default function SettingsPage({ settings, onSettingsChange, materials, onMaterialsChange }) {
@@ -69,6 +73,9 @@ export default function SettingsPage({ settings, onSettingsChange, materials, on
       )}
       {activeTab === 'quote' && (
         <QuoteTab settings={settings} update={updateSettings} />
+      )}
+      {activeTab === 'backup' && (
+        <BackupTab settings={settings} materials={materials} />
       )}
     </div>
   )
@@ -676,6 +683,70 @@ function QuoteTab({ settings, update }) {
           </div>
         </div>
       </div>
+    </Card>
+  )
+}
+
+function BackupTab({ settings, materials }) {
+  const [status, setStatus] = useState(null)
+
+  const handleExport = () => {
+    try {
+      const backup = {
+        _version: 1,
+        _exportedAt: new Date().toISOString(),
+        _app: 'TakeoffPro',
+        settings,
+        materials,
+        projects: loadProjects(),
+        plans: loadPlans().map(p => ({ ...p })), // metadata only — no blob data
+        templates: loadTemplates(),
+        quotes: loadQuotes(),
+      }
+      const json = JSON.stringify(backup, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `takeoffpro-backup-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setStatus({ type: 'success', msg: 'Mentés letöltve' })
+      setTimeout(() => setStatus(null), 3000)
+    } catch (err) {
+      setStatus({ type: 'error', msg: `Hiba: ${err.message}` })
+    }
+  }
+
+  return (
+    <Card style={{ padding: 28, maxWidth: 600 }}>
+      <SectionHeader title="Helyi mentés" />
+      <p style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.7, marginBottom: 20 }}>
+        Exportáld az összes beállítást, projektet, tervrajz metadatát, ajánlatot és anyaglistát egyetlen JSON fájlba.
+        Ez nem tartalmazza a feltöltött PDF/DXF fájlokat — csak a konfigurációt és metaadatokat.
+      </p>
+      <button onClick={handleExport} style={{
+        background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 8,
+        padding: '10px 20px', color: C.accent, fontFamily: 'Syne', fontWeight: 700,
+        fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <span style={{ fontSize: 15 }}>💾</span>
+        Backup letöltése (.json)
+      </button>
+      {status && (
+        <div style={{
+          marginTop: 12, padding: '8px 14px', borderRadius: 6,
+          fontFamily: 'DM Mono', fontSize: 11,
+          background: status.type === 'success' ? 'rgba(0,229,160,0.10)' : 'rgba(255,107,107,0.10)',
+          color: status.type === 'success' ? C.accent : '#FF6B6B',
+          border: `1px solid ${status.type === 'success' ? 'rgba(0,229,160,0.25)' : 'rgba(255,107,107,0.25)'}`,
+        }}>
+          {status.msg}
+        </div>
+      )}
     </Card>
   )
 }

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { C } from '../components/ui.jsx'
+import { C, ConfirmDialog, WorkflowStepper, useToast } from '../components/ui.jsx'
 import {
   loadPlans, getPlanFile, savePlan, deletePlan,
   generatePlanId, savePlanThumbnail, getPlanThumbnail, getPlansByProject,
@@ -565,6 +565,7 @@ function MetaCopilotStrip({ plan, onMetaChange }) {
 // ─── Plan card ────────────────────────────────────────────────────────────────
 function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId, onMetaChange }) {
   const [hov, setHov] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const isOpening = openingId === plan.id
   const markerCount = plan.markerCount || 0
   const detected = plan.detectedCount || 0
@@ -628,7 +629,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           <button onClick={e => { e.stopPropagation(); onOpen(plan) }} disabled={isOpening} style={{ flex: 1, padding: '6px 0', borderRadius: 5, background: isOpening ? 'transparent' : `${C.accent}12`, border: `1px solid ${isOpening ? C.border : `${C.accent}30`}`, color: isOpening ? C.muted : C.accent, fontSize: 11, fontFamily: 'Syne', fontWeight: 600, cursor: isOpening ? 'wait' : 'pointer', transition: 'all 0.15s' }}>
             {isOpening ? 'Töltés…' : hasCalc ? 'Szerkesztés' : 'Megnyitás'}
           </button>
-          <button onClick={e => { e.stopPropagation(); if (confirm('Biztosan törlöd?')) onDelete(plan.id) }}
+          <button onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
             style={{ padding: '6px 10px', borderRadius: 5, background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)'; e.currentTarget.style.color = '#FF6B6B' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted }}>
@@ -636,6 +637,14 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           </button>
         </div>
       </div>
+      {confirmDelete && (
+        <ConfirmDialog
+          message={`Törlöd a "${plan.name || 'Névtelen'}" tervrajzot?`}
+          detail="A tervrajz és a hozzá tartozó adatok véglegesen törlődnek."
+          onConfirm={() => { setConfirmDelete(false); onDelete(plan.id) }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   )
 }
@@ -643,6 +652,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
 // ─── Project card ────────────────────────────────────────────────────────────
 function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
   const [hov, setHov] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   return (
     <div
       onClick={() => onOpen(project.id)}
@@ -687,7 +697,7 @@ function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
           <button onClick={e => { e.stopPropagation(); onOpen(project.id) }} style={{ flex: 1, padding: '6px 0', borderRadius: 5, background: `${C.accent}12`, border: `1px solid ${C.accent}30`, color: C.accent, fontSize: 11, fontFamily: 'Syne', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}>
             Megnyitás
           </button>
-          <button onClick={e => { e.stopPropagation(); if (confirm(`Biztosan törlöd a "${project.name}" projektet?`)) onDelete(project.id) }}
+          <button onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
             style={{ padding: '6px 10px', borderRadius: 5, background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)'; e.currentTarget.style.color = '#FF6B6B' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted }}>
@@ -695,6 +705,14 @@ function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
           </button>
         </div>
       </div>
+      {confirmDelete && (
+        <ConfirmDialog
+          message={`Törlöd a "${project.name}" projektet?`}
+          detail="A projekt és a hozzá tartozó tervrajzok véglegesen törlődnek."
+          onConfirm={() => { setConfirmDelete(false); onDelete(project.id) }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1021,7 +1039,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     }
     setUploading(false)
     reload()
-  }, [projectId, reload])
+    toast.show(`${accepted.length} tervrajz feltöltve`, 'success')
+  }, [projectId, reload, toast])
 
   // Upload legend PDF
   const handleLegendFile = useCallback(async (files) => {
@@ -1059,13 +1078,27 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const handleMetaChange = useCallback((planId, updates) => {
     updatePlanMeta(planId, updates)
     reload()
-  }, [reload])
+    toast.show('Metadata frissítve', 'success')
+  }, [reload, toast])
 
   const toggleSelect = useCallback((planId, val) => setSelected(prev => ({ ...prev, [planId]: val })), [])
   const deselectAll = useCallback(() => setSelected({}), [])
   const selectedIds = Object.entries(selected).filter(([, v]) => v).map(([id]) => id)
   const selectedPlans = plans.filter(p => selectedIds.includes(p.id))
   const selectedCount = selectedPlans.length
+
+  const toast = useToast()
+
+  // ── Compute workflow step from project state ──
+  // 0=no plans, 1=has plans but no meta, 2=has meta but no calc, 3=has calc (ready for quote)
+  const workflowStep = (() => {
+    if (plans.length === 0) return 0
+    const hasMeta = plans.some(p => p.inferredMeta?.metaConfidence > 0)
+    const hasCalc = plans.some(p => (p.markerCount || 0) > 0 || (p.parseResult?.blocks?.length || 0) > 0)
+    if (hasCalc) return 3
+    if (hasMeta || templates.length > 0) return 2
+    return 1
+  })()
 
   if (!project) return <div style={{ padding: 40, fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Betöltés…</div>
 
@@ -1079,6 +1112,9 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         <h1 style={{ fontFamily: 'Syne', fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>{project.name}</h1>
         <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz</p>
       </div>
+
+      {/* ── Workflow stepper ── */}
+      <WorkflowStepper currentStep={workflowStep} />
 
 
       {/* ── Selection toolbar ── */}
