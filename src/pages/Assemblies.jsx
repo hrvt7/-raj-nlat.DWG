@@ -4,6 +4,7 @@ import { WORK_ITEM_CATEGORIES, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId, getA
 import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount, trackAsmUsage } from '../data/store.js'
 import { getAssemblyCategoriesForTrade, SHARED_CATEGORIES } from '../data/trades.js'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
+import { CATALOG_GRID_STYLE, catalogCardShell, CARD_HEADER_STYLE, CARD_TITLE_STYLE, CARD_DESC_STYLE, CARD_DIVIDER_STYLE, CARD_STAT_LABEL, CARD_CODE_STYLE } from '../components/catalogCardStyles.js'
 
 // ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
 
@@ -193,11 +194,7 @@ export default function AssembliesPage({ activeTrade }) {
           action={<Button onClick={handleCreate}>Új assembly</Button>}
         />
       ) : viewMode === 'grid' ? (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: 14,
-        }}>
+        <div style={CATALOG_GRID_STYLE}>
           {drag.orderedItems.map(asm => (
             <DraggableCardWrapper key={asm.id} itemKey={asm.id} borderRadius={14} {...drag}>
               <AssemblyGridCard
@@ -385,25 +382,17 @@ function AssemblyGridCard({ assembly, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        background: hovered ? 'rgba(0,229,160,0.04)' : C.bgCard,
-        border: `1px solid ${hovered ? 'rgba(0,229,160,0.25)' : C.border}`,
-        borderRadius: 14, padding: '20px 36px 16px 20px', cursor: 'pointer',
-        transition: 'all 0.18s',
-        transform: hovered ? 'translateY(-2px)' : 'none',
-        boxShadow: hovered ? '0 8px 32px rgba(0,0,0,0.35)' : 'none',
-        position: 'relative',
-      }}
+      style={{ ...catalogCardShell(hovered), paddingRight: 36 }}
     >
       {/* Category badge + right meta (ID + variant) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+      <div style={{ ...CARD_HEADER_STYLE, alignItems: 'flex-start', marginBottom: 12 }}>
         {cat ? (
           <Badge color="green">{cat.icon} {cat.label}</Badge>
         ) : (
           <span />
         )}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{assembly.id}</span>
+          <span style={CARD_CODE_STYLE}>{assembly.id}</span>
           {hasVariants && (
             <span style={{
               background: 'rgba(56,189,248,0.15)', border: `1px solid ${C.blue}25`,
@@ -417,19 +406,13 @@ function AssemblyGridCard({ assembly, onClick }) {
       </div>
 
       {/* Name */}
-      <div style={{
-        fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 6,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
+      <div style={{ ...CARD_TITLE_STYLE, fontSize: 15, marginBottom: 6 }}>
         {assembly.name}
       </div>
 
       {/* Description */}
       {assembly.description && (
-        <div style={{
-          fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted, marginBottom: 12,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
+        <div style={{ ...CARD_DESC_STYLE, fontSize: 11, marginBottom: 12 }}>
           {assembly.description}
         </div>
       )}
@@ -464,9 +447,7 @@ function AssemblyGridCard({ assembly, onClick }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           marginBottom: 4,
         }}>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase' }}>
-            Kész
-          </span>
+          <span style={CARD_STAT_LABEL}>Kész</span>
           <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 11, color: C.accent }}>
             {Math.round(completeness * 100)}%
           </span>
@@ -487,16 +468,14 @@ function AssemblyGridCard({ assembly, onClick }) {
         borderRadius: 8, padding: '8px 12px', marginBottom: 12,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Kalkulált ár
-        </span>
+        <span style={{ ...CARD_STAT_LABEL, marginBottom: 0 }}>Kalkulált ár</span>
         <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 16, color: C.accent }}>
           {fmt(Math.round(displayPrice))}<span style={{ fontSize: 10, fontWeight: 400, marginLeft: 2, color: C.textSub }}>Ft</span>
         </span>
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, background: C.border, marginBottom: 12 }} />
+      <div style={CARD_DIVIDER_STYLE} />
 
       {/* Stats row */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 11, fontFamily: 'DM Mono' }}>

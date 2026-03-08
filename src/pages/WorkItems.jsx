@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
+import { CATALOG_GRID_STYLE, catalogCardShell, CARD_HEADER_STYLE, CARD_TITLE_STYLE, CARD_DESC_STYLE, CARD_DIVIDER_STYLE, CARD_STAT_LABEL, CARD_STAT_ACCENT, CARD_STAT_YELLOW, CARD_STAT_UNIT, CARD_CODE_STYLE, categoryChipStyle, deleteButtonStyle } from '../components/catalogCardStyles.js'
 import { WORK_ITEM_CATEGORIES, WORK_ITEMS_DEFAULT } from '../data/workItemsDb.js'
 import { saveWorkItems } from '../data/store.js'
 import { getCategoriesForTrade } from '../data/trades.js'
@@ -109,7 +110,7 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange, activeTrad
           Nincs találat a szűrési feltételekre.
         </div>
       ) : viewMode === 'grid' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+        <div style={CATALOG_GRID_STYLE}>
           {drag.orderedItems.map(wi => (
             <DraggableCardWrapper key={wi.code} itemKey={wi.code} {...drag}>
               <WorkItemGridCard
@@ -213,78 +214,57 @@ function WorkItemGridCard({ workItem, onEdit, onDelete }) {
       onClick={onEdit}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        background: C.bgCard,
-        border: `1px solid ${hovered ? 'rgba(0,229,160,0.35)' : C.border}`,
-        borderRadius: 12,
-        padding: '14px 16px',
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        transform: hovered ? 'translateY(-2px)' : 'none',
-        boxShadow: hovered ? '0 8px 24px rgba(0,229,160,0.07)' : 'none',
-        position: 'relative',
-      }}
+      style={catalogCardShell(hovered)}
     >
       {/* Top row: category badge + code */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{
-          fontFamily: 'DM Mono', fontSize: 10,
-          color: cat?.color || C.textSub,
-          background: `${cat?.color || C.textSub}14`,
-          border: `1px solid ${cat?.color || C.textSub}28`,
-          padding: '2px 8px', borderRadius: 20,
-        }}>
+      <div style={CARD_HEADER_STYLE}>
+        <span style={categoryChipStyle(cat?.color)}>
           {cat?.label || workItem.category}
         </span>
-        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{workItem.code}</span>
+        <span style={CARD_CODE_STYLE}>{workItem.code}</span>
       </div>
 
       {/* Name */}
-      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, lineHeight: 1.35, marginBottom: workItem.desc ? 4 : 0 }}>
+      <div style={{ ...CARD_TITLE_STYLE, marginBottom: workItem.desc ? 4 : 0 }}>
         {workItem.name}
       </div>
       {workItem.desc && (
-        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted, lineHeight: 1.5 }}>
+        <div style={CARD_DESC_STYLE}>
           {workItem.desc}
         </div>
       )}
 
       {/* Divider */}
-      <div style={{ borderTop: `1px solid ${C.border}`, margin: '12px 0 10px' }} />
+      <div style={CARD_DIVIDER_STYLE} />
 
       {/* Stats row */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>P50</div>
-          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, background: C.accentDim, padding: '2px 7px', borderRadius: 6 }}>
+          <div style={CARD_STAT_LABEL}>P50</div>
+          <span style={CARD_STAT_ACCENT}>
             {workItem.p50}<span style={{ fontSize: 9, fontWeight: 400, marginLeft: 1, color: C.textSub }}>p</span>
           </span>
         </div>
         <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>P90</div>
-          <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.yellow, background: C.yellowDim, padding: '2px 7px', borderRadius: 6 }}>
+          <div style={CARD_STAT_LABEL}>P90</div>
+          <span style={CARD_STAT_YELLOW}>
             {workItem.p90}<span style={{ fontSize: 9, fontWeight: 400, marginLeft: 1, color: C.textSub }}>p</span>
           </span>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Egys.</div>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{workItem.unit}</span>
+          <div style={CARD_STAT_LABEL}>Egys.</div>
+          <span style={CARD_STAT_UNIT}>{workItem.unit}</span>
         </div>
         {workItem.heightFactor && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Mag.</div>
+            <div style={CARD_STAT_LABEL}>Mag.</div>
             <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent }}>✓</span>
           </div>
         )}
         {/* Delete button */}
         <button
           onClick={e => { e.stopPropagation(); onDelete() }}
-          style={{
-            marginLeft: 'auto', padding: '4px 7px', background: 'transparent',
-            border: `1px solid ${C.border}`, borderRadius: 6,
-            color: C.textMuted, cursor: 'pointer', fontSize: 11,
-            opacity: hovered ? 1 : 0.4, transition: 'opacity 0.15s',
-          }}
+          style={deleteButtonStyle(hovered)}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
