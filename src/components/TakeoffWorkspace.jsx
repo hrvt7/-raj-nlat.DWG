@@ -684,6 +684,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         setPdfMarkers(normalizeMarkers(ann.markers))
         if (ann.wallSplits) setWallSplits(ann.wallSplits)
         if (ann.variantOverrides) setVariantOverrides(ann.variantOverrides)
+        if (ann.deletedItems) setDeletedItems(new Set(ann.deletedItems))
         setRightTab('takeoff')
       }
     })()
@@ -1228,6 +1229,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           markers: pdfMarkers,
           wallSplits,
           variantOverrides,
+          deletedItems: [...deletedItems],
         })
         // Persist pricing summary + snapshot for quote generation on plan metadata
         // Resolve plan-level system type from filename inference (fallback: 'general')
@@ -1757,12 +1759,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                               return next
                             })
                           }
-                          // 3) Clean up wallSplits for this assembly
-                          setWallSplits(prev => {
-                            const next = { ...prev }
-                            delete next[asmId]
-                            return next
-                          })
+                          // 3) Clean up derived overrides for this assembly
+                          setWallSplits(prev => { const next = { ...prev }; delete next[asmId]; return next })
+                          setVariantOverrides(prev => { const next = { ...prev }; delete next[asmId]; return next })
+                          setQtyOverrides(prev => { const next = { ...prev }; delete next[asmId]; return next })
                         }}
                       />
                     ))}
