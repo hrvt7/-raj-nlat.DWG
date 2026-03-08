@@ -404,10 +404,10 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     if (tool === 'count') {
       // Assembly-first: resolve assembly for color + asmId, fallback to category
       const asm = (assembliesProp || []).find(a => a.id === activeCategory)
-      const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', '_special': '#FFD166' }
+      const _ASM_COLORS = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
       const SPECIAL_COLORS = { 'panel': '#FF6B6B', 'junction': '#4CC9F0', 'other': '#71717A' }
       const color = asm
-        ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF')
+        ? (_ASM_COLORS[asm.category] || '#9CA3AF')
         : (SPECIAL_COLORS[activeCategory] || (COUNT_CATEGORIES.find(c => c.key === activeCategory)?.color) || '#9CA3AF')
       markersRef.current = [...markersRef.current, createMarker({
         x: sx, y: sy, category: activeCategory, color,

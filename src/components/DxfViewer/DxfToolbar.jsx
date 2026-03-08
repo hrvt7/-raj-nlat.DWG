@@ -119,23 +119,27 @@ export function CategoryDropdown({ activeCategory, onCategoryChange }) {
   )
 }
 
-// ─── Assembly-based dropdown for PDF counting ────────────────────────────────
-// Shows actual assemblies (non-variants) grouped by category + panel/other specials
+// ─── Assembly-based dropdown for counting ─────────────────────────────────────
+// Shows countSelectable assemblies grouped by category + special items
 const ASM_CATEGORY_GROUPS = [
-  { key: 'szerelvenyek', label: 'Szerelvények', icon: '🔌' },
-  { key: 'vilagitas', label: 'Világítás', icon: '💡' },
-  { key: 'elosztok', label: 'Elosztók', icon: '⚡' },
+  { key: 'szerelvenyek', label: 'Szerelvények' },
+  { key: 'vilagitas', label: 'Világítás' },
+  { key: 'elosztok', label: 'Elosztók / Védelem' },
+  { key: 'gyengaram', label: 'Gyengeáram' },
+  { key: 'tuzjelzo', label: 'Tűzjelző' },
 ]
-const ASM_COLORS_MAP = {
+export const ASM_COLORS_MAP = {
   'szerelvenyek': '#4CC9F0',
   'vilagitas': '#00E5A0',
   'elosztok': '#FF6B6B',
+  'gyengaram': '#A78BFA',
+  'tuzjelzo': '#FF8C42',
   '_special': '#FFD166',
 }
 const SPECIAL_ITEMS = [
-  { key: 'panel', label: 'Elosztó (referencia)', color: '#FF6B6B', icon: '⚡' },
-  { key: 'junction', label: 'Kötődoboz', color: '#4CC9F0', icon: '📦' },
-  { key: 'other', label: 'Egyéb', color: '#71717A', icon: '➕' },
+  { key: 'panel', label: 'Elosztó (referencia)', color: '#FF6B6B' },
+  { key: 'junction', label: 'Kötődoboz', color: '#4CC9F0' },
+  { key: 'other', label: 'Egyéb', color: '#71717A' },
 ]
 
 export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies }) {
@@ -172,8 +176,8 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies 
     }
   }, [open, updatePopupPos])
 
-  // Only show non-variant assemblies
-  const mainAssemblies = (assemblies || []).filter(a => !a.variantOf)
+  // Only show countSelectable, non-variant assemblies
+  const mainAssemblies = (assemblies || []).filter(a => !a.variantOf && a.countSelectable)
 
   // Find the active item — could be an assembly or a special item
   const activeAsm = mainAssemblies.find(a => a.id === activeCategory)
@@ -186,23 +190,33 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies 
     setOpen(false)
   }, [onCategoryChange])
 
-  const AsmBtn = ({ id, label, color, icon }) => (
-    <button
-      onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}
-      onClick={() => handleSelect(id)}
-      style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 10px', borderRadius: 5, cursor: 'pointer',
-        background: id === activeCategory ? `${color}18` : 'transparent',
-        border: 'none', color: id === activeCategory ? color : '#B0B8C8',
-        fontSize: 11, fontFamily: 'DM Mono', fontWeight: id === activeCategory ? 700 : 500, textAlign: 'left',
-      }}
-    >
-      {icon && <span style={{ fontSize: 12, flexShrink: 0 }}>{icon}</span>}
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      {id === activeCategory && <span style={{ marginLeft: 'auto', fontSize: 10, flexShrink: 0 }}>✓</span>}
-    </button>
-  )
+  const [hoverId, setHoverId] = useState(null)
+
+  const AsmBtn = ({ id, label, color }) => {
+    const isActive = id === activeCategory
+    const isHover = id === hoverId
+    return (
+      <button
+        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+        onClick={() => handleSelect(id)}
+        onMouseEnter={() => setHoverId(id)}
+        onMouseLeave={() => setHoverId(null)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '7px 10px', borderRadius: 5, cursor: 'pointer',
+          background: isActive ? `${color}22` : isHover ? `${color}0D` : 'transparent',
+          border: 'none',
+          color: isActive ? color : isHover ? '#E4E4E7' : '#9CA3AF',
+          fontSize: 11, fontFamily: 'DM Mono', fontWeight: isActive ? 700 : 500,
+          textAlign: 'left', transition: 'background 0.1s, color 0.1s',
+        }}
+      >
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: isActive || isHover ? color : '#555', flexShrink: 0, transition: 'background 0.1s' }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        {isActive && <span style={{ marginLeft: 'auto', fontSize: 10, flexShrink: 0, color }}>✓</span>}
+      </button>
+    )
+  }
 
   // Render popup via portal to escape all stacking contexts and overflow clipping
   const popupContent = open && popupPos && createPortal(
@@ -217,17 +231,19 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies 
       }}
     >
       {/* Assembly groups by category */}
-      {ASM_CATEGORY_GROUPS.map(grp => {
+      {ASM_CATEGORY_GROUPS.map((grp, gi) => {
         const grpAsms = mainAssemblies.filter(a => a.category === grp.key)
         if (!grpAsms.length) return null
         const grpColor = ASM_COLORS_MAP[grp.key] || '#9CA3AF'
         return (
-          <div key={grp.key} style={{ marginBottom: 4 }}>
+          <div key={grp.key} style={{ marginBottom: 2, borderTop: gi > 0 ? '1px solid #1E1E22' : 'none', paddingTop: gi > 0 ? 4 : 0 }}>
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 2px',
+              display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px 3px',
               fontSize: 10, fontFamily: 'Syne', fontWeight: 700, color: grpColor, letterSpacing: '0.05em', textTransform: 'uppercase',
+              pointerEvents: 'none', userSelect: 'none',
             }}>
-              {grp.icon} {grp.label}
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: grpColor, opacity: 0.6 }} />
+              {grp.label}
             </div>
             {grpAsms.map(a => (
               <AsmBtn key={a.id} id={a.id} label={a.name} color={grpColor} />
@@ -237,15 +253,16 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies 
       })}
 
       {/* Special items separator */}
-      <div style={{ borderTop: '1px solid #1E1E22', paddingTop: 4, marginTop: 4 }}>
+      <div style={{ borderTop: '1px solid #1E1E22', paddingTop: 4, marginTop: 2 }}>
         <div style={{
-          padding: '4px 10px 2px', fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
+          padding: '5px 10px 3px', fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
           color: '#FFD166', letterSpacing: '0.05em', textTransform: 'uppercase',
+          pointerEvents: 'none', userSelect: 'none',
         }}>
-          🔧 Egyéb elemek
+          Egyéb elemek
         </div>
         {SPECIAL_ITEMS.map(s => (
-          <AsmBtn key={s.key} id={s.key} label={s.label} color={s.color} icon={s.icon} />
+          <AsmBtn key={s.key} id={s.key} label={s.label} color={s.color} />
         ))}
       </div>
     </div>,

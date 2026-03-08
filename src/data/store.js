@@ -370,8 +370,17 @@ export function saveWorkItems(items) {
 
 export function loadAssemblies() {
   const stored = load(LS_KEYS.ASSEMBLIES, null)
-  // Ha még nincs semmi mentve → adjuk vissza az összes alapértelmezett assembly-t
-  if (!stored) return ASSEMBLIES_DEFAULT
+  // Ha még nincs semmi mentve → adjuk vissza az összes alapértelmezett assembly-t (with derived countSelectable)
+  if (!stored) {
+    const NON_COUNT_CATS = ['kabelezes', 'kabeltalca', 'meres']
+    const PKG_PAT = ['rendszer (komplett', 'komplett szett', 'központ', 'programozás', 'üzembe helyezés', 'szegmens', 'rack', 'patch panel', 'switch', 'nvr rendszer', 'ups', 'kontroller', 'átadás']
+    for (const a of ASSEMBLIES_DEFAULT) {
+      if (a.countSelectable !== undefined) continue
+      if (a.variantOf || NON_COUNT_CATS.includes(a.category)) { a.countSelectable = false }
+      else { const nl = (a.name || '').toLowerCase(); a.countSelectable = !PKG_PAT.some(p => nl.includes(p.toLowerCase())) }
+    }
+    return ASSEMBLIES_DEFAULT
+  }
 
   let needsSave = false
   const defaultMap = new Map(ASSEMBLIES_DEFAULT.map(a => [a.id, a]))
@@ -404,6 +413,24 @@ export function loadAssemblies() {
       asm.variantOf = def.variantOf
       needsSave = true
     }
+  }
+
+  // 3) countSelectable migráció — derive for assemblies that don't have it
+  const NON_COUNTABLE_CATS = ['kabelezes', 'kabeltalca', 'meres']
+  const PACKAGE_PATTERNS = [
+    'rendszer (komplett', 'komplett szett', 'központ', 'programozás',
+    'üzembe helyezés', 'szegmens', 'rack', 'patch panel',
+    'switch', 'nvr rendszer', 'ups', 'kontroller', 'átadás',
+  ]
+  for (const asm of stored) {
+    if (asm.countSelectable !== undefined) continue
+    if (asm.variantOf || NON_COUNTABLE_CATS.includes(asm.category)) {
+      asm.countSelectable = false
+    } else {
+      const nl = (asm.name || '').toLowerCase()
+      asm.countSelectable = !PACKAGE_PATTERNS.some(p => nl.includes(p.toLowerCase()))
+    }
+    needsSave = true
   }
 
   if (needsSave) save(LS_KEYS.ASSEMBLIES, stored)

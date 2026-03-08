@@ -538,7 +538,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
     if (activeTool === 'count') {
       // Determine color from assembly or special items
-      const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B' }
+      const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
       const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
       const asm = (assembliesProp || []).find(a => a.id === activeCategory)
       const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[activeCategory] || '#9CA3AF')
@@ -885,7 +885,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
               const asmId = countSummary.asmIds[key]
               const asm = asmId ? (assembliesProp || []).find(a => a.id === asmId) : null
               const catDef = COUNT_CATEGORIES.find(c => c.key === key)
-              const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B' }
+              const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
               const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
               const label = asm ? asm.name : (catDef?.label || key)
               const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[key] || catDef?.color || '#9CA3AF')
