@@ -722,7 +722,7 @@ function HeroSection({ onStart }) {
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.025, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
 
       {/* Radial glow center */}
-      <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%,-50%)', width: 700, height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%,-50%)', width: 700, maxWidth: '100%', height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
 
@@ -762,12 +762,13 @@ function HeroSection({ onStart }) {
             so SVG height = width × 9/16 ≤ (100vh − 354px)
             → frame always fits inside the viewport ── */}
         <FadeIn delay={0.22}>
-          <div style={{
+          <div className="hero-frame" style={{
             position: 'relative', borderRadius: 16, overflow: 'hidden',
             border: '1px solid rgba(0,229,160,0.1)',
             boxShadow: '0 0 0 1px #090909, 0 40px 100px rgba(0,0,0,0.7), 0 0 60px rgba(0,229,160,0.04)',
             background: '#040A06',
             width: 'min(780px, calc((100vh - 354px) * 16 / 9))',
+            maxWidth: '100%',
             margin: '0 auto',
           }}>
             {/* corner accents */}
@@ -793,7 +794,7 @@ function HeroSection({ onStart }) {
 
 function GyengeAramSvg() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
       <style>{`
         .ga-grid-line { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
         .ga-cable-path { stroke: rgba(255,255,255,0.12); stroke-width: 1.5; fill: none; stroke-dasharray: 4 4; }
@@ -882,7 +883,7 @@ function TuzjelzoSvg() {
   const wall = 'rgba(255,255,255,0.22)'
   const muted = 'rgba(255,255,255,0.13)'
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="100%" height="100%">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
       <style>{`
         .tz-scan { animation: tz-scan 4s linear infinite; }
         @keyframes tz-scan { 0%{transform:translateX(0px)} 100%{transform:translateX(1200px)} }
@@ -1491,7 +1492,7 @@ function NormTimeSection() {
   const trade = NT_TRADES[active]
   return (
     <section className="sec-100" style={{ padding: '100px 24px 80px', background: '#050505', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%,-50%)', width: 700, height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%,-50%)', width: 700, maxWidth: '100%', height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
 
@@ -1852,7 +1853,7 @@ function PDFOutputSection() {
   return (
     <section className="sec-100" style={{ padding: '100px 24px', background: '#060606', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
       {/* Radial glow */}
-      <div style={{ position: 'absolute', right: '15%', top: '50%', transform: 'translateY(-50%)', width: 500, height: 400, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', right: '15%', top: '50%', transform: 'translateY(-50%)', width: 500, maxWidth: '100%', height: 400, background: 'radial-gradient(ellipse, rgba(0,229,160,0.04) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }} className="pdf-section-grid">
@@ -2093,7 +2094,7 @@ function Footer() {
 
 export default function Landing({ onStart }) {
   return (
-    <div style={{ background: '#0A0A0A', color: '#F0F0F0', minHeight: '100vh', position: 'relative' }}>
+    <div className="landing-root" style={{ background: '#0A0A0A', color: '#F0F0F0', minHeight: '100vh', position: 'relative' }}>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; }
         html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -2128,7 +2129,7 @@ export default function Landing({ onStart }) {
         /* ─ HERO animation: mobile = portrait SVG ─ */
         .ha-mobile  { display: none; }
         .ha-desktop { display: block; }
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
           .ha-mobile  { display: block !important; }
           .ha-desktop { display: none !important; }
         }
@@ -2201,9 +2202,13 @@ export default function Landing({ onStart }) {
         }
 
         /* ─ ANIMATED frames ─ */
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
           .anim-frame-169 { aspect-ratio: 4/3 !important; }
           .anim-frame-32  { aspect-ratio: 4/3 !important; }
+        }
+        @media (max-width: 480px) {
+          .anim-frame-169 { aspect-ratio: 1/1 !important; }
+          .anim-frame-32  { aspect-ratio: 1/1 !important; }
         }
 
         /* ─ Mouse glow: hide on touch devices ─ */
@@ -2217,7 +2222,7 @@ export default function Landing({ onStart }) {
         /* ─ PRICING card responsive ─ */
         @media (max-width: 540px) {
           .pricing-card { padding: 36px 20px 28px !important; }
-          .pricing-card > div { gap: 28px !important; }
+          .pricing-card > div { gap: 28px !important; flex-direction: column !important; }
           .pricing-badge { font-size: 9px !important; padding: 3px 12px !important; left: 50% !important; transform: translateX(-50%) !important; white-space: normal !important; text-align: center !important; }
           .pricing-phone-cta { width: 100% !important; justify-content: center !important; }
         }
@@ -2233,10 +2238,18 @@ export default function Landing({ onStart }) {
           .section-header-gap { margin-bottom: 36px !important; }
         }
 
+        /* ─ Hero frame: use simple width on mobile ─ */
+        @media (max-width: 768px) {
+          .hero-frame { width: 100% !important; }
+        }
+
         /* ─ Hero headline: allow wrap on very small screens ─ */
         @media (max-width: 360px) {
           .hero-nowrap { white-space: normal !important; }
         }
+
+        /* ─ Overflow guard ─ */
+        .landing-root { overflow-x: hidden; }
       `}</style>
       <GlobalMouseGlow />
       <NavBar onStart={onStart} />
