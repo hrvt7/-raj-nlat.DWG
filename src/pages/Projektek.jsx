@@ -785,12 +785,9 @@ function ProjectListView({ onOpenProject }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}>Felmérés</h1>
-          <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>Projektek — építkezésenként külön mappa és tervrajzok</p>
-        </div>
-        {projects.length > 0 && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>{projects.length} projekt</span>}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub, margin: 0 }}>Projektek — építkezésenként külön mappa és tervrajzok</p>
+        {projects.length > 0 && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0, marginLeft: 12 }}>{projects.length} projekt</span>}
       </div>
 
       {/* Create new project zone */}
