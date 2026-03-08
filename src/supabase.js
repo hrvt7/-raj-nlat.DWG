@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { buildQuoteRow } from './utils/quoteMapping.js'
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -67,28 +68,14 @@ export async function loadQuotesRemote() {
   if (error) throw error
   return data || []
 }
+// Re-export for external consumers
+export { buildQuoteRow } from './utils/quoteMapping.js'
+
 export async function saveQuoteRemote(quote) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
-  // Nettó = quote.gross (== summary.grandTotal)
-  const netFt = Math.round(quote.gross || quote.summary?.grandTotal || 0)
-  // ÁFA% — persisted on quote if available, otherwise default 27%
-  const vat = quote.vatPercent || 27
-  const grossFt = Math.round(netFt * (1 + vat / 100))
-  const { error } = await supabase.from('quotes').upsert({
-    user_id:        user.id,
-    quote_number:   quote.id,
-    status:         quote.status || 'draft',
-    client_name:    quote.client_name || quote.clientName || '',
-    project_name:   quote.project_name || quote.projectName || '',
-    context:        quote.context || {},
-    pricing_data:   quote,
-    cable_estimate: quote.cableEstimate || {},
-    total_net_ft:   netFt,
-    total_gross_ft: grossFt,
-    vat_percent:    vat,
-    notes:          quote.notes || '',
-  }, { onConflict: 'user_id,quote_number' })
+  const row = buildQuoteRow(quote, user.id)
+  const { error } = await supabase.from('quotes').upsert(row, { onConflict: 'user_id,quote_number' })
   if (error) throw error
 }
 export async function deleteQuoteRemote(quoteNumber) {
