@@ -1441,6 +1441,25 @@ export const ASSEMBLIES_DEFAULT = [
     updatedAt: '2025-01-01T00:00:00.000Z',
   },
 
+  // ─── Batch C — Tűzjelző hurok szegmens ─────────────────────────────────
+  {
+    id: 'ASM-080',
+    assemblyCode: 'FA-012',
+    name: 'Tűzjelző hurok szegmens (10m)',
+    category: 'tuzjelzo',
+    description: 'Tűzjelző hurok kábel szegmens: 10m JE-H(St)H E30 kábel + E30 védőcső + fektetési munkadíj.',
+    overheadType: 'visit',
+    symbolIds: [],
+    components: [
+      { itemCode: 'MAT-FA-JYSTY', itemType: 'material', name: 'JE-H(St)H E30 2×2×0.8 tűzálló kábel', unit: 'm', qty: 10, waste_pct: 10, sortOrder: 0 },
+      { itemCode: 'MAT-FA-PIPE-E30', itemType: 'material', name: 'Tűzálló védőcső 20mm E30', unit: 'm', qty: 10, sortOrder: 1 },
+      { itemCode: 'TUZ-006', itemType: 'workitem', name: 'Tűzjelző kábel fektetés', unit: 'm', qty: 10, sortOrder: 2 },
+    ],
+    tags: ['tűzjelző', 'hurok', 'kábel', 'E30'],
+    createdAt: '2025-01-01T00:00:00.000Z',
+    updatedAt: '2025-01-01T00:00:00.000Z',
+  },
+
   // ══════════════════════════════════════════════════════════════════════
   // BATCH A — ERŐSÁRAM CORE BŐVÍTÉS
   // ══════════════════════════════════════════════════════════════════════

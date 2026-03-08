@@ -249,6 +249,9 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-FA-REPEATER',    name: 'Kezelőegység (távoli kijelző)',          unit: 'db', price: 120000,discount: 0, category: 'tuzjelzo_kozpont' },
   { code: 'MAT-FA-IO-MODULE',   name: 'Címezhető I/O modul (relés)',           unit: 'db', price: 32000, discount: 0, category: 'tuzjelzo_kozpont' },
   { code: 'MAT-FA-FIRESTOP',    name: 'Tűzgátló habarcs készlet (1 áttörés)',  unit: 'db', price: 8500,  discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-PIPE-E30',   name: 'Tűzálló védőcső 20mm E30',             unit: 'm',  price: 850,   discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-JBOX-E30',   name: 'Tűzálló kötődoboz E30',               unit: 'db', price: 2800,  discount: 0, category: 'tuzjelzo_kozpont' },
+  { code: 'MAT-FA-TRAY-E30',   name: 'Tűzálló kábeltálca 100mm E30',        unit: 'm',  price: 3500,  discount: 0, category: 'tuzjelzo_kozpont' },
 
   // ── Földelés / EPH ──────────────────────────────────────────────────────────
   { code: 'MAT-160', name: 'Földelő szonda 1.5m Cu-bevonat',        unit: 'db', price: 8500,  discount: 0, category: 'foldeles' },
