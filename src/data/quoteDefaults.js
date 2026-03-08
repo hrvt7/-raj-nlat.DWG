@@ -39,7 +39,10 @@ export const CATEGORY_TO_SYSTEM_TYPE = {
   gyengaram:    'low_voltage',
   elosztok:     'power',      // elosztó tábla, kismegszakító = erősáram
   kabelezes:    'power',      // kábelhúzás typically erősáram
-  // nyomvonal, kabeltalca, bontas, dobozolas, kotesek, meres → 'general' (fallback)
+  kabeltalca:   'general',    // kábeltálca = általános (erős + gyenge közös)
+  meres:        'general',    // mérési csomag = általános
+  foldeles:     'power',      // földelés / EPH = erősáram
+  // nyomvonal, bontas, dobozolas, kotesek → 'general' (fallback)
 }
 
 /**

@@ -188,7 +188,7 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-149', name: 'Időrelé (lépcsőházi)', unit: 'db', price: 6000, discount: 0, category: 'vedelem' },
   // Elosztó kiegészítés
   { code: 'MAT-066', name: 'Elosztótábla 48M süllyesztett', unit: 'db', price: 23000, discount: 0, category: 'elosztok' },
-  { code: 'MAT-067', name: 'Elosztó szekrény IP54 fém (fali)', unit: 'db', price: 50000, discount: 0, category: 'elosztok' },
+  { code: 'MAT-067', name: 'Elosztó szekrény IP54 fém (fali)', unit: 'db', price: 85000, discount: 0, category: 'elosztok' },
   // Világítás kiegészítés
   { code: 'MAT-150', name: 'LED panel 60×60 40W 4000K', unit: 'db', price: 11000, discount: 0, category: 'vilagitas' },
   { code: 'MAT-151', name: 'LED downlight 7W süllyesztett', unit: 'db', price: 3800, discount: 0, category: 'vilagitas' },
@@ -202,7 +202,7 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-079', name: 'IP kamera PoE kültéri', unit: 'db', price: 30000, discount: 0, category: 'gyengaram' },
   // Ipari kiegészítés
   { code: 'MAT-056', name: 'CEE dugalj 3P+N+F 63A (IP44)', unit: 'db', price: 10500, discount: 0, category: 'ipari' },
-  { code: 'MAT-057', name: 'Ipari elosztó (mobil, 4×16A+2×32A)', unit: 'db', price: 60000, discount: 0, category: 'ipari' },
+  { code: 'MAT-057', name: 'Ipari elosztó (mobil, 4×16A+2×32A)', unit: 'db', price: 95000, discount: 0, category: 'ipari' },
 
   // ── Gyengeáram – Strukturált hálózat ──────────────────────────────────────
   { code: 'MAT-WE-CAT6A-JACK',  name: 'Cat6A keystone jack (árnyékolt)',       unit: 'db', price: 2800,  discount: 0, category: 'gyengaram_halozat' },
@@ -245,6 +245,18 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-FA-REPEATER',    name: 'Kezelőegység (távoli kijelző)',          unit: 'db', price: 120000,discount: 0, category: 'tuzjelzo_kozpont' },
   { code: 'MAT-FA-IO-MODULE',   name: 'Címezhető I/O modul (relés)',           unit: 'db', price: 32000, discount: 0, category: 'tuzjelzo_kozpont' },
   { code: 'MAT-FA-FIRESTOP',    name: 'Tűzgátló habarcs készlet (1 áttörés)',  unit: 'db', price: 8500,  discount: 0, category: 'tuzjelzo_kozpont' },
+
+  // ── Földelés / EPH ──────────────────────────────────────────────────────────
+  { code: 'MAT-160', name: 'Földelő szonda 1.5m Cu-bevonat',        unit: 'db', price: 8500,  discount: 0, category: 'foldeles' },
+  { code: 'MAT-161', name: 'EPH sín (egyenpotenciálú) Cu 10mm',     unit: 'db', price: 4200,  discount: 0, category: 'foldeles' },
+  { code: 'MAT-162', name: 'EPH összekötő vezető 6mm² zöld-sárga',  unit: 'm',  price: 420,   discount: 0, category: 'foldeles' },
+  { code: 'MAT-163', name: 'Földelő bilincs (szondához)',            unit: 'db', price: 1800,  discount: 0, category: 'foldeles' },
+
+  // ── Védelem bővítés (Batch A) ───────────────────────────────────────────────
+  { code: 'MAT-164', name: 'Fázissín (villás) 3P 12M',              unit: 'db', price: 3200,  discount: 0, category: 'vedelem' },
+  { code: 'MAT-165', name: 'Túlfeszültség-védő T1+T2 3P+N',        unit: 'db', price: 45000, discount: 0, category: 'vedelem' },
+  { code: 'MAT-166', name: 'Áramváltó 100/5A (DIN)',                 unit: 'db', price: 12000, discount: 0, category: 'vedelem' },
+  { code: 'MAT-167', name: 'Digitális almérő 3F DIN',                unit: 'db', price: 18000, discount: 0, category: 'vedelem' },
 ]
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
