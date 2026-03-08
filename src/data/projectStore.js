@@ -66,14 +66,17 @@ export function getProject(projectId) {
  * @param {string} projectId
  */
 export function deleteProject(projectId) {
-  const all = loadMeta().filter(p => p.id !== projectId)
-  saveMeta(all)
+  const before = loadMeta()
+  const after = before.filter(p => p.id !== projectId)
+  saveMeta(after)
+  return after.length < before.length  // true if actually removed
 }
 
 /**
  * Update project metadata (partial).
  * @param {string} projectId
  * @param {Object} updates
+ * @returns {boolean} true if project found and updated
  */
 export function updateProject(projectId, updates) {
   const all = loadMeta()
@@ -81,7 +84,9 @@ export function updateProject(projectId, updates) {
   if (idx >= 0) {
     all[idx] = { ...all[idx], ...updates }
     saveMeta(all)
+    return true
   }
+  return false
 }
 
 // ── Fallback project ────────────────────────────────────────────────────────

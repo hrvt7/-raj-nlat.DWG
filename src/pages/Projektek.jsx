@@ -746,24 +746,32 @@ function ProjectListView({ onOpenProject }) {
 
   const handleCreate = () => {
     if (!newName.trim()) return
-    const id = generateProjectId()
-    saveProject({ id, name: newName.trim(), description: '', legendPlanId: null, defaultQuoteOutputMode: 'combined', createdAt: new Date().toISOString() })
-    setNewName('')
-    setShowCreate(false)
-    reload()
+    try {
+      const id = generateProjectId()
+      saveProject({ id, name: newName.trim(), description: '', legendPlanId: null, defaultQuoteOutputMode: 'combined', createdAt: new Date().toISOString() })
+      setNewName('')
+      setShowCreate(false)
+      reload()
+    } catch (err) {
+      console.error('[Projektek] create failed:', err)
+    }
   }
 
-  const handleDelete = (projectId) => {
-    // Delete project templates
-    deleteTemplatesByProject(projectId)
-    // Move orphaned plans to the fallback "Importált tervek" project
-    const fallbackId = ensureFallbackProject()
-    const orphaned = loadPlans().filter(p => p.projectId === projectId)
-    for (const plan of orphaned) {
-      updatePlanMeta(plan.id, { projectId: fallbackId })
+  const handleDelete = async (projectId) => {
+    try {
+      // Delete project templates (async — must await)
+      await deleteTemplatesByProject(projectId)
+      // Move orphaned plans to the fallback "Importált tervek" project
+      const fallbackId = ensureFallbackProject()
+      const orphaned = loadPlans().filter(p => p.projectId === projectId)
+      for (const plan of orphaned) {
+        updatePlanMeta(plan.id, { projectId: fallbackId })
+      }
+      deleteProject(projectId)
+      reload()
+    } catch (err) {
+      console.error('[Projektek] delete failed:', err)
     }
-    deleteProject(projectId)
-    reload()
   }
 
   return (
@@ -998,65 +1006,81 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     }
     if (accepted.length === 0) return
     setUploading(true)
+    let savedCount = 0
     for (const file of accepted) {
-      const id = generatePlanId()
-      const ft = getFileType(file.name)
-      const layer1 = inferPlanMeta(file.name)
-      const plan = {
-        id, name: file.name, fileName: file.name, fileType: ft, fileSize: file.size,
-        projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
-        markerCount: 0, measureCount: 0, hasScale: false, detectedCount: 0, detectionReviewed: false,
-        inferredMeta: layer1.metaConfidence > 0 ? layer1 : null,
+      try {
+        const id = generatePlanId()
+        const ft = getFileType(file.name)
+        const layer1 = inferPlanMeta(file.name)
+        const plan = {
+          id, name: file.name, fileName: file.name, fileType: ft, fileSize: file.size,
+          projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
+          markerCount: 0, measureCount: 0, hasScale: false, detectedCount: 0, detectionReviewed: false,
+          inferredMeta: layer1.metaConfidence > 0 ? layer1 : null,
+        }
+        await savePlan(plan, file)
+        savedCount++
+        // Thumbnail only for PDF — DXF/DWG get fallback icon
+        if (ft === 'pdf') {
+          generatePdfThumb(file, id).then(d => { if (d) setThumbnails(prev => ({ ...prev, [id]: d })) }).catch(() => {})
+        }
+        // ── Layer 2: async text-based metadata enrichment (non-blocking) ──
+        ;(async () => {
+          try {
+            let textLines = []
+            if (ft === 'pdf') {
+              const buf = await file.arrayBuffer()
+              textLines = await extractPdfText(buf)
+            } else if (ft === 'dxf') {
+              const parseResult = await parseDxfFile(file, () => {})
+              const tbTexts = Object.values(parseResult.title_block || {}).flat()
+              textLines = tbTexts.length > 0 ? tbTexts : (parseResult.all_text || [])
+            }
+            if (textLines.length === 0) return
+            const layer2 = inferMetaFromText(textLines)
+            if (layer2.metaConfidence === 0) return
+            const merged = mergeMeta(layer1, layer2)
+            if (merged.metaConfidence > (layer1.metaConfidence || 0)) {
+              updatePlanMeta(id, { inferredMeta: merged })
+              reload()
+            }
+          } catch { /* silent — Layer 2 is best-effort */ }
+        })()
+      } catch (err) {
+        console.error(`[Projektek] plan save failed: ${file.name}`, err)
       }
-      await savePlan(plan, file)
-      // Thumbnail only for PDF — DXF/DWG get fallback icon
-      if (ft === 'pdf') {
-        generatePdfThumb(file, id).then(d => { if (d) setThumbnails(prev => ({ ...prev, [id]: d })) }).catch(() => {})
-      }
-      // ── Layer 2: async text-based metadata enrichment (non-blocking) ──
-      ;(async () => {
-        try {
-          let textLines = []
-          if (ft === 'pdf') {
-            const buf = await file.arrayBuffer()
-            textLines = await extractPdfText(buf)
-          } else if (ft === 'dxf') {
-            const parseResult = await parseDxfFile(file, () => {})
-            // Prefer title_block text (higher signal), then all_text as fallback
-            const tbTexts = Object.values(parseResult.title_block || {}).flat()
-            textLines = tbTexts.length > 0 ? tbTexts : (parseResult.all_text || [])
-          }
-          if (textLines.length === 0) return
-          const layer2 = inferMetaFromText(textLines)
-          if (layer2.metaConfidence === 0) return
-          const merged = mergeMeta(layer1, layer2)
-          if (merged.metaConfidence > (layer1.metaConfidence || 0)) {
-            updatePlanMeta(id, { inferredMeta: merged })
-            reload()
-          }
-        } catch { /* silent — Layer 2 is best-effort */ }
-      })()
     }
     setUploading(false)
     reload()
-    toast.show(`${accepted.length} tervrajz feltöltve`, 'success')
+    if (savedCount === accepted.length) {
+      toast.show(`${savedCount} tervrajz feltöltve`, 'success')
+    } else if (savedCount > 0) {
+      toast.show(`${savedCount}/${accepted.length} tervrajz sikeresen feltöltve`, 'warning')
+    } else {
+      toast.show('A feltöltés sikertelen', 'error')
+    }
   }, [projectId, reload, toast])
 
   // Upload legend PDF
   const handleLegendFile = useCallback(async (files) => {
     const file = Array.from(files).find(f => f.name.toLowerCase().endsWith('.pdf'))
     if (!file) return
-    const id = generatePlanId()
-    const plan = {
-      id, name: `[Jelmagyarázat] ${file.name}`, fileName: file.name, fileType: 'pdf', fileSize: file.size,
-      projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
+    try {
+      const id = generatePlanId()
+      const plan = {
+        id, name: `[Jelmagyarázat] ${file.name}`, fileName: file.name, fileType: 'pdf', fileSize: file.size,
+        projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
+      }
+      await savePlan(plan, file)
+      updateProject(projectId, { legendPlanId: id })
+      reload()
+      // Open legend panel for auto-extract
+      if (onLegendPanel) onLegendPanel({ projectId, legendPlanId: id })
+    } catch (err) {
+      console.error('[Projektek] legend upload failed:', err)
+      toast.show('Jelmagyarázat feltöltése sikertelen', 'error')
     }
-    await savePlan(plan, file)
-    updateProject(projectId, { legendPlanId: id })
-    reload()
-    // Open legend panel for auto-extract
-    if (onLegendPanel) onLegendPanel({ projectId, legendPlanId: id })
-  }, [projectId, reload, onLegendPanel])
+  }, [projectId, reload, onLegendPanel, toast])
 
   const handleOpenSaved = useCallback(async (plan) => {
     setOpeningId(plan.id)
@@ -1070,10 +1094,15 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   }, [onOpenFile])
 
   const handleDelete = useCallback(async (planId) => {
-    await deletePlan(planId)
-    setSelected(prev => { const s = { ...prev }; delete s[planId]; return s })
-    reload()
-  }, [reload])
+    try {
+      await deletePlan(planId)
+      setSelected(prev => { const s = { ...prev }; delete s[planId]; return s })
+      reload()
+    } catch (err) {
+      console.error('[Projektek] plan delete failed:', err)
+      toast.show('Tervrajz törlése sikertelen', 'error')
+    }
+  }, [reload, toast])
 
   const handleMetaChange = useCallback((planId, updates) => {
     updatePlanMeta(planId, updates)
@@ -1100,7 +1129,12 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     return 1
   })()
 
-  if (!project) return <div style={{ padding: 40, fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Betöltés…</div>
+  if (!project) return (
+    <div style={{ padding: 40, textAlign: 'center' }}>
+      <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.muted, marginBottom: 12 }}>A projekt nem található vagy törölve lett.</p>
+      <button onClick={onBack} style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent, background: 'none', border: `1px solid ${C.accent}`, borderRadius: 6, padding: '6px 14px', cursor: 'pointer' }}>Vissza a projektekhez</button>
+    </div>
+  )
 
   return (
     <div>
