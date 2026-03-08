@@ -1328,7 +1328,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
       // ── Resolve output mode: prefer estimation panel override, then project default ──
       const planMeta = planId ? getPlanMeta(planId) : null
-      const prjDefault = data?.quoteOverrides?._outputMode
+      const prjDefault = initialData?.quoteOverrides?._outputMode
         || (planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined')
       const _ieD = OUTPUT_MODE_INCLEXCL[prjDefault] || OUTPUT_MODE_INCLEXCL.combined
       const _qs = loadSettings().quote
@@ -1349,6 +1349,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         exclusions:   _ieD.exclusions || _qs.default_exclusions,
         validityText: _qs.default_validity_text,
         paymentTermsText: _qs.default_payment_terms_text,
+        vatPercent,
         gross:          Math.round(pricing.total),
         totalMaterials: Math.round(pricing.materialCost),
         totalLabor:     Math.round(pricing.laborCost),

@@ -83,3 +83,28 @@ export function updateProject(projectId, updates) {
     saveMeta(all)
   }
 }
+
+// ── Fallback project ────────────────────────────────────────────────────────
+// When a project is deleted, its plans are moved to this catch-all project
+// rather than being orphaned (projectId = undefined).
+const FALLBACK_PROJECT_ID = 'PRJ-imported'
+
+/**
+ * Ensure the fallback "Importált tervek" project exists and return its ID.
+ */
+export function ensureFallbackProject() {
+  const existing = loadMeta().find(p => p.id === FALLBACK_PROJECT_ID)
+  if (existing) return FALLBACK_PROJECT_ID
+  saveMeta([
+    ...loadMeta(),
+    {
+      id: FALLBACK_PROJECT_ID,
+      name: 'Importált tervek',
+      description: 'Törölt projektekből ide kerülnek a tervrajzok',
+      legendPlanId: null,
+      defaultQuoteOutputMode: 'combined',
+      createdAt: new Date().toISOString(),
+    },
+  ])
+  return FALLBACK_PROJECT_ID
+}

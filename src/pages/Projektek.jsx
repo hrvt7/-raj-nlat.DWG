@@ -9,6 +9,7 @@ import {
 } from '../data/planStore.js'
 import {
   loadProjects, saveProject, deleteProject, generateProjectId, getProject, updateProject,
+  ensureFallbackProject,
 } from '../data/projectStore.js'
 import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
@@ -735,15 +736,14 @@ function ProjectListView({ onOpenProject }) {
   }
 
   const handleDelete = (projectId) => {
-    // Delete project + its templates (plans stay orphaned → still visible in Tervrajzok)
+    // Delete project templates
     deleteTemplatesByProject(projectId)
-    // Remove projectId from plans
-    const allPlans = loadPlans()
-    allPlans.filter(p => p.projectId === projectId).forEach(p => {
-      const meta = JSON.parse(localStorage.getItem('takeoffpro_plans_meta') || '[]')
-      const idx = meta.findIndex(m => m.id === p.id)
-      if (idx >= 0) { delete meta[idx].projectId; localStorage.setItem('takeoffpro_plans_meta', JSON.stringify(meta)) }
-    })
+    // Move orphaned plans to the fallback "Importált tervek" project
+    const fallbackId = ensureFallbackProject()
+    const orphaned = loadPlans().filter(p => p.projectId === projectId)
+    for (const plan of orphaned) {
+      updatePlanMeta(plan.id, { projectId: fallbackId })
+    }
     deleteProject(projectId)
     reload()
   }

@@ -70,18 +70,23 @@ export async function loadQuotesRemote() {
 export async function saveQuoteRemote(quote) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
+  // Nettó = quote.gross (== summary.grandTotal)
+  const netFt = Math.round(quote.gross || quote.summary?.grandTotal || 0)
+  // ÁFA% — persisted on quote if available, otherwise default 27%
+  const vat = quote.vatPercent || 27
+  const grossFt = Math.round(netFt * (1 + vat / 100))
   const { error } = await supabase.from('quotes').upsert({
     user_id:        user.id,
     quote_number:   quote.id,
     status:         quote.status || 'draft',
-    client_name:    quote.context?.client_name || '',
-    project_name:   quote.context?.project_name || '',
+    client_name:    quote.client_name || quote.clientName || '',
+    project_name:   quote.project_name || quote.projectName || '',
     context:        quote.context || {},
     pricing_data:   quote,
     cable_estimate: quote.cableEstimate || {},
-    total_net_ft:   Math.round(quote.totalNet || 0),
-    total_gross_ft: Math.round(quote.totalGross || 0),
-    vat_percent:    quote.vatPercent || 27,
+    total_net_ft:   netFt,
+    total_gross_ft: grossFt,
+    vat_percent:    vat,
     notes:          quote.notes || '',
   }, { onConflict: 'user_id,quote_number' })
   if (error) throw error

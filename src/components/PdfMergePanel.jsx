@@ -92,8 +92,8 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
             workItems: wis,
             materials: mats,
             context: null,
-            markup: stg?.markup ?? 0.15,
-            hourlyRate: stg?.hourlyRate ?? 8000,
+            markup: (stg?.labor?.markup_percent ?? 15) / 100,
+            hourlyRate: stg?.labor?.hourly_rate ?? 9000,
             cableEstimate: null,
             difficultyMode: 'normal',
           })
@@ -183,8 +183,8 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
         totalWorkHours: pricing.laborHours,
       },
       pricingData: {
-        hourlyRate: settings?.hourlyRate ?? _allSettings.labor.hourly_rate,
-        markup_pct: settings?.markup ?? (_allSettings.labor.markup_percent / 100),
+        hourlyRate: settings?.labor?.hourly_rate ?? _allSettings.labor.hourly_rate,
+        markup_pct: (settings?.labor?.markup_percent ?? _allSettings.labor.markup_percent) / 100,
       },
       items,
       sourceType: 'pdf_merge',
@@ -420,7 +420,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   }}>
                     <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-                      Végösszeg (+ {Math.round((settings?.markup ?? 0.15) * 100)}% árrés)
+                      Végösszeg (+ {settings?.labor?.markup_percent ?? 15}% árrés)
                     </div>
                     <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.accent }}>
                       {fmtFt(pricing.total)}
