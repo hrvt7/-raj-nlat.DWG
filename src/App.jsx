@@ -1232,13 +1232,15 @@ function SaaSShell() {
                 <span style={{ display: 'block', width: 15, height: 1.5, background: C.muted, borderRadius: 1 }} />
               </button>
             )}
-            <div style={{ color: C.text, fontWeight: 600, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {viewingQuote
-                ? viewingQuote.projectName
-                : page === 'dashboard'
-                  ? (settings?.company?.name || '')
-                  : getPageTitle()}
-            </div>
+            {page === 'dashboard' && !viewingQuote ? (
+              <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: isMobile ? 16 : 19, letterSpacing: '-0.01em', color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {settings?.company?.name || ''}
+              </div>
+            ) : (
+              <div style={{ color: C.text, fontWeight: 600, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {viewingQuote ? viewingQuote.projectName : getPageTitle()}
+              </div>
+            )}
           </div>
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
