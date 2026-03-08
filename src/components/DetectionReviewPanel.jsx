@@ -133,7 +133,7 @@ function CategoryPicker({ currentCategory, onPick, detectionId }) {
   )
 }
 
-function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle, onLocate, onRemap, scoreThreshold }) {
+function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle, onLocate, onRemap, scoreThreshold, onCaptureSymbol }) {
   const cat = getCat(category)
   const accepted = detections.filter(d => d.accepted !== false)
   // Sort by score descending for easier review
@@ -199,10 +199,33 @@ function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onTogg
                 }
                 {Math.round(d.score * 100)}%
                 {d.pageNum > 1 && <span style={{ opacity: 0.7 }}>· o{d.pageNum}</span>}
+                {/* Source badge: project_memory vs standard */}
+                {d.detectionSource === 'project_memory' && (
+                  <span style={{
+                    fontSize: 7, padding: '1px 3px', borderRadius: 3,
+                    background: 'rgba(76,201,240,0.15)', color: C.blue,
+                    border: '1px solid rgba(76,201,240,0.3)',
+                    marginLeft: 2,
+                  }}>PM</span>
+                )}
               </button>
               {/* Category remap picker */}
               {onRemap && (
                 <CategoryPicker currentCategory={d.category} onPick={onRemap} detectionId={d.id} />
+              )}
+              {/* Capture as custom symbol — only on standard detections (project memory already is captured) */}
+              {onCaptureSymbol && d.detectionSource !== 'project_memory' && (
+                <button
+                  onClick={() => onCaptureSymbol(d)}
+                  title="Mentés projekt szimbólumként"
+                  style={{
+                    fontFamily: 'DM Mono', fontSize: 7,
+                    color: C.blue, background: 'rgba(76,201,240,0.06)',
+                    border: `1px solid rgba(76,201,240,0.2)`,
+                    borderRadius: 4, padding: '2px 4px', cursor: 'pointer',
+                    marginLeft: 1,
+                  }}
+                >💾</button>
               )}
               {/* Locate button — shows where this detection is on the plan */}
               {onLocate && (
@@ -333,7 +356,7 @@ function NoTemplatesWarning({ onClose }) {
 }
 
 // ─── DetectionReviewPanel ─────────────────────────────────────────────────────
-export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun, pdfCandidates }) {
+export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun, pdfCandidates, onCaptureSymbol }) {
   const [phase, setPhase] = useState('loading') // loading | no_templates | detecting | review | saving | done
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState(0)
@@ -390,6 +413,13 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
       d.id === detId ? { ...d, accepted } : d
     ))
   }, [])
+
+  // ── Custom symbol capture (delegates to parent) ──
+  const handleCaptureSymbol = useCallback((detection) => {
+    if (onCaptureSymbol) {
+      onCaptureSymbol(detection)
+    }
+  }, [onCaptureSymbol])
 
   // ── Batch bucket actions ──
   const handleAcceptAllGreen = useCallback(() => {
@@ -876,6 +906,7 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                         onLocate={handleLocate}
                         onRemap={handleRemap}
                         scoreThreshold={scoreThreshold}
+                        onCaptureSymbol={handleCaptureSymbol}
                       />
                     )
                   })}

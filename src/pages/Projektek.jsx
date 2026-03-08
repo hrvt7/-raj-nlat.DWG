@@ -27,6 +27,7 @@ import { triggerAnalysis } from '../services/pdfAnalysis/analysisRunner.js'
 import { ANALYSIS_STATUS } from '../services/pdfAnalysis/analysisRunner.js'
 import { getCachedDetection } from '../services/pdfDetection/index.js'
 import { adaptCandidates } from '../services/pdfDetection/candidateAdapter.js'
+import { captureFromDetection } from '../data/customSymbolStore.js'
 import DetectionReviewPanel from '../components/DetectionReviewPanel.jsx'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
@@ -1309,6 +1310,25 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     reload()
   }, [reload])
 
+  // ── Custom symbol capture from PDF review ──
+  const handleCaptureSymbol = useCallback((detection) => {
+    // Prompt-less capture: use the detection's label/category directly
+    // The user already sees the detection, so we trust the context
+    try {
+      captureFromDetection({
+        projectId,
+        label: detection.label || 'Egyéni szimbólum',
+        category: detection.category || 'other',
+        color: detection.color,
+        detection,
+      })
+      toast?.(`"${detection.label || 'Szimbólum'}" mentve a projekt memóriába.`)
+    } catch (err) {
+      console.error('[Projektek] custom symbol capture failed:', err)
+      toast?.('Hiba a szimbólum mentésekor.')
+    }
+  }, [projectId, toast])
+
   const workflowStep = (() => {
     if (plans.length === 0) return 0
     const hasMeta = plans.some(p => p.inferredMeta?.metaConfidence > 0)
@@ -1428,6 +1448,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           onDone={handlePdfReviewDone}
           projectId={projectId}
           onLocateDetection={null}
+          onCaptureSymbol={handleCaptureSymbol}
         />
       )}
     </div>

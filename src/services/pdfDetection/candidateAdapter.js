@@ -5,10 +5,17 @@
 // This adapter is the ONLY bridge between the two models.  Downstream UI
 // components never read legacy symbols.items directly.
 //
-// Truth source: DetectionCandidate[] from pdfDetection/ruleEngine.js
+// Handles TWO candidate sources:
+//   1. Standard library (ruleEngine.js) → source: 'pdf_rule_engine'
+//   2. Project memory (projectMemory.js) → source: 'project_memory'
+//
+// Both produce DetectionCandidate[] with the same shape.  The adapter
+// normalizes source tagging, category mapping, and acceptance defaults.
+//
+// Truth source: DetectionCandidate[] from pdfDetection/ruleEngine.js + projectMemory.js
 // Target shape: { id, planId, pageNum, x, y, score, category, color,
 //                 templateId, label, accepted, confidenceBucket, evidence,
-//                 requiresReview, symbolId, qty, asmId }
+//                 requiresReview, symbolId, qty, asmId, detectionSource }
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { CONFIDENCE_BUCKET } from './ruleEngine.js'
@@ -46,9 +53,20 @@ function mapColor(category) {
   return CATEGORY_COLORS[category] || CATEGORY_COLORS.other
 }
 
+// ── Detection source constants ──────────────────────────────────────────────
+
+export const DETECTION_SOURCE = /** @type {const} */ ({
+  STANDARD: 'standard',
+  PROJECT_MEMORY: 'project_memory',
+  MANUAL: 'manual',
+})
+
 // ── Confidence bucket → initial acceptance ──────────────────────────────────
 
-function initialAcceptance(bucket) {
+function initialAcceptance(bucket, candidateSource) {
+  // Project memory matches NEVER auto-accept, regardless of bucket
+  if (candidateSource === 'project_memory') return false
+
   if (bucket === CONFIDENCE_BUCKET.HIGH) return true    // green → auto-accept
   if (bucket === CONFIDENCE_BUCKET.REVIEW) return false // yellow → pending, requires explicit review
   return false                                          // red → default reject
@@ -64,7 +82,21 @@ function initialAcceptance(bucket) {
  * @returns {Object} review panel detection object
  */
 export function adaptCandidate(candidate, planId) {
-  const category = mapCategory(candidate.symbolId)
+  const isProjectMemory = candidate.source === 'project_memory'
+
+  // For project memory candidates, use their custom category/color
+  // For standard candidates, map from symbolId
+  const category = isProjectMemory
+    ? (candidate.customCategory || 'other')
+    : mapCategory(candidate.symbolId)
+  const color = isProjectMemory
+    ? (candidate.customColor || mapColor(category))
+    : mapColor(category)
+
+  const detectionSource = isProjectMemory
+    ? DETECTION_SOURCE.PROJECT_MEMORY
+    : DETECTION_SOURCE.STANDARD
+
   return {
     // ── identity ──
     id: `pdfdet-${candidate.symbolId}-p${candidate.pageNumber}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -78,12 +110,12 @@ export function adaptCandidate(candidate, planId) {
     // ── score / classification ──
     score: candidate.confidence,
     category,
-    color: mapColor(category),
+    color,
     templateId: null,  // PDF candidates have no template — rule engine based
     label: candidate.symbolType,
 
     // ── review state ──
-    accepted: initialAcceptance(candidate.confidenceBucket),
+    accepted: initialAcceptance(candidate.confidenceBucket, candidate.source),
 
     // ── extended fields (for enhanced review UX) ──
     confidenceBucket: candidate.confidenceBucket,
@@ -93,6 +125,9 @@ export function adaptCandidate(candidate, planId) {
     qty: candidate.qty || 1,
     asmId: candidate.asmId || null,
     source: 'pdf_rule_engine',
+
+    // ── source tagging (standard vs project_memory) ──
+    detectionSource,
   }
 }
 
@@ -135,7 +170,10 @@ export function groupByBucket(detections) {
 export function batchAcceptGreen(detections) {
   return detections.map(d => ({
     ...d,
-    accepted: d.confidenceBucket === CONFIDENCE_BUCKET.HIGH ? true : d.accepted,
+    // Project memory matches never auto-accept in batch, even if scored as HIGH
+    accepted: (d.confidenceBucket === CONFIDENCE_BUCKET.HIGH && d.detectionSource !== DETECTION_SOURCE.PROJECT_MEMORY)
+      ? true
+      : d.accepted,
   }))
 }
 

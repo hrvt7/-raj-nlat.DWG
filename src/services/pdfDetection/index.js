@@ -14,6 +14,7 @@
 
 import localforage from 'localforage'
 import { runRuleEngine } from './ruleEngine.js'
+import { runProjectMemory } from './projectMemory.js'
 
 // ── IndexedDB store for detection candidates ─────────────────────────────────
 
@@ -27,18 +28,44 @@ const detectionCandidateStore = localforage.createInstance({
 
 /**
  * Run detection on a PdfAnalysisResult and persist candidates.
+ * Includes both standard rule engine AND project memory matching.
  *
  * @param {import('../pdfAnalysis/types.js').PdfAnalysisResult} analysisResult
  * @param {string} analysisCacheKey — the analysis cache key (used to link detections)
+ * @param {Object[]} [projectCustomSymbols=[]] — custom symbols from customSymbolStore
  * @returns {Promise<{ candidates: import('./ruleEngine.js').DetectionCandidate[], meta: import('./ruleEngine.js').DetectionMeta }>}
  */
-export async function detectSymbols(analysisResult, analysisCacheKey) {
-  const { candidates, meta } = runRuleEngine(analysisResult)
+export async function detectSymbols(analysisResult, analysisCacheKey, projectCustomSymbols = []) {
+  // 1. Standard rule engine (canonical symbol library)
+  const { candidates: standardCandidates, meta } = runRuleEngine(analysisResult)
+
+  // 2. Project memory matching (custom symbols from this project)
+  let allCandidates = [...standardCandidates]
+  if (projectCustomSymbols.length > 0) {
+    const { candidates: memoryCandidates } = runProjectMemory(
+      projectCustomSymbols,
+      analysisResult,
+      standardCandidates,  // for dedup
+    )
+    if (memoryCandidates.length > 0) {
+      allCandidates.push(...memoryCandidates)
+      // Update meta counts
+      for (const mc of memoryCandidates) {
+        meta.totalCandidates++
+        if (mc.confidenceBucket === 'high') meta.highConfidence++
+        else if (mc.confidenceBucket === 'review') meta.reviewNeeded++
+        else meta.lowConfidence++
+      }
+      if (!meta.evidenceSources.includes('project_memory')) {
+        meta.evidenceSources.push('project_memory')
+      }
+    }
+  }
 
   // Persist to IndexedDB (keyed by analysis cache key for 1:1 linkage)
   if (analysisCacheKey) {
     await detectionCandidateStore.setItem(analysisCacheKey, {
-      candidates,
+      candidates: allCandidates,
       meta,
       detectedAt: new Date().toISOString(),
     }).catch(err => {
@@ -46,7 +73,7 @@ export async function detectSymbols(analysisResult, analysisCacheKey) {
     })
   }
 
-  return { candidates, meta }
+  return { candidates: allCandidates, meta }
 }
 
 /**
