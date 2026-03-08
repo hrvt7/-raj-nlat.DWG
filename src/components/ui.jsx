@@ -311,7 +311,7 @@ export function WorkflowStepper({ currentStep = 0 }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20,
-      padding: '8px 0',
+      padding: '8px 0', width: '100%',
     }}>
       {steps.map((step, i) => {
         const isDone = i < currentStep
@@ -322,7 +322,7 @@ export function WorkflowStepper({ currentStep = 0 }) {
           <React.Fragment key={i}>
             {i > 0 && (
               <div style={{
-                flex: 1, height: 1, maxWidth: 40,
+                flex: 1, height: 1,
                 background: isDone ? 'rgba(0,229,160,0.35)' : C.border,
                 margin: '0 4px',
               }} />

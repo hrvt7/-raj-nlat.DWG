@@ -189,7 +189,7 @@ function Checkbox({ checked, onChange }) {
 }
 
 // ─── Selection toolbar ────────────────────────────────────────────────────────
-function SelectionToolbar({ count, onDetect, onMerge, onDeselect }) {
+function SelectionToolbar({ count, onMerge, onDeselect }) {
   return (
     <div style={{
       background: '#16161A', border: `1px solid rgba(0,229,160,0.25)`,
@@ -204,7 +204,6 @@ function SelectionToolbar({ count, onDetect, onMerge, onDeselect }) {
         {count} terv kijelölve
       </span>
       <div style={{ flex: 1, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <TlBtn icon={<ScanIcon size={13} color={C.blue} />} label="Szimbólumdetektálás" color={C.blue} onClick={onDetect} />
         <TlBtn icon={<CalcIcon size={13} color={C.accent} />} label={count === 1 ? "Ajánlat generálása" : "Közös ajánlat generálása"} color={C.accent} onClick={onMerge} />
       </div>
       <button onClick={onDeselect} style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>
@@ -1197,7 +1196,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
       {selectedCount > 0 && (
         <SelectionToolbar
           count={selectedCount}
-          onDetect={() => onDetectPanel && onDetectPanel(selectedPlans, projectId)}
           onMerge={() => onMergePanel && onMergePanel(selectedPlans)}
           onDeselect={deselectAll}
         />
