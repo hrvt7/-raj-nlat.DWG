@@ -1033,7 +1033,7 @@ function SaaSShell() {
     const tradeLabel = activeTrade ? TRADE_LABELS[activeTrade] : null
     const baseTitles = {
       dashboard: 'Dashboard', quotes: 'Ajánlatok',
-      projektek: 'Projektek', 'projektek-workspace': 'Projektek',
+      projektek: '', 'projektek-workspace': '',
       'work-items': 'Munkatételek', materials: 'Anyagok',
       assemblies: 'Assemblyk', settings: 'Beállítások',
     }

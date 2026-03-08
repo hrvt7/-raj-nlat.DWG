@@ -98,48 +98,51 @@ function FolderIcon({ size = 38, color = C.accent }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
 }
 
-// ─── Projektkártya illusztráció (cable-grid / drop-zone motívum) ─────────────
+// ─── Projektkártya illusztráció (document scanner motívum) ───────────────────
 function ProjectCardIllustration({ size = 48 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
       <style>{`
-        .pc-grid { stroke: rgba(255,255,255,0.07); stroke-width: 0.5; opacity: 0.5; }
-        .pc-zone { stroke: #4CC9F0; stroke-width: 2.5; fill: none; stroke-dasharray: 14 14; stroke-linecap: round; opacity: 0.7; }
-        .pc-dot { fill: #4CC9F0; opacity: 0.55; }
-        .pc-cable-bg { stroke: rgba(255,255,255,0.08); stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-        .pc-cable-pulse {
-          stroke: #00E5A0; stroke-width: 2.5; fill: none;
-          stroke-linecap: round; stroke-linejoin: round;
-          filter: url(#pc-gl); stroke-dasharray: 20 150;
-          animation: pc-flow 3.5s linear infinite;
+        .pc-grid-bg { stroke: rgba(255,255,255,0.18); stroke-width: 1; opacity: 0.3; }
+        .pc-doc-outline { stroke: #17C7FF; stroke-width: 2.5; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+        .pc-doc-inner { stroke: rgba(255,255,255,0.18); stroke-width: 2; fill: none; stroke-dasharray: 4 6; stroke-linecap: round; }
+        .pc-scan-line { stroke: #21F3A3; stroke-width: 2; filter: url(#pc-glow-scan); }
+        .pc-scanner-group { animation: pc-scan-move 3s ease-in-out infinite; }
+        @keyframes pc-scan-move {
+          0%, 100% { transform: translateY(120px); }
+          50% { transform: translateY(380px); }
         }
-        .pc-rev { animation: pc-flow-rev 3.5s linear infinite; }
-        @keyframes pc-flow { 0% { stroke-dashoffset: 170; } 100% { stroke-dashoffset: 0; } }
-        @keyframes pc-flow-rev { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 170; } }
       `}</style>
       <defs>
-        <pattern id="pc-g1" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M 40 0 L 0 0 0 40" className="pc-grid" fill="none"/>
+        <pattern id="pc-grid2" width="16" height="16" patternUnits="userSpaceOnUse">
+          <path d="M 16 0 L 0 0 0 16" className="pc-grid-bg" fill="none"/>
         </pattern>
-        <filter id="pc-gl" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="2.5" result="blur"/>
-          <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+        <filter id="pc-glow-scan" x="-20%" y="-50%" width="140%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
         </filter>
+        <linearGradient id="pc-scan-trail" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="#21F3A3" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#21F3A3" stopOpacity="0" />
+        </linearGradient>
       </defs>
-      <rect width="512" height="512" fill="url(#pc-g1)"/>
-      <rect x="176" y="176" width="160" height="160" rx="24" className="pc-zone"/>
-      <circle cx="176" cy="176" r="3.5" className="pc-dot"/>
-      <circle cx="336" cy="176" r="3.5" className="pc-dot"/>
-      <circle cx="176" cy="336" r="3.5" className="pc-dot"/>
-      <circle cx="336" cy="336" r="3.5" className="pc-dot"/>
-      <path d="M 64 256 L 120 256 L 152 224 L 176 224" className="pc-cable-bg"/>
-      <path d="M 64 256 L 120 256 L 152 224 L 176 224" className="pc-cable-pulse pc-rev"/>
-      <path d="M 448 256 L 392 256 L 360 288 L 336 288" className="pc-cable-bg"/>
-      <path d="M 448 256 L 392 256 L 360 288 L 336 288" className="pc-cable-pulse pc-rev"/>
-      <path d="M 256 64 L 256 120 L 224 152 L 224 176" className="pc-cable-bg"/>
-      <path d="M 256 64 L 256 120 L 224 152 L 224 176" className="pc-cable-pulse pc-rev"/>
-      <path d="M 256 448 L 256 392 L 288 360 L 288 336" className="pc-cable-bg"/>
-      <path d="M 256 448 L 256 392 L 288 360 L 288 336" className="pc-cable-pulse pc-rev"/>
+      <rect width="512" height="512" fill="url(#pc-grid2)" />
+      <g>
+        <path d="M 176 112 L 288 112 L 336 160 L 336 400 L 176 400 Z" className="pc-doc-outline" />
+        <path d="M 288 112 L 288 160 L 336 160" className="pc-doc-outline" />
+        <line x1="208" y1="208" x2="304" y2="208" className="pc-doc-inner" />
+        <line x1="208" y1="256" x2="304" y2="256" className="pc-doc-inner" />
+        <line x1="208" y1="304" x2="272" y2="304" className="pc-doc-inner" />
+        <path d="M 160 112 L 192 112 M 176 96 L 176 128" stroke="#17C7FF" strokeWidth="1"/>
+        <path d="M 160 400 L 192 400 M 176 384 L 176 416" stroke="#17C7FF" strokeWidth="1"/>
+        <path d="M 320 400 L 352 400 M 336 384 L 336 416" stroke="#17C7FF" strokeWidth="1"/>
+      </g>
+      <g className="pc-scanner-group">
+        <rect x="156" y="-30" width="200" height="30" fill="url(#pc-scan-trail)" />
+        <line x1="156" y1="0" x2="356" y2="0" className="pc-scan-line" />
+        <polygon points="156,0 150,-5 150,5" fill="#21F3A3" />
+        <polygon points="356,0 362,-5 362,5" fill="#21F3A3" />
+      </g>
     </svg>
   )
 }
@@ -674,9 +677,9 @@ function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
         boxShadow: hov ? '0 4px 20px rgba(0,229,160,0.08)' : 'none',
       }}
     >
-      {/* Thumbnail area — larger SVG, more breathing room */}
-      <div style={{ height: 148, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}` }}>
-        <ProjectCardIllustration size={72} />
+      {/* Thumbnail area */}
+      <div style={{ height: 110, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${C.border}`, overflow: 'hidden' }}>
+        <ProjectCardIllustration size={80} />
       </div>
       {/* Project title — centered chip/band style */}
       <div style={{ padding: '14px 14px 0', textAlign: 'center' }}>
@@ -707,10 +710,10 @@ function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
             Megnyitás
           </button>
           <button onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
-            style={{ padding: '6px 10px', borderRadius: 5, background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)'; e.currentTarget.style.color = '#FF6B6B' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted }}>
-            <TrashIcon size={13} />
+            style={{ padding: '6px 10px', borderRadius: 5, background: 'transparent', border: `1px solid ${C.border}`, color: '#FF6B6B', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', opacity: 0.55 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)'; e.currentTarget.style.opacity = '1' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.opacity = '0.55' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
       </div>
@@ -860,7 +863,7 @@ function ProjectListView({ onOpenProject }) {
           }
         />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
           {projects.map(p => (
             <ProjectCard
               key={p.id}
