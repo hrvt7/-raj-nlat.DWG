@@ -1,9 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { C, fmt, StatCard, Card, QuoteStatusBadge, Button, EmptyState } from '../components/ui.jsx'
+import { C, fmt, StatCard, Card, QuoteStatusBadge, Button, EmptyState, useToast } from '../components/ui.jsx'
 import { loadWorkItems, loadMaterials, loadAssemblies } from '../data/store.js'
+import { isDemoSeeded, seedDemoData, hasDemoData, clearDemoData } from '../data/demoSeed.js'
 
-export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote }) {
+export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, onRefresh }) {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+  const [demoLoaded, setDemoLoaded] = useState(false)
+  const toast = useToast()
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768)
     window.addEventListener('resize', fn)
@@ -113,8 +116,22 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote })
           {recentQuotes.length === 0 ? (
             <EmptyState
               title="Még nincs ajánlat"
-              desc="Hozd létre az első ajánlatot DXF/DWG feltöltéssel."
-              action={<Button onClick={() => onNavigate('new-quote')}>Új ajánlat</Button>}
+              desc="Hozd létre az első projektet, töltsd fel a tervrajzot, majd készíts ajánlatot."
+              action={
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <Button onClick={() => onNavigate('felmeres')}>Új projekt</Button>
+                  {!isDemoSeeded() && (
+                    <Button variant="ghost" onClick={() => {
+                      const { seeded } = seedDemoData()
+                      if (seeded) {
+                        setDemoLoaded(true)
+                        toast.show('Mintaadatok betöltve', 'success')
+                        if (onRefresh) onRefresh()
+                      }
+                    }}>Mintaadatok betöltése</Button>
+                  )}
+                </div>
+              }
             />
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -178,6 +195,61 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote })
               <Button variant="ghost" size="sm" onClick={() => onNavigate('settings')} style={{ width: '100%', justifyContent: 'center' }}>
                 Beállítások →
               </Button>
+            </Card>
+          )}
+
+          {/* Demo path guidance */}
+          {quotes.length <= 2 && (
+            <Card style={{ padding: 18, border: `1px solid rgba(0,229,160,0.15)`, background: 'rgba(0,229,160,0.03)' }}>
+              <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, marginBottom: 10 }}>
+                Javasolt munkafolyamat
+              </div>
+              {[
+                { num: '1', label: 'Projekt létrehozása', desc: 'Felmérés menüpont', page: 'felmeres' },
+                { num: '2', label: 'Tervrajz feltöltése', desc: 'DXF/DWG/PDF fájl', page: 'felmeres' },
+                { num: '3', label: 'Kalkuláció készítése', desc: 'Automatikus mennyiségkimutatás', page: null },
+                { num: '4', label: 'Ajánlat generálása', desc: 'PDF export a megrendelőnek', page: 'quotes' },
+              ].map((step, i) => (
+                <div key={i}
+                  onClick={step.page ? () => onNavigate(step.page) : undefined}
+                  style={{
+                    display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 0',
+                    cursor: step.page ? 'pointer' : 'default',
+                    borderBottom: i < 3 ? `1px solid ${C.border}` : 'none',
+                  }}
+                >
+                  <div style={{
+                    width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                    background: 'rgba(0,229,160,0.12)', border: '1px solid rgba(0,229,160,0.25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'DM Mono', fontSize: 10, fontWeight: 700, color: C.accent,
+                  }}>{step.num}</div>
+                  <div>
+                    <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>{step.label}</div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{step.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+
+          {/* Demo data cleanup */}
+          {hasDemoData() && (
+            <Card style={{ padding: 14, border: `1px solid ${C.border}`, background: C.bgCard }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted }}>
+                  Mintaadatok aktívak
+                </div>
+                <button onClick={() => {
+                  const result = clearDemoData()
+                  toast.show(`Mintaadatok törölve (${result.removedProjects + result.removedPlans + result.removedQuotes} elem)`, 'success')
+                  if (onRefresh) onRefresh()
+                }} style={{
+                  background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6,
+                  padding: '4px 10px', fontFamily: 'DM Mono', fontSize: 10, color: C.textSub,
+                  cursor: 'pointer',
+                }}>Törlés</button>
+              </div>
             </Card>
           )}
 

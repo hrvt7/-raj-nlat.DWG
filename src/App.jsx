@@ -1313,11 +1313,13 @@ function SaaSShell() {
               ) : page === 'dashboard' ? (
                 <Dashboard quotes={quotes} settings={settings}
                   onNavigate={p => { setViewingQuote(null); setPage(p) }}
-                  onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
+                  onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }}
+                  onRefresh={() => setQuotes(loadQuotes())} />
               ) : page === 'quotes' ? (
                 <Quotes quotes={quotes} onQuotesChange={handleQuotesChange}
                   onNavigate={p => setPage(p)}
-                  onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }} />
+                  onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }}
+                  onRefresh={() => setQuotes(loadQuotes())} />
               ) : page === 'work-items' ? (
                 <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} activeTrade={activeTrade} />
               ) : page === 'materials' ? (

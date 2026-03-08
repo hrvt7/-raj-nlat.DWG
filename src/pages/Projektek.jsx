@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { C, ConfirmDialog, WorkflowStepper, useToast } from '../components/ui.jsx'
+import { C, ConfirmDialog, WorkflowStepper, EmptyState, Button, useToast } from '../components/ui.jsx'
+import { isDemoSeeded, seedDemoData } from '../data/demoSeed.js'
 import {
   loadPlans, getPlanFile, savePlan, deletePlan,
   generatePlanId, savePlanThumbnail, getPlanThumbnail, getPlansByProject,
@@ -842,13 +843,25 @@ function ProjectListView({ onOpenProject }) {
 
       {/* Project grid */}
       {projects.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48, color: C.muted }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1.2" strokeLinecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          </div>
-          <div style={{ fontSize: 14, fontFamily: 'Syne', color: C.textSub }}>Még nincsenek projektek</div>
-          <div style={{ fontSize: 12, marginTop: 6, fontFamily: 'DM Mono', color: C.muted }}>Hozd létre az első projektet fentebb</div>
-        </div>
+        <EmptyState
+          title="Még nincsenek projektek"
+          desc="Hozd létre az első projektet a fenti mezővel, vagy töltsd be a mintaadatokat a demóhoz."
+          action={
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button onClick={() => setShowCreate(true)}>Új projekt</Button>
+              {!isDemoSeeded() && (
+                <Button variant="ghost" onClick={() => {
+                  const { seeded } = seedDemoData()
+                  if (seeded) {
+                    toast.show('Mintaadatok betöltve — frissítsd az oldalt', 'success')
+                    // Force re-render by reloading projects
+                    window.location.reload()
+                  }
+                }}>Mintaadatok betöltése</Button>
+              )}
+            </div>
+          }
+        />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {projects.map(p => (

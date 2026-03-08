@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { C, fmt, Card, Button, QuoteStatusBadge, Badge, EmptyState, Input, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { checkQuotePlanStatus } from '../utils/quoteOrphans.js'
+import { isDemoSeeded, seedDemoData } from '../data/demoSeed.js'
 // saveQuotes handled by parent via onQuotesChange
 
 const STATUS_TABS = [
@@ -11,7 +12,7 @@ const STATUS_TABS = [
   { key: 'lost',    label: 'Elveszett' },
 ]
 
-export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQuote }) {
+export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQuote, onRefresh }) {
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -102,10 +103,22 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
       {/* Table */}
       {filtered.length === 0 ? (
         <EmptyState
-          
           title={search ? 'Nincs találat' : 'Még nincs ajánlat'}
-          desc={search ? 'Próbálj más keresési feltételt.' : 'Hozd létre az első ajánlatot DXF/DWG feltöltéssel.'}
-          action={!search && <Button onClick={() => onNavigate('new-quote')} >Új ajánlat</Button>}
+          desc={search ? 'Próbálj más keresési feltételt.' : 'Készítsd el az első ajánlatot: hozz létre projektet, töltsd fel a tervrajzot, majd generálj árajánlatot.'}
+          action={!search && (
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button onClick={() => onNavigate('new-quote')}>Új ajánlat</Button>
+              {!isDemoSeeded() && (
+                <Button variant="ghost" onClick={() => {
+                  const { seeded } = seedDemoData()
+                  if (seeded) {
+                    toast.show('Mintaadatok betöltve', 'success')
+                    if (onRefresh) onRefresh()
+                  }
+                }}>Mintaadatok betöltése</Button>
+              )}
+            </div>
+          )}
         />
       ) : (
         <Card style={{ overflow: 'hidden' }}>

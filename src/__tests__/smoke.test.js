@@ -873,3 +873,83 @@ describe('Source hygiene — no native confirm()', () => {
     expect(violations).toEqual([])
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 14. Demo Seed — shape validation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Demo Seed — data shape & idempotency', () => {
+  // localStorage mock with full API for demoSeed + store.js compat
+  let store = {}
+  beforeEach(() => {
+    store = {}
+    vi.stubGlobal('localStorage', {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => { store[k] = String(v) },
+      removeItem: (k) => { delete store[k] },
+      get length() { return Object.keys(store).length },
+      key: (i) => Object.keys(store)[i] ?? null,
+      clear: () => { store = {} },
+    })
+  })
+
+  it('seedDemoData creates DEMO-prefixed project, plans, and quotes', async () => {
+    const { seedDemoData, isDemoSeeded, getDemoProjectId } = await import('../data/demoSeed.js')
+    expect(isDemoSeeded()).toBe(false)
+
+    const result = seedDemoData()
+    expect(result.seeded).toBe(true)
+    expect(result.projectId).toBe(getDemoProjectId())
+
+    // Verify project
+    const projects = JSON.parse(store['takeoffpro_projects_meta'] || '[]')
+    expect(projects.length).toBeGreaterThanOrEqual(1)
+    const demoProj = projects.find(p => p.id.startsWith('DEMO-'))
+    expect(demoProj).toBeTruthy()
+    expect(demoProj.name).toContain('DEMO')
+
+    // Verify plans
+    const plans = JSON.parse(store['takeoffpro_plans_meta'] || '[]')
+    const demoPlans = plans.filter(p => p.id.startsWith('DEMO-'))
+    expect(demoPlans.length).toBeGreaterThanOrEqual(2)
+    for (const p of demoPlans) {
+      expect(p.projectId).toBe(getDemoProjectId())
+      expect(p.name).toContain('DEMO')
+    }
+
+    // Verify quotes
+    const quotes = JSON.parse(store['takeoffpro_quotes'] || '[]')
+    const demoQuotes = quotes.filter(q => q.id.startsWith('DEMO-'))
+    expect(demoQuotes.length).toBeGreaterThanOrEqual(1)
+    for (const q of demoQuotes) {
+      expect(q.summary).toBeTruthy()
+      expect(q.summary.grandTotal).toBeGreaterThan(0)
+    }
+
+    // Idempotent — second call should not re-seed
+    expect(isDemoSeeded()).toBe(true)
+    const result2 = seedDemoData()
+    expect(result2.seeded).toBe(false)
+  })
+
+  it('clearDemoData removes all DEMO-prefixed data', async () => {
+    const { clearDemoData, hasDemoData } = await import('../data/demoSeed.js')
+
+    // Manually seed DEMO data into the store to avoid module-level caching issues
+    store['takeoffpro_projects_meta'] = JSON.stringify([{ id: 'DEMO-PRJ-001', name: 'DEMO test' }])
+    store['takeoffpro_plans_meta'] = JSON.stringify([
+      { id: 'DEMO-PLN-001', name: 'DEMO plan 1' },
+      { id: 'DEMO-PLN-002', name: 'DEMO plan 2' },
+    ])
+    store['takeoffpro_quotes'] = JSON.stringify([
+      { id: 'DEMO-QT-2026-001', project_name: 'DEMO' },
+    ])
+    expect(hasDemoData()).toBe(true)
+
+    const removed = clearDemoData()
+    expect(removed.removedProjects).toBeGreaterThanOrEqual(1)
+    expect(removed.removedPlans).toBeGreaterThanOrEqual(2)
+    expect(removed.removedQuotes).toBeGreaterThanOrEqual(1)
+    expect(hasDemoData()).toBe(false)
+  })
+})
