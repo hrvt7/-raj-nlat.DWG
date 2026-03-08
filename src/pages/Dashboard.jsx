@@ -37,17 +37,6 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote })
 
   return (
     <div>
-      {/* Page header */}
-      <div style={{ marginBottom: 20 }}>
-        {settings?.company?.name && (
-          <h1 style={{ fontFamily: 'Syne', fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}>
-            {settings.company.name}
-          </h1>
-        )}
-        <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub }}>
-          Villanyszerelési árajánlat rendszer
-        </p>
-      </div>
 
 
       {/* Stats row – quotes */}
