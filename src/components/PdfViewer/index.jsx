@@ -1089,7 +1089,7 @@ function PdfToolbar({
   onUndo, onClearAll,
   onToggleCountPanel, countPanelOpen,
   pageNum, numPages, onPrevPage, onNextPage,
-  onToggleEstimation, estimationOpen,
+  /* onToggleEstimation, estimationOpen — removed with Részletek button */
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
   assemblies,
@@ -1104,10 +1104,14 @@ function PdfToolbar({
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap', position: 'relative', zIndex: 10 }}>
       {/* Page nav */}
       {numPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 8 }}>
-          <TinyBtn onClick={onPrevPage} disabled={pageNum <= 1}>◀</TinyBtn>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>{pageNum}/{numPages}</span>
-          <TinyBtn onClick={onNextPage} disabled={pageNum >= numPages}>▶</TinyBtn>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginRight: 8, background: C.bg, borderRadius: 6, padding: 2 }}>
+          <TinyBtn onClick={onPrevPage} disabled={pageNum <= 1} title="Előző oldal">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </TinyBtn>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, padding: '0 2px', userSelect: 'none' }}>{pageNum}/{numPages}</span>
+          <TinyBtn onClick={onNextPage} disabled={pageNum >= numPages} title="Következő oldal">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </TinyBtn>
         </div>
       )}
 
@@ -1145,15 +1149,28 @@ function PdfToolbar({
 
       {/* Undo/Clear */}
       {(markerCount > 0 || measureCount > 0) && (
-        <>
-          <TinyBtn onClick={onUndo} title="Visszavonás (Ctrl+Z)">↩</TinyBtn>
-          <TinyBtn onClick={onClearAll} title="Összes törlése" style={{ color: C.red }}>✕</TinyBtn>
-        </>
+        <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }}>
+          <TinyBtn onClick={onUndo} title="Visszavonás (Ctrl+Z)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 10h10a5 5 0 0 1 0 10H9"/><path d="M3 10l4-4M3 10l4 4"/></svg>
+          </TinyBtn>
+          <TinyBtn onClick={onClearAll} title="Összes törlése" style={{ color: C.red }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </TinyBtn>
+        </div>
       )}
 
-      {/* Count panel */}
+      {/* Összesítő — text pill */}
       {markerCount > 0 && (
-        <TinyBtn onClick={onToggleCountPanel} title="Összesítő" style={{ color: countPanelOpen ? C.accent : C.muted }}>∑</TinyBtn>
+        <button onClick={onToggleCountPanel} title="Összesítő panel" style={{
+          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+          fontFamily: 'Syne', fontWeight: 700,
+          background: countPanelOpen ? 'rgba(0,229,160,0.15)' : 'transparent',
+          border: `1px solid ${countPanelOpen ? 'rgba(0,229,160,0.3)' : C.border}`,
+          color: countPanelOpen ? C.accent : C.muted,
+          transition: 'all 0.12s',
+        }}>
+          {countPanelOpen ? 'Összesítő ✓' : 'Összesítő'}
+        </button>
       )}
 
       {/* Cable routes toggle */}
@@ -1164,38 +1181,30 @@ function PdfToolbar({
           background: showCableRoutes ? 'rgba(255,209,102,0.15)' : 'transparent',
           border: `1px solid ${showCableRoutes ? C.yellow : C.border}`,
           color: showCableRoutes ? C.yellow : C.muted,
+          transition: 'all 0.12s',
         }}>
           {showCableRoutes ? 'Kábelvonalak ✓' : 'Kábelvonalak'}
         </button>
       )}
 
-      {/* Estimation button (legacy — primary calc is now in right panel Kalkuláció tab) */}
-      {markerCount > 0 && (
-        <button onClick={onToggleEstimation} title="Régi kalkulációs panel (a fő kalkuláció a jobb oldali panelben van)" style={{
-          padding: '4px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 10,
-          fontFamily: 'DM Mono', fontWeight: 600,
-          background: estimationOpen ? 'rgba(255,209,102,0.15)' : 'rgba(255,255,255,0.04)',
-          border: `1px solid ${estimationOpen ? 'rgba(255,209,102,0.4)' : C.border}`,
-          color: estimationOpen ? '#FFD166' : C.muted,
-        }}>
-          📊 Részletek
-        </button>
-      )}
-
       {/* Rotation controls */}
       <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }} title="Terv forgatása">
-        <TinyBtn onClick={onRotateLeft} title="Forgatás balra (−90°)">↶</TinyBtn>
+        <TinyBtn onClick={onRotateLeft} title="Forgatás balra (−90°)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2.5 2v6h6"/><path d="M2.5 8a10 10 0 1 1 3.17-4.39"/></svg>
+        </TinyBtn>
         {rotation !== 0 && (
           <span style={{ fontSize: 9, fontFamily: 'DM Mono', color: C.muted, padding: '4px 3px', alignSelf: 'center' }}>{rotation}°</span>
         )}
-        <TinyBtn onClick={onRotateRight} title="Forgatás jobbra (+90°)">↷</TinyBtn>
+        <TinyBtn onClick={onRotateRight} title="Forgatás jobbra (+90°)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21.5 2v6h-6"/><path d="M21.5 8A10 10 0 1 0 18.33 3.61"/></svg>
+        </TinyBtn>
       </div>
 
       {/* Zoom controls */}
       <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }}>
-        <TinyBtn onClick={onZoomIn}>+</TinyBtn>
-        <TinyBtn onClick={onFitView}>⊞</TinyBtn>
-        <TinyBtn onClick={onZoomOut}>−</TinyBtn>
+        <TinyBtn onClick={onZoomIn} title="Nagyítás"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg></TinyBtn>
+        <TinyBtn onClick={onFitView} title="Illesztés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></TinyBtn>
+        <TinyBtn onClick={onZoomOut} title="Kicsinyítés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg></TinyBtn>
       </div>
     </div>
   )
@@ -1204,9 +1213,11 @@ function PdfToolbar({
 function TinyBtn({ children, onClick, title, style, disabled }) {
   return (
     <button onClick={onClick} title={title} disabled={disabled} style={{
-      padding: '4px 7px', borderRadius: 4, cursor: disabled ? 'default' : 'pointer',
+      padding: '5px 7px', borderRadius: 4, cursor: disabled ? 'default' : 'pointer',
       background: 'transparent', border: 'none', color: C.muted, fontSize: 13,
       fontFamily: 'DM Mono', fontWeight: 600, opacity: disabled ? 0.3 : 1,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      transition: 'color 0.1s',
       ...style,
     }}>{children}</button>
   )

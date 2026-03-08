@@ -344,59 +344,60 @@ export default function DxfToolbar({
 
       {/* Undo/Clear */}
       {(markerCount > 0 || measureCount > 0) && (
-        <>
-          <BtnIcon onClick={onUndo} title="Visszavonás (Ctrl+Z)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round"><path d="M3 10h10a5 5 0 0 1 0 10H9"/><path d="M3 10l4-4M3 10l4 4"/></svg>
-          </BtnIcon>
-          <BtnIcon onClick={onClearAll} title="Összes törlése">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-          </BtnIcon>
-        </>
+        <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }}>
+          <MiniBtn onClick={onUndo} title="Visszavonás (Ctrl+Z)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 10h10a5 5 0 0 1 0 10H9"/><path d="M3 10l4-4M3 10l4 4"/></svg>
+          </MiniBtn>
+          <MiniBtn onClick={onClearAll} title="Összes törlése" color={C.red}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </MiniBtn>
+        </div>
       )}
 
-      {/* Count summary */}
+      {/* Összesítő — text pill */}
       {markerCount > 0 && (
-        <BtnIcon onClick={onToggleCountPanel} title="Összesítő" active={countPanelOpen} activeColor={C.accent}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={countPanelOpen ? C.accent : C.muted} strokeWidth="2" strokeLinecap="round">
-            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 14l2 2 4-4"/>
-          </svg>
-        </BtnIcon>
+        <button onClick={onToggleCountPanel} title="Összesítő panel" style={{
+          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+          fontFamily: 'Syne', fontWeight: 700,
+          background: countPanelOpen ? 'rgba(0,229,160,0.15)' : 'transparent',
+          border: `1px solid ${countPanelOpen ? 'rgba(0,229,160,0.3)' : C.border}`,
+          color: countPanelOpen ? C.accent : C.muted,
+          transition: 'all 0.12s',
+        }}>
+          {countPanelOpen ? 'Összesítő ✓' : 'Összesítő'}
+        </button>
       )}
 
-      {/* Layers */}
-      <BtnIcon onClick={onToggleLayers} title="Rétegek" active={layersPanelOpen} activeColor={C.blue}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={layersPanelOpen ? C.blue : C.muted} strokeWidth="2" strokeLinecap="round">
-          <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
-        </svg>
-        <span style={{ fontSize: 11, fontFamily: 'Syne', color: layersPanelOpen ? C.blue : C.muted }}>Rétegek</span>
-      </BtnIcon>
+      {/* Layers — text pill */}
+      <button onClick={onToggleLayers} title="Rétegek" style={{
+        padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+        fontFamily: 'Syne', fontWeight: 700,
+        background: layersPanelOpen ? 'rgba(76,201,240,0.15)' : 'transparent',
+        border: `1px solid ${layersPanelOpen ? 'rgba(76,201,240,0.3)' : C.border}`,
+        color: layersPanelOpen ? C.blue : C.muted,
+        transition: 'all 0.12s',
+      }}>
+        {layersPanelOpen ? 'Rétegek ✓' : 'Rétegek'}
+      </button>
 
       {/* Zoom controls */}
       <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }}>
-        <ZBtn onClick={onZoomIn}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.textSub} strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg></ZBtn>
-        <ZBtn onClick={onFitView}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.textSub} strokeWidth="2" strokeLinecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></ZBtn>
-        <ZBtn onClick={onZoomOut}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.textSub} strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg></ZBtn>
+        <MiniBtn onClick={onZoomIn} title="Nagyítás"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg></MiniBtn>
+        <MiniBtn onClick={onFitView} title="Illesztés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></MiniBtn>
+        <MiniBtn onClick={onZoomOut} title="Kicsinyítés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg></MiniBtn>
       </div>
     </div>
   )
 }
 
-function BtnIcon({ children, onClick, title, active, activeColor }) {
+function MiniBtn({ children, onClick, title, color }) {
   return (
     <button onClick={onClick} title={title} style={{
-      padding: '5px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
-      display: 'flex', alignItems: 'center', gap: 5,
-      background: active ? `${activeColor || '#fff'}12` : 'transparent',
-      border: `1px solid ${active ? `${activeColor || '#fff'}30` : 'transparent'}`,
-      color: '#71717A', transition: 'all 0.12s',
+      padding: '5px 7px', borderRadius: 4, cursor: 'pointer',
+      background: 'transparent', border: 'none',
+      color: color || C.muted, fontSize: 13,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      transition: 'color 0.1s',
     }}>{children}</button>
-  )
-}
-
-function ZBtn({ children, onClick }) {
-  return (
-    <button onClick={onClick} style={{ padding: '4px 6px', borderRadius: 4, cursor: 'pointer', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {children}
-    </button>
   )
 }
