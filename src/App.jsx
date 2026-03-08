@@ -1232,9 +1232,11 @@ function SaaSShell() {
                 <span style={{ display: 'block', width: 15, height: 1.5, background: C.muted, borderRadius: 1 }} />
               </button>
             )}
-            <div style={{ color: C.text, fontWeight: 600, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {viewingQuote ? viewingQuote.projectName : getPageTitle()}
-            </div>
+            {(viewingQuote || page !== 'dashboard') && (
+              <div style={{ color: C.text, fontWeight: 600, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {viewingQuote ? viewingQuote.projectName : getPageTitle()}
+              </div>
+            )}
           </div>
           {/* Hero SVG strip — fills remaining top bar space */}
           <div style={{ flex: 1, height: 52, overflow: 'hidden', display: 'flex', alignItems: 'center', minWidth: 0 }}>
