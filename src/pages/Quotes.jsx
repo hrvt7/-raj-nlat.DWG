@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { C, fmt, Card, Button, QuoteStatusBadge, Badge, EmptyState, Input } from '../components/ui.jsx'
+import { C, fmt, Card, Button, QuoteStatusBadge, Badge, EmptyState, Input, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { checkQuotePlanStatus } from '../utils/quoteOrphans.js'
 // saveQuotes handled by parent via onQuotesChange
 
@@ -15,6 +15,8 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState(null)
+  const [confirmState, setConfirmState] = useState(null)
+  const toast = useToast()
 
   const filtered = quotes.filter(q => {
     const matchTab = activeTab === 'all' || q.status === activeTab
@@ -25,12 +27,22 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
   const updateStatus = (id, status) => {
     const updated = quotes.map(q => q.id === id ? { ...q, status } : q)
     onQuotesChange(updated)
+    toast.show('Státusz frissítve', 'success')
   }
 
   const deleteQuote = (id) => {
-    if (!confirm('Törlöd ezt az ajánlatot?')) return
-    const updated = quotes.filter(q => q.id !== id)
-    onQuotesChange(updated)
+    const q = quotes.find(q => q.id === id)
+    setConfirmState({
+      message: 'Törlöd ezt az ajánlatot?',
+      detail: q ? `${q.project_name || 'Névtelen'} (${q.id})` : id,
+      confirmLabel: 'Törlés',
+      onConfirm: () => {
+        const updated = quotes.filter(q => q.id !== id)
+        onQuotesChange(updated)
+        setConfirmState(null)
+        toast.show('Ajánlat törölve', 'success')
+      }
+    })
   }
 
   const totalValue = filtered.reduce((s, q) => s + (q.summary?.grandTotal || 0), 0)
@@ -198,6 +210,17 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
           </table>
         </div>
         </Card>
+      )}
+
+      {/* Confirm dialog */}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          detail={confirmState.detail}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   )

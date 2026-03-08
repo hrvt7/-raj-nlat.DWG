@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { C, fmt, Button, Badge, Input } from '../components/ui.jsx'
+import { C, fmt, Button, Badge, Input, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { CATALOG_GRID_STYLE, catalogCardShell, CARD_HEADER_STYLE, CARD_TITLE_STYLE, CARD_DIVIDER_STYLE, CARD_STAT_LABEL, CARD_STAT_ACCENT, CARD_STAT_YELLOW, CARD_STAT_UNIT, CARD_CODE_STYLE, categoryChipStyle, deleteButtonStyle } from '../components/catalogCardStyles.js'
 import { saveMaterials, DEFAULT_MATERIALS } from '../data/store.js'
@@ -30,6 +30,8 @@ export default function MaterialsPage({ materials, onMaterialsChange, activeTrad
   const [editItem, setEditItem] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_mat_view') || 'grid')
+  const [confirmState, setConfirmState] = useState(null)
+  const toast = useToast()
 
   // Trade filtering
   const tradeMaterialCategories = activeTrade ? getMaterialCategoriesForTrade(activeTrade) : null
@@ -55,19 +57,37 @@ export default function MaterialsPage({ materials, onMaterialsChange, activeTrad
     saveMaterials(updated)
     setEditItem(null)
     setShowAdd(false)
+    toast.show(item._isNew ? 'Anyag hozzáadva' : 'Anyag mentve', 'success')
   }
 
   const deleteItem = (code) => {
-    if (!confirm('Törlöd ezt az anyagot?')) return
-    const updated = materials.filter(m => m.code !== code)
-    onMaterialsChange(updated)
-    saveMaterials(updated)
+    const item = materials.find(m => m.code === code)
+    setConfirmState({
+      message: 'Törlöd ezt az anyagot?',
+      detail: item ? `${item.name} (${item.code})` : code,
+      confirmLabel: 'Törlés',
+      onConfirm: () => {
+        const updated = materials.filter(m => m.code !== code)
+        onMaterialsChange(updated)
+        saveMaterials(updated)
+        setConfirmState(null)
+        toast.show('Anyag törölve', 'success')
+      }
+    })
   }
 
   const resetToDefaults = () => {
-    if (!confirm('Visszaállítod az alapértelmezett anyaglistát? A saját módosításaid elvesznek.')) return
-    onMaterialsChange([...DEFAULT_MATERIALS])
-    saveMaterials(DEFAULT_MATERIALS)
+    setConfirmState({
+      message: 'Visszaállítod az alapértelmezett anyaglistát?',
+      detail: 'A saját módosításaid elvesznek.',
+      confirmLabel: 'Visszaállítás',
+      onConfirm: () => {
+        onMaterialsChange([...DEFAULT_MATERIALS])
+        saveMaterials(DEFAULT_MATERIALS)
+        setConfirmState(null)
+        toast.show('Anyaglista visszaállítva', 'success')
+      }
+    })
   }
 
   const newCode = () => {
@@ -186,6 +206,17 @@ export default function MaterialsPage({ materials, onMaterialsChange, activeTrad
       {/* Edit modal */}
       {editItem && (
         <MaterialModal item={editItem} onSave={saveItem} onClose={() => { setEditItem(null); setShowAdd(false) }} />
+      )}
+
+      {/* Confirm dialog */}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          detail={confirmState.detail}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   )

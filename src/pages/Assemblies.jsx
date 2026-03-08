@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
+import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { WORK_ITEM_CATEGORIES, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId, getAssemblyCompleteness, getAssemblyComponents } from '../data/workItemsDb.js'
 import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount, trackAsmUsage } from '../data/store.js'
 import { getAssemblyCategoriesForTrade, SHARED_CATEGORIES } from '../data/trades.js'
@@ -18,6 +18,8 @@ export default function AssembliesPage({ activeTrade }) {
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiHistory, setAiHistory] = useState([])
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_asm_view') || 'grid')
+  const [confirmState, setConfirmState] = useState(null)
+  const toast = useToast()
 
   // Trade filtering: restrict assemblies to ONLY exclusive categories of the active trade
   // (shared categories like 'kabelezes' are excluded so e.g. Villanytűzhely doesn't appear in Tűzjelző)
@@ -80,6 +82,7 @@ export default function AssembliesPage({ activeTrade }) {
     const updated = assemblies.map(a => a.id === updatedAsm.id
       ? { ...updatedAsm, updatedAt: new Date().toISOString() } : a)
     persist(updated)
+    toast.show('Assembly mentve', 'success')
   }
 
   const handleDuplicate = (asm) => {
@@ -90,12 +93,23 @@ export default function AssembliesPage({ activeTrade }) {
     const updated = [dup, ...assemblies]
     persist(updated)
     setSelectedId(id)
+    toast.show('Assembly duplikálva', 'success')
   }
 
   const handleDelete = (id) => {
-    const updated = assemblies.filter(a => a.id !== id)
-    persist(updated)
-    if (selectedId === id) setSelectedId(null)
+    const asm = assemblies.find(a => a.id === id)
+    setConfirmState({
+      message: 'Törlöd ezt az assembly-t?',
+      detail: asm ? `${asm.name} (${asm.id})` : id,
+      confirmLabel: 'Törlés',
+      onConfirm: () => {
+        const updated = assemblies.filter(a => a.id !== id)
+        persist(updated)
+        if (selectedId === id) setSelectedId(null)
+        setConfirmState(null)
+        toast.show('Assembly törölve', 'success')
+      }
+    })
   }
 
   // Close modal on Escape
@@ -238,7 +252,18 @@ export default function AssembliesPage({ activeTrade }) {
           onClose={() => setSelectedId(null)}
           onUpdate={handleUpdate}
           onDuplicate={(asm) => { handleDuplicate(asm) }}
-          onDelete={(id) => { handleDelete(id); setSelectedId(null) }}
+          onDelete={(id) => { handleDelete(id) }}
+        />
+      )}
+
+      {/* Confirm dialog */}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          detail={confirmState.detail}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
         />
       )}
     </div>
@@ -768,7 +793,7 @@ function AssemblyEditorPanel({ assembly, onUpdate, onDuplicate, onDelete }) {
               boxShadow: '0 8px 24px rgba(0,0,0,0.5)', minWidth: 160, overflow: 'hidden',
             }}>
               <MenuBtn label="📋 Duplikálás" onClick={() => { onDuplicate(assembly); setShowMenu(false) }} />
-              <MenuBtn label="🗑 Törlés" onClick={() => { if (confirm('Törlöd ezt az assembly-t?')) { onDelete(assembly.id); setShowMenu(false) } }} danger />
+              <MenuBtn label="🗑 Törlés" onClick={() => { onDelete(assembly.id); setShowMenu(false) }} danger />
             </div>
           )}
         </div>

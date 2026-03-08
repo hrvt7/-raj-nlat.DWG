@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState } from '../components/ui.jsx'
+import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { CATALOG_GRID_STYLE, catalogCardShell, CARD_HEADER_STYLE, CARD_TITLE_STYLE, CARD_DESC_STYLE, CARD_DIVIDER_STYLE, CARD_STAT_LABEL, CARD_STAT_ACCENT, CARD_STAT_YELLOW, CARD_STAT_UNIT, CARD_CODE_STYLE, categoryChipStyle, deleteButtonStyle } from '../components/catalogCardStyles.js'
 import { WORK_ITEM_CATEGORIES, WORK_ITEMS_DEFAULT } from '../data/workItemsDb.js'
@@ -12,6 +12,8 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange, activeTrad
   const [editItem, setEditItem] = useState(null) // null | item object
   const [showAdd, setShowAdd] = useState(false)
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_wi_view') || 'grid')
+  const [confirmState, setConfirmState] = useState(null) // { message, detail, onConfirm, confirmLabel }
+  const toast = useToast()
 
   // Trade filtering
   const tradeCategories = activeTrade ? getCategoriesForTrade(activeTrade) : null
@@ -38,19 +40,37 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange, activeTrad
     saveWorkItems(updated)
     setEditItem(null)
     setShowAdd(false)
+    toast.show(item._isNew ? 'Munkatétel hozzáadva' : 'Munkatétel mentve', 'success')
   }
 
   const deleteItem = (code) => {
-    if (!confirm('Törlöd ezt a munkatételt?')) return
-    const updated = workItems.filter(wi => wi.code !== code)
-    onWorkItemsChange(updated)
-    saveWorkItems(updated)
+    const item = workItems.find(wi => wi.code === code)
+    setConfirmState({
+      message: 'Törlöd ezt a munkatételt?',
+      detail: item ? `${item.name} (${item.code})` : code,
+      confirmLabel: 'Törlés',
+      onConfirm: () => {
+        const updated = workItems.filter(wi => wi.code !== code)
+        onWorkItemsChange(updated)
+        saveWorkItems(updated)
+        setConfirmState(null)
+        toast.show('Munkatétel törölve', 'success')
+      }
+    })
   }
 
   const resetToDefaults = () => {
-    if (!confirm('Visszaállítod az alapértelmezett normaidőket? A saját módosításaid elvesznek.')) return
-    onWorkItemsChange([...WORK_ITEMS_DEFAULT])
-    saveWorkItems(WORK_ITEMS_DEFAULT)
+    setConfirmState({
+      message: 'Visszaállítod az alapértelmezett normaidőket?',
+      detail: 'A saját módosításaid elvesznek.',
+      confirmLabel: 'Visszaállítás',
+      onConfirm: () => {
+        onWorkItemsChange([...WORK_ITEMS_DEFAULT])
+        saveWorkItems(WORK_ITEMS_DEFAULT)
+        setConfirmState(null)
+        toast.show('Normaidők visszaállítva', 'success')
+      }
+    })
   }
 
   return (
@@ -156,6 +176,17 @@ export default function WorkItemsPage({ workItems, onWorkItemsChange, activeTrad
       {/* Edit modal */}
       {editItem && (
         <WorkItemModal item={editItem} onSave={saveItem} onClose={() => { setEditItem(null); setShowAdd(false) }} />
+      )}
+
+      {/* Confirm dialog */}
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          detail={confirmState.detail}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   )

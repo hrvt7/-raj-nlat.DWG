@@ -845,3 +845,31 @@ describe('computePricing — material lookup warnings', () => {
     expect(matLine.materialCost).toBe(0)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 13. Source hygiene — no native confirm() in page components
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { readFileSync, readdirSync } from 'fs'
+import { join } from 'path'
+
+describe('Source hygiene — no native confirm()', () => {
+  const pagesDir = join(import.meta.dirname || new URL('.', import.meta.url).pathname, '..', 'pages')
+
+  it('page components do not use native window.confirm()', () => {
+    const files = readdirSync(pagesDir).filter(f => f.endsWith('.jsx') || f.endsWith('.js'))
+    const violations = []
+    for (const file of files) {
+      const src = readFileSync(join(pagesDir, file), 'utf-8')
+      // Match confirm( but not inside comments or the ConfirmDialog import
+      const lines = src.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        if (line.match(/\bconfirm\s*\(/) && !line.trim().startsWith('//') && !line.includes('ConfirmDialog')) {
+          violations.push(`${file}:${i + 1}: ${line.trim()}`)
+        }
+      }
+    }
+    expect(violations).toEqual([])
+  })
+})

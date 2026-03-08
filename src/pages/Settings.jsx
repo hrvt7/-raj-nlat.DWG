@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { C, fmt, Card, Button, Input, SectionHeader } from '../components/ui.jsx'
+import { C, fmt, Card, Button, Input, SectionHeader, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { saveSettings, saveMaterials, DEFAULT_MATERIALS, loadQuotes } from '../data/store.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { loadProjects } from '../data/projectStore.js'
@@ -265,6 +265,8 @@ function MaterialsTab({ materials, onMaterialsChange }) {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
   const [editItem, setEditItem] = useState(null)
+  const [confirmState, setConfirmState] = useState(null)
+  const toast = useToast()
 
   const categories = [
     { key: 'all',         label: 'Összes' },
@@ -293,19 +295,37 @@ function MaterialsTab({ materials, onMaterialsChange }) {
     onMaterialsChange(updated)
     saveMaterials(updated)
     setEditItem(null)
+    toast.show(item._isNew ? 'Anyag hozzáadva' : 'Anyag mentve', 'success')
   }
 
   const deleteItem = (code) => {
-    if (!confirm('Törlöd?')) return
-    const updated = materials.filter(m => m.code !== code)
-    onMaterialsChange(updated)
-    saveMaterials(updated)
+    const item = materials.find(m => m.code === code)
+    setConfirmState({
+      message: 'Törlöd ezt az anyagot?',
+      detail: item ? `${item.name} (${item.code})` : code,
+      confirmLabel: 'Törlés',
+      onConfirm: () => {
+        const updated = materials.filter(m => m.code !== code)
+        onMaterialsChange(updated)
+        saveMaterials(updated)
+        setConfirmState(null)
+        toast.show('Anyag törölve', 'success')
+      }
+    })
   }
 
   const resetMaterials = () => {
-    if (!confirm('Visszaállítod az alapértelmezett anyagárlistát?')) return
-    onMaterialsChange([...DEFAULT_MATERIALS])
-    saveMaterials(DEFAULT_MATERIALS)
+    setConfirmState({
+      message: 'Visszaállítod az alapértelmezett anyagárlistát?',
+      detail: 'A saját módosításaid elvesznek.',
+      confirmLabel: 'Visszaállítás',
+      onConfirm: () => {
+        onMaterialsChange([...DEFAULT_MATERIALS])
+        saveMaterials(DEFAULT_MATERIALS)
+        setConfirmState(null)
+        toast.show('Anyagárlista visszaállítva', 'success')
+      }
+    })
   }
 
   const bulkDiscount = (pct) => {
@@ -412,6 +432,16 @@ function MaterialsTab({ materials, onMaterialsChange }) {
 
       {editItem && (
         <MaterialModal item={editItem} onSave={saveItem} onClose={() => setEditItem(null)} />
+      )}
+
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          detail={confirmState.detail}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
       )}
     </div>
   )
