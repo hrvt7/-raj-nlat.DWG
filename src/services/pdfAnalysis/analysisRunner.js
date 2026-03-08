@@ -21,6 +21,7 @@ import {
   extractSummary,
 } from './analysisCache.js'
 import { hashFile, getPlanFile, updatePlanMeta } from '../../data/planStore.js'
+import { detectSymbols, extractDetectionSummary } from '../pdfDetection/index.js'
 
 // ── Status constants ─────────────────────────────────────────────────────────
 
@@ -98,12 +99,18 @@ async function _runAnalysisInner(planId, file, provider, onProgress, onStatusCha
     const cached = await getCachedAnalysis(cacheKey)
     if (cached) {
       const summary = extractSummary(cached)
+
+      // ── Run detection rule engine on cached result ──────────────────────
+      const { meta: detMeta } = await detectSymbols(cached, cacheKey)
+      const detSummary = extractDetectionSummary(detMeta)
+
       updatePlanMeta(planId, {
         pdfAnalysisStatus: ANALYSIS_STATUS.DONE,
         pdfAnalysisProvider: provider,
         pdfAnalysisVersion: ANALYSIS_VERSION,
         pdfAnalysisCacheKey: cacheKey,
         pdfAnalysisSummary: summary,
+        pdfDetectionSummary: detSummary,
         pdfAnalyzedAt: cached.generatedAt || new Date().toISOString(),
         pdfAnalysisError: null,
       })
@@ -117,6 +124,10 @@ async function _runAnalysisInner(planId, file, provider, onProgress, onStatusCha
     // ── Store in IndexedDB cache ──────────────────────────────────────────
     await setCachedAnalysis(cacheKey, result)
 
+    // ── Run detection rule engine ─────────────────────────────────────────
+    const { meta: detMeta } = await detectSymbols(result, cacheKey)
+    const detSummary = extractDetectionSummary(detMeta)
+
     // ── Update plan meta with summary ─────────────────────────────────────
     const summary = extractSummary(result)
     updatePlanMeta(planId, {
@@ -125,6 +136,7 @@ async function _runAnalysisInner(planId, file, provider, onProgress, onStatusCha
       pdfAnalysisVersion: ANALYSIS_VERSION,
       pdfAnalysisCacheKey: cacheKey,
       pdfAnalysisSummary: summary,
+      pdfDetectionSummary: detSummary,
       pdfAnalyzedAt: result.generatedAt || new Date().toISOString(),
       pdfAnalysisError: null,
     })
