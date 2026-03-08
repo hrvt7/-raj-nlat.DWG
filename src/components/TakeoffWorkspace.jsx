@@ -1302,9 +1302,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       })
 
       const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
-      // ── Resolve project-level default output mode ──────────────────
+      // ── Resolve output mode: prefer estimation panel override, then project default ──
       const planMeta = planId ? getPlanMeta(planId) : null
-      const prjDefault = planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined'
+      const prjDefault = data?.quoteOverrides?._outputMode
+        || (planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined')
       const _ieD = OUTPUT_MODE_INCLEXCL[prjDefault] || OUTPUT_MODE_INCLEXCL.combined
       const _qs = loadSettings().quote
 

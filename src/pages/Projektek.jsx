@@ -1077,123 +1077,28 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           <BackIcon size={14} color={C.muted} /> Vissza a projektekhez
         </button>
         <h1 style={{ fontFamily: 'Syne', fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>{project.name}</h1>
-        <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz · {templates.length} szimbólum sablon</p>
+        <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz</p>
       </div>
 
-      {/* ── Default output mode selector ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8,
-        padding: '8px 14px', marginBottom: 12,
-      }}>
-        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>Alapértelmezett ajánlat mód:</span>
-        {[
-          { key: 'combined',              label: 'Teljes' },
-          { key: 'labor_only',            label: 'Csak munkadíj' },
-          { key: 'split_material_labor',  label: 'Anyag + munkadíj külön' },
-        ].map(m => {
-          const active = (project.defaultQuoteOutputMode || 'combined') === m.key
-          return (
-            <button
-              key={m.key}
-              onClick={() => { updateProject(projectId, { defaultQuoteOutputMode: m.key }); reload() }}
-              style={{
-                fontFamily: 'DM Mono', fontSize: 11, padding: '4px 10px', borderRadius: 5,
-                border: `1px solid ${active ? C.accent + '60' : C.border}`,
-                background: active ? C.accent + '14' : 'transparent',
-                color: active ? C.accent : C.textSub,
-                cursor: 'pointer', transition: 'all 0.15s',
-              }}
-            >{m.label}</button>
-          )
-        })}
-      </div>
-
-      {/* ── Progress Hint Bar ── */}
+      {/* ── Progress Hint Bar (only shows when plans need calculation) ── */}
       {(() => {
         const noCalcPlans = plans.filter(p => !(p.calcTotal > 0)).length
-        const phase =
-          plans.length === 0 ? 'upload' :
-          templates.length === 0 ? 'legend' :
-          (plans.length > 0 && noCalcPlans > 0) ? 'work' :
-          plans.length > 0 ? 'done' : 'upload'
-
-        if (phase === 'done') return null
-
-        const PHASES = {
-          upload: { idx: 0, icon: '›', text: 'Töltsd fel a tervrajzokat', sub: 'PDF, DXF vagy DWG fájlok', color: C.accent, border: 'rgba(0,229,160,0.25)', bg: 'rgba(0,229,160,0.04)' },
-          legend: { idx: 1, icon: '›', text: 'Adj hozzá jelmagyarázatot', sub: 'Szimbólum sablonok automatikus felismerése', color: C.blue, border: 'rgba(76,201,240,0.25)', bg: 'rgba(76,201,240,0.04)' },
-          work:   { idx: 2, icon: '›', text: 'Nyisd meg a tervrajzokat → detektálás → kalkuláció', sub: `${noCalcPlans} tervrajz vár kalkulációra`, color: C.textSub, border: C.border, bg: 'rgba(255,255,255,0.02)' },
-        }
-        const p = PHASES[phase]
-        const dots = [0, 1, 2].map(i => i <= p.idx ? p.color : C.border)
+        if (plans.length === 0 || noCalcPlans === 0) return null
 
         return (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 12,
-            border: `1px solid ${p.border}`, borderRadius: 8,
-            background: p.bg, padding: '10px 14px', marginBottom: 12,
+            border: `1px solid ${C.border}`, borderRadius: 8,
+            background: 'rgba(255,255,255,0.02)', padding: '10px 14px', marginBottom: 12,
           }}>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-              {dots.map((c, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: c, display: 'inline-block', transition: 'background 0.2s' }} />)}
-            </div>
-            <span style={{ fontSize: 15, flexShrink: 0 }}>{p.icon}</span>
+            <span style={{ fontSize: 15, flexShrink: 0 }}>›</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>{p.text}</div>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 1 }}>{p.sub}</div>
+              <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>Nyisd meg a tervrajzokat → detektálás → kalkuláció</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 1 }}>{noCalcPlans} tervrajz vár kalkulációra</div>
             </div>
           </div>
         )
       })()}
-
-      {/* ── Legend entry chip ── */}
-      {project.legendPlanId || templates.length > 0 ? (
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            border: '1px solid rgba(76,201,240,0.2)', borderRadius: 8,
-            background: 'rgba(76,201,240,0.04)', padding: '10px 14px', marginBottom: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <BookIcon size={15} color={C.blue} />
-            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text }}>
-              Jelmagyarázat: <strong style={{ color: C.blue }}>{templates.length}</strong> szimbólum sablon
-            </span>
-          </div>
-          <button
-            onClick={() => onLegendPanel && onLegendPanel({ projectId, legendPlanId: project.legendPlanId })}
-            title="Jelmagyarázat szerkesztése"
-            style={{
-              background: 'transparent', border: `1px solid rgba(76,201,240,0.25)`, borderRadius: 5,
-              padding: '4px 10px', cursor: 'pointer', color: C.blue, fontSize: 11,
-              fontFamily: 'DM Mono', transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.1)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-          >
-            Szerkesztés
-          </button>
-        </div>
-      ) : (
-        <div
-          onClick={() => onLegendPanel && onLegendPanel({ projectId })}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            border: `2px dashed ${C.border}`, borderRadius: 8,
-            background: C.bgCard, padding: '12px 14px', marginBottom: 12,
-            cursor: 'pointer', transition: 'all 0.2s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(76,201,240,0.4)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border }}
-        >
-          <BookIcon size={16} color={C.muted} />
-          <div>
-            <div style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 600, color: C.text }}>Jelmagyarázat hozzáadása</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 1 }}>Szimbólum sablonok automatikus felismerése</div>
-          </div>
-        </div>
-      )}
 
       {/* ── Selection toolbar ── */}
       {selectedCount > 0 && (

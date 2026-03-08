@@ -1246,6 +1246,35 @@ function QuoteTab({
         </div>
       </div>
 
+      {/* ── Quote output mode selector ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        marginBottom: 10, padding: '8px 0',
+        borderTop: `1px solid ${C.border}`,
+      }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>Ajánlat mód:</span>
+        {[
+          { key: 'combined',              label: 'Teljes' },
+          { key: 'labor_only',            label: 'Csak munkadíj' },
+          { key: 'split_material_labor',  label: 'Anyag + munkadíj külön' },
+        ].map(m => {
+          const active = (quoteOverrides._outputMode || 'combined') === m.key
+          return (
+            <button
+              key={m.key}
+              onClick={() => setOverride('_outputMode', m.key)}
+              style={{
+                fontFamily: 'DM Mono', fontSize: 10, padding: '3px 8px', borderRadius: 4,
+                border: `1px solid ${active ? C.accent + '60' : C.border}`,
+                background: active ? 'rgba(0,229,160,0.12)' : 'transparent',
+                color: active ? C.accent : C.muted,
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >{m.label}</button>
+          )
+        })}
+      </div>
+
       {/* Action */}
       <button
         onClick={() => onCreateQuote?.({ countByCategory, assignments, quoteOverrides, cableData, costEstimate, cableBreakdown })}
