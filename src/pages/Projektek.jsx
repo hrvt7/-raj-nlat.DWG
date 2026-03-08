@@ -25,6 +25,9 @@ import { parseDxfFile } from '../dxfParser.js'
 import { countQuotesForPlan } from '../utils/quoteOrphans.js'
 import { triggerAnalysis } from '../services/pdfAnalysis/analysisRunner.js'
 import { ANALYSIS_STATUS } from '../services/pdfAnalysis/analysisRunner.js'
+import { getCachedDetection } from '../services/pdfDetection/index.js'
+import { adaptCandidates } from '../services/pdfDetection/candidateAdapter.js'
+import DetectionReviewPanel from '../components/DetectionReviewPanel.jsx'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -591,7 +594,7 @@ function MetaCopilotStrip({ plan, onMetaChange }) {
 }
 
 // ─── Plan card ────────────────────────────────────────────────────────────────
-function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId, onMetaChange }) {
+function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId, onMetaChange, onOpenPdfReview }) {
   const [hov, setHov] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const isOpening = openingId === plan.id
@@ -661,6 +664,36 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
               {plan.pdfAnalysisStatus === 'done' && `PDF elemzés kész${plan.pdfAnalysisSummary?.symbolCount ? ` · ${plan.pdfAnalysisSummary.symbolCount} szimbólum` : ''}`}
               {plan.pdfAnalysisStatus === 'failed' && 'PDF elemzés sikertelen'}
             </span>
+          </div>
+        )}
+        {/* ── PDF Detection Summary + Review CTA ── */}
+        {plan.pdfDetectionSummary && plan.pdfDetectionSummary.totalCandidates > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4,
+            padding: '3px 8px', borderRadius: 5, fontSize: 9, fontFamily: 'DM Mono',
+            background: 'rgba(255,209,102,0.06)', border: '1px solid rgba(255,209,102,0.15)', color: '#FFD166',
+          }}>
+            <span style={{ fontSize: 10 }}>🔍</span>
+            <span>
+              {plan.pdfDetectionSummary.totalCandidates} detektálás
+              {plan.pdfDetectionSummary.highConfidence > 0 && (
+                <span style={{ color: C.accent }}> · {plan.pdfDetectionSummary.highConfidence} magas</span>
+              )}
+              {plan.pdfDetectionSummary.reviewNeeded > 0 && (
+                <span style={{ color: '#FFD166' }}> · {plan.pdfDetectionSummary.reviewNeeded} review</span>
+              )}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); if (onOpenPdfReview) onOpenPdfReview(plan) }}
+              style={{
+                marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 8,
+                color: '#FFD166', background: 'rgba(255,209,102,0.12)',
+                border: '1px solid rgba(255,209,102,0.25)', borderRadius: 4,
+                padding: '1px 6px', cursor: 'pointer',
+              }}
+            >
+              Review →
+            </button>
           </div>
         )}
         {hasCalc && (
@@ -1078,6 +1111,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const [dragging, setDragging] = useState(false)
   const [legendDragging, setLegendDragging] = useState(false)
   const [uploadWarning, setUploadWarning] = useState(null)
+  const [pdfReviewPlan, setPdfReviewPlan] = useState(null) // plan being reviewed for PDF detections
+  const [pdfReviewCandidates, setPdfReviewCandidates] = useState(null) // adapted candidates for review panel
   const planInputRef = useRef(null)
   const legendInputRef = useRef(null)
   const toast = useToast()
@@ -1242,6 +1277,38 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
 
   // ── Compute workflow step from project state ──
   // 0=no plans, 1=has plans but no meta, 2=has meta but no calc, 3=has calc (ready for quote)
+  // ── Open PDF detection review for a plan ──
+  const handleOpenPdfReview = useCallback(async (plan) => {
+    if (!plan.pdfDetectionSummary || !plan.pdfDetectionSummary.totalCandidates) return
+    // Build cache key to retrieve cached detection candidates
+    // The cache key format is {fileHash}:{provider}:{version} but we look up by plan
+    // Try to get from the detection_candidates store via the analysis cache key on plan meta
+    const cacheKey = plan.pdfAnalysisCacheKey
+    if (!cacheKey) {
+      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
+      return
+    }
+    const cached = await getCachedDetection(cacheKey)
+    if (!cached || !cached.candidates || !cached.candidates.length) {
+      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
+      return
+    }
+    const adapted = adaptCandidates(cached.candidates, plan.id)
+    setPdfReviewPlan(plan)
+    setPdfReviewCandidates(adapted)
+  }, [toast])
+
+  const handleClosePdfReview = useCallback(() => {
+    setPdfReviewPlan(null)
+    setPdfReviewCandidates(null)
+  }, [])
+
+  const handlePdfReviewDone = useCallback(() => {
+    setPdfReviewPlan(null)
+    setPdfReviewCandidates(null)
+    reload()
+  }, [reload])
+
   const workflowStep = (() => {
     if (plans.length === 0) return 0
     const hasMeta = plans.some(p => p.inferredMeta?.metaConfidence > 0)
@@ -1338,7 +1405,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
                 key={plan.id} plan={plan} thumb={thumbnails[plan.id]}
                 selected={!!selected[plan.id]} onSelect={val => toggleSelect(plan.id, val)}
                 onOpen={handleOpenSaved} onDelete={handleDelete} openingId={openingId}
-                onMetaChange={handleMetaChange}
+                onMetaChange={handleMetaChange} onOpenPdfReview={handleOpenPdfReview}
               />
             ))}
           </div>
@@ -1351,6 +1418,18 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           </div>
         )}
       </div>
+
+      {/* ── PDF Detection Review Panel (rule engine candidates) ── */}
+      {pdfReviewPlan && pdfReviewCandidates && (
+        <DetectionReviewPanel
+          plans={[pdfReviewPlan]}
+          pdfCandidates={pdfReviewCandidates}
+          onClose={handleClosePdfReview}
+          onDone={handlePdfReviewDone}
+          projectId={projectId}
+          onLocateDetection={null}
+        />
+      )}
     </div>
   )
 }

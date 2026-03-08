@@ -333,7 +333,7 @@ function NoTemplatesWarning({ onClose }) {
 }
 
 // ─── DetectionReviewPanel ─────────────────────────────────────────────────────
-export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun }) {
+export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun, pdfCandidates }) {
   const [phase, setPhase] = useState('loading') // loading | no_templates | detecting | review | saving | done
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState(0)
@@ -344,6 +344,65 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const runIdRef = useRef(null) // DetectionRun.id for persistence
   const [scoreThreshold, setScoreThreshold] = useState(0.70)
   const [reviewFilter, setReviewFilter] = useState('all') // all | accepted | rejected | pending
+  const [focusIndex, setFocusIndex] = useState(-1) // keyboard navigation index
+
+  // ── PDF rule-engine candidates (skip template scanning entirely) ──
+  useEffect(() => {
+    if (!pdfCandidates || !pdfCandidates.length) return
+    setAllDetections(pdfCandidates)
+    setPhase('review')
+  }, [pdfCandidates])
+
+  // ── Keyboard refs for stable closure ──
+  const filteredRef = useRef([])
+  const focusRef = useRef(-1)
+  focusRef.current = focusIndex
+
+  // ── Keyboard support (A=accept, R=reject, J/↓=next, K/↑=prev) ──
+  useEffect(() => {
+    if (phase !== 'review' || allDetections.length === 0) return
+    function handleKey(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+      const key = e.key.toLowerCase()
+      const list = filteredRef.current
+      const idx = focusRef.current
+      if (key === 'j' || key === 'arrowdown') {
+        e.preventDefault()
+        setFocusIndex(prev => Math.min(prev + 1, list.length - 1))
+      } else if (key === 'k' || key === 'arrowup') {
+        e.preventDefault()
+        setFocusIndex(prev => Math.max(prev - 1, 0))
+      } else if (key === 'a' && idx >= 0 && idx < list.length) {
+        e.preventDefault()
+        handleToggleAccept(list[idx].id, true)
+      } else if (key === 'r' && idx >= 0 && idx < list.length) {
+        e.preventDefault()
+        handleToggleAccept(list[idx].id, false)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [phase, allDetections, reviewFilter])
+
+  // ── Set explicit acceptance state ──
+  const handleToggleAccept = useCallback((detId, accepted) => {
+    setAllDetections(prev => prev.map(d =>
+      d.id === detId ? { ...d, accepted } : d
+    ))
+  }, [])
+
+  // ── Batch bucket actions ──
+  const handleAcceptAllGreen = useCallback(() => {
+    setAllDetections(prev => prev.map(d =>
+      d.confidenceBucket === 'high' ? { ...d, accepted: true } : d
+    ))
+  }, [])
+
+  const handleIgnoreAllRed = useCallback(() => {
+    setAllDetections(prev => prev.map(d =>
+      d.confidenceBucket === 'low' ? { ...d, accepted: false } : d
+    ))
+  }, [])
 
   // ── Reopen existing run (skip detection) ──
   useEffect(() => {
@@ -357,9 +416,9 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
     setPhase('review')
   }, [existingRun])
 
-  // ── Load templates and start detection (skip if reopening) ──
+  // ── Load templates and start detection (skip if reopening or pdfCandidates) ──
   useEffect(() => {
-    if (existingRun) return // skip detection when reopening
+    if (existingRun || (pdfCandidates && pdfCandidates.length)) return // skip detection when reopening or pdf candidates
     ;(async () => {
       setPhase('loading')
       // Load project-scoped templates if projectId provided, otherwise global
@@ -517,12 +576,15 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
 
   // ── Filtered detections for display ──
   const filteredDetections = useMemo(() => {
+    let result
     switch (reviewFilter) {
-      case 'accepted': return allDetections.filter(d => d.accepted !== false)
-      case 'rejected': return allDetections.filter(d => d.accepted === false)
-      case 'pending':  return allDetections.filter(d => d.score < scoreThreshold)
-      default:         return allDetections
+      case 'accepted': result = allDetections.filter(d => d.accepted !== false); break
+      case 'rejected': result = allDetections.filter(d => d.accepted === false); break
+      case 'pending':  result = allDetections.filter(d => d.score < scoreThreshold); break
+      default:         result = allDetections
     }
+    filteredRef.current = result
+    return result
   }, [allDetections, reviewFilter, scoreThreshold])
 
   // ── Filter counts ──
@@ -733,6 +795,56 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                       Kattints → elfogad/elvet · 📍 → ugrás a tervre
                     </div>
                   </div>
+
+                  {/* ── Bucket batch actions (PDF rule-engine mode) ── */}
+                  {pdfCandidates && pdfCandidates.length > 0 && (() => {
+                    const greenCount = allDetections.filter(d => d.confidenceBucket === 'high').length
+                    const yellowCount = allDetections.filter(d => d.confidenceBucket === 'review').length
+                    const redCount = allDetections.filter(d => d.confidenceBucket === 'low').length
+                    return (
+                      <div style={{
+                        background: C.bgCard, border: `1px solid ${C.border}`,
+                        borderRadius: 12, padding: '10px 16px',
+                        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                      }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginRight: 4 }}>
+                          Gyors műveletek:
+                        </span>
+                        {greenCount > 0 && (
+                          <button
+                            onClick={handleAcceptAllGreen}
+                            style={{
+                              ...actionBtnStyle, color: C.accent,
+                              borderColor: C.accentBorder, background: C.accentDim,
+                            }}
+                          >
+                            <CheckIcon size={11} color={C.accent} /> {greenCount} zöld elfogadása
+                          </button>
+                        )}
+                        {redCount > 0 && (
+                          <button
+                            onClick={handleIgnoreAllRed}
+                            style={{
+                              ...actionBtnStyle, color: C.red,
+                              borderColor: 'rgba(255,107,107,0.3)',
+                              background: 'rgba(255,107,107,0.06)',
+                            }}
+                          >
+                            <XSmIcon size={11} color={C.red} /> {redCount} piros kihagyása
+                          </button>
+                        )}
+                        {yellowCount > 0 && (
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.yellow }}>
+                            {yellowCount} sárga vár review-ra
+                          </span>
+                        )}
+                        <div style={{ flex: 1 }} />
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 8, color: C.muted, opacity: 0.7 }}>
+                          ⌨ J/K = nav · A = elfogad · R = elvet
+                        </span>
+                      </div>
+                    )
+                  })()}
 
                   {/* Score threshold slider */}
                   <ScoreThresholdSlider
