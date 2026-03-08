@@ -50,7 +50,7 @@ function mapColor(category) {
 
 function initialAcceptance(bucket) {
   if (bucket === CONFIDENCE_BUCKET.HIGH) return true    // green → auto-accept
-  if (bucket === CONFIDENCE_BUCKET.REVIEW) return true  // yellow → default accept, review suggested
+  if (bucket === CONFIDENCE_BUCKET.REVIEW) return false // yellow → pending, requires explicit review
   return false                                          // red → default reject
 }
 

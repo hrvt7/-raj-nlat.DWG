@@ -115,12 +115,12 @@ describe('candidateAdapter — initial acceptance', () => {
     expect(adapted.accepted).toBe(true)
   })
 
-  it('REVIEW bucket → accepted = true (yellow default accept, review suggested)', () => {
+  it('REVIEW bucket → accepted = false (yellow pending, requires explicit review)', () => {
     const adapted = adaptCandidate(
       makeCandidate({ confidenceBucket: 'review', confidence: 0.5, requiresReview: true }),
       PLAN_ID,
     )
-    expect(adapted.accepted).toBe(true)
+    expect(adapted.accepted).toBe(false)
   })
 
   it('LOW bucket → accepted = false (red default reject)', () => {
@@ -180,12 +180,18 @@ describe('candidateAdapter — batch operations', () => {
     expect(step2.find(d => d.confidenceBucket === 'review').accepted).toBe(false)
     expect(step2.find(d => d.confidenceBucket === 'low').accepted).toBe(false)
   })
+
+  it('initial state after adapt: only green is accepted, yellow and red are not', () => {
+    expect(adapted.find(d => d.confidenceBucket === 'high').accepted).toBe(true)
+    expect(adapted.find(d => d.confidenceBucket === 'review').accepted).toBe(false)
+    expect(adapted.find(d => d.confidenceBucket === 'low').accepted).toBe(false)
+  })
 })
 
 // ── 4. Yellow review state ──────────────────────────────────────────────────
 
 describe('candidateAdapter — yellow review state', () => {
-  it('review bucket candidate has requiresReview = true', () => {
+  it('review bucket candidate starts NOT accepted, requires explicit action', () => {
     const candidate = makeCandidate({
       confidenceBucket: 'review',
       confidence: 0.45,
@@ -194,8 +200,35 @@ describe('candidateAdapter — yellow review state', () => {
     const adapted = adaptCandidate(candidate, PLAN_ID)
     expect(adapted.requiresReview).toBe(true)
     expect(adapted.confidenceBucket).toBe('review')
-    // Default accepted for yellow, but flagged for manual review
-    expect(adapted.accepted).toBe(true)
+    // Yellow is NOT accepted by default — requires explicit review
+    expect(adapted.accepted).toBe(false)
+  })
+
+  it('yellow candidate becomes accepted only after explicit toggle', () => {
+    const candidate = makeCandidate({
+      confidenceBucket: 'review',
+      confidence: 0.45,
+      requiresReview: true,
+    })
+    const adapted = adaptCandidate(candidate, PLAN_ID)
+    expect(adapted.accepted).toBe(false)
+    // Simulate explicit accept (as the review panel handleToggleAccept would do)
+    const accepted = { ...adapted, accepted: true }
+    expect(accepted.accepted).toBe(true)
+    // This is the only path for yellow → accepted
+  })
+
+  it('non-reviewed yellow candidate does NOT produce marker fields for apply', () => {
+    const candidates = [
+      makeCandidate({ symbolId: 'SYM-SOCKET', confidence: 0.8, confidenceBucket: 'high' }),
+      makeCandidate({ symbolId: 'SYM-SWITCH', confidence: 0.5, confidenceBucket: 'review' }),
+    ]
+    const adapted = adaptCandidates(candidates, PLAN_ID)
+    // Simulate apply: only accepted items get toMarkerFields
+    const acceptedOnly = adapted.filter(d => d.accepted !== false)
+    expect(acceptedOnly.length).toBe(1) // only green
+    expect(acceptedOnly[0].confidenceBucket).toBe('high')
+    // Yellow is filtered out because accepted = false
   })
 
   it('adapts evidence breakdown for review', () => {
