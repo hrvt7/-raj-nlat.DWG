@@ -28,6 +28,11 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
 
+  // Stable callback ref — prevents infinite re-render loop when parent passes
+  // inline onCableData (new reference each render → useEffect re-fires → setState → re-render → …)
+  const onCableDataRef = useRef(onCableData)
+  useEffect(() => { onCableDataRef.current = onCableData })
+
   // Expose inner DxfViewerCanvas imperative API so parents (e.g. DxfBlockOverlay) can use
   // sceneToScreen, getViewer, subscribe, etc. through the forwarded ref.
   useImperativeHandle(ref, () => ({
@@ -172,15 +177,16 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   // ── Report cable data to parent when markers/scale change ──
   // Mirrors the PdfViewer onCableData pattern: Manhattan distance from panel to each device.
   useEffect(() => {
-    if (!onCableData) return
+    const cb = onCableDataRef.current
+    if (!cb) return
     const markers = markersRef.current
     const sf = scaleRef.current
     if (!markers.length || !sf.calibrated || !sf.factor) {
-      onCableData(null)
+      cb(null)
       return
     }
     const panel = markers.find(m => m.category === 'panel')
-    if (!panel) { onCableData(null); return }
+    if (!panel) { cb(null); return }
 
     const ROUTING_FACTOR = 1.25
     let lightM = 0, socketM = 0, switchM = 0, otherM = 0
@@ -203,9 +209,9 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
 
     const totalM = lightM + socketM + switchM + otherM
     const deviceCount = lightN + socketN + switchN + otherN
-    if (deviceCount === 0) { onCableData(null); return }
+    if (deviceCount === 0) { cb(null); return }
 
-    onCableData({
+    cb({
       cable_total_m: Math.round(totalM * 10) / 10,
       cable_total_m_p50: Math.round(totalM * 10) / 10,
       cable_total_m_p90: Math.round(totalM * 1.2 * 10) / 10,
@@ -218,8 +224,9 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       method: `Kézi jelölés alapján (${deviceCount} eszköz, Manhattan-távolság × ${ROUTING_FACTOR})`,
       confidence: 0.92,
     })
+  // onCableData accessed via stable ref — no dep needed
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderTick, scale, onCableData])
+  }, [renderTick, scale])
 
   // ── Coordinate projection helper ──
   const project = useCallback((sx, sy) => {

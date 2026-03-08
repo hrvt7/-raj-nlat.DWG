@@ -64,6 +64,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
 
+  // ── Stable callback refs ──
+  // Parent passes inline arrow functions for callbacks, which change reference
+  // on every render. Storing them in refs prevents useEffect dependency cycles
+  // (e.g. cable data useEffect → onCableData → parent setState → re-render →
+  //  new onCableData ref → effect re-fires → infinite loop).
+  const onCableDataRef = useRef(onCableData)
+  useEffect(() => { onCableDataRef.current = onCableData })
+  const onMarkersChangeRef = useRef(onMarkersChange)
+  useEffect(() => { onMarkersChangeRef.current = onMarkersChange })
+
   // ── PDF state ──
   const [pdfDoc, setPdfDoc] = useState(null)
   const [pageNum, setPageNum] = useState(1)
@@ -743,16 +753,17 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
   // ── Report cable data to parent when markers/scale change ──
   useEffect(() => {
-    if (!onCableData) return
+    const cb = onCableDataRef.current
+    if (!cb) return
     const markers = markersRef.current
     const sf = scaleRef.current
     if (!markers.length || !sf.calibrated || !sf.factor) {
-      onCableData(null)
+      cb(null)
       return
     }
     // Find panel marker
     const panel = markers.find(m => m.category === 'panel')
-    if (!panel) { onCableData(null); return }
+    if (!panel) { cb(null); return }
 
     // Compute Manhattan cable lengths from panel to each device
     let lightM = 0, socketM = 0, switchM = 0, otherM = 0
@@ -779,9 +790,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
     const totalM = lightM + socketM + switchM + otherM
     const deviceCount = lightN + socketN + switchN + otherN
-    if (deviceCount === 0) { onCableData(null); return }
+    if (deviceCount === 0) { cb(null); return }
 
-    onCableData({
+    cb({
       cable_total_m: Math.round(totalM * 10) / 10,
       cable_total_m_p50: Math.round(totalM * 10) / 10,
       cable_total_m_p90: Math.round(totalM * 1.2 * 10) / 10,
@@ -795,8 +806,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       confidence: 0.92,
       _source: 'pdf_markers',
     })
+  // onCableData accessed via stable ref — no dep needed
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderTick, scale, onCableData])
+  }, [renderTick, scale])
 
   // ═══════════════════════════════════════════════════════════════════════════
   return (
