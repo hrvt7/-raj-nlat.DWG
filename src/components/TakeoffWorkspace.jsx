@@ -4,8 +4,25 @@
 // Kábelbecslés: 1. mért DXF rétegek → 2. MST pozíciókból → 3. eszközszám alapján.
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
-const DxfViewerPanel = lazy(() => import('./DxfViewer/index.jsx'))
-const PdfViewerPanel = lazy(() => import('./PdfViewer/index.jsx'))
+
+// ── Lazy imports with retry: handles stale chunk hashes after Vercel deploys ──
+// If the dynamic import fails (chunk 404), retry once and reload if still failing.
+function lazyRetry(importFn) {
+  return lazy(() =>
+    importFn().catch(() => {
+      // First retry — browser may have stale HTML with old chunk hashes
+      return importFn().catch((err) => {
+        // If still failing, force a full page reload to fetch fresh HTML
+        console.error('Chunk load failed after retry, reloading page:', err)
+        window.location.reload()
+        // Return never-resolving promise so React doesn't render an error
+        return new Promise(() => {})
+      })
+    })
+  )
+}
+const DxfViewerPanel = lazyRetry(() => import('./DxfViewer/index.jsx'))
+const PdfViewerPanel = lazyRetry(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, generateQuoteId, loadSettings } from '../data/store.js'
@@ -584,7 +601,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
-  const [rightTab, setRightTab] = useState('recognize') // 'recognize' | 'takeoff' | 'cable' | 'context'
+  const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
@@ -743,31 +760,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     const ext = f.name.toLowerCase().split('.').pop()
 
     if (ext === 'pdf') {
-      // ── PDF Takeoff Pipeline (vector-first, Vision AI fallback) ──────────
-      setParsePending(true)
-      setParseProgress(0)
+      // ── PDF: skip auto-detection, go directly to manual takeoff ──────────
+      // The auto-detection pipeline (runPdfTakeoff) is not stable enough for
+      // production use — it produces misleading recognition results on most
+      // architectural / electrical PDFs.  The engine is preserved but disabled.
       setPdfConfidence(null)
       setPdfSource(null)
       setPdfError(null)
       setLastPdfFile(f)
-      try {
-        const result = await runPdfTakeoff(f, pct => setParseProgress(pct))
-        setParsedDxf(result.parsedDxf)
-        setRecognizedItems(result.recognizedItems)
-        setCableEstimate(normalizeCableEstimate(result.cableEstimate, CABLE_SOURCE.PDF_TAKEOFF))
-        setPdfConfidence(result.confidence ?? null)
-        setPdfSource(result.pipelineSource ?? null)
-        if (result.recognizedItems.length) setRightTab('recognize')
-        if (result.warnings?.length) {
-          console.warn('PDF takeoff warnings:', result.warnings)
-        }
-      } catch (err) {
-        console.error('PDF takeoff error:', err)
-        setPdfError(err.message || 'PDF feldolgozási hiba')
-        setParsedDxf({ success: false, error: err.message, _pdfError: true })
-      } finally {
-        setParsePending(false)
-      }
+      setParsedDxf({ success: true, _noDxf: true })
+      setRightTab('takeoff')
       return
     }
 
@@ -904,7 +906,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       }).sort((a, b) => b.confidence - a.confidence || b.qty - a.qty)
 
       setRecognizedItems(items)
-      if (items.length) setRightTab('recognize')
+      if (items.length) setRightTab('takeoff')
     } catch (err) {
       console.error('Parse error:', err)
       setParsedDxf({ success: false, error: err.message || String(err) })
@@ -1377,11 +1379,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 20 }}>
         {isDwgConverting ? (
           <>
-            <div style={{ fontSize: 32 }}>🔄</div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 14, color: C.textSub }}>DWG → DXF konverzió (CloudConvert)...</div>
+            <div style={{
+              width: 40, height: 40, border: '3px solid #1E1E22',
+              borderTopColor: '#00E5A0', borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text }}>DWG → DXF konverzió…</div>
             <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>Ez néhány másodpercet vesz igénybe</div>
-            <div style={{ width: 240, height: 3, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: '40%', background: C.accent, borderRadius: 2, animation: 'slideProgress 1.2s ease-in-out infinite' }} />
+            <div style={{ width: 200, height: 2, background: C.border, borderRadius: 1, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: '40%', background: C.accent, borderRadius: 1, animation: 'slideProgress 1.5s ease-in-out infinite' }} />
             </div>
           </>
         ) : (
@@ -1676,7 +1682,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0 }}>
             {[
-              { id: 'recognize', label: '🔍 Elemek',     badge: effectiveItems.length },
               { id: 'takeoff',   label: '📋 Felmérés',   badge: takeoffRows.length },
               { id: 'cable',     label: '🔌 Kábel' },
               { id: 'calc',      label: '🧮 Kalkuláció' },
@@ -1706,166 +1711,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           {/* Tab content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
 
-            {/* ── RECOGNITION TAB ────────────────────────────────────────── */}
-            {rightTab === 'recognize' && (
-              <div>
-                {/* PDF-specific: confidence badge + API error banner */}
-                {isPdf && pdfConfidence !== null && (
-                  <div style={{ marginBottom: 12 }}>
-                    <ConfidenceBadge
-                      confidence={pdfConfidence}
-                      source={pdfSource}
-                      showManualHint={true}
-                      onOpenManualTools={() => {
-                        // Switch to PDF viewer manual mode (Count/Measure tool)
-                        setRightTab('cable')
-                      }}
-                    />
-                  </div>
-                )}
-                {isPdf && pdfError && (
-                  <div style={{ marginBottom: 12 }}>
-                    <ApiErrorBanner
-                      error={pdfError}
-                      label="PDF feldolgozási hiba"
-                      onRetry={() => lastPdfFile && handleFile(lastPdfFile)}
-                      onManualMode={() => setRightTab('takeoff')}
-                    />
-                  </div>
-                )}
-                {recognizedItems.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-                    {parsedDxf?._dwgFailed
-                      ? 'DWG konverzió sikertelen. Exportáld DXF-ként és töltsd fel újra.'
-                      : parsedDxf?._noDxf
-                      ? 'A PDF nem tartalmaz felismerhető vektoros elemet. Adj hozzá elemeket manuálisan a Felmérés fülön.'
-                      : 'Nem találtunk ismert blokkokat a DXF-ben.'}
-                  </div>
-                ) : (
-                  <>
-                    {/* Summary + bulk accept */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                      <div>
-                        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: C.text }}>
-                          {highConf.length + midConf.length} / {effectiveItems.length} felismerve
-                        </div>
-                        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-                          {highConf.length} biztos · {midConf.length} közepes · {lowConf.length} ismeretlen
-                        </div>
-                      </div>
-                      <button
-                        onClick={acceptAllHighConf}
-                        style={{
-                          padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
-                          background: C.accentDim, border: `1px solid ${C.accent}`,
-                          color: C.accent, fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-                        }}
-                      >
-                        ✓ Elfogad mindent → Takeoff
-                      </button>
-                    </div>
-
-                    {/* Deleted items restore */}
-                    {deletedItems.size > 0 && (
-                      <div style={{ marginBottom: 10, padding: '6px 10px', borderRadius: 6, background: 'rgba(255,107,107,0.08)', border: `1px solid ${C.red}25` }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red }}>
-                            {deletedItems.size} elem törölve
-                          </span>
-                          <button
-                            onClick={() => setDeletedItems(new Set())}
-                            style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono', textDecoration: 'underline' }}
-                          >
-                            Mindent visszaállít
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* High confidence group */}
-                    {highConf.length > 0 && (
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, display: 'inline-block' }} />
-                          BIZTOS FELISMERÉS (≥80%)
-                        </div>
-                        {highConf.map(item => (
-                          <RecognitionRow
-                            key={item.blockName} item={item} asmOverrides={asmOverrides}
-                            assemblies={assemblies}
-                            onAccept={() => {}}
-                            onOverride={(name, id) => setAsmOverrides(p => ({ ...p, [name]: id }))}
-                            onQtyChange={(name, qty) => setItemQtyOverrides(p => ({ ...p, [name]: qty }))}
-                            onDelete={(name) => setDeletedItems(p => new Set([...p, name]))}
-                            isHighlighted={highlightBlock === item.blockName}
-                            onHover={setHighlightBlock}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Mid confidence */}
-                    {midConf.length > 0 && (
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.yellow, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.yellow, display: 'inline-block' }} />
-                          ELLENŐRIZD (50-80%)
-                        </div>
-                        {midConf.map(item => (
-                          <RecognitionRow
-                            key={item.blockName} item={item} asmOverrides={asmOverrides}
-                            assemblies={assemblies}
-                            onAccept={() => {}}
-                            onOverride={(name, id) => setAsmOverrides(p => ({ ...p, [name]: id }))}
-                            onQtyChange={(name, qty) => setItemQtyOverrides(p => ({ ...p, [name]: qty }))}
-                            onDelete={(name) => setDeletedItems(p => new Set([...p, name]))}
-                            isHighlighted={highlightBlock === item.blockName}
-                            onHover={setHighlightBlock}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Low confidence / unknown */}
-                    {lowConf.length > 0 && (
-                      <div>
-                        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.red, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.red, display: 'inline-block' }} />
-                          ISMERETLEN ({lowConf.length} db)
-                        </div>
-                        {lowConf.map(item => (
-                          <RecognitionRow
-                            key={item.blockName} item={item} asmOverrides={asmOverrides}
-                            assemblies={assemblies}
-                            onAccept={() => {}}
-                            onOverride={(name, id) => {
-                              setAsmOverrides(p => ({ ...p, [name]: id }))
-                              // Persist unknown→assembly mapping for future projects
-                              if (id) {
-                                const rule = BLOCK_ASM_RULES.find(r => r.asmId === id)
-                                const asmType = ASSEMBLY_TYPES.find(t => t.key === rule?.label) || ASSEMBLY_TYPES.find(t => t.label === rule?.label)
-                                addUserOverride(name, asmType?.key || id)
-                              }
-                            }}
-                            onQtyChange={(name, qty) => setItemQtyOverrides(p => ({ ...p, [name]: qty }))}
-                            onDelete={(name) => setDeletedItems(p => new Set([...p, name]))}
-                            isHighlighted={highlightBlock === item.blockName}
-                            onHover={setHighlightBlock}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
             {/* ── TAKEOFF TAB ─────────────────────────────────────────────── */}
             {rightTab === 'takeoff' && (
               <div>
                 {takeoffRows.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-                    Még nincs felvett elem. Használd a Számlálás eszközt a tervrajzon, vagy az Elemek fülön fogadd el a felismert blokkokat.
+                    Még nincs felvett elem. Használd a Számlálás eszközt a tervrajzon.
                   </div>
                 ) : (
                   <>

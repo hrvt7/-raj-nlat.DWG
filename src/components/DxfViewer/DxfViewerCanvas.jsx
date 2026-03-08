@@ -65,7 +65,13 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
       setError(null)
 
       try {
-        const { DxfViewer } = await import('dxf-viewer')
+        // Retry dynamic import once — handles stale chunk hashes after Vercel deploy
+        let DxfViewer
+        try {
+          ({ DxfViewer } = await import('dxf-viewer'))
+        } catch {
+          ({ DxfViewer } = await import('dxf-viewer'))
+        }
         if (cancelled) return
 
         if (viewerRef.current) {
@@ -208,15 +214,23 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
         <div style={{
           position: 'absolute', inset: 0, display: 'flex',
           flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(9,9,11,0.9)', zIndex: 5,
+          background: 'rgba(9,9,11,0.9)', zIndex: 5, gap: 12,
         }}>
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" strokeWidth="2" strokeLinecap="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          <div style={{ color: '#FF6B6B', fontSize: 13, fontFamily: 'Syne', textAlign: 'center', maxWidth: 280, marginTop: 8 }}>
+          <div style={{ color: '#FF6B6B', fontSize: 13, fontFamily: 'Syne', textAlign: 'center', maxWidth: 320 }}>
             {error}
           </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '8px 16px', borderRadius: 6, cursor: 'pointer',
+              background: 'rgba(0,229,160,0.12)', border: '1px solid rgba(0,229,160,0.4)',
+              color: '#00E5A0', fontFamily: 'DM Mono', fontSize: 12,
+            }}
+          >Oldal újratöltése</button>
         </div>
       )}
     </div>
