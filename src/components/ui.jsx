@@ -310,7 +310,7 @@ export function WorkflowStepper({ currentStep = 0 }) {
   ]
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20,
+      display: 'flex', alignItems: 'center', marginBottom: 20,
       padding: '8px 0', width: '100%',
     }}>
       {steps.map((step, i) => {
@@ -318,18 +318,16 @@ export function WorkflowStepper({ currentStep = 0 }) {
         const isCurrent = i === currentStep
         const dotColor = isDone ? C.accent : isCurrent ? C.accent : C.border
         const labelColor = isDone ? C.textSub : isCurrent ? C.text : C.textMuted
+        const isLast = i === steps.length - 1
         return (
           <React.Fragment key={i}>
-            {i > 0 && (
+            {/* Step node: circle + label centered together */}
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              gap: 5, flexShrink: 0, minWidth: 0,
+            }}>
               <div style={{
-                flex: 1, height: 1,
-                background: isDone ? 'rgba(0,229,160,0.35)' : C.border,
-                margin: '0 4px',
-              }} />
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{
-                width: 20, height: 20, borderRadius: '50%',
+                width: 22, height: 22, borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 10, fontFamily: 'DM Mono', fontWeight: 700,
                 background: isDone ? 'rgba(0,229,160,0.15)' : isCurrent ? 'rgba(0,229,160,0.08)' : 'transparent',
@@ -340,12 +338,22 @@ export function WorkflowStepper({ currentStep = 0 }) {
                 {isDone ? '✓' : step.icon}
               </div>
               <span style={{
-                fontFamily: 'DM Mono', fontSize: 10, color: labelColor,
-                fontWeight: isCurrent ? 600 : 400,
+                fontFamily: 'DM Mono', fontSize: 11, color: labelColor,
+                fontWeight: isCurrent ? 600 : 500,
+                letterSpacing: '0.01em',
                 transition: 'all 0.2s',
                 whiteSpace: 'nowrap',
               }}>{step.label}</span>
             </div>
+            {/* Connector line between steps */}
+            {!isLast && (
+              <div style={{
+                flex: 1, height: 1.5, minWidth: 16,
+                background: isDone ? 'rgba(0,229,160,0.35)' : C.border,
+                margin: '0 8px', marginBottom: 20,
+                borderRadius: 1,
+              }} />
+            )}
           </React.Fragment>
         )
       })}

@@ -1037,7 +1037,7 @@ function SaaSShell() {
       'work-items': 'Munkatételek', materials: 'Anyagok',
       assemblies: 'Assemblyk', settings: 'Beállítások',
     }
-    const base = baseTitles[page] || page
+    const base = baseTitles[page] ?? page
     return tradeLabel ? `${base} — ${tradeLabel}` : base
   }
 
