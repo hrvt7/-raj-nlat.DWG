@@ -1,19 +1,21 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { generatePdf } from './utils/generatePdf.js'
-import { exportBOM, generateBOMRows } from './utils/bomExport.js'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
+import { supabase, supabaseConfigured, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
-import Dashboard from './pages/Dashboard.jsx'
-import Quotes from './pages/Quotes.jsx'
-import WorkItems from './pages/WorkItems.jsx'
-import Settings from './pages/Settings.jsx'
-import AssembliesPage from './pages/Assemblies.jsx'
-import ProjektekPage from './pages/Projektek.jsx'
-import LegendPanel from './components/LegendPanel.jsx'
-import DetectionReviewPanel from './components/DetectionReviewPanel.jsx'
-import PdfMergePanel from './components/PdfMergePanel.jsx'
-import MaterialsPage from './pages/Materials.jsx'
+
+// ── Lazy-loaded pages (not needed on initial render) ────────────────────────
+const Dashboard              = lazy(() => import('./pages/Dashboard.jsx'))
+const Quotes                 = lazy(() => import('./pages/Quotes.jsx'))
+const WorkItems              = lazy(() => import('./pages/WorkItems.jsx'))
+const Settings               = lazy(() => import('./pages/Settings.jsx'))
+const AssembliesPage         = lazy(() => import('./pages/Assemblies.jsx'))
+const ProjektekPage          = lazy(() => import('./pages/Projektek.jsx'))
+const MaterialsPage          = lazy(() => import('./pages/Materials.jsx'))
+
+// ── Lazy-loaded modals (rarely opened) ──────────────────────────────────────
+const LegendPanel            = lazy(() => import('./components/LegendPanel.jsx'))
+const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPanel.jsx'))
+const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote, generateQuoteId } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
@@ -23,6 +25,7 @@ import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, groupItemsByFloor, resolveItemSystemType } from './data/quoteDefaults.js'
 import { quoteDisplayTotals } from './utils/quoteDisplayTotals.js'
+import { generateBOMRows } from './utils/bomExport.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -209,7 +212,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     onSaveQuote(updated)
   }
 
-  const handlePdf = () => {
+  const handlePdf = async () => {
     setPdfGenerating(true)
     // Build a live quote snapshot for PDF so it uses current edits (even unsaved)
     const liveQuote = {
@@ -225,8 +228,10 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       validityText: editValidity,
       paymentTermsText: editPaymentTerms,
     }
-    try { generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy) }
-    finally { setTimeout(() => setPdfGenerating(false), 1200) }
+    try {
+      const { generatePdf } = await import('./utils/generatePdf.js')
+      generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy)
+    } finally { setTimeout(() => setPdfGenerating(false), 1200) }
   }
 
   // Separate items by type for the grouped table
@@ -406,7 +411,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             </div>
           )}
           <button
-            onClick={() => exportBOM(quote)}
+            onClick={async () => { const { exportBOM } = await import('./utils/bomExport.js'); exportBOM(quote) }}
             disabled={!hasBom}
             style={{
               width: '100%', padding: '10px', borderRadius: 9,
@@ -1078,7 +1083,7 @@ function SaaSShell() {
     if (session) {
       saveQuoteRemote(quote).catch(err => {
         console.error('[TakeoffPro] Remote quote sync failed:', err.message)
-        // Data is safe in localStorage — remote sync will retry on next save
+        showToast('⚠', 'Felhő szinkron sikertelen – az adat helyben mentve.', '#FF6B6B')
       })
     }
   }
@@ -1143,6 +1148,7 @@ function SaaSShell() {
     if (session) {
       saveQuoteRemote(updatedQuote).catch(err => {
         console.error('[TakeoffPro] Remote quote sync failed:', err.message)
+        showToast('⚠', 'Felhő szinkron sikertelen – az adat helyben mentve.', '#FF6B6B')
       })
     }
   }
@@ -1313,6 +1319,7 @@ function SaaSShell() {
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 14px' : '32px 28px' }}>
+            <Suspense fallback={<div style={{ color: C.muted, textAlign: 'center', padding: 40, fontFamily: 'DM Mono', fontSize: 13 }}>Betöltés…</div>}>
             <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
               {viewingQuote && page === 'quotes' ? (
                 <QuoteView quote={viewingQuote} settings={settings} onBack={() => setViewingQuote(null)}
@@ -1357,11 +1364,13 @@ function SaaSShell() {
                   onMaterialsChange={m => { setMaterials(m) }} />
               ) : null}
             </div>
+            </Suspense>
           </div>
         )}
       </div>
 
       {/* ── Felmérés modal panels ─────────────────────────────────────────── */}
+      <Suspense fallback={null}>
       {legendPanelData && (
         <ErrorBoundary
           fallbackLabel="Jelmagyarázat panel hiba"
@@ -1458,6 +1467,7 @@ function SaaSShell() {
           }}
         />
       )}
+      </Suspense>
       {/* ── Auto-save toast (informative guard on plan switch) ────────────── */}
       {autoSaveToast && (
         <div style={{

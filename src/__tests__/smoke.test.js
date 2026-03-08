@@ -353,6 +353,7 @@ describe('planMetaAccessors — unified metadata access', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { quoteDisplayTotals } from '../utils/quoteDisplayTotals.js'
+import { OUTPUT_MODE_NOTES } from '../data/quoteDefaults.js'
 
 describe('quoteDisplayTotals — outputMode-aware financial totals', () => {
   const base = { totalLabor: 500_000, totalMaterials: 300_000, markupPct: 0.15, vatPct: 27 }
@@ -459,5 +460,45 @@ describe('generateBOMRows — BOM independence', () => {
     expect(rows.length).toBe(1)
     expect(rows[0].qty).toBe(100)
     expect(rows[0].materialCost).toBe(25000)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 10. Deploy safety — env guard & supabaseConfigured export
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Deploy safety — env guards', () => {
+  it('supabaseConfigured is a boolean export', async () => {
+    // Dynamic import to avoid side-effect issues with actual supabase init
+    // We test the contract: it must be a boolean
+    const mod = await import('../supabase.js')
+    expect(typeof mod.supabaseConfigured).toBe('boolean')
+  })
+
+  it('quoteDisplayTotals returns all required fields', () => {
+    const result = quoteDisplayTotals({
+      outputMode: 'combined', totalLabor: 100000, totalMaterials: 200000,
+      markupPct: 0.1, vatPct: 27,
+    })
+    expect(result).toHaveProperty('displayNet')
+    expect(result).toHaveProperty('displayVat')
+    expect(result).toHaveProperty('displayGross')
+    expect(result).toHaveProperty('fullNet')
+    // All must be numbers
+    expect(typeof result.displayNet).toBe('number')
+    expect(typeof result.displayVat).toBe('number')
+    expect(typeof result.displayGross).toBe('number')
+    expect(typeof result.fullNet).toBe('number')
+  })
+
+  it('buildQuoteRow always includes output_mode field', () => {
+    const row = buildQuoteRow({ id: 'QT-2025-001', outputMode: undefined }, 'user-1')
+    expect(row.output_mode).toBe('combined')  // default
+  })
+
+  it('OUTPUT_MODE_NOTES has all three mode keys', () => {
+    expect(OUTPUT_MODE_NOTES).toHaveProperty('combined')
+    expect(OUTPUT_MODE_NOTES).toHaveProperty('labor_only')
+    expect(OUTPUT_MODE_NOTES).toHaveProperty('split_material_labor')
   })
 })

@@ -1,21 +1,41 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildQuoteRow } from './utils/quoteMapping.js'
 
+// ── Env validation ──────────────────────────────────────────────────────────
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!SUPABASE_URL || !SUPABASE_ANON) {
-  // In development, log a clear error instead of silently failing with hardcoded credentials
-  console.error('[supabase] VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set in .env')
+/** @type {boolean} true when both required env vars are present */
+export const supabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON)
+
+if (!supabaseConfigured) {
+  console.error(
+    '[TakeoffPro] Hiányzó Supabase konfiguráció!\n' +
+    '  VITE_SUPABASE_URL:      ' + (SUPABASE_URL  ? '✓' : '✗ HIÁNYZIK') + '\n' +
+    '  VITE_SUPABASE_ANON_KEY: ' + (SUPABASE_ANON ? '✓' : '✗ HIÁNYZIK') + '\n' +
+    '  → A .env fájlból hiányzik. Lásd: .env.example\n' +
+    '  → Az app offline módban működik (localStorage only).'
+  )
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
-  // TakeoffPro Supabase: public schema (nem takeoffpro)
-  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
-})
+// Safe client init — pass dummy values if unconfigured to avoid createClient crash.
+// All remote operations guard on supabaseConfigured before calling.
+export const supabase = createClient(
+  SUPABASE_URL  || 'https://placeholder.supabase.co',
+  SUPABASE_ANON || 'eyJ_placeholder',
+  { auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true } },
+)
+
+// ── Guard helper ────────────────────────────────────────────────────────────
+function requireConfig(op) {
+  if (!supabaseConfigured) {
+    throw new Error(`[TakeoffPro] ${op}: Supabase nincs konfigurálva. Ellenőrizd a .env fájlt.`)
+  }
+}
 
 // ── Auth helpers ───────────────────────────────────────────────────────────────
 export async function signUp(email, password, fullName) {
+  requireConfig('signUp')
   const { data, error } = await supabase.auth.signUp({
     email, password, options: { data: { full_name: fullName } },
   })
@@ -23,24 +43,29 @@ export async function signUp(email, password, fullName) {
   return data
 }
 export async function signIn(email, password) {
+  requireConfig('signIn')
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
   return data
 }
 export async function signOut() {
+  requireConfig('signOut')
   const { error } = await supabase.auth.signOut()
   if (error) throw error
 }
 export async function getSession() {
+  if (!supabaseConfigured) return null
   const { data: { session } } = await supabase.auth.getSession()
   return session
 }
 export function onAuthChange(cb) {
+  if (!supabaseConfigured) return { data: { subscription: { unsubscribe() {} } } }
   return supabase.auth.onAuthStateChange((_e, session) => cb(session))
 }
 
 // ── Profile ────────────────────────────────────────────────────────────────────
 export async function getProfile() {
+  requireConfig('getProfile')
   const { data, error } = await supabase.from('profiles').select('*').single()
   if (error && error.code !== 'PGRST116') throw error
   return data
@@ -48,11 +73,13 @@ export async function getProfile() {
 
 // ── Settings ───────────────────────────────────────────────────────────────────
 export async function loadSettingsRemote() {
+  requireConfig('loadSettingsRemote')
   const { data, error } = await supabase.from('settings').select('data').single()
   if (error && error.code !== 'PGRST116') throw error
   return data?.data || null
 }
 export async function saveSettingsRemote(obj) {
+  requireConfig('saveSettingsRemote')
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
   const { error } = await supabase.from('settings').upsert(
@@ -63,6 +90,7 @@ export async function saveSettingsRemote(obj) {
 
 // ── Quotes ─────────────────────────────────────────────────────────────────────
 export async function loadQuotesRemote() {
+  requireConfig('loadQuotesRemote')
   const { data, error } = await supabase
     .from('quotes').select('*').order('created_at', { ascending: false })
   if (error) throw error
@@ -72,6 +100,7 @@ export async function loadQuotesRemote() {
 export { buildQuoteRow } from './utils/quoteMapping.js'
 
 export async function saveQuoteRemote(quote) {
+  requireConfig('saveQuoteRemote')
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
   const row = buildQuoteRow(quote, user.id)
@@ -79,12 +108,14 @@ export async function saveQuoteRemote(quote) {
   if (error) throw error
 }
 export async function deleteQuoteRemote(quoteNumber) {
+  requireConfig('deleteQuoteRemote')
   const { error } = await supabase.from('quotes').delete().eq('quote_number', quoteNumber)
   if (error) throw error
 }
 
 // ── Work items / Materials / Assemblies ────────────────────────────────────────
 async function upsertUserBlob(table, dataArray) {
+  requireConfig('upsertUserBlob:' + table)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
   const { error } = await supabase.from(table).upsert(
@@ -93,6 +124,7 @@ async function upsertUserBlob(table, dataArray) {
   if (error) throw error
 }
 async function loadUserBlob(table) {
+  requireConfig('loadUserBlob:' + table)
   const { data, error } = await supabase.from(table).select('data').single()
   if (error && error.code !== 'PGRST116') throw error
   return data?.data || null
@@ -106,6 +138,7 @@ export const saveAssembliesRemote  = (d) => upsertUserBlob('assemblies', d)
 
 // ── Subscription ───────────────────────────────────────────────────────────────
 export async function getSubscriptionStatus() {
+  requireConfig('getSubscriptionStatus')
   const { data, error } = await supabase.from('profiles').select('plan, subscription_end').single()
   if (error && error.code !== 'PGRST116') throw error
   if (!data) return { plan: 'free', active: false }
@@ -135,6 +168,7 @@ export async function isSubscribed() {
  * @returns {{ erosaram: boolean, gyengaram: boolean, tuzjelzo: boolean }}
  */
 export async function loadTradeSubscriptionsRemote() {
+  requireConfig('loadTradeSubscriptionsRemote')
   const { data, error } = await supabase
     .from('trade_subscriptions')
     .select('trade_id, status')
@@ -154,6 +188,7 @@ export async function loadTradeSubscriptionsRemote() {
  * Trade aktiválása/deaktiválása
  */
 export async function setTradeSubscriptionRemote(tradeId, active) {
+  requireConfig('setTradeSubscriptionRemote')
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
   if (active) {
