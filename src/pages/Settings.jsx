@@ -723,10 +723,32 @@ function BackupTab({ settings, materials }) {
   return (
     <Card style={{ padding: 28, maxWidth: 600 }}>
       <SectionHeader title="Helyi mentés" />
-      <p style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.7, marginBottom: 20 }}>
-        Exportáld az összes beállítást, projektet, tervrajz metadatát, ajánlatot és anyaglistát egyetlen JSON fájlba.
-        Ez nem tartalmazza a feltöltött PDF/DXF fájlokat — csak a konfigurációt és metaadatokat.
+      <p style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.7, marginBottom: 16 }}>
+        Exportáld az összes konfigurációt és metaadatot egyetlen JSON fájlba.
       </p>
+
+      {/* What's included / excluded */}
+      <div style={{
+        marginBottom: 20, padding: '12px 16px', borderRadius: 8,
+        background: 'rgba(255,209,102,0.06)', border: '1px solid rgba(255,209,102,0.15)',
+      }}>
+        <div style={{ fontFamily: 'Syne', fontSize: 11, fontWeight: 700, color: '#FFD166', marginBottom: 8 }}>Mi kerül a backupba?</div>
+        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, lineHeight: 1.8 }}>
+          ✓ Beállítások (munkadíj, ÁFA, cégadatok)<br/>
+          ✓ Anyagkatalógus<br/>
+          ✓ Projektek és tervrajz metaadatok<br/>
+          ✓ Sablonok (jelmagyarázat alapján)<br/>
+          ✓ Ajánlatok (összes adat)<br/>
+          <span style={{ color: 'rgba(255,107,107,0.8)' }}>
+          ✗ Feltöltött PDF/DXF/DWG fájlok (csak metaadatuk)<br/>
+          ✗ Felmérési munkalapok (IndexedDB blob-ok)
+          </span>
+        </div>
+        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 8, fontStyle: 'italic' }}>
+          Visszaállítás után a tervrajz fájlokat újra kell feltölteni.
+        </div>
+      </div>
+
       <button onClick={handleExport} style={{
         background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 8,
         padding: '10px 20px', color: C.accent, fontFamily: 'Syne', fontWeight: 700,

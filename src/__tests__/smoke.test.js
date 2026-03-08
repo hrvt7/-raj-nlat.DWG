@@ -511,7 +511,11 @@ describe('Deploy safety — env guards', () => {
 // Mock generateQuoteId (depends on localStorage)
 vi.mock('../data/store.js', async (importOriginal) => {
   const mod = await importOriginal()
-  return { ...mod, generateQuoteId: () => 'QT-TEST-001' }
+  return {
+    ...mod,
+    generateQuoteId: () => 'QT-TEST-001',
+    loadQuotes: vi.fn(() => []),
+  }
 })
 
 import { createQuote } from '../utils/createQuote.js'
@@ -695,5 +699,149 @@ describe('createQuote factory — unified quote assembly', () => {
       expect(qB).toHaveProperty(key)
       expect(qC).toHaveProperty(key)
     }
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 11. quoteOrphans — orphan detection helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { checkQuotePlanStatus, countQuotesForPlan } from '../utils/quoteOrphans.js'
+
+// We need to mock loadQuotes and loadPlans used inside quoteOrphans.js
+vi.mock('../data/planStore.js', async (importOriginal) => {
+  const mod = await importOriginal()
+  return {
+    ...mod,
+    loadPlans: vi.fn(() => []),
+  }
+})
+
+import { loadPlans } from '../data/planStore.js'
+import { loadQuotes } from '../data/store.js'
+
+describe('checkQuotePlanStatus — orphan detection', () => {
+  beforeEach(() => {
+    loadPlans.mockReturnValue([{ id: 'P-1' }, { id: 'P-2' }])
+  })
+
+  it('returns "ok" when planId references existing plan', () => {
+    expect(checkQuotePlanStatus({ planId: 'P-1' })).toBe('ok')
+  })
+
+  it('returns "orphan" when planId references deleted plan', () => {
+    expect(checkQuotePlanStatus({ planId: 'P-GONE' })).toBe('orphan')
+  })
+
+  it('returns "ok" when all sourcePlans exist', () => {
+    expect(checkQuotePlanStatus({ sourcePlans: ['P-1', 'P-2'] })).toBe('ok')
+  })
+
+  it('returns "partial" when some sourcePlans are missing', () => {
+    expect(checkQuotePlanStatus({ sourcePlans: ['P-1', 'P-GONE'] })).toBe('partial')
+  })
+
+  it('returns "orphan" when all sourcePlans are missing', () => {
+    expect(checkQuotePlanStatus({ sourcePlans: ['P-GONE', 'P-ALSO-GONE'] })).toBe('orphan')
+  })
+
+  it('returns "no-ref" for quote with no plan references', () => {
+    expect(checkQuotePlanStatus({ id: 'Q-1' })).toBe('no-ref')
+    expect(checkQuotePlanStatus({})).toBe('no-ref')
+  })
+})
+
+describe('countQuotesForPlan — plan reference counting', () => {
+  it('counts quotes referencing plan via planId', () => {
+    loadQuotes.mockReturnValue([
+      { id: 'Q-1', planId: 'P-1' },
+      { id: 'Q-2', planId: 'P-2' },
+      { id: 'Q-3', planId: 'P-1' },
+    ])
+    expect(countQuotesForPlan('P-1')).toBe(2)
+    expect(countQuotesForPlan('P-2')).toBe(1)
+    expect(countQuotesForPlan('P-NONE')).toBe(0)
+  })
+
+  it('counts quotes referencing plan via sourcePlans array', () => {
+    loadQuotes.mockReturnValue([
+      { id: 'Q-1', sourcePlans: ['P-1', 'P-2'] },
+      { id: 'Q-2', sourcePlans: ['P-2', 'P-3'] },
+    ])
+    expect(countQuotesForPlan('P-1')).toBe(1)
+    expect(countQuotesForPlan('P-2')).toBe(2)
+    expect(countQuotesForPlan('P-3')).toBe(1)
+  })
+
+  it('returns 0 when no quotes exist', () => {
+    loadQuotes.mockReturnValue([])
+    expect(countQuotesForPlan('P-1')).toBe(0)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 12. computePricing warnings — material not found
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('computePricing — material lookup warnings', () => {
+  const workItem = { code: 'WI-001', name: 'Felszerelés', p50: 30, p90: 45, unit: 'db' }
+  const assembly = {
+    id: 'ASM-W', name: 'Teszt', category: 'dugalj',
+    components: [
+      { itemType: 'material', itemCode: 'MAT-MISSING', name: 'Ismeretlen anyag', qty: 1, unit: 'db' },
+      { itemType: 'workitem', itemCode: 'WI-001', name: 'Felszerelés', qty: 1, unit: 'db' },
+    ],
+  }
+
+  it('returns warning when material code not found in catalog', () => {
+    const result = computePricing({
+      takeoffRows: [{ asmId: 'ASM-W', qty: 5, wallType: 'brick' }],
+      assemblies: [assembly],
+      workItems: [workItem],
+      materials: [],  // empty catalog → material not found
+      context: null,
+      markup: 0,
+      hourlyRate: 9000,
+      cableEstimate: null,
+      difficultyMode: 'normal',
+    })
+    expect(result.warnings).toBeDefined()
+    expect(result.warnings.length).toBeGreaterThan(0)
+    expect(result.warnings[0].type).toBe('material_not_found')
+    expect(result.warnings[0].name).toBe('Ismeretlen anyag')
+  })
+
+  it('returns no warnings when all materials found', () => {
+    const mat = { code: 'MAT-MISSING', name: 'Ismeretlen anyag', price: 100, unit: 'db', discount: 0 }
+    const result = computePricing({
+      takeoffRows: [{ asmId: 'ASM-W', qty: 5, wallType: 'brick' }],
+      assemblies: [assembly],
+      workItems: [workItem],
+      materials: [mat],
+      context: null,
+      markup: 0,
+      hourlyRate: 9000,
+      cableEstimate: null,
+      difficultyMode: 'normal',
+    })
+    expect(result.warnings).toBeDefined()
+    expect(result.warnings.length).toBe(0)
+  })
+
+  it('counts missing material cost as 0 Ft', () => {
+    const result = computePricing({
+      takeoffRows: [{ asmId: 'ASM-W', qty: 1, wallType: 'brick' }],
+      assemblies: [assembly],
+      workItems: [workItem],
+      materials: [],
+      context: null,
+      markup: 0,
+      hourlyRate: 0,
+      cableEstimate: null,
+      difficultyMode: 'normal',
+    })
+    // Material cost should be 0 since material not found
+    const matLine = result.lines.find(l => l.type === 'material')
+    expect(matLine.materialCost).toBe(0)
   })
 })

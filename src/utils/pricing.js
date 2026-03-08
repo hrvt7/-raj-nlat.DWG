@@ -37,6 +37,7 @@ export function computePricing({
   let materialCost = 0
   let laborHours = 0
   const lines = []
+  const warnings = []
 
   for (const row of takeoffRows) {
     const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
@@ -71,6 +72,9 @@ export function computePricing({
         } else {
           const mat = materials.find(m => m.code === comp.itemCode)
                    || materials.find(m => m.name === comp.name)
+          if (!mat && comp.name) {
+            warnings.push({ type: 'material_not_found', name: comp.name, code: comp.itemCode || '' })
+          }
           const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
           const cost = unitPrice * compQty
           materialCost += cost
@@ -93,6 +97,9 @@ export function computePricing({
       if (c.m <= 0) continue
       const mat = materials.find(m => m.code === c.code)
                || materials.find(m => m.name?.includes(c.fallback))
+      if (!mat) {
+        warnings.push({ type: 'material_not_found', name: c.fallback, code: c.code })
+      }
       const unitPrice = mat ? mat.price * (1 - (mat.discount || 0) / 100) : 0
       const cost = unitPrice * c.m
       materialCost += cost
@@ -108,5 +115,5 @@ export function computePricing({
   const markupAmount = subtotal * (markup || 0)
   const total = subtotal + markupAmount
 
-  return { materialCost, laborCost, laborHours, subtotal, markup: markupAmount, total, lines }
+  return { materialCost, laborCost, laborHours, subtotal, markup: markupAmount, total, lines, warnings }
 }

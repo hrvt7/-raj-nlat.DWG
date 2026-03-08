@@ -21,6 +21,7 @@ import {
 } from '../utils/planMetaInference.js'
 import { callAiMetaVision, mergeAiMeta, renderFirstPageImage } from '../utils/aiMetaVision.js'
 import { parseDxfFile } from '../dxfParser.js'
+import { countQuotesForPlan } from '../utils/quoteOrphans.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -637,14 +638,21 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           </button>
         </div>
       </div>
-      {confirmDelete && (
-        <ConfirmDialog
-          message={`Törlöd a "${plan.name || 'Névtelen'}" tervrajzot?`}
-          detail="A tervrajz és a hozzá tartozó adatok véglegesen törlődnek."
-          onConfirm={() => { setConfirmDelete(false); onDelete(plan.id) }}
-          onCancel={() => setConfirmDelete(false)}
-        />
-      )}
+      {confirmDelete && (() => {
+        const qCount = countQuotesForPlan(plan.id)
+        return (
+          <ConfirmDialog
+            message={`Törlöd a "${plan.name || 'Névtelen'}" tervrajzot?`}
+            detail={
+              qCount > 0
+                ? `⚠ ${qCount} ajánlat hivatkozik erre a tervrajzra. Törlés után az érintett ajánlatokban a forrásterv nem lesz elérhető.`
+                : 'A tervrajz és a hozzá tartozó adatok véglegesen törlődnek.'
+            }
+            onConfirm={() => { setConfirmDelete(false); onDelete(plan.id) }}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )
+      })()}
     </div>
   )
 }

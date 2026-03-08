@@ -1516,6 +1516,22 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         </button>
       </div>
 
+      {/* ── Material lookup warnings ────────────────────────────────────────── */}
+      {pricing?.warnings?.length > 0 && (
+        <div style={{
+          padding: '4px 20px', background: 'rgba(255,209,102,0.06)',
+          borderBottom: '1px solid rgba(255,209,102,0.12)',
+          fontFamily: 'DM Mono', fontSize: 10, color: '#FFD166',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span>⚠</span>
+          {pricing.warnings.length} anyag nem található a katalógusban (0 Ft-tal számolva)
+          <span style={{ color: C.muted, marginLeft: 4 }}>
+            — {[...new Set(pricing.warnings.map(w => w.name))].slice(0, 3).join(', ')}{pricing.warnings.length > 3 ? ' …' : ''}
+          </span>
+        </div>
+      )}
+
       {/* ── Main two-column layout ─────────────────────────────────────────── */}
       <div ref={containerRef} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 

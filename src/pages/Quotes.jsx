@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { C, fmt, Card, Button, QuoteStatusBadge, Badge, EmptyState, Input } from '../components/ui.jsx'
+import { checkQuotePlanStatus } from '../utils/quoteOrphans.js'
 // saveQuotes handled by parent via onQuotesChange
 
 const STATUS_TABS = [
@@ -33,6 +34,16 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
   }
 
   const totalValue = filtered.reduce((s, q) => s + (q.summary?.grandTotal || 0), 0)
+
+  // Compute orphan status for all quotes (memoized by quotes array ref)
+  const orphanMap = useMemo(() => {
+    const map = {}
+    for (const q of quotes) {
+      const status = checkQuotePlanStatus(q)
+      if (status === 'orphan' || status === 'partial') map[q.id] = status
+    }
+    return map
+  }, [quotes])
 
   return (
     <div>
@@ -121,6 +132,22 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
                         }}
                       >
                         📦 Bundle
+                      </div>
+                    )}
+                    {orphanMap[q.id] && (
+                      <div
+                        title={orphanMap[q.id] === 'orphan'
+                          ? 'A forrásterv törölve lett — az ajánlat adatai megmaradtak.'
+                          : 'Néhány forrásterv törölve lett.'}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 3,
+                          marginLeft: 6, padding: '1px 6px', borderRadius: 4,
+                          background: 'rgba(255,209,102,0.10)', border: '1px solid rgba(255,209,102,0.25)',
+                          fontFamily: 'DM Mono', fontSize: 9, color: '#FFD166',
+                          verticalAlign: 'middle', cursor: 'default',
+                        }}
+                      >
+                        ⚠ Terv törölve
                       </div>
                     )}
                   </td>
