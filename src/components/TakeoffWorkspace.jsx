@@ -50,11 +50,11 @@ const C = {
 
 // ─── Block recognition rules ──────────────────────────────────────────────────
 const BLOCK_ASM_RULES = [
-  { patterns: ['LIGHT','LAMP','VILÁG','VILAG','LÁMPA','LAMPA','LED','SPOT','DOWNLIGHT','CEILING','MENNYEZET'], asmId: 'ASM-003', icon: '💡', label: 'Lámpatest' },
-  { patterns: ['SWITCH','KAPCS','KAPCSOL','DIMMER','TOGGLE','NYOMÓ','NYOMO'], asmId: 'ASM-002', icon: '🔘', label: 'Kapcsoló' },
-  { patterns: ['SOCKET','DUGALJ','ALJZAT','OUTLET','PLUG','CSATLAKOZ','RECEPT','ERŐÁTVITELI','EROATVITELI'], asmId: 'ASM-001', icon: '🔌', label: 'Dugalj' },
-  { patterns: ['PANEL','DB_PANEL','ELOSZTO','ELOSZTÓ','MDB','SZEKRÉNY','SZEKRENY','DISTRIBUTION','BOARD','TABLOU'], asmId: 'ASM-018', icon: '⚡', label: 'Elosztó' },
-  { patterns: ['SMOKE','FÜST','FUST','DETECTOR','ÉRZÉKEL','ERZEKEL','ALARM'], asmId: null, icon: '🔔', label: 'Érzékelő' },
+  { patterns: ['LIGHT','LAMP','VILÁG','VILAG','LÁMPA','LAMPA','LED','SPOT','DOWNLIGHT','CEILING','MENNYEZET'], asmId: 'ASM-003', label: 'Lámpatest' },
+  { patterns: ['SWITCH','KAPCS','KAPCSOL','DIMMER','TOGGLE','NYOMÓ','NYOMO'], asmId: 'ASM-002', label: 'Kapcsoló' },
+  { patterns: ['SOCKET','DUGALJ','ALJZAT','OUTLET','PLUG','CSATLAKOZ','RECEPT','ERŐÁTVITELI','EROATVITELI'], asmId: 'ASM-001', label: 'Dugalj' },
+  { patterns: ['PANEL','DB_PANEL','ELOSZTO','ELOSZTÓ','MDB','SZEKRÉNY','SZEKRENY','DISTRIBUTION','BOARD','TABLOU'], asmId: 'ASM-018', label: 'Elosztó' },
+  { patterns: ['SMOKE','FÜST','FUST','DETECTOR','ÉRZÉKEL','ERZEKEL','ALARM'], asmId: null, label: 'Érzékelő' },
 ]
 
 // Assembly overlay colors (for SVG dots on DXF)
@@ -375,7 +375,7 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
           {item.blockName}
         </div>
         <div style={{ fontFamily: 'Syne', fontSize: 12, fontWeight: 600, color: C.text }}>
-          {rule?.icon || '❓'} {asm?.name || (asmId ? asmId : 'Ismeretlen')}
+          {asm?.name || (asmId ? asmId : 'Ismeretlen')}
         </div>
       </div>
 
@@ -436,10 +436,13 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete }) {
+  const [hovered, setHovered] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
-  const rule = BLOCK_ASM_RULES.find(r => r.asmId === asmId)
+
+  // Category color from ASM_COLORS
+  const dotColor = ASM_COLORS[asmId] || C.muted
 
   // If no splits set yet, treat all qty as brick
   const effectiveSplits = wallSplits || { brick: qty }
@@ -469,16 +472,33 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
   if (!asm) return null
 
   return (
-    <div style={{
-      padding: '10px 14px', borderRadius: 8, marginBottom: 6,
-      background: isHighlighted ? 'rgba(0,229,160,0.06)' : C.bgCard,
-      border: `1px solid ${isHighlighted ? C.accent + '60' : C.border}`,
-    }}>
-      {/* ── Top row: icon / name / total qty / total price ── */}
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        padding: '10px 14px', borderRadius: 8, marginBottom: 6,
+        background: isHighlighted ? 'rgba(0,229,160,0.06)' : C.bgCard,
+        border: `1px solid ${isHighlighted ? C.accent + '60' : C.border}`,
+      }}
+    >
+      {/* ── Delete button (hover-reveal) ── */}
+      {hovered && onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(asmId) }}
+          title="Elem törlése"
+          style={{
+            position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
+            background: C.red, border: `2px solid ${C.bgCard}`, color: '#fff',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0, zIndex: 2,
+          }}
+        >&times;</button>
+      )}
+
+      {/* ── Top row: color dot / name / total qty / total price ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>
-          {rule?.icon || '📦'}
-        </div>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
         <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {asm.name}
         </div>
@@ -1720,6 +1740,30 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
                         unitCostByWall={unitCostByAsmByWall[row.asmId] || {}}
+                        onDelete={(asmId) => {
+                          // 1) Remove marker-sourced items for this assembly
+                          setPdfMarkers(prev => prev.filter(m => {
+                            const mid = m.asmId || (m.category?.startsWith('ASM-') ? m.category : null)
+                            return mid !== asmId
+                          }))
+                          // 2) Remove recognition-sourced items for this assembly
+                          const blockNamesToDelete = effectiveItems
+                            .filter(i => (asmOverrides[i.blockName] ?? i.asmId) === asmId)
+                            .map(i => i.blockName)
+                          if (blockNamesToDelete.length > 0) {
+                            setDeletedItems(prev => {
+                              const next = new Set(prev)
+                              blockNamesToDelete.forEach(bn => next.add(bn))
+                              return next
+                            })
+                          }
+                          // 3) Clean up wallSplits for this assembly
+                          setWallSplits(prev => {
+                            const next = { ...prev }
+                            delete next[asmId]
+                            return next
+                          })
+                        }}
                       />
                     ))}
 
