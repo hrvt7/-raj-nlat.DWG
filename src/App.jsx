@@ -21,7 +21,8 @@ import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, f
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
-import { OUTPUT_MODE_INCLEXCL, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, groupItemsByFloor, resolveItemSystemType } from './data/quoteDefaults.js'
+import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, groupItemsByFloor, resolveItemSystemType } from './data/quoteDefaults.js'
+import { quoteDisplayTotals } from './utils/quoteDisplayTotals.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -40,12 +41,7 @@ const OUTPUT_MODES = [
   { key: 'split_material_labor',  label: 'Anyag + munkadíj külön',     desc: 'Anyag és munkadíj külön bontásban' },
 ]
 
-// ─── Customer-facing notes per outputMode ─────────────────────────────────────
-const OUTPUT_MODE_NOTES = {
-  combined: null,
-  labor_only: 'Az ajánlat kizárólag a szerelési munkadíjat tartalmazza. Az anyagköltség nem része az ajánlatnak.',
-  split_material_labor: 'Az ajánlat az anyag- és munkadíj költségeket külön bontásban tartalmazza.',
-}
+// OUTPUT_MODE_NOTES imported from ./data/quoteDefaults.js
 
 // OUTPUT_MODE_INCLEXCL imported from ./data/quoteDefaults.js
 
@@ -238,9 +234,10 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const laborItems = (quote.items || []).filter(i => i.type === 'labor')
 
   // ── Display values per outputMode (internal data untouched) ──────────────
-  const displayNet   = outputMode === 'labor_only' ? newTotalLabor + Math.round(newTotalLabor * (Number(editMarkup) / 100)) : net
-  const displayVat   = Math.round(displayNet * vatPct / 100)
-  const displayGross = displayNet + displayVat
+  const { displayNet, displayVat, displayGross } = quoteDisplayTotals({
+    outputMode, totalLabor: newTotalLabor, totalMaterials,
+    markupPct: Number(editMarkup) / 100, vatPct,
+  })
 
   // ── BOM rows (memoised — only recompute when items change) ──────────────
   const bomRows = React.useMemo(() => generateBOMRows(quote), [quote.items])

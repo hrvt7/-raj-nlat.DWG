@@ -347,3 +347,117 @@ describe('planMetaAccessors — unified metadata access', () => {
     expect(getPlanDiscipline(null)).toBe(null)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. quoteDisplayTotals — outputMode-aware totals
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { quoteDisplayTotals } from '../utils/quoteDisplayTotals.js'
+
+describe('quoteDisplayTotals — outputMode-aware financial totals', () => {
+  const base = { totalLabor: 500_000, totalMaterials: 300_000, markupPct: 0.15, vatPct: 27 }
+
+  it('combined mode: net = (material + labor) + markup on both', () => {
+    const r = quoteDisplayTotals({ ...base, outputMode: 'combined' })
+    // subtotal = 300k + 500k = 800k; markup = 800k × 0.15 = 120k; net = 920k
+    expect(r.displayNet).toBe(920_000)
+    expect(r.fullNet).toBe(920_000)
+    expect(r.displayVat).toBe(Math.round(920_000 * 0.27))
+    expect(r.displayGross).toBe(920_000 + Math.round(920_000 * 0.27))
+  })
+
+  it('labor_only mode: net = labor + markup on labor only', () => {
+    const r = quoteDisplayTotals({ ...base, outputMode: 'labor_only' })
+    // laborMarkup = 500k × 0.15 = 75k; laborNet = 575k
+    expect(r.displayNet).toBe(575_000)
+    expect(r.displayVat).toBe(Math.round(575_000 * 0.27))
+    expect(r.displayGross).toBe(575_000 + Math.round(575_000 * 0.27))
+    // fullNet still includes everything
+    expect(r.fullNet).toBe(920_000)
+  })
+
+  it('split_material_labor mode: same totals as combined', () => {
+    const r = quoteDisplayTotals({ ...base, outputMode: 'split_material_labor' })
+    expect(r.displayNet).toBe(920_000)
+    expect(r.displayGross).toBe(920_000 + Math.round(920_000 * 0.27))
+  })
+
+  it('zero markup: net = subtotal, labor_only net = labor', () => {
+    const r = quoteDisplayTotals({ ...base, markupPct: 0, outputMode: 'labor_only' })
+    expect(r.displayNet).toBe(500_000) // raw labor, no markup
+    expect(r.fullNet).toBe(800_000)    // material + labor, no markup
+  })
+
+  it('handles missing/undefined values gracefully', () => {
+    const r = quoteDisplayTotals({ outputMode: 'combined' })
+    expect(r.displayNet).toBe(0)
+    expect(r.displayVat).toBe(0)
+    expect(r.displayGross).toBe(0)
+  })
+
+  it('default vatPct is 27 when not provided', () => {
+    const r = quoteDisplayTotals({ outputMode: 'combined', totalLabor: 100_000, totalMaterials: 0, markupPct: 0 })
+    expect(r.displayVat).toBe(Math.round(100_000 * 0.27))
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 8. buildQuoteRow — outputMode sync field
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('buildQuoteRow — output_mode field', () => {
+  it('includes output_mode from quote.outputMode', () => {
+    const row = buildQuoteRow({ id: 'Q-1', gross: 100000, outputMode: 'labor_only' }, 'u1')
+    expect(row.output_mode).toBe('labor_only')
+  })
+
+  it('defaults output_mode to combined when missing', () => {
+    const row = buildQuoteRow({ id: 'Q-2', gross: 100000 }, 'u1')
+    expect(row.output_mode).toBe('combined')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 9. BOM independence from outputMode
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { generateBOMRows } from '../utils/bomExport.js'
+
+describe('generateBOMRows — BOM independence', () => {
+  const quote = {
+    items: [
+      { type: 'material', name: 'Kábel NYM 3x2.5', code: 'MAT-001', qty: 100, unit: 'm', materialCost: 25000 },
+      { type: 'material', name: 'Dugalj', code: 'MAT-002', qty: 10, unit: 'db', materialCost: 8000 },
+      { type: 'labor', name: 'Szerelés', code: 'WI-001', qty: 10, unit: 'db', hours: 5 },
+      { type: 'cable', name: 'Kábel NYM 5x2.5', code: 'MAT-003', qty: 50, unit: 'm', materialCost: 20000 },
+    ],
+  }
+
+  it('returns only material and cable items (no labor)', () => {
+    const rows = generateBOMRows(quote)
+    expect(rows.length).toBe(3)
+    expect(rows.every(r => r.materialCost > 0)).toBe(true)
+  })
+
+  it('produces identical BOM regardless of outputMode', () => {
+    // BOM function doesn't take outputMode — it always returns full materials
+    const rows1 = generateBOMRows({ ...quote, outputMode: 'combined' })
+    const rows2 = generateBOMRows({ ...quote, outputMode: 'labor_only' })
+    const rows3 = generateBOMRows({ ...quote, outputMode: 'split_material_labor' })
+    expect(rows1).toEqual(rows2)
+    expect(rows2).toEqual(rows3)
+  })
+
+  it('aggregates duplicate material codes', () => {
+    const q = {
+      items: [
+        { type: 'material', name: 'Kábel', code: 'MAT-001', qty: 50, unit: 'm', materialCost: 12500 },
+        { type: 'material', name: 'Kábel', code: 'MAT-001', qty: 50, unit: 'm', materialCost: 12500 },
+      ],
+    }
+    const rows = generateBOMRows(q)
+    expect(rows.length).toBe(1)
+    expect(rows[0].qty).toBe(100)
+    expect(rows[0].materialCost).toBe(25000)
+  })
+})

@@ -13,7 +13,8 @@ const fmtDate = iso => {
   } catch { return new Date().toLocaleDateString('hu-HU') }
 }
 
-import { groupItemsBySystem, groupItemsByFloor, SYSTEM_GROUP_LABELS } from '../data/quoteDefaults.js'
+import { groupItemsBySystem, groupItemsByFloor, SYSTEM_GROUP_LABELS, OUTPUT_MODE_NOTES } from '../data/quoteDefaults.js'
+import { quoteDisplayTotals } from './quoteDisplayTotals.js'
 
 const WALL_LABELS = { drywall: 'GK', ytong: 'Ytong', brick: 'Tégla', concrete: 'Beton' }
 
@@ -25,17 +26,16 @@ function escHtml(s) {
 // outputMode: 'combined' | 'labor_only' | 'split_material_labor'
 export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
   const vatPct    = Number(settings?.labor?.vat_percent) || 27
-  const net       = Math.round(Number(quote.gross) || 0)
-  const vatAmt    = Math.round(net * vatPct / 100)
-  const gross     = net + vatAmt
+  const markupPct = Number(quote.pricingData?.markup_pct) || 0
 
-  // Display-only values for labor_only mode (internal data unchanged)
-  const laborNet   = outputMode === 'labor_only' ? Math.round(Number(quote.totalLabor) || 0) : net
-  const laborVat   = Math.round(laborNet * vatPct / 100)
-  const laborGross = laborNet + laborVat
-  const dNet   = outputMode === 'labor_only' ? laborNet   : net
-  const dVat   = outputMode === 'labor_only' ? laborVat   : vatAmt
-  const dGross = outputMode === 'labor_only' ? laborGross : gross
+  // Use shared helper for outputMode-aware totals (consistent with UI)
+  const { displayNet: dNet, displayVat: dVat, displayGross: dGross, fullNet: net } = quoteDisplayTotals({
+    outputMode,
+    totalLabor: Number(quote.totalLabor) || 0,
+    totalMaterials: Number(quote.totalMaterials) || 0,
+    markupPct,
+    vatPct,
+  })
   const company   = settings?.company || {}
   const qSettings = settings?.quote   || {}
   const validity  = parseInt(qSettings.validity_days) || 30
@@ -190,13 +190,8 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     }
   }
 
-  // ── OutputMode customer-facing note ──────────────────────────────────────
-  const modeNotes = {
-    combined: null,
-    labor_only: 'Az ajánlat kizárólag a szerelési munkadíjat tartalmazza. Az anyagköltség nem része az ajánlatnak.',
-    split_material_labor: 'Az ajánlat az anyag- és munkadíj költségeket külön bontásban tartalmazza.',
-  }
-  const modeNote = modeNotes[outputMode] || null
+  // ── OutputMode customer-facing note (from shared constants) ─────────────
+  const modeNote = OUTPUT_MODE_NOTES[outputMode] || null
   const modeNoteHtml = modeNote
     ? `<div class="mode-note">${escHtml(modeNote)}</div>`
     : ''

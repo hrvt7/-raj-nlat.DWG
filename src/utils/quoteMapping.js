@@ -24,6 +24,7 @@ export function buildQuoteRow(quote, userId) {
     total_net_ft:   netFt,
     total_gross_ft: grossFt,
     vat_percent:    vat,
+    output_mode:    quote.outputMode || 'combined',
     notes:          quote.notes || '',
   }
 }

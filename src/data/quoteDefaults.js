@@ -12,6 +12,13 @@ export const OUTPUT_MODE_INCLEXCL = {
   split_material_labor:  { inclusions: '', exclusions: '' },
 }
 
+/** Customer-facing explanatory note per outputMode (null = no note shown) */
+export const OUTPUT_MODE_NOTES = {
+  combined: null,
+  labor_only: 'Az ajánlat kizárólag a szerelési munkadíjat tartalmazza. Az anyagköltség nem része az ajánlatnak.',
+  split_material_labor: 'Az ajánlat az anyag- és munkadíj költségeket külön bontásban tartalmazza.',
+}
+
 // ─── System type metadata ───────────────────────────────────────────────────
 // Used to tag quote line items for future proposal grouping.
 
