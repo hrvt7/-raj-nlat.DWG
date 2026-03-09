@@ -30,6 +30,30 @@ export const MIN_SEED_AREA = 100  // 10×10 px minimum
 // more conservative bucket, reducing false positives in whole_plan scope.
 export const SCOPE_PENALTY_WHOLE_PLAN = 0.05
 
+// ── Strictness presets ──────────────────────────────────────────────────
+// Recipe-level matching tuning. Each preset adjusts NCC threshold,
+// per-page cap, and scope penalty multiplier.
+//
+// 'strict'   — fewer false positives, may miss faint symbols
+// 'balanced' — default behavior (backward compat)
+// 'broad'    — catches more, but needs more review
+//
+export const STRICTNESS_PRESETS = {
+  strict:   { nccThresholdDelta: +0.10, maxMatchesPerPage: 15, scopePenaltyMul: 2.0 },
+  balanced: { nccThresholdDelta:  0.00, maxMatchesPerPage: 30, scopePenaltyMul: 1.0 },
+  broad:    { nccThresholdDelta: -0.08, maxMatchesPerPage: 50, scopePenaltyMul: 0.5 },
+}
+
+/**
+ * Resolve strictness preset parameters.
+ * Falls back to 'balanced' for unknown values.
+ * @param {string|null|undefined} strictness
+ * @returns {{ nccThresholdDelta: number, maxMatchesPerPage: number, scopePenaltyMul: number }}
+ */
+export function resolveStrictnessPreset(strictness) {
+  return STRICTNESS_PRESETS[strictness] || STRICTNESS_PRESETS.balanced
+}
+
 // ── Text hint scoring ────────────────────────────────────────────────────────
 
 /**
@@ -122,7 +146,7 @@ export function isSeedTooSmall(bbox) {
  * @returns {{ confidence: number, confidenceBucket: string, evidence: object }}
  */
 export function computeRecipeMatchConfidence({ nccScore, textHintScore, aspectScore }, modifiers = {}) {
-  const { seedBbox = null, isWholePlan = false } = modifiers
+  const { seedBbox = null, isWholePlan = false, scopePenaltyMul = 1.0 } = modifiers
 
   const raw = (
     WEIGHT_NCC * nccScore +
@@ -134,7 +158,7 @@ export function computeRecipeMatchConfidence({ nccScore, textHintScore, aspectSc
   const areaMul = seedAreaPenalty(seedBbox)
 
   // Apply scope penalty (whole_plan is noisier)
-  const scopePen = isWholePlan ? SCOPE_PENALTY_WHOLE_PLAN : 0
+  const scopePen = isWholePlan ? (SCOPE_PENALTY_WHOLE_PLAN * scopePenaltyMul) : 0
 
   const confidence = Math.max(0, Math.min(1, raw * areaMul - scopePen))
   const confidenceBucket = toBucket(confidence)

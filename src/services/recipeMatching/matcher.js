@@ -29,13 +29,14 @@ import {
   scoreAspectRatio,
   computeRecipeMatchConfidence,
   isSeedTooSmall,
+  resolveStrictnessPreset,
 } from './scoring.js'
 
 // ── NCC matching threshold (lower than generic because user-taught + review) ──
-const NCC_THRESHOLD = 0.55
+const NCC_THRESHOLD_BASE = 0.55
 
 // ── Safety caps ──────────────────────────────────────────────────────────────
-const MAX_MATCHES_PER_PAGE = 30          // was 50 — reduced to cut noise
+const MAX_MATCHES_PER_PAGE_DEFAULT = 30          // was 50 — reduced to cut noise
 export const MAX_TOTAL_MATCHES = 200     // whole_plan safety limit
 
 // ── Proximity dedup radius ──────────────────────────────────────────────────
@@ -88,7 +89,7 @@ async function extractTextInBbox(pdfPage, bbox) {
  *   confidence: number, confidenceBucket: string, evidence: object
  * }>>}
  */
-export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, scopeOpts = {}) {
+export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, scopeOpts = {}, strictnessOpts = {}) {
   if (!cropDataUrl) return []
 
   // Quality guard: skip tiny seeds that produce noisy NCC matches
@@ -103,10 +104,15 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, s
     label: recipe.label || recipe.assemblyName || '',
   }
 
+  // Resolve strictness preset for this recipe
+  const preset = resolveStrictnessPreset(strictnessOpts.matchStrictness)
+  const effectiveNccThreshold = NCC_THRESHOLD_BASE + preset.nccThresholdDelta
+  const effectiveMaxPerPage = preset.maxMatchesPerPage || MAX_MATCHES_PER_PAGE_DEFAULT
+
   // Run NCC matching
   let nccDetections
   try {
-    nccDetections = await detectTemplateOnPage(pdfPage, templateLike, 1, NCC_THRESHOLD)
+    nccDetections = await detectTemplateOnPage(pdfPage, templateLike, 1, effectiveNccThreshold)
   } catch {
     return [] // canvas/rendering failure
   }
@@ -114,7 +120,7 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, s
   if (!nccDetections?.length) return []
 
   // Cap detections per page
-  const capped = nccDetections.slice(0, MAX_MATCHES_PER_PAGE)
+  const capped = nccDetections.slice(0, effectiveMaxPerPage)
 
   // Recipe bbox aspect for aspect scoring
   const recipeAspect = recipe.bbox?.w && recipe.bbox?.h
@@ -122,6 +128,7 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, s
     : null
 
   const { isWholePlan = false } = scopeOpts
+  const scopePenaltyMul = preset.scopePenaltyMul || 1.0
 
   // For each NCC detection, compute full confidence
   const results = []
@@ -145,7 +152,7 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, s
     // Combined confidence with quality modifiers
     const { confidence, confidenceBucket, evidence } = computeRecipeMatchConfidence(
       { nccScore: det.score, textHintScore, aspectScore },
-      { seedBbox: recipe.bbox, isWholePlan },
+      { seedBbox: recipe.bbox, isWholePlan, scopePenaltyMul },
     )
 
     results.push({

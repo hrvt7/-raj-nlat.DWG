@@ -5,7 +5,7 @@ import SeedAssignPanel from '../SeedAssignPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
-import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getRelevantRecipes, updateRecipe, archiveRecipe, RECIPE_SCOPE } from '../../data/recipeStore.js'
+import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getAllRecipesByProject, getRelevantRecipes, updateRecipe, archiveRecipe, restoreRecipe, updateRecipeRunStats, RECIPE_SCOPE, MATCH_STRICTNESS } from '../../data/recipeStore.js'
 import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
 import RecipeListPanel from '../RecipeListPanel.jsx'
 import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
@@ -161,6 +161,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   // ── Recipe list panel state ──
   const [recipeListOpen, setRecipeListOpen] = useState(false)
   const [recipeListItems, setRecipeListItems] = useState([])
+  const [showArchivedRecipes, setShowArchivedRecipes] = useState(false)
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -860,7 +861,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   // ── Recipe list panel handlers ──────────────────────────────────────────
   const refreshRecipeList = useCallback(() => {
-    if (projectId) setRecipeListItems(getRelevantRecipes(projectId))
+    if (projectId) setRecipeListItems(getAllRecipesByProject(projectId))
   }, [projectId])
 
   const handleOpenRecipeList = useCallback(() => {
@@ -870,6 +871,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   const handleCloseRecipeList = useCallback(() => {
     setRecipeListOpen(false)
+    setShowArchivedRecipes(false)
   }, [])
 
   const handleRunSingleRecipe = useCallback(async (recipe) => {
@@ -893,8 +895,24 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     if (planId) setRecipeCount(getRecipesByPlan(planId).length)
   }, [refreshRecipeList, planId])
 
+  const handleRestoreRecipe = useCallback((recipeId) => {
+    restoreRecipe(recipeId)
+    refreshRecipeList()
+    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
+  }, [refreshRecipeList, planId])
+
   const handleScopeToggleRecipe = useCallback((recipeId, newScope) => {
     updateRecipe(recipeId, { scope: newScope })
+    refreshRecipeList()
+  }, [refreshRecipeList])
+
+  const handleStrictnessChangeRecipe = useCallback((recipeId, newStrictness) => {
+    updateRecipe(recipeId, { matchStrictness: newStrictness })
+    refreshRecipeList()
+  }, [refreshRecipeList])
+
+  const handleAssemblySwapRecipe = useCallback((recipeId, newAssemblyId, newAssemblyName) => {
+    updateRecipe(recipeId, { assemblyId: newAssemblyId, assemblyName: newAssemblyName })
     refreshRecipeList()
   }, [refreshRecipeList])
 
@@ -910,18 +928,35 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   const handleApplyRecipeMatches = useCallback(() => {
     const accepted = recipeMatchCandidates.filter(c => c.accepted)
-    if (!accepted.length) return
+    const rejected = recipeMatchCandidates.filter(c => !c.accepted)
+    if (!accepted.length && !rejected.length) return
 
-    const newMarkers = accepted.map(c => {
-      const fields = recipeToMarkerFields(c, assembliesProp)
-      return createMarker(fields)
-    })
+    if (accepted.length) {
+      const newMarkers = accepted.map(c => {
+        const fields = recipeToMarkerFields(c, assembliesProp)
+        return createMarker(fields)
+      })
 
-    // Merge with existing markers (manual-first dedup)
-    markersRef.current = deduplicateMarkersManualFirst([...markersRef.current, ...newMarkers])
-    markDirty()
-    setRenderTick(t => t + 1)
-    if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
+      // Merge with existing markers (manual-first dedup)
+      markersRef.current = deduplicateMarkersManualFirst([...markersRef.current, ...newMarkers])
+      markDirty()
+      setRenderTick(t => t + 1)
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
+    }
+
+    // ── Quality feedback: update per-recipe run stats ──
+    const byRecipe = new Map()
+    for (const c of recipeMatchCandidates) {
+      const rid = c.recipeId
+      if (!byRecipe.has(rid)) byRecipe.set(rid, { accepted: 0, rejected: 0, total: 0 })
+      const s = byRecipe.get(rid)
+      s.total++
+      if (c.accepted) s.accepted++
+      else s.rejected++
+    }
+    for (const [rid, stats] of byRecipe) {
+      try { updateRecipeRunStats(rid, stats) } catch { /* non-critical */ }
+    }
 
     // Clear match state
     setRecipeMatchCandidates([])
@@ -1261,13 +1296,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         {recipeListOpen && (
           <RecipeListPanel
             recipes={recipeListItems}
+            assemblies={assembliesProp}
             onRun={handleRunSingleRecipe}
             onRunAll={handleRunAllFromList}
             onRename={handleRenameRecipe}
             onDelete={handleDeleteRecipe}
+            onRestore={handleRestoreRecipe}
             onScopeToggle={handleScopeToggleRecipe}
+            onStrictnessChange={handleStrictnessChangeRecipe}
+            onAssemblySwap={handleAssemblySwapRecipe}
             onClose={handleCloseRecipeList}
             isRunning={recipeMatchRunning}
+            showArchived={showArchivedRecipes}
+            onToggleArchived={() => setShowArchivedRecipes(prev => !prev)}
           />
         )}
 

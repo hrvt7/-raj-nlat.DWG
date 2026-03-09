@@ -28,6 +28,12 @@ export const RECIPE_SCOPE = /** @type {const} */ ({
   WHOLE_PLAN: 'whole_plan',
 })
 
+export const MATCH_STRICTNESS = /** @type {const} */ ({
+  STRICT: 'strict',
+  BALANCED: 'balanced',
+  BROAD: 'broad',
+})
+
 // ── IndexedDB store for crop snapshots ──────────────────────────────────────
 
 const recipeCropStore = localforage.createInstance({
@@ -60,6 +66,7 @@ export function generateRecipeId() {
  * @param {string} [params.sourceType] — 'vector' | 'raster' | 'mixed' | 'unknown'
  * @param {string[]} [params.seedTextHints] — nearby text strings from PDF
  * @param {string} [params.scope] — RECIPE_SCOPE value
+ * @param {string} [params.matchStrictness] — MATCH_STRICTNESS value
  * @returns {import('./recipeStore.js').SymbolRecipe}
  */
 export function createRecipe({
@@ -73,6 +80,7 @@ export function createRecipe({
   sourceType = 'unknown',
   seedTextHints = [],
   scope = RECIPE_SCOPE.WHOLE_PLAN,
+  matchStrictness = MATCH_STRICTNESS.BALANCED,
 }) {
   const now = new Date().toISOString()
   return {
@@ -87,8 +95,10 @@ export function createRecipe({
     sourceType,
     seedTextHints: seedTextHints.slice(0, 20), // cap at 20 hints
     scope,
+    matchStrictness,
     status: RECIPE_STATUS.ACTIVE,
     usageCount: 0,
+    lastRunStats: null, // { accepted, rejected, total } — set after matching runs
     createdAt: now,
     updatedAt: now,
   }
@@ -124,6 +134,16 @@ export function loadRecipes() {
  */
 export function getRecipesByProject(projectId) {
   return _loadAll().filter(r => r.projectId === projectId && r.status === RECIPE_STATUS.ACTIVE)
+}
+
+/**
+ * Get ALL recipes for a project (including archived).
+ * Used by RecipeListPanel to show archived recipes for restore.
+ * @param {string} projectId
+ * @returns {SymbolRecipe[]}
+ */
+export function getAllRecipesByProject(projectId) {
+  return _loadAll().filter(r => r.projectId === projectId)
 }
 
 /**
@@ -177,6 +197,25 @@ export function updateRecipe(recipeId, updates) {
  */
 export function archiveRecipe(recipeId) {
   updateRecipe(recipeId, { status: RECIPE_STATUS.ARCHIVED })
+}
+
+/**
+ * Restore an archived recipe (unarchive).
+ * @param {string} recipeId
+ * @returns {SymbolRecipe|null}
+ */
+export function restoreRecipe(recipeId) {
+  return updateRecipe(recipeId, { status: RECIPE_STATUS.ACTIVE })
+}
+
+/**
+ * Update run stats for a recipe after matching completes.
+ * @param {string} recipeId
+ * @param {{ accepted: number, rejected: number, total: number }} stats
+ * @returns {SymbolRecipe|null}
+ */
+export function updateRecipeRunStats(recipeId, stats) {
+  return updateRecipe(recipeId, { lastRunStats: stats })
 }
 
 /**
