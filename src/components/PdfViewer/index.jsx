@@ -1,9 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
+import SeedAssignPanel from '../SeedAssignPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
+import { createRecipe, saveRecipe, getRecipesByPlan } from '../../data/recipeStore.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -59,7 +61,7 @@ function formatDist(m) {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange }) {
+export default function PdfViewerPanel({ file, style, planId, projectId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -76,6 +78,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
   // ── PDF state ──
   const [pdfDoc, setPdfDoc] = useState(null)
+  const pdfDocRef = useRef(null)
+  useEffect(() => { pdfDocRef.current = pdfDoc }, [pdfDoc])
   const [pageNum, setPageNum] = useState(1)
   const [numPages, setNumPages] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -121,6 +125,17 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (onDirtyChange) onDirtyChange(true)
     }
   }, [onDirtyChange])
+
+  // ── Seed capture state (Azonosítás mode) ──
+  const seedStartRef = useRef(null)        // { x, y } in screen coords — drag start
+  const seedRectRef = useRef(null)          // { x, y, w, h } in screen coords — live rect
+  const [pendingSeed, setPendingSeed] = useState(null) // { bbox, pageNum, cropDataUrl, textHints }
+  const [recipeCount, setRecipeCount] = useState(0)    // recipe count badge
+
+  // Load recipe count for this plan
+  useEffect(() => {
+    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
+  }, [planId])
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -530,6 +545,19 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       ctx.moveTo(0, s.y); ctx.lineTo(cw, s.y)
       ctx.stroke()
     }
+
+    // ── Seed capture rect (Azonosítás mode) ──
+    if (seedRectRef.current && activeTool === 'select') {
+      const sr = seedRectRef.current
+      ctx.save()
+      ctx.strokeStyle = C.accent
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 3])
+      ctx.strokeRect(sr.x, sr.y, sr.w, sr.h)
+      ctx.fillStyle = 'rgba(0, 229, 160, 0.08)'
+      ctx.fillRect(sr.x, sr.y, sr.w, sr.h)
+      ctx.restore()
+    }
   }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes])
 
   // ── Mouse handlers ──
@@ -543,6 +571,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (!activeTool || e.button === 1) {
       // Pan mode when no tool active or middle mouse
       dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, startOX: viewRef.current.offsetX, startOY: viewRef.current.offsetY }
+      return
+    }
+
+    if (activeTool === 'select') {
+      // Azonosítás mode: start box draw for seed capture
+      seedStartRef.current = { x: sx, y: sy }
+      seedRectRef.current = null
       return
     }
 
@@ -619,13 +654,128 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       return
     }
 
+    // Azonosítás mode: live box draw
+    if (activeTool === 'select' && seedStartRef.current) {
+      const s = seedStartRef.current
+      seedRectRef.current = {
+        x: Math.min(s.x, sx),
+        y: Math.min(s.y, sy),
+        w: Math.abs(sx - s.x),
+        h: Math.abs(sy - s.y),
+      }
+      drawOverlay()
+      return
+    }
+
     mousePdfRef.current = screenToPdf(sx, sy)
     if (activeTool) drawOverlay()
   }, [activeTool, screenToPdf, drawOverlay])
 
-  const handleMouseUp = useCallback(() => {
-    dragRef.current.dragging = false
+  // ── Seed capture: extract crop + text hints ──
+  const finalizeSeedCapture = useCallback(async (screenRect) => {
+    const v = viewRef.current
+    // Convert screen rect to PDF coordinate space
+    const pdfBbox = {
+      x: (screenRect.x - v.offsetX) / v.zoom,
+      y: (screenRect.y - v.offsetY) / v.zoom,
+      w: screenRect.w / v.zoom,
+      h: screenRect.h / v.zoom,
+    }
+
+    // Extract crop snapshot from the PDF canvas
+    let cropDataUrl = null
+    try {
+      const pdfCanvas = pdfCanvasRef.current
+      if (pdfCanvas) {
+        // The PDF canvas uses renderScale, so compute pixel coordinates
+        const renderScale = pdfCanvas.width / v.pageWidth
+        const cropCanvas = document.createElement('canvas')
+        const cw = Math.round(pdfBbox.w * renderScale)
+        const ch = Math.round(pdfBbox.h * renderScale)
+        if (cw > 2 && ch > 2) {
+          cropCanvas.width = Math.min(cw, 256)
+          cropCanvas.height = Math.min(ch, 256)
+          const ctx = cropCanvas.getContext('2d')
+          ctx.drawImage(
+            pdfCanvas,
+            Math.round(pdfBbox.x * renderScale),
+            Math.round(pdfBbox.y * renderScale),
+            cw, ch,
+            0, 0, cropCanvas.width, cropCanvas.height,
+          )
+          cropDataUrl = cropCanvas.toDataURL('image/png')
+        }
+      }
+    } catch { /* crop extraction is best-effort */ }
+
+    // Extract text hints from PDF text layer in the bbox region
+    let textHints = []
+    try {
+      if (pdfDocRef.current) {
+        const page = await pdfDocRef.current.getPage(pageNum)
+        const textContent = await page.getTextContent()
+        const vp = page.getViewport({ scale: 1 })
+        // pdf.js text items have transform [scaleX, 0, 0, scaleY, x, y]
+        for (const item of textContent.items) {
+          if (!item.str?.trim()) continue
+          const tx = item.transform[4]
+          const ty = vp.height - item.transform[5] // flip Y
+          if (tx >= pdfBbox.x && tx <= pdfBbox.x + pdfBbox.w &&
+              ty >= pdfBbox.y && ty <= pdfBbox.y + pdfBbox.h) {
+            textHints.push(item.str.trim())
+          }
+        }
+        textHints = textHints.slice(0, 20) // cap
+      }
+    } catch { /* text hint extraction is best-effort */ }
+
+    setPendingSeed({
+      bbox: pdfBbox,
+      pageNum,
+      cropDataUrl,
+      textHints,
+    })
+  }, [pageNum])
+
+  // ── Seed save handler: create SymbolRecipe from seed + assignment ──
+  const handleSeedSave = useCallback((assemblyId, label, scope) => {
+    if (!pendingSeed || !planId) return
+    const asm = (assembliesProp || []).find(a => a.id === assemblyId)
+    const recipe = createRecipe({
+      projectId: projectId || '',
+      sourcePlanId: planId,
+      sourcePageNumber: pendingSeed.pageNum,
+      bbox: pendingSeed.bbox,
+      assemblyId,
+      assemblyName: asm?.name || '',
+      label,
+      sourceType: 'unknown',
+      seedTextHints: pendingSeed.textHints || [],
+      scope,
+    })
+    saveRecipe(recipe, pendingSeed.cropDataUrl)
+    setPendingSeed(null)
+    setRecipeCount(getRecipesByPlan(planId).length)
+  }, [pendingSeed, planId, projectId, assembliesProp])
+
+  const handleSeedCancel = useCallback(() => {
+    setPendingSeed(null)
   }, [])
+
+  const handleMouseUp = useCallback(() => {
+    // Azonosítás mode: finalize box draw → seed capture
+    if (activeTool === 'select' && seedStartRef.current && seedRectRef.current) {
+      const sr = seedRectRef.current
+      if (sr.w > 10 && sr.h > 10) {
+        // Valid box draw — extract seed data
+        finalizeSeedCapture(sr)
+      }
+      seedStartRef.current = null
+      seedRectRef.current = null
+      drawOverlay()
+    }
+    dragRef.current.dragging = false
+  }, [activeTool, finalizeSeedCapture, drawOverlay])
 
   const handleWheel = useCallback((e) => {
     e.preventDefault()
@@ -647,7 +797,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   useEffect(() => {
     const h = (e) => {
       if (calibDialog) return
-      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; drawOverlay() }
+      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; setPendingSeed(null); seedStartRef.current = null; seedRectRef.current = null; drawOverlay() }
+      if (e.key === 'i' || e.key === 'I') setActiveTool(t => t === 'select' ? null : 'select')
       if (e.key === 'c' || e.key === 'C') setActiveTool(t => t === 'count' ? null : 'count')
       if (e.key === 'm' || e.key === 'M') setActiveTool(t => t === 'measure' ? null : 'measure')
       if (e.key === 's' || e.key === 'S') setActiveTool(t => t === 'calibrate' ? null : 'calibrate')
@@ -839,6 +990,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         onRotateLeft={() => setRotation(r => (r - 90 + 360) % 360)}
         onRotateRight={() => setRotation(r => (r + 90) % 360)}
         assemblies={assembliesProp}
+        recipeCount={recipeCount}
       />
 
       {/* Main area */}
@@ -880,6 +1032,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
             </svg>
             <div style={{ color: C.red, fontSize: 13, fontFamily: 'Syne', textAlign: 'center', maxWidth: 280, marginTop: 8 }}>{error}</div>
           </div>
+        )}
+
+        {/* Seed assignment panel (Azonosítás mode) */}
+        {pendingSeed && (
+          <SeedAssignPanel
+            seed={pendingSeed}
+            assemblies={assembliesProp}
+            onSave={handleSeedSave}
+            onCancel={handleSeedCancel}
+          />
         )}
 
         {/* Count summary panel */}
@@ -1104,9 +1266,10 @@ function PdfToolbar({
   /* onToggleEstimation, estimationOpen — removed with Részletek button */
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
-  assemblies,
+  assemblies, recipeCount,
 }) {
   const TOOLS = [
+    { id: 'select', label: 'Azonosítás', key: 'I' },
     { id: 'count', label: 'Számlálás', key: 'C' },
     { id: 'measure', label: 'Mérés', key: 'M' },
     { id: 'calibrate', label: 'Skála', key: 'S' },
@@ -1139,6 +1302,7 @@ function PdfToolbar({
             color: on ? C.accent : C.text, transition: 'all 0.12s',
           }}>
             {t.label}
+            {t.id === 'select' && recipeCount > 0 && <span style={{ background: C.blue, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{recipeCount}</span>}
             {t.id === 'count' && markerCount > 0 && <span style={{ background: C.accent, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{markerCount}</span>}
             {t.id === 'measure' && measureCount > 0 && <span style={{ background: C.yellow, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{measureCount}</span>}
             {t.id === 'calibrate' && scale.calibrated && <span style={{ background: C.blue, color: C.bg, borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 700, fontFamily: 'DM Mono' }}>✓</span>}
