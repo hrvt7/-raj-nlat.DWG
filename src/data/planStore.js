@@ -334,3 +334,82 @@ export async function getOrParse(planId, file, parseFn) {
 
   return { parseResult, fromCache: false }
 }
+
+// ─── Project Block Dictionary ─────────────────────────────────────────────────
+// Stores user-assigned blockName → asmId mappings per project.
+// When a user manually assigns an unknown block to an assembly, it's saved here
+// so all future DXF files in the same project auto-apply the mapping.
+
+const BLOCK_DICT_PREFIX = 'takeoffpro_block_dict_'
+
+function _normBlockName(name) {
+  return (name || '').toUpperCase().replace(/[_\-\.]/g, ' ').trim()
+}
+
+/**
+ * Load the block dictionary for a project
+ * @param {string} projectId
+ * @returns {Object} { normalizedBlockName: asmId }
+ */
+export function loadBlockDictionary(projectId) {
+  if (!projectId) return {}
+  try {
+    const raw = localStorage.getItem(BLOCK_DICT_PREFIX + projectId)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+/**
+ * Save a block→assembly mapping to the project dictionary
+ * @param {string} projectId
+ * @param {string} blockName - raw block name (will be normalized)
+ * @param {string|null} asmId - assembly ID or null to remove
+ */
+export function saveBlockMapping(projectId, blockName, asmId) {
+  if (!projectId) return
+  const dict = loadBlockDictionary(projectId)
+  const key = _normBlockName(blockName)
+  if (!key) return
+  if (asmId) {
+    dict[key] = asmId
+  } else {
+    delete dict[key]
+  }
+  try {
+    localStorage.setItem(BLOCK_DICT_PREFIX + projectId, JSON.stringify(dict))
+  } catch (err) {
+    console.warn('[planStore] block dictionary save failed:', err.message)
+  }
+}
+
+/**
+ * Look up a block name in the project dictionary
+ * @param {string} projectId
+ * @param {string} blockName
+ * @returns {string|null} asmId or null
+ */
+export function lookupBlockInDictionary(projectId, blockName) {
+  if (!projectId) return null
+  const dict = loadBlockDictionary(projectId)
+  return dict[_normBlockName(blockName)] || null
+}
+
+/**
+ * Bulk-apply project dictionary to recognized items
+ * @param {string} projectId
+ * @param {Array} items - [{blockName, qty, asmId, confidence, ...}]
+ * @returns {Array} items with dictionary-applied asmId where applicable
+ */
+export function applyBlockDictionary(projectId, items) {
+  if (!projectId || !items?.length) return items
+  const dict = loadBlockDictionary(projectId)
+  if (!Object.keys(dict).length) return items
+  return items.map(item => {
+    if (item.asmId && item.confidence > 0.5) return item // already recognized well
+    const dictAsmId = dict[_normBlockName(item.blockName)]
+    if (dictAsmId) {
+      return { ...item, asmId: dictAsmId, confidence: 0.85, matchType: 'dictionary', _dictApplied: true }
+    }
+    return item
+  })
+}
