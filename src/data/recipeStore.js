@@ -157,6 +157,11 @@ export function getRecipesByPlan(planId) {
 
 /**
  * Save a new recipe + optional crop snapshot.
+ *
+ * Returns the recipe synchronously for immediate use.
+ * The crop persist promise is exposed as `recipe._cropSaved` for callers
+ * that need to ensure the crop is written before running matching.
+ *
  * @param {SymbolRecipe} recipe
  * @param {string|null} [cropDataUrl] — base64 data URL of crop snapshot
  * @returns {SymbolRecipe}
@@ -166,11 +171,13 @@ export function saveRecipe(recipe, cropDataUrl = null) {
   all.push(recipe)
   _saveAll(all)
 
-  // Save crop to IndexedDB (fire-and-forget)
+  // Save crop to IndexedDB — expose promise so callers can await if needed
   if (cropDataUrl) {
-    recipeCropStore.setItem(recipe.id, cropDataUrl).catch(err => {
+    recipe._cropSaved = recipeCropStore.setItem(recipe.id, cropDataUrl).catch(err => {
       console.warn('[recipeStore] crop save failed:', err.message)
     })
+  } else {
+    recipe._cropSaved = Promise.resolve()
   }
 
   return recipe

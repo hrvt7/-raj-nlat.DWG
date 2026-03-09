@@ -218,7 +218,10 @@ export function deduplicateMatchesByProximity(matches) {
  */
 export async function matchRecipeOnPages(recipe, pdfDoc, options = {}, onProgress = null) {
   const cropDataUrl = await getRecipeCrop(recipe.id)
-  if (!cropDataUrl) return []
+  if (!cropDataUrl) {
+    console.warn('[matcher] no crop found for recipe:', recipe.id, recipe.label)
+    return []
+  }
 
   const { scope = 'whole_plan', currentPage = 1 } = options
   const numPages = pdfDoc.numPages

@@ -815,7 +815,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   }, [pageNum])
 
   // ── Seed save handler: create SymbolRecipe from seed + assignment ──
-  const handleSeedSave = useCallback((assemblyId, label, scope) => {
+  const handleSeedSave = useCallback(async (assemblyId, label, scope) => {
     if (!pendingSeed || !planId) return
     const asm = (assembliesProp || []).find(a => a.id === assemblyId)
     const recipe = createRecipe({
@@ -830,7 +830,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       seedTextHints: pendingSeed.textHints || [],
       scope,
     })
-    saveRecipe(recipe, pendingSeed.cropDataUrl)
+    const saved = saveRecipe(recipe, pendingSeed.cropDataUrl)
+    // Await crop persist so it's ready for immediate matching
+    if (saved._cropSaved) await saved._cropSaved
     setPendingSeed(null)
     setRecipeCount(getRecipesByPlan(planId).length)
   }, [pendingSeed, planId, projectId, assembliesProp])
@@ -844,8 +846,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const handleRunRecipeMatching = useCallback(async (recipesToRun) => {
     if (!pdfDocRef.current || !planId) return
     const recipes = recipesToRun || getRecipesByPlan(planId)
-    if (!recipes.length) return
+    if (!recipes.length) {
+      console.warn('[RecipeMatching] no recipes found for plan:', planId)
+      return
+    }
 
+    if (import.meta.env.DEV) console.log('[RecipeMatching] starting run with', recipes.length, 'recipes on plan:', planId, 'page:', pageNum)
     setRecipeMatchRunning(true)
     setRecipeMatchPanelOpen(true)
     setRecipeMatchCandidates([])
@@ -854,6 +860,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const candidates = await runRecipeMatching(recipes, pdfDocRef.current, planId, {
         currentPage: pageNum,
       })
+      if (import.meta.env.DEV) console.log('[RecipeMatching] run complete:', candidates.length, 'candidates found')
       setRecipeMatchCandidates(candidates)
     } catch (err) {
       console.error('[RecipeMatching] run failed:', err)

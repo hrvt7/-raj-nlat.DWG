@@ -92,13 +92,13 @@ export default function RecipeMatchReviewPanel({
 
   // Keyboard shortcuts
   useEffect(() => {
-    if (isRunning || !total) return
+    if (isRunning) return
     const handler = (e) => {
       if (e.key === 'Escape') {
         e.stopPropagation()
         onDismiss()
       }
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && total > 0) {
         e.stopPropagation()
         if (acceptedCount > 0) {
           onApply()
@@ -134,7 +134,27 @@ export default function RecipeMatchReviewPanel({
     )
   }
 
-  if (!total) return null
+  if (!total) {
+    return (
+      <div style={panelStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>
+            Találatok (0)
+          </div>
+          <button onClick={onDismiss} style={closeBtnStyle} title="Bezárás (Esc)">✕</button>
+        </div>
+        <div style={{ padding: '16px 14px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, marginBottom: 8 }}>🔍</div>
+          <div style={{ fontFamily: 'Syne', fontSize: 12, fontWeight: 600, color: C.textSub, marginBottom: 4 }}>
+            Nem találtam egyezést
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, lineHeight: 1.5 }}>
+            Próbáld újra más mintával, vagy növeld a keresési területet (Teljes terv).
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div ref={panelRef} style={panelStyle}>
