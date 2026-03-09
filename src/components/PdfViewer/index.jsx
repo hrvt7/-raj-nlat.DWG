@@ -5,7 +5,9 @@ import SeedAssignPanel from '../SeedAssignPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
-import { createRecipe, saveRecipe, getRecipesByPlan } from '../../data/recipeStore.js'
+import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject } from '../../data/recipeStore.js'
+import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
+import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket } from '../../services/recipeMatching/index.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -136,6 +138,13 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => {
     if (planId) setRecipeCount(getRecipesByPlan(planId).length)
   }, [planId])
+
+  // ── Recipe matching state ──
+  const [recipeMatchCandidates, setRecipeMatchCandidates] = useState([])
+  const recipeMatchCandidatesRef = useRef([])
+  useEffect(() => { recipeMatchCandidatesRef.current = recipeMatchCandidates; setRenderTick(t => t + 1) }, [recipeMatchCandidates])
+  const [recipeMatchRunning, setRecipeMatchRunning] = useState(false)
+  const [recipeMatchPanelOpen, setRecipeMatchPanelOpen] = useState(false)
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -546,6 +555,45 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       ctx.stroke()
     }
 
+    // ── Recipe match candidate overlays ──
+    const rmCandidates = recipeMatchCandidatesRef.current
+    if (rmCandidates?.length) {
+      for (const c of rmCandidates) {
+        if (c.pageNumber !== pageNum) continue
+        const sx = c.x * v.zoom + v.offsetX
+        const sy = c.y * v.zoom + v.offsetY
+        const bucketColor = c.confidenceBucket === 'high' ? C.accent
+          : c.confidenceBucket === 'review' ? C.yellow : C.red
+        const r = Math.max(8, 12 * Math.min(v.zoom, 1.5))
+
+        ctx.save()
+        // Outer ring
+        ctx.beginPath()
+        ctx.arc(sx, sy, r, 0, Math.PI * 2)
+        ctx.fillStyle = bucketColor + (c.accepted ? '40' : '18')
+        ctx.fill()
+        ctx.lineWidth = c.accepted ? 2.5 : 1.5
+        ctx.setLineDash(c.accepted ? [] : [4, 3])
+        ctx.strokeStyle = bucketColor
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        // Inner marker if accepted
+        if (c.accepted) {
+          ctx.beginPath()
+          const cr = r * 0.4
+          ctx.moveTo(sx - cr, sy)
+          ctx.lineTo(sx + cr, sy)
+          ctx.moveTo(sx, sy - cr)
+          ctx.lineTo(sx, sy + cr)
+          ctx.lineWidth = 2
+          ctx.strokeStyle = bucketColor
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
+    }
+
     // ── Seed capture rect (Azonosítás mode) ──
     if (seedRectRef.current && activeTool === 'select') {
       const sr = seedRectRef.current
@@ -761,6 +809,83 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const handleSeedCancel = useCallback(() => {
     setPendingSeed(null)
   }, [])
+
+  // ── Recipe matching handlers ──────────────────────────────────────────────
+
+  const handleRunRecipeMatching = useCallback(async (recipesToRun) => {
+    if (!pdfDocRef.current || !planId) return
+    const recipes = recipesToRun || getRecipesByPlan(planId)
+    if (!recipes.length) return
+
+    setRecipeMatchRunning(true)
+    setRecipeMatchPanelOpen(true)
+    setRecipeMatchCandidates([])
+
+    try {
+      const candidates = await runRecipeMatching(recipes, pdfDocRef.current, planId, {
+        currentPage: pageNum,
+      })
+      setRecipeMatchCandidates(candidates)
+    } catch (err) {
+      console.error('[RecipeMatching] run failed:', err)
+    } finally {
+      setRecipeMatchRunning(false)
+    }
+  }, [planId, pageNum])
+
+  // Run project-wide recipes on this plan (reuse entry point)
+  const handleRunProjectRecipes = useCallback(async () => {
+    if (!pdfDocRef.current || !projectId) return
+    const recipes = getRecipesByProject(projectId)
+    if (!recipes.length) return
+    await handleRunRecipeMatching(recipes)
+  }, [projectId, handleRunRecipeMatching])
+
+  const handleAcceptAllGreenMatches = useCallback(() => {
+    setRecipeMatchCandidates(prev => batchAcceptGreenMatches(prev))
+  }, [])
+
+  const handleToggleMatchCandidate = useCallback((candidateId, accepted) => {
+    setRecipeMatchCandidates(prev =>
+      prev.map(c => c.id === candidateId ? { ...c, accepted } : c)
+    )
+  }, [])
+
+  const handleApplyRecipeMatches = useCallback(() => {
+    const accepted = recipeMatchCandidates.filter(c => c.accepted)
+    if (!accepted.length) return
+
+    const newMarkers = accepted.map(c => {
+      const fields = recipeToMarkerFields(c, assembliesProp)
+      return createMarker(fields)
+    })
+
+    // Merge with existing markers (manual-first dedup)
+    markersRef.current = deduplicateMarkersManualFirst([...markersRef.current, ...newMarkers])
+    markDirty()
+    setRenderTick(t => t + 1)
+    if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
+
+    // Clear match state
+    setRecipeMatchCandidates([])
+    setRecipeMatchPanelOpen(false)
+
+    // Update recipe count badge
+    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
+  }, [recipeMatchCandidates, assembliesProp, planId, markDirty])
+
+  const handleDismissRecipeMatches = useCallback(() => {
+    setRecipeMatchCandidates([])
+    setRecipeMatchPanelOpen(false)
+  }, [])
+
+  const handleFocusMatchCandidate = useCallback((candidate) => {
+    // TODO: pan/zoom to candidate location (future enhancement)
+    // For now, just switch to the right page
+    if (candidate.pageNumber && candidate.pageNumber !== pageNum) {
+      setPageNum(candidate.pageNumber)
+    }
+  }, [pageNum])
 
   const handleMouseUp = useCallback(() => {
     // Azonosítás mode: finalize box draw → seed capture
@@ -991,6 +1116,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         onRotateRight={() => setRotation(r => (r + 90) % 360)}
         assemblies={assembliesProp}
         recipeCount={recipeCount}
+        onRunRecipeMatching={() => handleRunRecipeMatching()}
+        onRunProjectRecipes={handleRunProjectRecipes}
+        recipeMatchRunning={recipeMatchRunning}
+        hasProjectRecipes={projectId ? getRecipesByProject(projectId).length > 0 : false}
       />
 
       {/* Main area */}
@@ -1041,6 +1170,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             assemblies={assembliesProp}
             onSave={handleSeedSave}
             onCancel={handleSeedCancel}
+          />
+        )}
+
+        {/* Recipe match review panel */}
+        {recipeMatchPanelOpen && (
+          <RecipeMatchReviewPanel
+            candidates={recipeMatchCandidates}
+            onAcceptAllGreen={handleAcceptAllGreenMatches}
+            onToggleCandidate={handleToggleMatchCandidate}
+            onApply={handleApplyRecipeMatches}
+            onDismiss={handleDismissRecipeMatches}
+            onFocusCandidate={handleFocusMatchCandidate}
+            isRunning={recipeMatchRunning}
           />
         )}
 
@@ -1267,6 +1409,7 @@ function PdfToolbar({
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
   assemblies, recipeCount,
+  onRunRecipeMatching, onRunProjectRecipes, recipeMatchRunning, hasProjectRecipes,
 }) {
   const TOOLS = [
     { id: 'select', label: 'Azonosítás', key: 'I' },
@@ -1319,6 +1462,30 @@ function PdfToolbar({
       )}
       {activeTool === 'measure' && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
+      )}
+
+      {/* Recipe matching buttons — shown when Azonosítás tool active and recipes exist */}
+      {activeTool === 'select' && recipeCount > 0 && (
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+          <button onClick={onRunRecipeMatching} disabled={recipeMatchRunning} title="Recipe futtatás ezen az oldalon" style={{
+            padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
+            fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
+            background: 'rgba(76,201,240,0.10)', border: `1px solid rgba(76,201,240,0.3)`,
+            color: C.blue, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
+          }}>
+            {recipeMatchRunning ? 'Keresés...' : 'Receptek futtatása'}
+          </button>
+          {hasProjectRecipes && (
+            <button onClick={onRunProjectRecipes} disabled={recipeMatchRunning} title="Összes projekt recept futtatása" style={{
+              padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
+              fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
+              background: 'transparent', border: `1px solid ${C.border}`,
+              color: C.muted, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
+            }}>
+              Projekt receptek
+            </button>
+          )}
+        </div>
       )}
 
       <div style={{ flex: 1 }} />
