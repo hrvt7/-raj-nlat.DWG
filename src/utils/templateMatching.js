@@ -375,6 +375,102 @@ export async function detectTemplateOnPage(pdfPage, template, detectionScale = D
 }
 
 /**
+ * Run detection for a single template ONLY within a specified region of a PDF page.
+ * Pre-crops the page image to the region before NCC matching, so no matches
+ * outside the region are possible. Coordinates are returned in PDF scale=1.
+ *
+ * @param {Object} pdfPage - pdf.js page object
+ * @param {Object} template - { id, category, color, imageDataUrl, label }
+ * @param {{ x: number, y: number, w: number, h: number }} region - PDF scale=1 bbox
+ * @param {number} detectionScale
+ * @param {number} threshold
+ * @param {Object} [options]
+ * @returns {Promise<Array>} - detections in PDF scale=1 coordinates (within region)
+ */
+export async function detectTemplateInRegion(pdfPage, template, region, detectionScale = DETECTION_SCALE, threshold = 0.60, options = {}) {
+  if (!template.imageDataUrl || !region) return []
+
+  const { enableTrim = true, enableContrast = true } = options
+
+  // 1. Render full page at detectionScale
+  const { imageData: pageImageData, width: pageW, height: pageH } = await renderPageImageData(pdfPage, detectionScale)
+
+  // 2. Compute region in detection-scale pixels (clamp to page bounds)
+  const rx = Math.max(0, Math.floor(region.x * detectionScale))
+  const ry = Math.max(0, Math.floor(region.y * detectionScale))
+  const rw = Math.min(pageW - rx, Math.ceil(region.w * detectionScale))
+  const rh = Math.min(pageH - ry, Math.ceil(region.h * detectionScale))
+
+  if (rw < 8 || rh < 8) return [] // region too small
+
+  // 3. Extract region pixels from page image
+  const regionData = new Uint8ClampedArray(rw * rh * 4)
+  for (let y = 0; y < rh; y++) {
+    const srcOffset = ((ry + y) * pageW + rx) * 4
+    const dstOffset = y * rw * 4
+    regionData.set(pageImageData.data.subarray(srcOffset, srcOffset + rw * 4), dstOffset)
+  }
+  const regionImageData = new ImageData(regionData, rw, rh)
+  let regionGray = toGray(regionImageData)
+
+  // 4. Prepare template (same as detectTemplateOnPage)
+  const { imageData: tplImageData, width: rawTplW, height: rawTplH } = await renderDataUrlImageData(template.imageDataUrl)
+  let tplGray = toGray(tplImageData)
+  let tplW = rawTplW
+  let tplH = rawTplH
+
+  let trimResult = null
+  if (enableTrim) {
+    trimResult = trimWhitespace(tplGray, tplW, tplH)
+    if (!trimResult) return []
+    tplGray = trimResult.gray
+    tplW = trimResult.w
+    tplH = trimResult.h
+  }
+
+  if (enableContrast) {
+    regionGray = enhanceContrast(regionGray, 3.0)
+    tplGray = enhanceContrast(tplGray, 3.0)
+  }
+
+  if (tplW > rw || tplH > rh) return [] // template bigger than region
+  if (tplW < 4 || tplH < 4) return []
+
+  // 5. Build SAT for region (not full page)
+  const regionSAT = buildSAT(regionGray, rw, rh)
+
+  // 6. Run NCC on region
+  const rawDetections = matchTemplate(regionGray, rw, rh, tplGray, tplW, tplH, regionSAT, threshold)
+
+  if (import.meta.env.DEV) {
+    console.log(`[Matcher:region] template=${template.id} regionPx=(${rx},${ry} ${rw}×${rh}) rawHits=${rawDetections.length}`)
+  }
+
+  // 7. NMS
+  const filtered = nonMaxSuppression(rawDetections, tplW, tplH)
+
+  // 8. Convert to PDF scale=1 coords — offset by region origin
+  return filtered.map(d => {
+    const centerX = (rx + d.x + tplW / 2) / detectionScale
+    const centerY = (ry + d.y + tplH / 2) / detectionScale
+    const matchW = tplW / detectionScale
+    const matchH = tplH / detectionScale
+
+    return {
+      x: centerX,
+      y: centerY,
+      score: d.score,
+      templateId: template.id,
+      category: template.category,
+      color: template.color,
+      label: template.label,
+      matchW,
+      matchH,
+    }
+  })
+}
+
+/**
  * Run detection for multiple templates on all pages of a PDF.
  * Yields progress via onProgress callback.
  *

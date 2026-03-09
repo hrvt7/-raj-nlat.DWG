@@ -158,6 +158,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const regionStartRef = useRef(null)    // { x, y } screen coords
   const regionRectRef = useRef(null)     // { x, y, w, h } screen coords — live
   const [pendingRegion, setPendingRegion] = useState(null) // PDF scale=1 bbox after draw
+  const [awaitingRegionForRecipe, setAwaitingRegionForRecipe] = useState(null) // recipe + cropUrl waiting for region draw
+  const awaitingRegionRef = useRef(null)
+  useEffect(() => { awaitingRegionRef.current = awaitingRegionForRecipe }, [awaitingRegionForRecipe])
   useEffect(() => { countSessionRef.current = countSession; setRenderTick(t => t + 1) }, [countSession])
 
   // ── Recipe matching state ──
@@ -753,8 +756,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     }
 
     if (activeTool === 'select') {
-      if (e.shiftKey) {
-        // Shift+drag in Azonosítás mode: draw search region
+      if (e.shiftKey || awaitingRegionRef.current) {
+        // Shift+drag OR awaiting-region mode: draw search region
         regionStartRef.current = { x: sx, y: sy }
         regionRectRef.current = null
         return
@@ -978,7 +981,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   }, [planId, projectId, pageNum])
 
   // ── Seed save handler: create SymbolRecipe from seed + assignment ──
-  // When a pendingRegion exists, also launch a count-workflow region search.
+  // After save, prompts user to draw a search region (region-first workflow).
+  // If a region was already drawn (pre-region), auto-launches search.
   const handleSeedSave = useCallback(async (assemblyId, label, scope) => {
     if (!pendingSeed || !planId) return
     const asm = (assembliesProp || []).find(a => a.id === assemblyId)
@@ -1005,12 +1009,15 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     setPendingRegion(null)
     setRecipeCount(getRecipesByPlan(planId).length)
 
-    // If a search region was drawn, automatically launch count-workflow region search
     if (region && pdfDocRef.current) {
+      // Region was already drawn (pre-region workflow) → auto-launch search
       handleCreateCountObjectAndSearch({
         ...recipe,
         cropDataUrl: cropUrl,
       }, region)
+    } else {
+      // Region-first workflow: prompt user to draw a search region next
+      setAwaitingRegionForRecipe({ ...recipe, cropDataUrl: cropUrl })
     }
   }, [pendingSeed, planId, projectId, assembliesProp, pendingRegion, handleCreateCountObjectAndSearch])
 
@@ -1352,9 +1359,21 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const rr = regionRectRef.current
       if (rr.w > 20 && rr.h > 20) {
         const pdfRegion = screenRectToPdfRegion(rr, viewRef.current)
-        setPendingRegion(pdfRegion)
-        if (import.meta.env.DEV) {
-          console.log('[RegionDraw] finalized region PDF coords:', pdfRegion)
+
+        // Region-first workflow: if a recipe is awaiting region, auto-launch search
+        const awaiting = awaitingRegionRef.current
+        if (awaiting && pdfDocRef.current) {
+          setAwaitingRegionForRecipe(null)
+          setPendingRegion(null)
+          handleCreateCountObjectAndSearch(awaiting, pdfRegion)
+          if (import.meta.env.DEV) {
+            console.log('[RegionFirst] auto-launching search for awaiting recipe:', awaiting.id, 'region:', pdfRegion)
+          }
+        } else {
+          setPendingRegion(pdfRegion)
+          if (import.meta.env.DEV) {
+            console.log('[RegionDraw] finalized region PDF coords:', pdfRegion)
+          }
         }
       }
       regionStartRef.current = null
@@ -1395,7 +1414,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => {
     const h = (e) => {
       if (calibDialog) return
-      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; setPendingSeed(null); seedStartRef.current = null; seedRectRef.current = null; regionStartRef.current = null; regionRectRef.current = null; setPendingRegion(null); handleCountDismiss(); drawOverlay() }
+      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; setPendingSeed(null); seedStartRef.current = null; seedRectRef.current = null; regionStartRef.current = null; regionRectRef.current = null; setPendingRegion(null); setAwaitingRegionForRecipe(null); handleCountDismiss(); drawOverlay() }
       if (e.key === 'i' || e.key === 'I') setActiveTool(t => t === 'select' ? null : 'select')
       if (e.key === 'c' || e.key === 'C') setActiveTool(t => t === 'count' ? null : 'count')
       if (e.key === 'm' || e.key === 'M') setActiveTool(t => t === 'measure' ? null : 'measure')
@@ -1681,8 +1700,38 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           />
         )}
 
+        {/* Region-first prompt — shown after seed save, waiting for region draw */}
+        {awaitingRegionForRecipe && activeTool === 'select' && (
+          <div style={{
+            position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(0,229,160,0.15)', border: `1px solid rgba(0,229,160,0.4)`,
+            borderRadius: 8, padding: '8px 16px', zIndex: 25,
+            fontFamily: 'DM Mono', fontSize: 12, color: C.accent,
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <span style={{ fontSize: 16 }}>▸</span>
+            Minta mentve — most húzz egy keresési területet (Shift+húzás) ahol keresni akarsz
+            <button onClick={() => {
+              // Skip region → launch full-page search instead
+              if (awaitingRegionForRecipe && pdfDocRef.current) {
+                const r = awaitingRegionForRecipe
+                setAwaitingRegionForRecipe(null)
+                handleCreateCountObjectAndSearch(r, null)
+              }
+            }} style={{
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: 4, padding: '2px 8px', color: '#a1a1aa', cursor: 'pointer',
+              fontFamily: 'DM Mono', fontSize: 10,
+            }}>Teljes oldal</button>
+            <button onClick={() => setAwaitingRegionForRecipe(null)} style={{
+              background: 'none', border: 'none', color: '#71717A', cursor: 'pointer',
+              fontFamily: 'DM Mono', fontSize: 10,
+            }}>✕</button>
+          </div>
+        )}
+
         {/* Region hint — shown when pendingRegion is set but no seed yet */}
-        {pendingRegion && !pendingSeed && activeTool === 'select' && (
+        {pendingRegion && !pendingSeed && !awaitingRegionForRecipe && activeTool === 'select' && (
           <div style={{
             position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
             background: 'rgba(76,201,240,0.15)', border: `1px solid rgba(76,201,240,0.3)`,

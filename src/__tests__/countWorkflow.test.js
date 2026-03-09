@@ -69,6 +69,7 @@ import {
   materializeAccepted,
   screenRectToPdfRegion,
   pdfRegionToScreenRect,
+  clampRegionToPage,
 } from '../services/countWorkflow/index.js'
 
 // ── Setup ────────────────────────────────────────────────────────────────────
@@ -764,5 +765,203 @@ describe('accepted-only materialization with region context', () => {
     })
     const markers = materializeAccepted(batchAcceptLikely(candidates), co, [])
     expect(markers).toHaveLength(0)
+  })
+})
+
+// ── 13. Page boundary clamping (clampRegionToPage) ──────────────────────
+
+describe('clampRegionToPage', () => {
+  const pageBounds = { width: 595, height: 842 } // A4 at 72 DPI
+
+  it('returns region unchanged when fully inside page', () => {
+    const region = { x: 50, y: 50, w: 200, h: 300 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped).toEqual({ x: 50, y: 50, w: 200, h: 300 })
+  })
+
+  it('clamps negative x/y to zero', () => {
+    const region = { x: -20, y: -30, w: 200, h: 300 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped.x).toBe(0)
+    expect(clamped.y).toBe(0)
+    // Width/height shrink by the clamped amount
+    expect(clamped.w).toBe(180) // 200 - 20 = 180
+    expect(clamped.h).toBe(270) // 300 - 30 = 270
+  })
+
+  it('clamps region extending beyond page width', () => {
+    const region = { x: 500, y: 100, w: 200, h: 100 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped.x).toBe(500)
+    expect(clamped.w).toBe(95) // 595 - 500 = 95
+    expect(clamped.h).toBe(100) // unchanged
+  })
+
+  it('clamps region extending beyond page height', () => {
+    const region = { x: 100, y: 800, w: 100, h: 200 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped.y).toBe(800)
+    expect(clamped.h).toBe(42) // 842 - 800 = 42
+    expect(clamped.w).toBe(100) // unchanged
+  })
+
+  it('clamps region entirely outside page to zero-size', () => {
+    const region = { x: 600, y: 900, w: 200, h: 200 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped.w).toBe(0)
+    expect(clamped.h).toBe(0)
+  })
+
+  it('handles region covering the entire page', () => {
+    const region = { x: 0, y: 0, w: 1000, h: 1000 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped).toEqual({ x: 0, y: 0, w: 595, h: 842 })
+  })
+
+  it('handles zero-size region', () => {
+    const region = { x: 100, y: 100, w: 0, h: 0 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped.w).toBe(0)
+    expect(clamped.h).toBe(0)
+  })
+
+  it('prevents black background / padding false positives', () => {
+    // Scenario: user draws region that overlaps with viewer padding area
+    // The viewer adds black padding around the PDF page. If region extends
+    // beyond page bounds, clampRegionToPage cuts it to page content only.
+    const region = { x: -50, y: -50, w: 700, h: 950 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    // All four sides clamped to page
+    expect(clamped.x).toBe(0)
+    expect(clamped.y).toBe(0)
+    expect(clamped.x + clamped.w).toBeLessThanOrEqual(pageBounds.width)
+    expect(clamped.y + clamped.h).toBeLessThanOrEqual(pageBounds.height)
+  })
+})
+
+// ── 14. Region-first workflow: search region constrains NCC input ────────
+
+describe('region-first workflow constraints', () => {
+  it('current_region scope requires searchRegion in CountObject', () => {
+    const co = createCountObject({
+      projectId: 'P', planId: 'PL', pageNumber: 1,
+      sampleBbox: { x: 0, y: 0, w: 10, h: 10 },
+      sampleCropId: 'R1', assemblyId: 'A1',
+      searchScope: SEARCH_SCOPE.CURRENT_REGION,
+      searchRegion: { x: 100, y: 100, w: 300, h: 400 },
+    })
+    expect(co.searchScope).toBe('current_region')
+    expect(co.searchRegion).not.toBeNull()
+    expect(co.searchRegion.w).toBeGreaterThan(0)
+    expect(co.searchRegion.h).toBeGreaterThan(0)
+  })
+
+  it('clampRegionToPage + tiny region returns zero size (skip signal)', () => {
+    // If clamped region is < 8px in either dimension, executeSearch skips detection
+    const tinyRegion = { x: 594, y: 841, w: 5, h: 5 }
+    const pageBounds = { width: 595, height: 842 }
+    const clamped = clampRegionToPage(tinyRegion, pageBounds)
+    // 595-594 = 1px wide, 842-841 = 1px tall — too small for NCC
+    expect(clamped.w).toBeLessThan(8)
+    expect(clamped.h).toBeLessThan(8)
+  })
+
+  it('region inside page stays above minimum size', () => {
+    const region = { x: 100, y: 100, w: 200, h: 300 }
+    const pageBounds = { width: 595, height: 842 }
+    const clamped = clampRegionToPage(region, pageBounds)
+    expect(clamped.w).toBeGreaterThanOrEqual(8)
+    expect(clamped.h).toBeGreaterThanOrEqual(8)
+  })
+
+  it('filterBySearchRegion double-layer: post-filter as safety net', () => {
+    // Even if pre-crop somehow leaked a detection, the post-filter catches it
+    const detections = [
+      { x: 150, y: 150, score: 0.8 },  // inside region
+      { x: 50, y: 50, score: 0.9 },    // outside region (would be impossible with pre-crop)
+    ]
+    const region = { x: 100, y: 100, w: 200, h: 200 }
+    const result = filterBySearchRegion(detections, region)
+    expect(result).toHaveLength(1)
+    expect(result[0].x).toBe(150)
+  })
+
+  it('whole_plan scope: filterBySearchRegion with null region passes all', () => {
+    const detections = [
+      { x: 10, y: 10, score: 0.9 },
+      { x: 500, y: 700, score: 0.7 },
+    ]
+    // whole_plan has no region — filter should be no-op
+    const result = filterBySearchRegion(detections, null)
+    expect(result).toHaveLength(2)
+  })
+
+  it('page bounds filter removes detections at negative coords', () => {
+    // Simulates the non-region scope page bounds filter in executeSearch
+    const detections = [
+      { x: 100, y: 200, score: 0.8 },
+      { x: -10, y: 50, score: 0.7 },   // negative x — outside page
+      { x: 50, y: -20, score: 0.6 },   // negative y — outside page
+      { x: 600, y: 400, score: 0.5 },  // beyond page width
+    ]
+    const pageBounds = { width: 595, height: 842 }
+    const filtered = detections.filter(d =>
+      d.x >= 0 && d.x <= pageBounds.width && d.y >= 0 && d.y <= pageBounds.height
+    )
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].x).toBe(100)
+  })
+})
+
+// ── 15. Architecture boundary: region workflow doesn't touch BOM/quote ───
+
+describe('region workflow architecture boundary', () => {
+  it('SearchSession from region search has scope=current_region', () => {
+    const ss = createSearchSession({
+      countObjectId: 'CO-1',
+      planId: 'PL-1',
+      scope: SEARCH_SCOPE.CURRENT_REGION,
+      region: { x: 100, y: 100, w: 300, h: 400 },
+      scaleMode: SCALE_MODE.EXACT,
+    })
+    expect(ss.scope).toBe('current_region')
+    expect(ss.region).toEqual({ x: 100, y: 100, w: 300, h: 400 })
+  })
+
+  it('region session materializes with same source=count_object', () => {
+    const candidates = [
+      {
+        ...createSessionCandidate({
+          x: 150, y: 150, pageNumber: 1, score: 0.85,
+          confidence: 0.85, confidenceBucket: 'high',
+          matchBbox: { x: 140, y: 140, w: 20, h: 20 },
+        }),
+        status: CANDIDATE_STATUS.ACCEPTED,
+      },
+    ]
+    const co = createCountObject({
+      projectId: 'P', planId: 'PL', pageNumber: 1,
+      sampleBbox: { x: 0, y: 0, w: 10, h: 10 },
+      sampleCropId: 'R1', assemblyId: 'ASM-001',
+      searchScope: SEARCH_SCOPE.CURRENT_REGION,
+      searchRegion: { x: 100, y: 100, w: 200, h: 200 },
+    })
+    const markers = materializeAccepted(candidates, co, [])
+    expect(markers).toHaveLength(1)
+    expect(markers[0].source).toBe('count_object')
+    expect(markers[0].countObjectId).toBe(co.id)
+    // No BOM/quote fields
+    expect(markers[0]).not.toHaveProperty('bomLineId')
+    expect(markers[0]).not.toHaveProperty('quoteItemId')
+    expect(markers[0]).not.toHaveProperty('ruleId')
+  })
+
+  it('clampRegionToPage is a pure function (no side effects)', () => {
+    const region = { x: -10, y: -20, w: 500, h: 900 }
+    const pageBounds = { width: 595, height: 842 }
+    const originalRegion = { ...region }
+    clampRegionToPage(region, pageBounds)
+    // Original region object NOT mutated
+    expect(region).toEqual(originalRegion)
   })
 })

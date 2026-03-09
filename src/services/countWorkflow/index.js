@@ -19,6 +19,7 @@
 
 import {
   detectTemplateOnPage,
+  detectTemplateInRegion,
   DETECTION_SCALE,
 } from '../../utils/templateMatching.js'
 import { getRecipeCrop } from '../../data/recipeStore.js'
@@ -88,6 +89,30 @@ export function pdfRegionToScreenRect(pdfRect, view) {
     y: pdfRect.y * view.zoom + view.offsetY,
     w: pdfRect.w * view.zoom,
     h: pdfRect.h * view.zoom,
+  }
+}
+
+// ── Page boundary clamping ────────────────────────────────────────────────
+
+/**
+ * Clamp a PDF region bbox to the actual page bounds.
+ * Ensures the search region cannot extend beyond the PDF page content area,
+ * eliminating false positives from viewer black background / padding.
+ *
+ * @param {{ x: number, y: number, w: number, h: number }} region — PDF scale=1
+ * @param {{ width: number, height: number }} pageBounds — PDF page dimensions at scale=1
+ * @returns {{ x: number, y: number, w: number, h: number }} — clamped region
+ */
+export function clampRegionToPage(region, pageBounds) {
+  const x = Math.max(0, region.x)
+  const y = Math.max(0, region.y)
+  const x2 = Math.min(pageBounds.width, region.x + region.w)
+  const y2 = Math.min(pageBounds.height, region.y + region.h)
+  return {
+    x,
+    y,
+    w: Math.max(0, x2 - x),
+    h: Math.max(0, y2 - y),
   }
 }
 
@@ -176,6 +201,9 @@ export async function executeSearch(countObject, pdfDoc, options = {}) {
     label: countObject.label || countObject.assemblyName || '',
   }
 
+  // Determine if we have a region to pre-crop
+  const useRegionCrop = scope === SEARCH_SCOPE.CURRENT_REGION && countObject.searchRegion
+
   // Run NCC detection across pages
   const allDetections = []
 
@@ -183,11 +211,32 @@ export async function executeSearch(countObject, pdfDoc, options = {}) {
     const pageNum = pageRange[i]
     const pdfPage = await pdfDoc.getPage(pageNum)
 
+    // Get page bounds for clamping (PDF scale=1)
+    const viewport = pdfPage.getViewport({ scale: 1 })
+    const pageBounds = { width: viewport.width, height: viewport.height }
+
     let detections
     try {
-      detections = await detectTemplateOnPage(
-        pdfPage, templateLike, DETECTION_SCALE, config.nccThreshold
-      )
+      if (useRegionCrop) {
+        // PRE-CROP: clamp region to page bounds, then run NCC only on region pixels
+        const clampedRegion = clampRegionToPage(countObject.searchRegion, pageBounds)
+        if (clampedRegion.w < 8 || clampedRegion.h < 8) {
+          detections = []
+        } else {
+          detections = await detectTemplateInRegion(
+            pdfPage, templateLike, clampedRegion, DETECTION_SCALE, config.nccThreshold
+          )
+        }
+      } else {
+        // Full page scan (current_page / whole_plan)
+        detections = await detectTemplateOnPage(
+          pdfPage, templateLike, DETECTION_SCALE, config.nccThreshold
+        )
+        // For non-region scopes, still clamp results to page bounds
+        detections = detections.filter(d =>
+          d.x >= 0 && d.x <= pageBounds.width && d.y >= 0 && d.y <= pageBounds.height
+        )
+      }
     } catch {
       detections = []
     }
@@ -207,28 +256,20 @@ export async function executeSearch(countObject, pdfDoc, options = {}) {
     await new Promise(r => setTimeout(r, 0))
   }
 
-  // Dev-only diagnostics: raw detection count before filtering
+  // Dev-only diagnostics
   if (import.meta.env?.DEV) {
     const region = countObject.searchRegion
     console.log(
       `[CountWorkflow:search] scope=${scope} scaleMode=${countObject.scaleMode} ` +
-      `pages=${pageRange.join(',')} rawDetections=${allDetections.length} ` +
+      `pages=${pageRange.join(',')} preCrop=${useRegionCrop} detections=${allDetections.length} ` +
       `region=${region ? `(${region.x.toFixed(1)},${region.y.toFixed(1)} ${region.w.toFixed(1)}×${region.h.toFixed(1)})` : 'none'}`
     )
   }
 
-  // Apply search region filter (for current_region scope)
-  const regionFiltered = scope === SEARCH_SCOPE.CURRENT_REGION && countObject.searchRegion
+  // Safety net: apply post-filter as second layer of defense for region scope
+  const regionFiltered = useRegionCrop
     ? filterBySearchRegion(allDetections, countObject.searchRegion)
     : allDetections
-
-  // Dev-only diagnostics: post-filter count
-  if (import.meta.env?.DEV) {
-    console.log(
-      `[CountWorkflow:search] postFilter=${regionFiltered.length} ` +
-      `(dropped=${allDetections.length - regionFiltered.length} outside region)`
-    )
-  }
 
   // Create SearchSession
   const session = createSearchSession({
