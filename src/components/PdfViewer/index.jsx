@@ -7,6 +7,10 @@ import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '.
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
 import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getAllRecipesByProject, getRelevantRecipes, getRecommendedRecipeSet, updateRecipe, archiveRecipe, restoreRecipe, updateRecipeRunStats, RECIPE_SCOPE, MATCH_STRICTNESS } from '../../data/recipeStore.js'
 import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
+import CountSessionPanel from '../CountSessionPanel.jsx'
+import { createCountObject, saveCountObject, SCALE_MODE, SEARCH_SCOPE } from '../../data/countObjectStore.js'
+import { executeSearch, batchAcceptLikely, batchIgnoreLow, setCandidateStatus as setCSCandidateStatus, materializeAccepted, screenRectToPdfRegion, pdfRegionToScreenRect } from '../../services/countWorkflow/index.js'
+import { CANDIDATE_STATUS } from '../../data/searchSessionStore.js'
 import RecipeListPanel from '../RecipeListPanel.jsx'
 import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
 import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket, generateBatchId } from '../../services/recipeMatching/index.js'
@@ -142,6 +146,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => {
     if (planId) setRecipeCount(getRecipesByPlan(planId).length)
   }, [planId])
+
+  // ── Count session state (PlanSwift-style region search) ──
+  const [countSession, setCountSession] = useState(null)          // active SearchSession
+  const countSessionRef = useRef(null)
+  const [countObject, setCountObject] = useState(null)            // active CountObject
+  const [countSearching, setCountSearching] = useState(false)
+  const [countSessionPanelOpen, setCountSessionPanelOpen] = useState(false)
+  const [countCropPreview, setCountCropPreview] = useState(null)  // crop data URL for panel
+  // Region draw refs (reuse seed capture pattern)
+  const regionStartRef = useRef(null)    // { x, y } screen coords
+  const regionRectRef = useRef(null)     // { x, y, w, h } screen coords — live
+  const [pendingRegion, setPendingRegion] = useState(null) // PDF scale=1 bbox after draw
+  useEffect(() => { countSessionRef.current = countSession; setRenderTick(t => t + 1) }, [countSession])
 
   // ── Recipe matching state ──
   const [recipeMatchCandidates, setRecipeMatchCandidates] = useState([])
@@ -634,6 +651,79 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       }
     }
 
+    // ── Count session candidate overlays ──
+    const csCandidates = countSessionRef.current?.candidates
+    if (csCandidates?.length) {
+      for (const c of csCandidates) {
+        if (c.pageNumber !== pageNum) continue
+        const sx = c.x * v.zoom + v.offsetX
+        const sy = c.y * v.zoom + v.offsetY
+        const bucketColor = c.confidenceBucket === 'high' ? C.accent
+          : c.confidenceBucket === 'review' ? C.yellow : C.red
+        const r = Math.max(8, 12 * Math.min(v.zoom, 1.5))
+        const isAccepted = c.status === CANDIDATE_STATUS.ACCEPTED
+        const isIgnored = c.status === CANDIDATE_STATUS.IGNORED
+
+        if (isIgnored) continue // don't render ignored candidates
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(sx, sy, r, 0, Math.PI * 2)
+        ctx.fillStyle = bucketColor + (isAccepted ? '40' : '18')
+        ctx.fill()
+        ctx.lineWidth = isAccepted ? 2.5 : 1.5
+        ctx.setLineDash(isAccepted ? [] : [4, 3])
+        ctx.strokeStyle = bucketColor
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        if (isAccepted) {
+          ctx.beginPath()
+          const cr = r * 0.4
+          ctx.moveTo(sx - cr, sy)
+          ctx.lineTo(sx + cr, sy)
+          ctx.moveTo(sx, sy - cr)
+          ctx.lineTo(sx, sy + cr)
+          ctx.lineWidth = 2
+          ctx.strokeStyle = bucketColor
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
+    }
+
+    // ── Count search region rect (if set) ──
+    if (countSession?.region) {
+      const sr = pdfRegionToScreenRect(countSession.region, v)
+      ctx.save()
+      ctx.strokeStyle = C.blue
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([8, 4])
+      ctx.strokeRect(sr.x, sr.y, sr.w, sr.h)
+      ctx.fillStyle = 'rgba(76,201,240,0.06)'
+      ctx.fillRect(sr.x, sr.y, sr.w, sr.h)
+      ctx.setLineDash([])
+      ctx.restore()
+    }
+
+    // ── Region draw rect (live, during drag) ──
+    if (regionRectRef.current && activeTool === 'select') {
+      const rr = regionRectRef.current
+      ctx.save()
+      ctx.strokeStyle = C.blue
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 3])
+      ctx.strokeRect(rr.x, rr.y, rr.w, rr.h)
+      ctx.fillStyle = 'rgba(76,201,240,0.08)'
+      ctx.fillRect(rr.x, rr.y, rr.w, rr.h)
+      ctx.setLineDash([])
+      // Label
+      ctx.font = '10px "DM Mono"'
+      ctx.fillStyle = C.blue
+      ctx.fillText('Keresési régió', rr.x + 4, rr.y - 4)
+      ctx.restore()
+    }
+
     // ── Seed capture rect (Azonosítás mode) ──
     if (seedRectRef.current && activeTool === 'select') {
       const sr = seedRectRef.current
@@ -663,6 +753,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     }
 
     if (activeTool === 'select') {
+      if (e.shiftKey) {
+        // Shift+drag in Azonosítás mode: draw search region
+        regionStartRef.current = { x: sx, y: sy }
+        regionRectRef.current = null
+        return
+      }
       // Azonosítás mode: start box draw for seed capture
       seedStartRef.current = { x: sx, y: sy }
       seedRectRef.current = null
@@ -738,6 +834,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const dy = e.clientY - dragRef.current.startY
       viewRef.current.offsetX = dragRef.current.startOX + dx
       viewRef.current.offsetY = dragRef.current.startOY + dy
+      drawOverlay()
+      return
+    }
+
+    // Region draw: live box draw (Shift+drag)
+    if (activeTool === 'select' && regionStartRef.current) {
+      const s = regionStartRef.current
+      regionRectRef.current = {
+        x: Math.min(s.x, sx),
+        y: Math.min(s.y, sy),
+        w: Math.abs(sx - s.x),
+        h: Math.abs(sy - s.y),
+      }
       drawOverlay()
       return
     }
@@ -826,6 +935,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   }, [pageNum])
 
   // ── Seed save handler: create SymbolRecipe from seed + assignment ──
+  // When a pendingRegion exists, also launch a count-workflow region search.
   const handleSeedSave = useCallback(async (assemblyId, label, scope) => {
     if (!pendingSeed || !planId) return
     const asm = (assembliesProp || []).find(a => a.id === assemblyId)
@@ -844,13 +954,158 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const saved = saveRecipe(recipe, pendingSeed.cropDataUrl)
     // Await crop persist so it's ready for immediate matching
     if (saved._cropSaved) await saved._cropSaved
+
+    const cropUrl = pendingSeed.cropDataUrl
+    const region = pendingRegion
+
     setPendingSeed(null)
+    setPendingRegion(null)
     setRecipeCount(getRecipesByPlan(planId).length)
-  }, [pendingSeed, planId, projectId, assembliesProp])
+
+    // If a search region was drawn, automatically launch count-workflow region search
+    if (region && pdfDocRef.current) {
+      handleCreateCountObjectAndSearch({
+        ...recipe,
+        cropDataUrl: cropUrl,
+      }, region)
+    }
+  }, [pendingSeed, planId, projectId, assembliesProp, pendingRegion, handleCreateCountObjectAndSearch])
 
   const handleSeedCancel = useCallback(() => {
     setPendingSeed(null)
   }, [])
+
+  // ── Count session handlers (PlanSwift-style region search) ────────────────
+
+  // After seed save: also create a CountObject for region-scoped search
+  const handleCreateCountObjectAndSearch = useCallback(async (recipe, searchRegion) => {
+    if (!pdfDocRef.current || !planId) return
+
+    const searchScope = searchRegion ? SEARCH_SCOPE.CURRENT_REGION : SEARCH_SCOPE.CURRENT_PAGE
+    const co = createCountObject({
+      projectId: projectId || '',
+      planId,
+      pageNumber: pageNum,
+      sampleBbox: recipe.bbox,
+      sampleCropId: recipe.id,
+      assemblyId: recipe.assemblyId,
+      assemblyName: recipe.assemblyName,
+      label: recipe.label,
+      scaleMode: SCALE_MODE.EXACT,
+      searchScope,
+      searchRegion: searchRegion || null,
+      seedTextHints: recipe.seedTextHints || [],
+    })
+    saveCountObject(co)
+    setCountObject(co)
+    setCountCropPreview(recipe.cropDataUrl || null)
+    setCountSearching(true)
+    setCountSessionPanelOpen(true)
+
+    if (import.meta.env.DEV) {
+      console.log('[CountSession] creating CO:', co.id, 'scope:', searchScope,
+        'region:', searchRegion ? `(${searchRegion.x.toFixed(1)},${searchRegion.y.toFixed(1)} ${searchRegion.w.toFixed(1)}×${searchRegion.h.toFixed(1)})` : 'none')
+    }
+
+    try {
+      const session = await executeSearch(co, pdfDocRef.current, { cropDataUrl: recipe.cropDataUrl })
+      setCountSession(session)
+      if (import.meta.env.DEV) console.log('[CountSession] search complete:', session.candidateCount, 'candidates')
+    } catch (err) {
+      console.error('[CountSession] search failed:', err)
+    } finally {
+      setCountSearching(false)
+    }
+  }, [planId, projectId, pageNum])
+
+  // Extended seed save: create recipe AND immediately launch region-scoped count search
+  const handleSeedSaveWithRegionSearch = useCallback(async (assemblyId, label, scope) => {
+    if (!pendingSeed || !planId) return
+    const asm = (assembliesProp || []).find(a => a.id === assemblyId)
+    const recipe = createRecipe({
+      projectId: projectId || '',
+      sourcePlanId: planId,
+      sourcePageNumber: pendingSeed.pageNum,
+      bbox: pendingSeed.bbox,
+      assemblyId,
+      assemblyName: asm?.name || '',
+      label,
+      sourceType: 'unknown',
+      seedTextHints: pendingSeed.textHints || [],
+      scope,
+    })
+    const saved = saveRecipe(recipe, pendingSeed.cropDataUrl)
+    if (saved._cropSaved) await saved._cropSaved
+    setRecipeCount(getRecipesByPlan(planId).length)
+
+    // If there's a pending region, use it for region-scoped search
+    const searchRegion = pendingRegion
+    setPendingSeed(null)
+    setPendingRegion(null)
+
+    // Launch count workflow search with this recipe's crop
+    const searchCo = {
+      ...recipe,
+      cropDataUrl: pendingSeed.cropDataUrl,
+    }
+    handleCreateCountObjectAndSearch(searchCo, searchRegion)
+  }, [pendingSeed, planId, projectId, assembliesProp, pendingRegion, handleCreateCountObjectAndSearch])
+
+  const handleCountBatchAcceptLikely = useCallback(() => {
+    if (!countSession) return
+    const updated = batchAcceptLikely(countSession.candidates)
+    setCountSession(prev => ({ ...prev, candidates: updated }))
+  }, [countSession])
+
+  const handleCountBatchIgnoreLow = useCallback(() => {
+    if (!countSession) return
+    const updated = batchIgnoreLow(countSession.candidates)
+    setCountSession(prev => ({ ...prev, candidates: updated }))
+  }, [countSession])
+
+  const handleCountCandidateStatusChange = useCallback((candidateId, status) => {
+    if (!countSession) return
+    const updated = setCSCandidateStatus(countSession.candidates, candidateId, status)
+    setCountSession(prev => ({ ...prev, candidates: updated }))
+  }, [countSession])
+
+  const handleCountMaterialize = useCallback(() => {
+    if (!countSession || !countObject) return
+    const markerFields = materializeAccepted(countSession.candidates, countObject, assembliesProp || [])
+    if (import.meta.env.DEV) console.log('[CountSession] materializing', markerFields.length, 'accepted candidates')
+    for (const mf of markerFields) {
+      markersRef.current.push(createMarker(mf))
+    }
+    markDirty()
+    setRenderTick(t => t + 1)
+    drawOverlay()
+    if (onMarkersChange) onMarkersChange([...markersRef.current])
+    // Close session panel
+    setCountSessionPanelOpen(false)
+    setCountSession(null)
+    setCountObject(null)
+  }, [countSession, countObject, assembliesProp, markDirty, drawOverlay, onMarkersChange])
+
+  const handleCountDismiss = useCallback(() => {
+    setCountSessionPanelOpen(false)
+    setCountSession(null)
+    setCountObject(null)
+    setCountCropPreview(null)
+  }, [])
+
+  const handleCountFocusCandidate = useCallback((candidate) => {
+    if (!candidate) return
+    // Center view on candidate
+    const canvas = overlayRef.current
+    if (canvas) {
+      const v = viewRef.current
+      const canvasW = canvas.width
+      const canvasH = canvas.height
+      v.offsetX = canvasW / 2 - candidate.x * v.zoom
+      v.offsetY = canvasH / 2 - candidate.y * v.zoom
+      drawOverlay()
+    }
+  }, [drawOverlay])
 
   // ── Recipe matching handlers ──────────────────────────────────────────────
 
@@ -1125,6 +1380,20 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   }, [pageNum])
 
   const handleMouseUp = useCallback(() => {
+    // Region draw: finalize → convert to PDF coords
+    if (activeTool === 'select' && regionStartRef.current && regionRectRef.current) {
+      const rr = regionRectRef.current
+      if (rr.w > 20 && rr.h > 20) {
+        const pdfRegion = screenRectToPdfRegion(rr, viewRef.current)
+        setPendingRegion(pdfRegion)
+        if (import.meta.env.DEV) {
+          console.log('[RegionDraw] finalized region PDF coords:', pdfRegion)
+        }
+      }
+      regionStartRef.current = null
+      regionRectRef.current = null
+      drawOverlay()
+    }
     // Azonosítás mode: finalize box draw → seed capture
     if (activeTool === 'select' && seedStartRef.current && seedRectRef.current) {
       const sr = seedRectRef.current
@@ -1159,7 +1428,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => {
     const h = (e) => {
       if (calibDialog) return
-      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; setPendingSeed(null); seedStartRef.current = null; seedRectRef.current = null; drawOverlay() }
+      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; setPendingSeed(null); seedStartRef.current = null; seedRectRef.current = null; regionStartRef.current = null; regionRectRef.current = null; setPendingRegion(null); handleCountDismiss(); drawOverlay() }
       if (e.key === 'i' || e.key === 'I') setActiveTool(t => t === 'select' ? null : 'select')
       if (e.key === 'c' || e.key === 'C') setActiveTool(t => t === 'count' ? null : 'count')
       if (e.key === 'm' || e.key === 'M') setActiveTool(t => t === 'measure' ? null : 'measure')
@@ -1427,6 +1696,34 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             isRunning={recipeMatchRunning}
             assemblies={assembliesProp}
           />
+        )}
+
+        {/* Count session panel (PlanSwift-style region search) */}
+        {countSessionPanelOpen && (
+          <CountSessionPanel
+            session={countSession}
+            countObject={countObject}
+            onCandidateStatusChange={handleCountCandidateStatusChange}
+            onBatchAcceptLikely={handleCountBatchAcceptLikely}
+            onBatchIgnoreLow={handleCountBatchIgnoreLow}
+            onMaterialize={handleCountMaterialize}
+            onDismiss={handleCountDismiss}
+            onFocusCandidate={handleCountFocusCandidate}
+            isSearching={countSearching}
+            cropPreviewUrl={countCropPreview}
+          />
+        )}
+
+        {/* Region hint — shown when pendingRegion is set but no seed yet */}
+        {pendingRegion && !pendingSeed && activeTool === 'select' && (
+          <div style={{
+            position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(76,201,240,0.15)', border: `1px solid rgba(76,201,240,0.3)`,
+            borderRadius: 8, padding: '6px 14px', zIndex: 25,
+            fontFamily: 'DM Mono', fontSize: 11, color: C.blue,
+          }}>
+            Régió kijelölve ({pendingRegion.w.toFixed(0)}×{pendingRegion.h.toFixed(0)}) — most jelölj ki egy szimbólumot a régión belül
+          </div>
         )}
 
         {/* Recipe list / management panel */}
@@ -1829,7 +2126,7 @@ function PdfToolbar({
       {/* Azonosítás context area — empty state hint OR recipe run buttons */}
       {activeTool === 'select' && recipeCount === 0 && !hasProjectRecipes && (
         <span style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginLeft: 8, userSelect: 'none' }}>
-          Jelölj ki egy szimbólumot a terven ▸
+          Jelölj ki egy szimbólumot ▸ &nbsp;|&nbsp; Shift+húzás = keresési régió
         </span>
       )}
       {activeTool === 'select' && recipeCount === 0 && hasProjectRecipes && (
