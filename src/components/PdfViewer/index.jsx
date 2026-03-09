@@ -5,8 +5,9 @@ import SeedAssignPanel from '../SeedAssignPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
-import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getRelevantRecipes } from '../../data/recipeStore.js'
+import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getRelevantRecipes, updateRecipe, archiveRecipe, RECIPE_SCOPE } from '../../data/recipeStore.js'
 import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
+import RecipeListPanel from '../RecipeListPanel.jsx'
 import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
 import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket } from '../../services/recipeMatching/index.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -156,6 +157,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const showReuseBanner = !reuseBannerDismissed
     && !recipeMatchPanelOpen && !pendingSeed
     && shouldShowReuseBanner(projectId, planId, markerCount_forBanner, getRelevantProjectRecipes)
+
+  // ── Recipe list panel state ──
+  const [recipeListOpen, setRecipeListOpen] = useState(false)
+  const [recipeListItems, setRecipeListItems] = useState([])
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -853,6 +858,46 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     await handleRunRecipeMatching(recipes)
   }, [projectId, handleRunRecipeMatching])
 
+  // ── Recipe list panel handlers ──────────────────────────────────────────
+  const refreshRecipeList = useCallback(() => {
+    if (projectId) setRecipeListItems(getRelevantRecipes(projectId))
+  }, [projectId])
+
+  const handleOpenRecipeList = useCallback(() => {
+    refreshRecipeList()
+    setRecipeListOpen(true)
+  }, [refreshRecipeList])
+
+  const handleCloseRecipeList = useCallback(() => {
+    setRecipeListOpen(false)
+  }, [])
+
+  const handleRunSingleRecipe = useCallback(async (recipe) => {
+    setRecipeListOpen(false)
+    await handleRunRecipeMatching([recipe])
+  }, [handleRunRecipeMatching])
+
+  const handleRunAllFromList = useCallback(async () => {
+    setRecipeListOpen(false)
+    await handleRunProjectRecipes()
+  }, [handleRunProjectRecipes])
+
+  const handleRenameRecipe = useCallback((recipeId, newLabel) => {
+    updateRecipe(recipeId, { label: newLabel })
+    refreshRecipeList()
+  }, [refreshRecipeList])
+
+  const handleDeleteRecipe = useCallback((recipeId) => {
+    archiveRecipe(recipeId)
+    refreshRecipeList()
+    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
+  }, [refreshRecipeList, planId])
+
+  const handleScopeToggleRecipe = useCallback((recipeId, newScope) => {
+    updateRecipe(recipeId, { scope: newScope })
+    refreshRecipeList()
+  }, [refreshRecipeList])
+
   const handleAcceptAllGreenMatches = useCallback(() => {
     setRecipeMatchCandidates(prev => batchAcceptGreenMatches(prev))
   }, [])
@@ -1143,6 +1188,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         onRunProjectRecipes={handleRunProjectRecipes}
         recipeMatchRunning={recipeMatchRunning}
         hasProjectRecipes={projectId ? getRelevantRecipes(projectId).length > 0 : false}
+        onOpenRecipeList={handleOpenRecipeList}
+        recipeListOpen={recipeListOpen}
       />
 
       {/* Main area */}
@@ -1207,6 +1254,20 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             onFocusCandidate={handleFocusMatchCandidate}
             isRunning={recipeMatchRunning}
             assemblies={assembliesProp}
+          />
+        )}
+
+        {/* Recipe list / management panel */}
+        {recipeListOpen && (
+          <RecipeListPanel
+            recipes={recipeListItems}
+            onRun={handleRunSingleRecipe}
+            onRunAll={handleRunAllFromList}
+            onRename={handleRenameRecipe}
+            onDelete={handleDeleteRecipe}
+            onScopeToggle={handleScopeToggleRecipe}
+            onClose={handleCloseRecipeList}
+            isRunning={recipeMatchRunning}
           />
         )}
 
@@ -1442,6 +1503,7 @@ function PdfToolbar({
   rotation, onRotateLeft, onRotateRight,
   assemblies, recipeCount,
   onRunRecipeMatching, onRunProjectRecipes, recipeMatchRunning, hasProjectRecipes,
+  onOpenRecipeList, recipeListOpen,
 }) {
   const TOOLS = [
     { id: 'select', label: 'Azonosítás', key: 'I' },
@@ -1539,6 +1601,25 @@ function PdfToolbar({
             </button>
           )}
         </div>
+      )}
+
+      {/* Projekt minták button — always visible when project has recipes */}
+      {hasProjectRecipes && (
+        <button onClick={onOpenRecipeList} title="Projekt minták kezelése" style={{
+          padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
+          fontSize: 11, fontFamily: 'Syne', fontWeight: 700, marginLeft: 4,
+          background: recipeListOpen ? 'rgba(76,201,240,0.12)' : 'transparent',
+          border: `1px solid ${recipeListOpen ? 'rgba(76,201,240,0.3)' : C.border}`,
+          color: recipeListOpen ? C.blue : C.muted,
+          display: 'flex', alignItems: 'center', gap: 5,
+          transition: 'all 0.12s',
+        }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+          Minták
+        </button>
       )}
 
       <div style={{ flex: 1 }} />
