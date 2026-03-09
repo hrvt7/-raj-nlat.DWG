@@ -5,7 +5,7 @@ import SeedAssignPanel from '../SeedAssignPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
-import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getAllRecipesByProject, getRelevantRecipes, updateRecipe, archiveRecipe, restoreRecipe, updateRecipeRunStats, RECIPE_SCOPE, MATCH_STRICTNESS } from '../../data/recipeStore.js'
+import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getAllRecipesByProject, getRelevantRecipes, getRecommendedRecipeSet, updateRecipe, archiveRecipe, restoreRecipe, updateRecipeRunStats, RECIPE_SCOPE, MATCH_STRICTNESS } from '../../data/recipeStore.js'
 import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
 import RecipeListPanel from '../RecipeListPanel.jsx'
 import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
@@ -157,6 +157,14 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const showReuseBanner = !reuseBannerDismissed
     && !recipeMatchPanelOpen && !pendingSeed
     && shouldShowReuseBanner(projectId, planId, markerCount_forBanner, getRelevantProjectRecipes)
+
+  // ── Recommended recipe set (for banner presets) ──
+  // planMeta would come from plan metadata (floor, systemType, docType) if available.
+  // For now we pass null — quality + usage scoring still ranks recipes properly.
+  const recommendationSet = React.useMemo(() => {
+    if (!projectId || !showReuseBanner) return { recommended: [], rest: [], reasons: [] }
+    return getRecommendedRecipeSet(projectId, null)
+  }, [projectId, showReuseBanner])
 
   // ── Recipe list panel state ──
   const [recipeListOpen, setRecipeListOpen] = useState(false)
@@ -971,7 +979,18 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     setRecipeMatchPanelOpen(false)
   }, [])
 
-  const handleReuseBannerRun = useCallback(() => {
+  const handleReuseBannerRunRecommended = useCallback(() => {
+    setReuseBannerDismissed(true)
+    if (planId) dismissReuseBanner(planId)
+    const { recommended } = getRecommendedRecipeSet(projectId, null)
+    if (recommended.length > 0) {
+      handleRunRecipeMatching(recommended)
+    } else {
+      handleRunProjectRecipes()
+    }
+  }, [planId, projectId, handleRunRecipeMatching, handleRunProjectRecipes])
+
+  const handleReuseBannerRunAll = useCallback(() => {
     setReuseBannerDismissed(true)
     if (planId) dismissReuseBanner(planId)
     handleRunProjectRecipes()
@@ -1314,8 +1333,11 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
         {/* Reuse banner — project recipes available for new plan */}
         <ReuseBanner
-          recipeCount={projectRecipeCount}
-          onRun={handleReuseBannerRun}
+          recommendedCount={recommendationSet.recommended.length}
+          totalCount={projectRecipeCount}
+          reasons={recommendationSet.reasons}
+          onRunRecommended={handleReuseBannerRunRecommended}
+          onRunAll={handleReuseBannerRunAll}
           onDismiss={handleReuseBannerDismiss}
           visible={showReuseBanner}
         />

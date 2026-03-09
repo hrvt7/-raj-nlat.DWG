@@ -309,6 +309,126 @@ export function getRelevantRecipeCount(projectId, planMeta = null) {
   return getRelevantRecipes(projectId, planMeta).length
 }
 
+// ── Recommended recipe set ──────────────────────────────────────────────────
+// Builds a ranked recommendation: separates "recommended" (high-quality,
+// relevant) recipes from "rest" with human-readable reasons.
+//
+// Scoring combines:
+//   - planMeta relevance (floor +3, systemType +2, docType +1)
+//   - quality bonus: lastRunStats accept rate ≥ 70% → +3, ≥ 50% → +1
+//   - quality penalty: accept rate < 30% → -2
+//   - usageCount tiebreak
+//
+// "Recommended" = score ≥ RECOMMENDED_THRESHOLD (2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RECOMMENDED_THRESHOLD = 2
+
+/**
+ * Compute a recommendation score for a recipe relative to a target plan.
+ * @param {SymbolRecipe} recipe
+ * @param {Object|null} planMeta — { floor, systemType, docType }
+ * @returns {{ score: number, reasons: string[] }}
+ */
+export function scoreRecipeRecommendation(recipe, planMeta) {
+  let score = 0
+  const reasons = []
+
+  // ── Plan meta relevance ──
+  if (planMeta) {
+    const sourceMeta = _getPlanMeta(recipe.sourcePlanId)
+    if (sourceMeta) {
+      if (planMeta.floor && sourceMeta.floor && planMeta.floor === sourceMeta.floor) {
+        score += 3
+        reasons.push('same_floor')
+      }
+      if (planMeta.systemType && sourceMeta.systemType && planMeta.systemType === sourceMeta.systemType) {
+        score += 2
+        reasons.push('same_system')
+      }
+      if (planMeta.docType && sourceMeta.docType && planMeta.docType === sourceMeta.docType) {
+        score += 1
+        reasons.push('same_doc_type')
+      }
+    }
+  }
+
+  // ── Quality bonus / penalty ──
+  const stats = recipe.lastRunStats
+  if (stats && stats.total > 0) {
+    const acceptRate = stats.accepted / stats.total
+    if (acceptRate >= 0.7) {
+      score += 3
+      reasons.push('high_quality')
+    } else if (acceptRate >= 0.5) {
+      score += 1
+      reasons.push('ok_quality')
+    } else if (acceptRate < 0.3) {
+      score -= 2
+      reasons.push('low_quality')
+    }
+  }
+
+  // ── Usage bonus (mild) ──
+  if ((recipe.usageCount || 0) >= 3) {
+    score += 1
+    reasons.push('frequently_used')
+  }
+
+  return { score, reasons }
+}
+
+/**
+ * Get recommended recipe set for a plan within a project.
+ *
+ * Returns { recommended, rest, reasons } where:
+ *   - recommended: recipes with score ≥ threshold, sorted by score desc
+ *   - rest: remaining active recipes, sorted by score desc
+ *   - reasons: human-readable summary strings
+ *
+ * @param {string} projectId
+ * @param {Object|null} [planMeta] — { floor, systemType, docType }
+ * @returns {{ recommended: SymbolRecipe[], rest: SymbolRecipe[], reasons: string[] }}
+ */
+export function getRecommendedRecipeSet(projectId, planMeta = null) {
+  const all = getRecipesByProject(projectId) // active only
+  if (!all.length) return { recommended: [], rest: [], reasons: [] }
+
+  const scored = all.map(recipe => {
+    const { score, reasons } = scoreRecipeRecommendation(recipe, planMeta)
+    return { recipe, score, reasons }
+  })
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    const usageDiff = (b.recipe.usageCount || 0) - (a.recipe.usageCount || 0)
+    if (usageDiff !== 0) return usageDiff
+    return (b.recipe.createdAt || '').localeCompare(a.recipe.createdAt || '')
+  })
+
+  const recommended = []
+  const rest = []
+  const reasonSet = new Set()
+
+  for (const item of scored) {
+    if (item.score >= RECOMMENDED_THRESHOLD) {
+      recommended.push(item.recipe)
+      item.reasons.forEach(r => reasonSet.add(r))
+    } else {
+      rest.push(item.recipe)
+    }
+  }
+
+  // Build human-readable reasons
+  const reasons = []
+  if (reasonSet.has('same_floor')) reasons.push('Azonos emelet')
+  if (reasonSet.has('same_system')) reasons.push('Azonos rendszer')
+  if (reasonSet.has('high_quality')) reasons.push('Magas találati arány')
+  if (reasonSet.has('frequently_used')) reasons.push('Gyakran használt')
+
+  return { recommended, rest, reasons }
+}
+
 /**
  * Load plan metadata from localStorage.
  * Plan entries may store floor, systemType, docType.

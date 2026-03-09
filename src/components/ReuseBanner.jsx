@@ -2,23 +2,51 @@
 // Non-modal, dismissable inline banner shown when a user opens a plan
 // in a project that already has saved recipes.
 //
+// Now supports run presets:
+//   - "Ajánlott" — run recommended subset (high-quality, relevant)
+//   - "Mind (N)" — run all active project recipes
+//   - Dismiss
+//
 // Props:
-//   recipeCount     — number of project recipes available
-//   onRun           — () => void — run project recipes on this plan
-//   onDismiss       — () => void — dismiss banner
-//   visible         — boolean — whether to show
+//   recommendedCount — number of recommended recipes
+//   totalCount       — total active project recipes
+//   reasons          — string[] — human-readable recommendation reasons
+//   onRunRecommended — () => void — run recommended subset
+//   onRunAll         — () => void — run all project recipes
+//   onDismiss        — () => void — dismiss banner
+//   visible          — boolean
 // ──────────────────────────────────────────────────────────────────────────────
 
 import React from 'react'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
-  accent: '#00E5A0', blue: '#4CC9F0',
+  accent: '#00E5A0', blue: '#4CC9F0', yellow: '#FFD166',
   text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
 }
 
-export default function ReuseBanner({ recipeCount, onRun, onDismiss, visible }) {
-  if (!visible || !recipeCount) return null
+export default function ReuseBanner({
+  recommendedCount = 0,
+  totalCount = 0,
+  reasons = [],
+  onRunRecommended,
+  onRunAll,
+  onDismiss,
+  visible,
+  // Backward compat — old API
+  recipeCount,
+  onRun,
+}) {
+  // Backward compat: if old API used, map to new
+  const total = totalCount || recipeCount || 0
+  const recommended = recommendedCount || 0
+  const hasRecommended = recommended > 0 && recommended < total
+
+  if (!visible || !total) return null
+
+  const subtitle = hasRecommended && reasons.length > 0
+    ? reasons.join(' · ')
+    : 'Futtatás ezen a terven?'
 
   return (
     <div style={{
@@ -27,7 +55,7 @@ export default function ReuseBanner({ recipeCount, onRun, onDismiss, visible }) 
       background: 'rgba(17,17,19,0.95)', border: `1px solid rgba(0,229,160,0.25)`,
       borderRadius: 10, padding: '8px 14px',
       boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)',
-      maxWidth: 420, whiteSpace: 'nowrap',
+      maxWidth: 520, whiteSpace: 'nowrap',
     }}>
       {/* Icon */}
       <div style={{
@@ -43,21 +71,45 @@ export default function ReuseBanner({ recipeCount, onRun, onDismiss, visible }) 
       {/* Text */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12, fontFamily: 'Syne', fontWeight: 700, color: C.text }}>
-          {recipeCount} mentett minta elérhető
+          {hasRecommended
+            ? `${recommended} ajánlott minta (${total} összesen)`
+            : `${total} mentett minta elérhető`}
         </div>
         <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginTop: 1 }}>
-          Futtatás ezen a terven?
+          {subtitle}
         </div>
       </div>
 
-      {/* Run button */}
-      <button onClick={onRun} style={{
-        padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
-        background: C.accent, border: 'none', color: C.bg,
-        fontSize: 11, fontFamily: 'Syne', fontWeight: 700, flexShrink: 0,
-      }}>
-        Futtatás
-      </button>
+      {/* Run preset buttons */}
+      {hasRecommended ? (
+        <>
+          {/* Recommended button — primary */}
+          <button onClick={onRunRecommended || onRun} style={{
+            padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
+            background: C.accent, border: 'none', color: C.bg,
+            fontSize: 11, fontFamily: 'Syne', fontWeight: 700, flexShrink: 0,
+          }}>
+            Ajánlott
+          </button>
+          {/* Run all — secondary */}
+          <button onClick={onRunAll || onRun} style={{
+            padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
+            background: 'rgba(76,201,240,0.12)', border: `1px solid rgba(76,201,240,0.3)`,
+            color: C.blue, fontSize: 10, fontFamily: 'DM Mono', fontWeight: 500, flexShrink: 0,
+          }}>
+            Mind ({total})
+          </button>
+        </>
+      ) : (
+        /* Single run button when no meaningful recommended subset */
+        <button onClick={onRunAll || onRun} style={{
+          padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
+          background: C.accent, border: 'none', color: C.bg,
+          fontSize: 11, fontFamily: 'Syne', fontWeight: 700, flexShrink: 0,
+        }}>
+          Futtatás
+        </button>
+      )}
 
       {/* Dismiss */}
       <button onClick={onDismiss} style={{
@@ -72,7 +124,6 @@ export default function ReuseBanner({ recipeCount, onRun, onDismiss, visible }) 
 
 // ── Helper: check if reuse banner should show ─────────────────────────────
 // Returns true when the project has recipes but the current plan has no markers.
-// Now uses relevance-aware recipe lookup when planMeta is available.
 export function shouldShowReuseBanner(projectId, planId, markerCount, getRecipesFn) {
   if (!projectId || !planId) return false
   if (markerCount > 0) return false
