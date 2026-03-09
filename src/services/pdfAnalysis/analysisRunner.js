@@ -22,6 +22,7 @@ import {
 } from './analysisCache.js'
 import { hashFile, getPlanFile, updatePlanMeta } from '../../data/planStore.js'
 import { detectSymbols, extractDetectionSummary } from '../pdfDetection/index.js'
+import { getCustomSymbolsByProject } from '../../data/customSymbolStore.js'
 
 // ── Status constants ─────────────────────────────────────────────────────────
 
@@ -48,10 +49,11 @@ const _inflight = new Map()
  * @param {Object} [options]
  * @param {function} [options.onProgress] — progress callback (0–1)
  * @param {function} [options.onStatusChange] — called with (planId, status)
+ * @param {string}   [options.projectId] — project ID for custom symbol matching + OCR
  * @returns {Promise<{ result: import('./types.js').PdfAnalysisResult|null, fromCache: boolean }>}
  */
 export async function runAnalysis(planId, file, options = {}) {
-  const { onProgress, onStatusChange } = options
+  const { onProgress, onStatusChange, projectId } = options
   const provider = getActiveProvider()
 
   // 1. Dedup: if already running for this plan, await the existing promise
@@ -60,7 +62,7 @@ export async function runAnalysis(planId, file, options = {}) {
     return { result, fromCache: false }
   }
 
-  const promise = _runAnalysisInner(planId, file, provider, onProgress, onStatusChange)
+  const promise = _runAnalysisInner(planId, file, provider, onProgress, onStatusChange, projectId)
   _inflight.set(planId, promise)
 
   try {
@@ -74,7 +76,7 @@ export async function runAnalysis(planId, file, options = {}) {
 /**
  * @private
  */
-async function _runAnalysisInner(planId, file, provider, onProgress, onStatusChange) {
+async function _runAnalysisInner(planId, file, provider, onProgress, onStatusChange, projectId) {
   const _notify = (status) => {
     if (onStatusChange) {
       try { onStatusChange(planId, status) } catch { /* ignore */ }
@@ -95,13 +97,22 @@ async function _runAnalysisInner(planId, file, provider, onProgress, onStatusCha
     const fileHash = await hashFile(file)
     const cacheKey = buildCacheKey(fileHash, provider)
 
+    // ── Resolve project custom symbols + pdfData for detection ────────────
+    const projectCustomSymbols = projectId
+      ? getCustomSymbolsByProject(projectId)
+      : []
+    let pdfData = null
+    try {
+      pdfData = await file.arrayBuffer()
+    } catch { /* pdfData stays null — OCR will be skipped */ }
+
     // ── Cache check ───────────────────────────────────────────────────────
     const cached = await getCachedAnalysis(cacheKey)
     if (cached) {
       const summary = extractSummary(cached)
 
       // ── Run detection rule engine on cached result ──────────────────────
-      const { meta: detMeta } = await detectSymbols(cached, cacheKey)
+      const { meta: detMeta } = await detectSymbols(cached, cacheKey, projectCustomSymbols, pdfData)
       const detSummary = extractDetectionSummary(detMeta)
 
       updatePlanMeta(planId, {
@@ -125,7 +136,7 @@ async function _runAnalysisInner(planId, file, provider, onProgress, onStatusCha
     await setCachedAnalysis(cacheKey, result)
 
     // ── Run detection rule engine ─────────────────────────────────────────
-    const { meta: detMeta } = await detectSymbols(result, cacheKey)
+    const { meta: detMeta } = await detectSymbols(result, cacheKey, projectCustomSymbols, pdfData)
     const detSummary = extractDetectionSummary(detMeta)
 
     // ── Update plan meta with summary ─────────────────────────────────────
@@ -166,6 +177,7 @@ async function _runAnalysisInner(planId, file, provider, onProgress, onStatusCha
  * @param {File|Blob} file
  * @param {Object} [options]
  * @param {function} [options.onStatusChange]
+ * @param {string}   [options.projectId] — project ID for custom symbol matching + OCR
  */
 export function triggerAnalysis(planId, file, options = {}) {
   // Mark pending immediately (synchronous)
@@ -215,7 +227,10 @@ export async function ensureAnalysis(plan, options = {}) {
     return { result: null, fromCache: false, skipped: true }
   }
 
-  const out = await runAnalysis(plan.id, file, options)
+  const out = await runAnalysis(plan.id, file, {
+    ...options,
+    projectId: options.projectId || plan.projectId,
+  })
   return { ...out, skipped: false }
 }
 

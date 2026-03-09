@@ -15,9 +15,9 @@
 import localforage from 'localforage'
 import { runRuleEngine } from './ruleEngine.js'
 import { runProjectMemory } from './projectMemory.js'
-import { routePdfType, DETECTION_MODE } from './pdfTypeRouter.js'
+import { routePdfType } from './pdfTypeRouter.js'
 import { extractOcrText, enrichAnalysisWithOcr, extractOcrHints } from './ocrTextExtractor.js'
-import { inferMetaFromText, mergeMeta } from '../../utils/planMetaInference.js'
+import { inferMetaFromText } from '../../utils/planMetaInference.js'
 
 // ── IndexedDB store for detection candidates ─────────────────────────────────
 

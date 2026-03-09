@@ -1183,6 +1183,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           // ── PDF Analysis: fire-and-forget background analysis ──
           triggerAnalysis(id, file, {
             onStatusChange: () => reload(),
+            projectId,
           })
         }
         // ── Layer 2: async text-based metadata enrichment (non-blocking) ──

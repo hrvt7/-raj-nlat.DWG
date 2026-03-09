@@ -23,8 +23,6 @@
 //   - Reports OCR status for UI display
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { isPageLimited } from './pdfTypeRouter.js'
-
 // ── OCR source constants ────────────────────────────────────────────────────
 
 export const OCR_SOURCE = /** @type {const} */ ({
