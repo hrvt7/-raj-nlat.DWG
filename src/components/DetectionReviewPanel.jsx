@@ -816,6 +816,23 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                     Érintett oldalak: {detectionMeta.rasterPageNumbers.join(', ')}
                   </div>
                 )}
+                {/* OCR text hint status */}
+                {detectionMeta.ocrResult && (
+                  <div style={{
+                    marginTop: 6, padding: '4px 8px',
+                    background: detectionMeta.ocrResult.hasAnyText ? 'rgba(0,229,160,0.06)' : 'rgba(255,107,107,0.06)',
+                    borderRadius: 6, fontSize: 10,
+                    color: detectionMeta.ocrResult.hasAnyText ? C.accent : C.red,
+                  }}>
+                    {detectionMeta.ocrResult.hasAnyText ? '📝' : '⬜'}{' '}
+                    OCR: {detectionMeta.ocrResult.summary}
+                    {detectionMeta.ocrResult.hasAnyText && detectionMeta.ocrMetaAssist?.metaConfidence > 0 && (
+                      <span style={{ marginLeft: 8, opacity: 0.8 }}>
+                        · Metadata assist aktív
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
