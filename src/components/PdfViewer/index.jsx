@@ -10,6 +10,8 @@ import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
 import RecipeListPanel from '../RecipeListPanel.jsx'
 import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
 import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket, generateBatchId } from '../../services/recipeMatching/index.js'
+import { createRunRecord, saveRun, getRunsByPlan, getLastRun, markRunUndone, getRunByBatchId } from '../../data/recipeRunStore.js'
+import RunHistoryDrawer from '../RunHistoryDrawer.jsx'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -147,10 +149,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => { recipeMatchCandidatesRef.current = recipeMatchCandidates; setRenderTick(t => t + 1) }, [recipeMatchCandidates])
   const [recipeMatchRunning, setRecipeMatchRunning] = useState(false)
   const [recipeMatchPanelOpen, setRecipeMatchPanelOpen] = useState(false)
+  const lastRunMetaRef = useRef(null) // { recipeIds, recipeCount, totalMatches, scope }
 
   // ── Apply summary + undo state ──
   const [applyResult, setApplyResult] = useState(null)     // { markersCreated, markersDeduplicated, assemblySummary, batchId }
   const [lastApplyBatchId, setLastApplyBatchId] = useState(null)
+
+  // ── Run history state ──
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false)
+  const [recentRuns, setRecentRuns] = useState([])
+  const refreshRunHistory = useCallback(() => {
+    if (planId) setRecentRuns(getRunsByPlan(planId).slice(0, 5))
+  }, [planId])
+  useEffect(() => { refreshRunHistory() }, [refreshRunHistory])
 
   // ── Reuse banner state ──
   const [reuseBannerDismissed, setReuseBannerDismissed] = useState(false)
@@ -843,13 +854,16 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   // ── Recipe matching handlers ──────────────────────────────────────────────
 
-  const handleRunRecipeMatching = useCallback(async (recipesToRun) => {
+  const handleRunRecipeMatching = useCallback(async (recipesToRun, runScope) => {
     if (!pdfDocRef.current || !planId) return
     const recipes = recipesToRun || getRecipesByPlan(planId)
     if (!recipes.length) {
       console.warn('[RecipeMatching] no recipes found for plan:', planId)
       return
     }
+
+    // Determine scope — explicit arg, or infer from recipe source
+    const scope = runScope || (recipes.length === 1 && recipes[0].scope === 'current_page' ? 'current_page' : 'whole_plan')
 
     if (import.meta.env.DEV) console.log('[RecipeMatching] starting run with', recipes.length, 'recipes on plan:', planId, 'page:', pageNum)
     setRecipeMatchRunning(true)
@@ -861,9 +875,17 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         currentPage: pageNum,
       })
       if (import.meta.env.DEV) console.log('[RecipeMatching] run complete:', candidates.length, 'candidates found')
+      // Store run metadata for the apply step
+      lastRunMetaRef.current = {
+        recipeIds: recipes.map(r => r.id),
+        recipeCount: recipes.length,
+        totalMatches: candidates.length,
+        scope,
+      }
       setRecipeMatchCandidates(candidates)
     } catch (err) {
       console.error('[RecipeMatching] run failed:', err)
+      lastRunMetaRef.current = null
     } finally {
       setRecipeMatchRunning(false)
     }
@@ -999,6 +1021,25 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     setLastApplyBatchId(batchId)
     setApplyResult({ markersCreated, markersDeduplicated, assemblySummary, batchId })
 
+    // ── Record run in history ──
+    const runMeta = lastRunMetaRef.current || {}
+    const run = createRunRecord({
+      planId,
+      scope: runMeta.scope || 'whole_plan',
+      recipeIds: runMeta.recipeIds || [],
+      recipeCount: runMeta.recipeCount || 0,
+      totalMatches: runMeta.totalMatches || 0,
+      acceptedCount: accepted.length,
+      appliedMarkerCount: markersCreated,
+      skippedCount: markersDeduplicated,
+      assemblySummary,
+      batchId,
+      undoAvailable: true,
+    })
+    saveRun(run)
+    lastRunMetaRef.current = null
+    refreshRunHistory()
+
     // Auto-dismiss summary after 8 seconds
     setTimeout(() => setApplyResult(prev => prev?.batchId === batchId ? null : prev), 8000)
 
@@ -1008,7 +1049,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
     // Update recipe count badge
     if (planId) setRecipeCount(getRecipesByPlan(planId).length)
-  }, [recipeMatchCandidates, assembliesProp, planId, markDirty])
+  }, [recipeMatchCandidates, assembliesProp, planId, markDirty, refreshRunHistory])
 
   const handleDismissRecipeMatches = useCallback(() => {
     setRecipeMatchCandidates([])
@@ -1016,19 +1057,33 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   }, [])
 
   // ── Undo last recipe apply ──
-  const handleUndoLastApply = useCallback(() => {
-    if (!lastApplyBatchId) return
+  const handleUndoLastApply = useCallback((batchIdOverride) => {
+    const bid = batchIdOverride || lastApplyBatchId
+    if (!bid) return
     const before = markersRef.current.length
-    markersRef.current = markersRef.current.filter(m => m.batchId !== lastApplyBatchId)
+    markersRef.current = markersRef.current.filter(m => m.batchId !== bid)
     const removed = before - markersRef.current.length
     if (removed > 0) {
       markDirty()
       setRenderTick(t => t + 1)
       if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
     }
+    // Mark run as undone in history
+    if (planId) {
+      const run = getRunByBatchId(planId, bid)
+      if (run) markRunUndone(planId, run.runId)
+      refreshRunHistory()
+    }
     setApplyResult(null)
-    setLastApplyBatchId(null)
-  }, [lastApplyBatchId, markDirty])
+    if (bid === lastApplyBatchId) setLastApplyBatchId(null)
+  }, [lastApplyBatchId, markDirty, planId, refreshRunHistory])
+
+  // Undo from history drawer — finds the run's batchId
+  const handleUndoFromHistory = useCallback((runId) => {
+    const run = recentRuns.find(r => r.runId === runId)
+    if (!run?.batchId) return
+    handleUndoLastApply(run.batchId)
+  }, [recentRuns, handleUndoLastApply])
 
   const handleReuseBannerRunRecommended = useCallback(() => {
     setReuseBannerDismissed(true)
@@ -1295,6 +1350,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         hasProjectRecipes={projectId ? getRelevantRecipes(projectId).length > 0 : false}
         onOpenRecipeList={handleOpenRecipeList}
         recipeListOpen={recipeListOpen}
+        lastRun={recentRuns[0] || null}
+        onOpenRunHistory={() => setRunHistoryOpen(true)}
+        runHistoryOpen={runHistoryOpen}
       />
 
       {/* Main area */}
@@ -1379,6 +1437,15 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             isRunning={recipeMatchRunning}
             showArchived={showArchivedRecipes}
             onToggleArchived={() => setShowArchivedRecipes(prev => !prev)}
+          />
+        )}
+
+        {/* Run history drawer */}
+        {runHistoryOpen && !recipeMatchPanelOpen && (
+          <RunHistoryDrawer
+            runs={recentRuns}
+            onUndo={handleUndoFromHistory}
+            onClose={() => setRunHistoryOpen(false)}
           />
         )}
 
@@ -1672,6 +1739,7 @@ function PdfToolbar({
   assemblies, recipeCount,
   onRunRecipeMatching, onRunProjectRecipes, recipeMatchRunning, hasProjectRecipes,
   onOpenRecipeList, recipeListOpen,
+  lastRun, onOpenRunHistory, runHistoryOpen,
 }) {
   const TOOLS = [
     { id: 'select', label: 'Azonosítás', key: 'I' },
@@ -1787,6 +1855,25 @@ function PdfToolbar({
             <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
           </svg>
           Minták
+        </button>
+      )}
+
+      {/* Last run badge — quick summary + opens history */}
+      {lastRun && (
+        <button onClick={onOpenRunHistory} title="Futtatási előzmények" style={{
+          padding: '3px 8px', borderRadius: 6, cursor: 'pointer', marginLeft: 4,
+          fontSize: 10, fontFamily: 'DM Mono', fontWeight: 600,
+          background: runHistoryOpen ? 'rgba(0,229,160,0.12)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${runHistoryOpen ? 'rgba(0,229,160,0.3)' : C.border}`,
+          color: runHistoryOpen ? C.accent : C.textSub,
+          display: 'flex', alignItems: 'center', gap: 4,
+          transition: 'all 0.12s',
+        }}>
+          <span style={{ color: C.accent, fontWeight: 700 }}>{lastRun.appliedMarkerCount}</span>
+          <span style={{ color: C.muted }}>marker</span>
+          <span style={{ color: C.muted }}>·</span>
+          <span>{lastRun.recipeCount} minta</span>
+          {lastRun.undoneAt && <span style={{ color: C.red, fontSize: 8 }}>↩</span>}
         </button>
       )}
 
