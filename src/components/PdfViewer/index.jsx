@@ -67,6 +67,11 @@ function formatDist(m) {
   return `${m.toFixed(1)} m`
 }
 
+// ── Feature flag: PDF symbol search / identification ──
+// Disabled for pilot — generates too many false positives, corrupts right-panel calcs.
+// Set to true to re-enable the experimental Azonosítás tool + recipe matching.
+const PDF_SYMBOL_SEARCH_ENABLED = false
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
@@ -1453,7 +1458,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const h = (e) => {
       if (calibDialog) return
       if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; setPendingSeed(null); seedStartRef.current = null; seedRectRef.current = null; regionStartRef.current = null; regionRectRef.current = null; setPendingRegion(null); setAwaitingRegionForRecipe(null); handleCountDismiss(); drawOverlay() }
-      if (e.key === 'i' || e.key === 'I') setActiveTool(t => t === 'select' ? null : 'select')
+      if ((e.key === 'i' || e.key === 'I') && PDF_SYMBOL_SEARCH_ENABLED) setActiveTool(t => t === 'select' ? null : 'select')
       if (e.key === 'c' || e.key === 'C') setActiveTool(t => t === 'count' ? null : 'count')
       if (e.key === 'm' || e.key === 'M') setActiveTool(t => t === 'measure' ? null : 'measure')
       if (e.key === 's' || e.key === 'S') setActiveTool(t => t === 'calibrate' ? null : 'calibrate')
@@ -1699,8 +1704,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           </div>
         )}
 
-        {/* Seed assignment panel (Azonosítás mode) */}
-        {pendingSeed && (
+        {/* Seed assignment panel (Azonosítás mode) — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && pendingSeed && (
           <SeedAssignPanel
             seed={pendingSeed}
             assemblies={assembliesProp}
@@ -1709,8 +1714,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           />
         )}
 
-        {/* Recipe match review panel */}
-        {recipeMatchPanelOpen && (
+        {/* Recipe match review panel — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && recipeMatchPanelOpen && (
           <RecipeMatchReviewPanel
             candidates={recipeMatchCandidates}
             onAcceptAllGreen={handleAcceptAllGreenMatches}
@@ -1723,8 +1728,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           />
         )}
 
-        {/* Count session panel (PlanSwift-style region search) */}
-        {countSessionPanelOpen && (
+        {/* Count session panel (PlanSwift-style region search) — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && countSessionPanelOpen && (
           <CountSessionPanel
             session={countSession}
             countObject={countObject}
@@ -1739,8 +1744,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           />
         )}
 
-        {/* Region-first prompt — shown after seed save, waiting for region draw */}
-        {awaitingRegionForRecipe && activeTool === 'select' && (
+        {/* Region-first prompt — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && awaitingRegionForRecipe && activeTool === 'select' && (
           <div style={{
             position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
             background: 'rgba(0,229,160,0.15)', border: `1px solid rgba(0,229,160,0.4)`,
@@ -1769,8 +1774,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           </div>
         )}
 
-        {/* Region hint — shown when pendingRegion is set but no seed yet */}
-        {pendingRegion && !pendingSeed && !awaitingRegionForRecipe && activeTool === 'select' && (
+        {/* Region hint — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && pendingRegion && !pendingSeed && !awaitingRegionForRecipe && activeTool === 'select' && (
           <div style={{
             position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
             background: 'rgba(76,201,240,0.15)', border: `1px solid rgba(76,201,240,0.3)`,
@@ -1781,8 +1786,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           </div>
         )}
 
-        {/* Recipe list / management panel */}
-        {recipeListOpen && (
+        {/* Recipe list / management panel — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && recipeListOpen && (
           <RecipeListPanel
             recipes={recipeListItems}
             assemblies={assembliesProp}
@@ -1801,8 +1806,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           />
         )}
 
-        {/* Run history drawer */}
-        {runHistoryOpen && !recipeMatchPanelOpen && (
+        {/* Run history drawer — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && runHistoryOpen && !recipeMatchPanelOpen && (
           <RunHistoryDrawer
             runs={recentRuns}
             onUndo={handleUndoFromHistory}
@@ -1810,8 +1815,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           />
         )}
 
-        {/* Reuse banner — project recipes available for new plan */}
-        <ReuseBanner
+        {/* Reuse banner — experimental, behind feature flag */}
+        {PDF_SYMBOL_SEARCH_ENABLED && <ReuseBanner
           recommendedCount={recommendationSet.recommended.length}
           totalCount={projectRecipeCount}
           reasons={recommendationSet.reasons}
@@ -1819,7 +1824,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           onRunAll={handleReuseBannerRunAll}
           onDismiss={handleReuseBannerDismiss}
           visible={showReuseBanner}
-        />
+        />}
 
         {/* Apply summary toast / zero-match feedback */}
         {applyResult && (
@@ -2123,7 +2128,8 @@ function PdfToolbar({
   lastRun, onOpenRunHistory, runHistoryOpen,
 }) {
   const TOOLS = [
-    { id: 'select', label: 'Azonosítás', key: 'I' },
+    // Azonosítás (select) is experimental — hidden when PDF_SYMBOL_SEARCH_ENABLED is false
+    ...(PDF_SYMBOL_SEARCH_ENABLED ? [{ id: 'select', label: 'Azonosítás', key: 'I' }] : []),
     { id: 'count', label: 'Számlálás', key: 'C' },
     { id: 'measure', label: 'Mérés', key: 'M' },
     { id: 'calibrate', label: 'Skála', key: 'S' },
@@ -2220,8 +2226,8 @@ function PdfToolbar({
         </div>
       )}
 
-      {/* Projekt minták button — always visible when project has recipes */}
-      {hasProjectRecipes && (
+      {/* Projekt minták button — always visible when project has recipes (GUARDED by feature flag) */}
+      {PDF_SYMBOL_SEARCH_ENABLED && hasProjectRecipes && (
         <button onClick={onOpenRecipeList} title="Projekt minták kezelése" style={{
           padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
           fontSize: 11, fontFamily: 'Syne', fontWeight: 700, marginLeft: 4,
@@ -2239,8 +2245,8 @@ function PdfToolbar({
         </button>
       )}
 
-      {/* Last run badge — quick summary + opens history */}
-      {lastRun && (
+      {/* Last run badge — quick summary + opens history (GUARDED by feature flag) */}
+      {PDF_SYMBOL_SEARCH_ENABLED && lastRun && (
         <button onClick={onOpenRunHistory} title="Futtatási előzmények" style={{
           padding: '3px 8px', borderRadius: 6, cursor: 'pointer', marginLeft: 4,
           fontSize: 10, fontFamily: 'DM Mono', fontWeight: 600,
