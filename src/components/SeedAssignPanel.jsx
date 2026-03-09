@@ -100,7 +100,10 @@ export default function SeedAssignPanel({ seed, assemblies, onSave, onCancel }) 
       {/* Right: assignment form */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontSize: 13, fontFamily: 'Syne', fontWeight: 700, color: C.accent }}>
-          Szimbólum hozzárendelése
+          Szerelvény hozzárendelése
+        </div>
+        <div style={{ fontSize: 9, fontFamily: 'DM Mono', color: C.muted, marginTop: -2 }}>
+          Válassz szerelvényt, majd mentsd mintaként
         </div>
 
         {/* Assembly groups */}

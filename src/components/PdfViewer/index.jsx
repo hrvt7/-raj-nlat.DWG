@@ -7,6 +7,7 @@ import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '.
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
 import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject } from '../../data/recipeStore.js'
 import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
+import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
 import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket } from '../../services/recipeMatching/index.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -145,6 +146,14 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => { recipeMatchCandidatesRef.current = recipeMatchCandidates; setRenderTick(t => t + 1) }, [recipeMatchCandidates])
   const [recipeMatchRunning, setRecipeMatchRunning] = useState(false)
   const [recipeMatchPanelOpen, setRecipeMatchPanelOpen] = useState(false)
+
+  // ── Reuse banner state ──
+  const [reuseBannerDismissed, setReuseBannerDismissed] = useState(false)
+  const projectRecipeCount = getProjectRecipeCount(projectId, getRecipesByProject)
+  const markerCount_forBanner = markersRef.current?.length || 0
+  const showReuseBanner = !reuseBannerDismissed
+    && !recipeMatchPanelOpen && !pendingSeed
+    && shouldShowReuseBanner(projectId, planId, markerCount_forBanner, getRecipesByProject)
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -879,6 +888,17 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     setRecipeMatchPanelOpen(false)
   }, [])
 
+  const handleReuseBannerRun = useCallback(() => {
+    setReuseBannerDismissed(true)
+    if (planId) dismissReuseBanner(planId)
+    handleRunProjectRecipes()
+  }, [planId, handleRunProjectRecipes])
+
+  const handleReuseBannerDismiss = useCallback(() => {
+    setReuseBannerDismissed(true)
+    if (planId) dismissReuseBanner(planId)
+  }, [planId])
+
   const handleFocusMatchCandidate = useCallback((candidate) => {
     // TODO: pan/zoom to candidate location (future enhancement)
     // For now, just switch to the right page
@@ -1183,8 +1203,17 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             onDismiss={handleDismissRecipeMatches}
             onFocusCandidate={handleFocusMatchCandidate}
             isRunning={recipeMatchRunning}
+            assemblies={assembliesProp}
           />
         )}
+
+        {/* Reuse banner — project recipes available for new plan */}
+        <ReuseBanner
+          recipeCount={projectRecipeCount}
+          onRun={handleReuseBannerRun}
+          onDismiss={handleReuseBannerDismiss}
+          visible={showReuseBanner}
+        />
 
         {/* Count summary panel */}
         {countPanelOpen && markerCount > 0 && (
@@ -1433,16 +1462,19 @@ function PdfToolbar({
         </div>
       )}
 
-      {/* Tool buttons */}
+      {/* Tool buttons — Azonosítás primary, others secondary */}
       {TOOLS.map(t => {
         const on = activeTool === t.id
+        const isPrimary = t.id === 'select'
         return (
           <button key={t.id} onClick={() => onToolChange(on ? null : t.id)} title={`${t.label} (${t.key})`} style={{
-            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
+            padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
+            fontSize: isPrimary ? 12 : 11, fontFamily: 'Syne', fontWeight: isPrimary ? 700 : 600,
             display: 'flex', alignItems: 'center', gap: 5,
             background: on ? 'rgba(0,229,160,0.12)' : 'transparent',
             border: `1px solid ${on ? 'rgba(0,229,160,0.3)' : 'transparent'}`,
-            color: on ? C.accent : C.text, transition: 'all 0.12s',
+            color: on ? C.accent : isPrimary ? C.text : C.textSub,
+            transition: 'all 0.12s',
           }}>
             {t.label}
             {t.id === 'select' && recipeCount > 0 && <span style={{ background: C.blue, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{recipeCount}</span>}
@@ -1464,25 +1496,43 @@ function PdfToolbar({
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
-      {/* Recipe matching buttons — shown when Azonosítás tool active and recipes exist */}
+      {/* Azonosítás context area — empty state hint OR recipe run buttons */}
+      {activeTool === 'select' && recipeCount === 0 && !hasProjectRecipes && (
+        <span style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginLeft: 8, userSelect: 'none' }}>
+          Jelölj ki egy szimbólumot a terven ▸
+        </span>
+      )}
+      {activeTool === 'select' && recipeCount === 0 && hasProjectRecipes && (
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted }}>Nincs terv-minta</span>
+          <button onClick={onRunProjectRecipes} disabled={recipeMatchRunning} title="Projekt minták futtatása ezen a terven" style={{
+            padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
+            fontSize: 11, fontFamily: 'Syne', fontWeight: 700,
+            background: 'rgba(0,229,160,0.10)', border: `1px solid rgba(0,229,160,0.25)`,
+            color: C.accent, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
+          }}>
+            {recipeMatchRunning ? 'Keresés...' : 'Projekt minták futtatása'}
+          </button>
+        </div>
+      )}
       {activeTool === 'select' && recipeCount > 0 && (
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-          <button onClick={onRunRecipeMatching} disabled={recipeMatchRunning} title="Recipe futtatás ezen az oldalon" style={{
+          <button onClick={onRunRecipeMatching} disabled={recipeMatchRunning} title="Mentett minták futtatása ezen az oldalon" style={{
             padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
-            fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
-            background: 'rgba(76,201,240,0.10)', border: `1px solid rgba(76,201,240,0.3)`,
-            color: C.blue, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
+            fontSize: 11, fontFamily: 'Syne', fontWeight: 700,
+            background: 'rgba(0,229,160,0.10)', border: `1px solid rgba(0,229,160,0.25)`,
+            color: C.accent, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
           }}>
-            {recipeMatchRunning ? 'Keresés...' : 'Receptek futtatása'}
+            {recipeMatchRunning ? 'Keresés...' : 'Minták futtatása'}
           </button>
           {hasProjectRecipes && (
-            <button onClick={onRunProjectRecipes} disabled={recipeMatchRunning} title="Összes projekt recept futtatása" style={{
+            <button onClick={onRunProjectRecipes} disabled={recipeMatchRunning} title="Összes projekt minta futtatása" style={{
               padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
               fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
               background: 'transparent', border: `1px solid ${C.border}`,
               color: C.muted, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
             }}>
-              Projekt receptek
+              Projekt minták
             </button>
           )}
         </div>

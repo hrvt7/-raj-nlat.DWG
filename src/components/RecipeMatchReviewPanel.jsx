@@ -4,14 +4,27 @@
 //
 // Separate from DetectionReviewPanel — operates on RecipeMatchCandidate[],
 // NOT on DetectionCandidate[].
+//
+// Keyboard shortcuts:
+//   Enter   — accept all green + apply (fast path)
+//   Escape  — dismiss panel
 // ──────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
   accent: '#00E5A0', yellow: '#FFD166', red: '#FF6B6B', blue: '#4CC9F0',
   text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
+}
+
+// Assembly category → color map for quick visual scanning
+const ASM_CAT_COLORS = {
+  szerelvenyek: '#4CC9F0',
+  vilagitas: '#00E5A0',
+  elosztok: '#FF6B6B',
+  gyengaram: '#A78BFA',
+  tuzjelzo: '#FF8C42',
 }
 
 /**
@@ -23,11 +36,13 @@ const C = {
  * @param {Function} props.onDismiss — () => void — close panel
  * @param {Function} props.onFocusCandidate — (candidate) => void — scroll to candidate on map
  * @param {boolean} props.isRunning — matching in progress
+ * @param {Object[]} [props.assemblies] — assembly catalog for color lookup
  */
 export default function RecipeMatchReviewPanel({
-  candidates, onAcceptAllGreen, onToggleCandidate, onApply, onDismiss, onFocusCandidate, isRunning,
+  candidates, onAcceptAllGreen, onToggleCandidate, onApply, onDismiss, onFocusCandidate, isRunning, assemblies,
 }) {
   const [expandedBucket, setExpandedBucket] = useState('green')
+  const panelRef = useRef(null)
 
   const buckets = useMemo(() => {
     const green = [], yellow = [], red = []
@@ -41,13 +56,50 @@ export default function RecipeMatchReviewPanel({
 
   const acceptedCount = (candidates || []).filter(c => c.accepted).length
   const total = (candidates || []).length
+  const allGreenAccepted = buckets.green.length > 0 && buckets.green.every(c => c.accepted)
+  const hasYellow = buckets.yellow.length > 0
+  // Fast path: only green+red (no yellow review needed) → show combo button
+  const canFastAcceptApply = buckets.green.length > 0 && !hasYellow && !allGreenAccepted
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (isRunning || !total) return
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onDismiss()
+      }
+      if (e.key === 'Enter') {
+        e.stopPropagation()
+        if (acceptedCount > 0) {
+          onApply()
+        } else if (canFastAcceptApply) {
+          // Fast path: accept all green then apply
+          onAcceptAllGreen()
+          // Apply after a tick to let state update
+          setTimeout(() => onApply(), 50)
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isRunning, total, acceptedCount, canFastAcceptApply, onDismiss, onApply, onAcceptAllGreen])
+
+  // Assembly color lookup
+  const asmColorMap = useMemo(() => {
+    const map = {}
+    for (const a of (assemblies || [])) {
+      map[a.id] = ASM_CAT_COLORS[a.category] || C.muted
+    }
+    return map
+  }, [assemblies])
 
   if (isRunning) {
     return (
       <div style={panelStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px' }}>
           <div style={{ width: 14, height: 14, border: '2px solid #1E1E22', borderTopColor: C.accent, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>Recipe matching...</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>Minták keresése...</span>
         </div>
       </div>
     )
@@ -56,13 +108,16 @@ export default function RecipeMatchReviewPanel({
   if (!total) return null
 
   return (
-    <div style={panelStyle}>
+    <div ref={panelRef} style={panelStyle}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: `1px solid ${C.border}` }}>
         <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>
-          Recipe találatok ({total})
+          Találatok ({total})
         </div>
-        <button onClick={onDismiss} style={closeBtnStyle} title="Bezárás">✕</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 9, fontFamily: 'DM Mono', color: C.muted }}>Esc: bezár · Enter: alkalmaz</span>
+          <button onClick={onDismiss} style={closeBtnStyle} title="Bezárás (Esc)">✕</button>
+        </div>
       </div>
 
       {/* Summary pills */}
@@ -72,8 +127,21 @@ export default function RecipeMatchReviewPanel({
         <Pill color={C.red} count={buckets.red.length} label="Alacsony" active={expandedBucket === 'red'} onClick={() => setExpandedBucket('red')} />
       </div>
 
-      {/* Accept all green button */}
-      {buckets.green.length > 0 && !buckets.green.every(c => c.accepted) && (
+      {/* Fast path: accept all green + apply in one button (no yellow) */}
+      {canFastAcceptApply && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <button onClick={() => { onAcceptAllGreen(); setTimeout(() => onApply(), 50) }} style={{
+            width: '100%', padding: '7px 12px', borderRadius: 6, cursor: 'pointer',
+            background: C.accent, border: 'none', color: C.bg,
+            fontSize: 12, fontFamily: 'Syne', fontWeight: 700,
+          }}>
+            Elfogadás és alkalmazás ({buckets.green.length}) ↵
+          </button>
+        </div>
+      )}
+
+      {/* Standard: accept all green button (when yellow exists, two-step needed) */}
+      {hasYellow && buckets.green.length > 0 && !allGreenAccepted && (
         <div style={{ padding: '0 14px 8px' }}>
           <button onClick={onAcceptAllGreen} style={{
             width: '100%', padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
@@ -91,6 +159,7 @@ export default function RecipeMatchReviewPanel({
           <CandidateRow
             key={c.id}
             candidate={c}
+            asmColor={asmColorMap[c.assemblyId]}
             onToggle={() => onToggleCandidate(c.id, !c.accepted)}
             onFocus={() => onFocusCandidate?.(c)}
           />
@@ -102,7 +171,7 @@ export default function RecipeMatchReviewPanel({
         )}
       </div>
 
-      {/* Apply button */}
+      {/* Apply button (when items are manually accepted) */}
       {acceptedCount > 0 && (
         <div style={{ padding: '8px 14px', borderTop: `1px solid ${C.border}` }}>
           <button onClick={onApply} style={{
@@ -110,7 +179,7 @@ export default function RecipeMatchReviewPanel({
             background: C.accent, border: 'none', color: C.bg,
             fontSize: 13, fontFamily: 'Syne', fontWeight: 700,
           }}>
-            Alkalmazás ({acceptedCount} marker)
+            Alkalmazás ({acceptedCount} marker) ↵
           </button>
         </div>
       )}
@@ -136,10 +205,11 @@ function Pill({ color, count, label, active, onClick }) {
   )
 }
 
-function CandidateRow({ candidate, onToggle, onFocus }) {
+function CandidateRow({ candidate, asmColor, onToggle, onFocus }) {
   const c = candidate
   const bucketColor = c.confidenceBucket === 'high' ? C.accent
     : c.confidenceBucket === 'review' ? C.yellow : C.red
+  const assemblyColor = asmColor || C.muted
 
   return (
     <div style={{
@@ -157,6 +227,12 @@ function CandidateRow({ candidate, onToggle, onFocus }) {
         {c.accepted ? '✓' : ''}
       </button>
 
+      {/* Assembly color indicator */}
+      <div style={{
+        width: 3, height: 22, borderRadius: 2, flexShrink: 0,
+        background: assemblyColor, opacity: 0.7,
+      }} />
+
       {/* Info */}
       <button onClick={onFocus} style={{
         flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
@@ -166,7 +242,7 @@ function CandidateRow({ candidate, onToggle, onFocus }) {
           {c.label || c.assemblyName || 'Ismeretlen'}
         </div>
         <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>
-          p{c.pageNumber} · {(c.confidence * 100).toFixed(0)}%
+          p{c.pageNumber} · {(c.confidence * 100).toFixed(0)}% · {c.assemblyName || ''}
         </div>
       </button>
 
@@ -181,7 +257,7 @@ function CandidateRow({ candidate, onToggle, onFocus }) {
 const panelStyle = {
   position: 'absolute', top: 8, right: 8, zIndex: 25,
   background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10,
-  minWidth: 240, maxWidth: 300, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+  minWidth: 260, maxWidth: 320, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
 }
 
 const closeBtnStyle = {
