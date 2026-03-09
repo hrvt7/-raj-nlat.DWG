@@ -27,7 +27,7 @@ import { parseDxfFile, parseDxfText } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, loadSettings } from '../data/store.js'
 import { createQuote } from '../utils/createQuote.js'
-import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta, saveBlockMapping, applyBlockDictionary, loadBlockDictionary } from '../data/planStore.js'
+import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
 import { WALL_FACTORS, calcProductivityFactor } from '../data/workItemsDb.js'
 import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
@@ -35,6 +35,8 @@ import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
 import { normalizeMarkers } from '../utils/markerModel.js'
 import ConfidenceBadge from './ConfidenceBadge.jsx'
+import DxfAuditCard from './DxfAuditCard.jsx'
+import { computeDxfAudit } from '../utils/dxfAudit.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -66,38 +68,6 @@ const ASM_COLORS = {
   null: '#9CA3AF',         // unknown → gray
 }
 
-// ─── Match source display labels ──────────────────────────────────────────────
-const MATCH_SOURCE_LABELS = {
-  attribute:   { label: 'ATTRIB',  color: '#A78BFA' },  // purple
-  block_name:  { label: 'Bloknév', color: '#4CC9F0' },  // blue
-  nearby_text: { label: 'Közeli szöveg', color: '#FFD166' },  // yellow
-  dictionary:  { label: 'Szótár',  color: '#00E5A0' },  // green
-  unknown:     { label: 'Ismeretlen', color: '#9CA3AF' },  // gray
-}
-
-function MatchSourceBadge({ matchSource, attribTag, nearbyText, compact }) {
-  const info = MATCH_SOURCE_LABELS[matchSource] || MATCH_SOURCE_LABELS.unknown
-  const tooltip = matchSource === 'attribute' && attribTag
-    ? `ATTRIB: ${attribTag}`
-    : matchSource === 'nearby_text' && nearbyText
-    ? `Közeli: "${nearbyText}"`
-    : info.label
-  return (
-    <span
-      title={tooltip}
-      style={{
-        fontFamily: 'DM Mono', fontSize: compact ? 8 : 9,
-        color: info.color, background: info.color + '18',
-        border: `1px solid ${info.color}30`,
-        padding: compact ? '0px 4px' : '1px 5px', borderRadius: 3,
-        whiteSpace: 'nowrap', flexShrink: 0,
-      }}
-    >
-      {info.label}
-    </span>
-  )
-}
-
 function recognizeBlock(blockName) {
   const up = (blockName || '').toUpperCase().replace(/[_\-\.]/g, ' ')
 
@@ -125,135 +95,6 @@ function recognizeBlock(blockName) {
   if (bestMatch) return bestMatch
 
   return { asmId: null, confidence: 0, matchType: 'unknown', rule: null }
-}
-
-// ─── ATTRIB-aware keyword matching ────────────────────────────────────────────
-// Descriptive ATTRIB tags whose values are most likely to identify device type
-const ATTRIB_DESCRIPTIVE_TAGS = new Set([
-  'TYPE','DESC','DESCRIPTION','NAME','LABEL','DEVICE','TAG','CIRCUIT',
-  'PANEL','LOAD','NOTE','MODEL','FUNCTION','SYMBOL','CATEGORY','CLASS',
-  'TIP','TIPUS','TÍPUS','MEGNEVEZES','MEGNEVEZÉS','LEIRAS','LEÍRÁS',
-])
-
-function matchKeywordsInText(text) {
-  // Run the same BLOCK_ASM_RULES keyword matching on arbitrary text
-  const up = (text || '').toUpperCase().replace(/[_\-\.]/g, ' ')
-  if (!up || up.length < 2) return null
-  // Exact
-  for (const rule of BLOCK_ASM_RULES) {
-    for (const p of rule.patterns) {
-      if (up === p) return { asmId: rule.asmId, confidence: 1.0, rule }
-    }
-  }
-  // Partial
-  let best = null
-  for (const rule of BLOCK_ASM_RULES) {
-    for (const p of rule.patterns) {
-      if (up.includes(p)) {
-        const spec = Math.min(p.length / Math.max(up.replace(/ /g, '').length, 1), 1)
-        const conf = 0.55 + spec * 0.35
-        if (!best || conf > best.confidence) best = { asmId: rule.asmId, confidence: conf, rule }
-      }
-    }
-  }
-  return best
-}
-
-// ─── Spatial text association (nearby TEXT/MTEXT) ─────────────────────────────
-// For a given insert position, find the best keyword match from nearby text entities.
-// Distance threshold is relative to bounding box span to handle different unit systems.
-function findNearbyTextMatch(insertX, insertY, textPositions, geomBounds) {
-  if (!textPositions?.length) return null
-  // Adaptive distance threshold: 2% of the drawing span, min 50 raw units
-  const span = geomBounds ? Math.max(geomBounds.width, geomBounds.height, 1) : 10000
-  const threshold = Math.max(span * 0.02, 50)
-  const thresholdSq = threshold * threshold
-
-  let bestMatch = null
-  for (const tp of textPositions) {
-    const dx = tp.x - insertX, dy = tp.y - insertY
-    const distSq = dx * dx + dy * dy
-    if (distSq > thresholdSq) continue
-    const kwMatch = matchKeywordsInText(tp.text)
-    if (!kwMatch) continue
-    // Scale confidence by proximity (closer → higher)
-    const proximity = 1 - Math.sqrt(distSq) / threshold
-    const conf = kwMatch.confidence * (0.70 + 0.30 * proximity)  // range: 0.70×base to 1.0×base
-    if (!bestMatch || conf > bestMatch.confidence) {
-      bestMatch = { asmId: kwMatch.asmId, confidence: Math.min(conf, 0.60), rule: kwMatch.rule, nearbyText: tp.text, distance: Math.sqrt(distSq) }
-    }
-  }
-  return bestMatch
-}
-
-// ─── Enhanced recognition cascade ─────────────────────────────────────────────
-// 1. ATTRIB values → 2. blockName → 3. nearbyText → 4. unknown
-// Project dictionary is applied separately (post-process in handleFile)
-function recognizeBlockEnhanced(blockName, { attribs, textPositions, insertPositions, geomBounds } = {}) {
-  // Phase 1: ATTRIB values — check descriptive tags first
-  if (attribs?.length) {
-    let bestAttrib = null
-    for (const attr of attribs) {
-      const tagUp = (attr.tag || '').toUpperCase()
-      const isDescriptive = ATTRIB_DESCRIPTIVE_TAGS.has(tagUp)
-      const kwMatch = matchKeywordsInText(attr.value)
-      if (kwMatch) {
-        // Descriptive tags get higher confidence
-        const conf = isDescriptive
-          ? Math.min(kwMatch.confidence * 1.05, 0.95)  // boost descriptive
-          : Math.min(kwMatch.confidence * 0.95, 0.88)   // non-descriptive slightly lower
-        if (!bestAttrib || conf > bestAttrib.confidence) {
-          bestAttrib = { asmId: kwMatch.asmId, confidence: conf, matchType: 'partial', matchSource: 'attribute', rule: kwMatch.rule, _attribTag: attr.tag, _attribValue: attr.value }
-        }
-      }
-    }
-    if (bestAttrib && bestAttrib.confidence >= 0.60) return bestAttrib
-  }
-
-  // Phase 2: blockName (existing logic)
-  const blockMatch = recognizeBlock(blockName)
-  if (blockMatch.asmId && blockMatch.confidence >= 0.50) {
-    return { ...blockMatch, matchSource: 'block_name' }
-  }
-
-  // Phase 3: nearbyText fallback — only if we have positions
-  if (textPositions?.length && insertPositions?.length) {
-    // Find average position for this blockName across all inserts
-    const positions = insertPositions.filter(ins => ins.name === blockName)
-    if (positions.length > 0) {
-      // Try match from the first few instances (up to 5) and take the best
-      let bestNearby = null
-      const sample = positions.slice(0, 5)
-      for (const pos of sample) {
-        const m = findNearbyTextMatch(pos.x, pos.y, textPositions, geomBounds)
-        if (m && (!bestNearby || m.confidence > bestNearby.confidence)) bestNearby = m
-      }
-      if (bestNearby) {
-        return {
-          asmId: bestNearby.asmId, confidence: bestNearby.confidence,
-          matchType: 'partial', matchSource: 'nearby_text',
-          rule: bestNearby.rule, _nearbyText: bestNearby.nearbyText,
-          _nearbyDistance: Math.round(bestNearby.distance),
-        }
-      }
-    }
-  }
-
-  // Phase 4: unknown — also try ATTRIB with lower threshold
-  if (attribs?.length) {
-    let bestAny = null
-    for (const attr of attribs) {
-      const kwMatch = matchKeywordsInText(attr.value)
-      if (kwMatch && (!bestAny || kwMatch.confidence > bestAny.confidence)) {
-        bestAny = { ...kwMatch, _attribTag: attr.tag, _attribValue: attr.value }
-      }
-    }
-    if (bestAny && bestAny.confidence >= 0.40) {
-      return { asmId: bestAny.asmId, confidence: Math.min(bestAny.confidence, 0.55), matchType: 'partial', matchSource: 'attribute', rule: bestAny.rule, _attribTag: bestAny._attribTag, _attribValue: bestAny._attribValue }
-    }
-  }
-
-  return { ...blockMatch, matchSource: 'unknown' }
 }
 
 // ─── DXF cable-layer detection ────────────────────────────────────────────────
@@ -357,214 +198,6 @@ function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems, highlightBloc
         )
       })}
     </svg>
-  )
-}
-
-// ─── Recognition Summary Bar ──────────────────────────────────────────────────
-// Shows recognition status after DXF parse: how many blocks recognized vs unknown
-function RecognitionSummaryBar({ recognizedItems, totalInserts, onShowUnknown, isDxf }) {
-  if (!isDxf || !recognizedItems?.length) return null
-
-  const total = recognizedItems.length
-  const known = recognizedItems.filter(i => i.asmId && i.confidence >= 0.5).length
-  const unknown = total - known
-  const pct = total > 0 ? Math.round((known / total) * 100) : 0
-  const hasInserts = totalInserts > 0
-
-  // Determine status level
-  let statusColor, statusBg, statusIcon, statusText
-  if (!hasInserts) {
-    statusColor = C.red; statusBg = C.redDim; statusIcon = '🔴'
-    statusText = 'Nincs blokk a rajzban — valószínűleg exploded szimbólumok'
-  } else if (pct >= 70) {
-    statusColor = C.accent; statusBg = C.accentDim; statusIcon = '✅'
-    statusText = `${known}/${total} blokktípus felismerve`
-  } else if (pct >= 20) {
-    statusColor = C.yellow; statusBg = C.yellowDim; statusIcon = '⚠️'
-    statusText = `${known}/${total} blokktípus felismerve — ${unknown} hozzárendelést igényel`
-  } else {
-    statusColor = '#FF9090'; statusBg = C.redDim; statusIcon = '🟠'
-    statusText = `Kevés automatikus találat (${known}/${total}) — a blokkok neve nem volt felismerhető`
-  }
-
-  return (
-    <div style={{
-      padding: '10px 14px', borderRadius: 8, marginBottom: 10,
-      background: statusBg, border: `1px solid ${statusColor}30`,
-      display: 'flex', alignItems: 'center', gap: 10,
-    }}>
-      <span style={{ fontSize: 16, flexShrink: 0 }}>{statusIcon}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: statusColor }}>
-          {statusText}
-        </div>
-        {/* Progress bar */}
-        {hasInserts && (
-          <div style={{ marginTop: 4, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-            <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: statusColor, transition: 'width 0.3s' }} />
-          </div>
-        )}
-        {/* Match source breakdown */}
-        {hasInserts && known > 0 && (() => {
-          const bySource = {}
-          for (const item of recognizedItems.filter(i => i.asmId && i.confidence >= 0.5)) {
-            const src = item.matchSource || 'block_name'
-            bySource[src] = (bySource[src] || 0) + 1
-          }
-          const sources = Object.entries(bySource).sort((a, b) => b[1] - a[1])
-          if (sources.length <= 1) return null
-          return (
-            <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-              {sources.map(([src, count]) => {
-                const info = MATCH_SOURCE_LABELS[src] || MATCH_SOURCE_LABELS.unknown
-                return (
-                  <span key={src} style={{ fontFamily: 'DM Mono', fontSize: 9, color: info.color }}>
-                    {info.label}: {count}
-                  </span>
-                )
-              })}
-            </div>
-          )
-        })()}
-      </div>
-      {unknown > 0 && hasInserts && (
-        <button
-          onClick={onShowUnknown}
-          style={{
-            padding: '5px 12px', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
-            background: 'rgba(255,255,255,0.06)', border: `1px solid ${statusColor}40`,
-            color: statusColor, fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
-          }}
-        >
-          Hozzárendelés →
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ─── Unknown Blocks Panel ────────────────────────────────────────────────────
-// Lists unrecognized blocks with assembly assignment dropdowns
-function UnknownBlocksPanel({ items, assemblies, onAssign, onClose }) {
-  const unknowns = items.filter(i => !i.asmId || i.confidence < 0.5)
-  if (!unknowns.length) return null
-
-  const totalUnknownQty = unknowns.reduce((s, i) => s + i.qty, 0)
-
-  return (
-    <div style={{
-      background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10,
-      padding: 14, marginBottom: 12,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div>
-          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.yellow }}>
-            Ismeretlen blokkok ({unknowns.length} típus, {totalUnknownQty} db)
-          </div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 2 }}>
-            Rendelje hozzá a megfelelő szerelvényt mindegyikhez
-          </div>
-        </div>
-        {onClose && (
-          <button onClick={onClose} style={{
-            background: 'none', border: 'none', color: C.muted, cursor: 'pointer',
-            fontSize: 16, fontWeight: 700, padding: '2px 6px',
-          }}>×</button>
-        )}
-      </div>
-
-      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-        {unknowns.map(item => (
-          <div key={item.blockName} style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-            borderRadius: 6, marginBottom: 4, background: C.bg, border: `1px solid ${C.border}`,
-          }}>
-            {/* Block name + qty */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: 'DM Mono', fontSize: 11, color: C.text,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }} title={item.blockName}>
-                {item.blockName}
-              </div>
-              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
-                {item.qty} db
-              </div>
-            </div>
-
-            {/* Match source + confidence badge */}
-            {item.matchSource && item.matchSource !== 'unknown' && (
-              <MatchSourceBadge matchSource={item.matchSource} attribTag={item._attribTag} nearbyText={item._nearbyText} compact />
-            )}
-            {item.confidence > 0 && item.confidence < 0.5 && (
-              <div style={{
-                fontFamily: 'DM Mono', fontSize: 9, color: C.red, background: C.redDim,
-                padding: '1px 5px', borderRadius: 4, flexShrink: 0,
-              }}>
-                {Math.round(item.confidence * 100)}%
-              </div>
-            )}
-
-            {/* Assembly dropdown */}
-            <select
-              value=""
-              onChange={e => {
-                if (e.target.value) onAssign(item.blockName, e.target.value)
-              }}
-              style={{
-                width: 140, padding: '5px 8px', borderRadius: 6, fontSize: 11,
-                background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text,
-                fontFamily: 'DM Mono', cursor: 'pointer', flexShrink: 0,
-              }}
-            >
-              <option value="">Válassz...</option>
-              {assemblies.filter(a => !a.variantOf).map(a => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Degradation Notice ─────────────────────────────────────────────────────
-// Shows when 0 inserts found (exploded blocks) — recommends manual counting
-function DxfDegradationNotice({ totalInserts, recognizedItems, isDxf, onActivateCountTool }) {
-  if (!isDxf) return null
-
-  // Only show if we have parse data but 0 inserts
-  if (totalInserts > 0) return null
-  if (!recognizedItems) return null  // not parsed yet
-
-  return (
-    <div style={{
-      padding: '14px 16px', borderRadius: 10, marginBottom: 12,
-      background: C.redDim, border: `1px solid ${C.red}30`,
-    }}>
-      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: '#FF9090', marginBottom: 6 }}>
-        🔴 A rajz nem tartalmaz blokkokat
-      </div>
-      <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.6, marginBottom: 10 }}>
-        A terv valószínűleg felrobbantott (exploded) szimbólumokat tartalmaz, vagy a blokkok külső referenciában (XREF) vannak. Az automatikus felismerés nem működik ezen a fájlon.
-      </div>
-      <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.6, marginBottom: 10 }}>
-        Használja a <span style={{ color: C.accent, fontWeight: 700 }}>kézi számlálás</span> eszközt (C billentyű) a szimbólumok megjelöléséhez a tervrajzon.
-      </div>
-      {onActivateCountTool && (
-        <button
-          onClick={onActivateCountTool}
-          style={{
-            padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
-            background: C.accentDim, border: `1px solid ${C.accent}40`,
-            color: C.accent, fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-          }}
-        >
-          Kézi számlálás indítása →
-        </button>
-      )}
-    </div>
   )
 }
 
@@ -737,11 +370,6 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
       }}>
         {confPct}%
       </div>
-
-      {/* Match source badge */}
-      {item.matchSource && item.matchSource !== 'unknown' && (
-        <MatchSourceBadge matchSource={item.matchSource} attribTag={item._attribTag} nearbyText={item._nearbyText} compact />
-      )}
 
       {/* Block info */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -996,7 +624,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
-  const [showUnknownPanel, setShowUnknownPanel] = useState(false) // auto-opens on low recognition
+  const [auditDismissed, setAuditDismissed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
@@ -1143,6 +771,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setAsmOverrides({})
     setQtyOverrides({})
     setItemQtyOverrides({})
+    setAuditDismissed(false)
     setDeletedItems(new Set())
     setVariantOverrides({})
     setWallSplits({})
@@ -1290,48 +919,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
       setParsedDxf(result)
 
-      // Run enhanced recognition on all unique block types
+      // Run recognition on all unique block types
       const blockMap = {}
       for (const b of (result.blocks || [])) {
         if (!blockMap[b.name]) blockMap[b.name] = 0
         blockMap[b.name] += b.count
       }
-      const enhancedCtx = {
-        textPositions: result.textPositions || [],
-        insertPositions: result.inserts || [],
-        geomBounds: result.geomBounds,
-      }
-      let items = Object.entries(blockMap).map(([blockName, qty]) => {
-        const attribs = result.insertAttribs?.[blockName] || []
-        const rec = recognizeBlockEnhanced(blockName, { ...enhancedCtx, attribs })
+      const items = Object.entries(blockMap).map(([blockName, qty]) => {
+        const rec = recognizeBlock(blockName)
         return { blockName, qty, ...rec }
       }).sort((a, b) => b.confidence - a.confidence || b.qty - a.qty)
 
-      // Apply project block dictionary (auto-assigns previously user-mapped blocks)
-      const currentProjectId = planId ? (getPlanMeta(planId)?.projectId || null) : null
-      if (currentProjectId) {
-        items = applyBlockDictionary(currentProjectId, items)
-      }
-
       setRecognizedItems(items)
-
-      // Degradation logic: auto-open unknown panel + switch to takeoff tab
-      const knownCount = items.filter(i => i.asmId && i.confidence >= 0.5).length
-      const totalCount = items.length
-      const recognitionPct = totalCount > 0 ? (knownCount / totalCount) * 100 : 0
-      const hasInserts = (result.inserts?.length || 0) > 0
-
-      if (hasInserts && totalCount > 0) {
-        if (recognitionPct < 70) {
-          setShowUnknownPanel(true)  // auto-open unknown blocks panel
-        }
-        setRightTab('takeoff')
-      } else if (!hasInserts && totalCount === 0) {
-        // 0 inserts — degradation notice will show in the takeoff tab
-        setRightTab('takeoff')
-      } else if (items.length) {
-        setRightTab('takeoff')
-      }
+      if (items.length) setRightTab('takeoff')
     } catch (err) {
       console.error('Parse error:', err)
       setParsedDxf({ success: false, error: err.message || String(err) })
@@ -1354,6 +954,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const midConf  = effectiveItems.filter(i => i.confidence >= 0.5 && i.confidence < 0.8)
   const lowConf  = effectiveItems.filter(i => i.confidence < 0.5)
   const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
+
+  // ── DXF Import Audit (structured quality summary) ────────────────────────
+  const dxfAudit = useMemo(() => {
+    if (!parsedDxf) return null
+    return computeDxfAudit(parsedDxf, recognizedItems)
+  }, [parsedDxf, recognizedItems])
 
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
   // From DXF/PDF auto-recognition pipeline
@@ -1949,9 +1555,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 planId={planId}
                 assemblies={assemblies}
                 focusTarget={focusTarget}
-                onMarkersChange={(markers) => {
-                  setPdfMarkers(markers)
-                }}
                 onCableData={(data) => {
                   if (data) {
                     const normalized = normalizeCableEstimate(data, CABLE_SOURCE.DXF_MARKERS)
@@ -2028,8 +1631,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               <Suspense fallback={<div style={{ width: '100%', height: '100%', background: C.bg }} />}>
                 <PdfViewerPanel
                   file={file}
-                  planId={planId}
-                  projectId={planId ? (getPlanMeta(planId)?.projectId || null) : null}
                   style={{ height: '100%', border: 'none', borderRadius: 0 }}
                   assemblies={assemblies}
                   focusTarget={focusTarget}
@@ -2130,50 +1731,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {/* ── TAKEOFF TAB ─────────────────────────────────────────────── */}
             {rightTab === 'takeoff' && (
               <div>
-                {/* Recognition Summary Bar — shows after DXF parse */}
-                <RecognitionSummaryBar
-                  recognizedItems={recognizedItems}
-                  totalInserts={effectiveParsedDxf?.inserts?.length || 0}
-                  isDxf={isDxf}
-                  onShowUnknown={() => setShowUnknownPanel(true)}
-                />
-
-                {/* Degradation Notice — 0 INSERTs (exploded blocks) */}
-                <DxfDegradationNotice
-                  totalInserts={effectiveParsedDxf?.inserts?.length || 0}
-                  recognizedItems={recognizedItems.length > 0 ? recognizedItems : (parsedDxf?.success ? [] : null)}
-                  isDxf={isDxf}
-                  onActivateCountTool={() => {
-                    // Activate count tool via DxfViewerPanel ref
-                    canvasRef.current?.setTool?.('count')
-                  }}
-                />
-
-                {/* Unknown Blocks Panel — assign unrecognized blocks */}
-                {showUnknownPanel && isDxf && (
-                  <UnknownBlocksPanel
-                    items={effectiveItems.length > 0 ? effectiveItems : recognizedItems}
-                    assemblies={assemblies}
-                    onClose={() => setShowUnknownPanel(false)}
-                    onAssign={(blockName, asmId) => {
-                      // 1. Apply override immediately
-                      setAsmOverrides(prev => ({ ...prev, [blockName]: asmId }))
-                      // 2. Save to project dictionary for future files
-                      const currentProjectId = planId ? (getPlanMeta(planId)?.projectId || null) : null
-                      if (currentProjectId) {
-                        saveBlockMapping(currentProjectId, blockName, asmId)
-                      }
-                    }}
+                {/* DXF Audit Card — shows import quality summary */}
+                {dxfAudit && !auditDismissed && !isPdf && (
+                  <DxfAuditCard
+                    audit={dxfAudit}
+                    onTabSwitch={setRightTab}
+                    onDismiss={() => setAuditDismissed(true)}
                   />
                 )}
-
-                {takeoffRows.length === 0 && !showUnknownPanel ? (
+                {takeoffRows.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
-                    {isDxf && recognizedItems.length > 0 && (effectiveParsedDxf?.inserts?.length || 0) > 0
-                      ? 'Nincs hozzárendelt elem. Rendelje hozzá az ismeretlen blokkokat a fenti panelen.'
-                      : 'Még nincs felvett elem. Használd a Számlálás eszközt a tervrajzon.'}
+                    Még nincs felvett elem. Használd a Számlálás eszközt a tervrajzon.
                   </div>
-                ) : takeoffRows.length > 0 ? (
+                ) : (
                   <>
                     {takeoffRows.map(row => (
                       <TakeoffRow
@@ -2226,7 +1796,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       </div>
                     )}
                   </>
-                ) : null}
+                )}
               </div>
             )}
 
