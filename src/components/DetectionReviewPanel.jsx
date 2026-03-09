@@ -208,6 +208,15 @@ function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onTogg
                     marginLeft: 2,
                   }}>PM</span>
                 )}
+                {/* Limited mode badge */}
+                {d.isLimitedMode && (
+                  <span title="Korlátozott detekció — raster/szkennelt oldal" style={{
+                    fontSize: 7, padding: '1px 3px', borderRadius: 3,
+                    background: 'rgba(255,209,102,0.12)', color: C.yellow,
+                    border: '1px solid rgba(255,209,102,0.25)',
+                    marginLeft: 2,
+                  }}>LTD</span>
+                )}
               </button>
               {/* Category remap picker */}
               {onRemap && (
@@ -356,7 +365,7 @@ function NoTemplatesWarning({ onClose }) {
 }
 
 // ─── DetectionReviewPanel ─────────────────────────────────────────────────────
-export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun, pdfCandidates, onCaptureSymbol }) {
+export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun, pdfCandidates, onCaptureSymbol, detectionMeta }) {
   const [phase, setPhase] = useState('loading') // loading | no_templates | detecting | review | saving | done
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState(0)
@@ -782,6 +791,32 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
               fontFamily: 'DM Mono', fontSize: 11, color: C.red,
             }}>
               Hiba: {error}
+            </div>
+          )}
+
+          {/* Limited detection mode banner */}
+          {phase === 'review' && detectionMeta && detectionMeta.detectionMode && detectionMeta.detectionMode !== 'full' && (
+            <div style={{
+              background: 'rgba(255,209,102,0.08)', border: '1px solid rgba(255,209,102,0.2)',
+              borderRadius: 10, padding: '10px 14px', marginBottom: 12,
+              fontFamily: 'DM Mono', fontSize: 10, color: C.yellow,
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+            }}>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>⚠</span>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 3, fontSize: 11 }}>
+                  {detectionMeta.detectionMode === 'limited' ? 'Korlátozott detekció' : 'Vegyes detekciós mód'}
+                </div>
+                <div style={{ color: C.textSub, lineHeight: 1.5 }}>
+                  {(detectionMeta.limitedModeReasons || []).join(' · ') || 'Raster/szkennelt oldalak esetén a detekció korlátozott.'}
+                  {' '}A geometria alapú felismerés nem elérhető. Minden detekció manuális ellenőrzést igényel.
+                </div>
+                {(detectionMeta.rasterPageNumbers || []).length > 0 && (
+                  <div style={{ marginTop: 4, opacity: 0.8 }}>
+                    Érintett oldalak: {detectionMeta.rasterPageNumbers.join(', ')}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -15,6 +15,7 @@
 import localforage from 'localforage'
 import { runRuleEngine } from './ruleEngine.js'
 import { runProjectMemory } from './projectMemory.js'
+import { routePdfType, DETECTION_MODE } from './pdfTypeRouter.js'
 
 // ── IndexedDB store for detection candidates ─────────────────────────────────
 
@@ -36,8 +37,16 @@ const detectionCandidateStore = localforage.createInstance({
  * @returns {Promise<{ candidates: import('./ruleEngine.js').DetectionCandidate[], meta: import('./ruleEngine.js').DetectionMeta }>}
  */
 export async function detectSymbols(analysisResult, analysisCacheKey, projectCustomSymbols = []) {
-  // 1. Standard rule engine (canonical symbol library)
-  const { candidates: standardCandidates, meta } = runRuleEngine(analysisResult)
+  // 0. Route PDF type → determines detection mode per page
+  const routeResult = routePdfType(analysisResult)
+
+  // 1. Standard rule engine (canonical symbol library) — route-aware
+  const { candidates: standardCandidates, meta } = runRuleEngine(analysisResult, routeResult)
+
+  // Attach routing metadata to meta
+  meta.detectionMode = routeResult.detectionMode
+  meta.rasterPageNumbers = routeResult.rasterPageNumbers
+  meta.limitedModeReasons = routeResult.limitedModeReasons
 
   // 2. Project memory matching (custom symbols from this project)
   let allCandidates = [...standardCandidates]
@@ -104,6 +113,9 @@ export function extractDetectionSummary(meta) {
     reviewNeeded: meta.reviewNeeded || 0,
     lowConfidence: meta.lowConfidence || 0,
     detectedSymbolIds: meta.detectedSymbolIds || [],
+    detectionMode: meta.detectionMode || 'full',
+    rasterPageNumbers: meta.rasterPageNumbers || [],
+    limitedModeReasons: meta.limitedModeReasons || [],
   }
 }
 

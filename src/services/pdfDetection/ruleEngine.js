@@ -14,6 +14,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { getAutoDetectableSymbols, getSymbolByLegacyType } from './symbolLibrary.js'
+import { isPageLimited, isGeometryDisabled, getPageConfidenceCap } from './pdfTypeRouter.js'
 
 // ── Confidence buckets ───────────────────────────────────────────────────────
 
@@ -62,9 +63,10 @@ const WEIGHT_LEGACY = 0.25
  * Run the rule engine against a full PdfAnalysisResult.
  *
  * @param {import('../pdfAnalysis/types.js').PdfAnalysisResult} analysisResult
+ * @param {import('./pdfTypeRouter.js').RouteResult} [routeResult] — optional type routing config
  * @returns {{ candidates: DetectionCandidate[], meta: DetectionMeta }}
  */
-export function runRuleEngine(analysisResult) {
+export function runRuleEngine(analysisResult, routeResult) {
   if (!analysisResult || !analysisResult.pages) {
     return { candidates: [], meta: _emptyMeta() }
   }
@@ -73,7 +75,7 @@ export function runRuleEngine(analysisResult) {
   const allCandidates = []
 
   for (const page of analysisResult.pages) {
-    const pageCandidates = _detectOnPage(page, symbols, analysisResult)
+    const pageCandidates = _detectOnPage(page, symbols, analysisResult, routeResult)
     allCandidates.push(...pageCandidates)
   }
 
@@ -90,9 +92,14 @@ export function runRuleEngine(analysisResult) {
 /**
  * @private
  */
-function _detectOnPage(page, symbols, analysisResult) {
+function _detectOnPage(page, symbols, analysisResult, routeResult) {
   const candidates = []
   const pageNumber = page.pageNumber || 1
+
+  // ── Route-aware config ──────────────────────────────────────────────────
+  const pageLimited = routeResult ? isPageLimited(routeResult, pageNumber) : false
+  const geometryOff = routeResult ? isGeometryDisabled(routeResult, pageNumber) : false
+  const confidenceCap = routeResult ? getPageConfidenceCap(routeResult, pageNumber) : 1.0
 
   // Pre-index text blocks for pattern matching
   const textLower = (page.textBlocks || []).map(tb => (tb.text || '').toLowerCase())
@@ -105,8 +112,10 @@ function _detectOnPage(page, symbols, analysisResult) {
     // ── Text evidence ──────────────────────────────────────────────────
     const textResult = _scoreTextEvidence(sym, textLower, allText)
 
-    // ── Geometry evidence ──────────────────────────────────────────────
-    const geomResult = _scoreGeometryEvidence(sym, page.drawings || [])
+    // ── Geometry evidence (disabled in limited mode) ───────────────────
+    const geomResult = geometryOff
+      ? { score: 0, matchedShapes: [], bbox: null }
+      : _scoreGeometryEvidence(sym, page.drawings || [])
 
     // ── Legacy evidence ────────────────────────────────────────────────
     const legacyResult = _scoreLegacyEvidence(sym, legacyItems)
@@ -121,11 +130,11 @@ function _detectOnPage(page, symbols, analysisResult) {
       geomResult.score * WEIGHT_GEOMETRY +
       legacyResult.score * WEIGHT_LEGACY
     )
-    // Clamp to [0, 1]
-    const confidence = Math.min(1, Math.max(0, rawConfidence))
+    // Clamp to [0, 1], then apply page confidence cap (limited mode cap)
+    const confidence = Math.min(confidenceCap, Math.max(0, rawConfidence))
 
-    // Conservative: single weak evidence → force review
-    const requiresReview = confidence < 0.7 || evidenceCount === 1
+    // In limited mode: ALWAYS requires review, regardless of confidence
+    const requiresReview = pageLimited || confidence < 0.7 || evidenceCount === 1
 
     // Determine primary source
     const source = _primarySource(textResult.score, geomResult.score, legacyResult.score)
@@ -155,6 +164,8 @@ function _detectOnPage(page, symbols, analysisResult) {
       qty,
       asmId: sym.asmId || null,
       legacyType: sym.legacyType || null,
+      // ── Limited mode tagging ──
+      isLimitedMode: pageLimited,
     })
   }
 

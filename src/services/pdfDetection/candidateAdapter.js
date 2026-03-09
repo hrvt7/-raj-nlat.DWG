@@ -61,11 +61,20 @@ export const DETECTION_SOURCE = /** @type {const} */ ({
   MANUAL: 'manual',
 })
 
+export const DETECTION_MODE_LABEL = /** @type {const} */ ({
+  full: 'Teljes detekció',
+  limited: 'Korlátozott detekció',
+  mixed: 'Vegyes mód',
+})
+
 // ── Confidence bucket → initial acceptance ──────────────────────────────────
 
-function initialAcceptance(bucket, candidateSource) {
+function initialAcceptance(bucket, candidateSource, isLimited) {
   // Project memory matches NEVER auto-accept, regardless of bucket
   if (candidateSource === 'project_memory') return false
+
+  // Limited mode (raster) matches NEVER auto-accept — always require review
+  if (isLimited) return false
 
   if (bucket === CONFIDENCE_BUCKET.HIGH) return true    // green → auto-accept
   if (bucket === CONFIDENCE_BUCKET.REVIEW) return false // yellow → pending, requires explicit review
@@ -115,7 +124,7 @@ export function adaptCandidate(candidate, planId) {
     label: candidate.symbolType,
 
     // ── review state ──
-    accepted: initialAcceptance(candidate.confidenceBucket, candidate.source),
+    accepted: initialAcceptance(candidate.confidenceBucket, candidate.source, candidate.isLimitedMode),
 
     // ── extended fields (for enhanced review UX) ──
     confidenceBucket: candidate.confidenceBucket,
@@ -128,6 +137,9 @@ export function adaptCandidate(candidate, planId) {
 
     // ── source tagging (standard vs project_memory) ──
     detectionSource,
+
+    // ── limited mode tagging ──
+    isLimitedMode: candidate.isLimitedMode || false,
   }
 }
 
@@ -170,10 +182,12 @@ export function groupByBucket(detections) {
 export function batchAcceptGreen(detections) {
   return detections.map(d => ({
     ...d,
-    // Project memory matches never auto-accept in batch, even if scored as HIGH
-    accepted: (d.confidenceBucket === CONFIDENCE_BUCKET.HIGH && d.detectionSource !== DETECTION_SOURCE.PROJECT_MEMORY)
-      ? true
-      : d.accepted,
+    // Project memory and limited mode matches never auto-accept in batch
+    accepted: (
+      d.confidenceBucket === CONFIDENCE_BUCKET.HIGH &&
+      d.detectionSource !== DETECTION_SOURCE.PROJECT_MEMORY &&
+      !d.isLimitedMode
+    ) ? true : d.accepted,
   }))
 }
 

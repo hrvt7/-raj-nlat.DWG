@@ -1114,6 +1114,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const [uploadWarning, setUploadWarning] = useState(null)
   const [pdfReviewPlan, setPdfReviewPlan] = useState(null) // plan being reviewed for PDF detections
   const [pdfReviewCandidates, setPdfReviewCandidates] = useState(null) // adapted candidates for review panel
+  const [pdfDetectionMeta, setPdfDetectionMeta] = useState(null) // detection meta with routing info
   const planInputRef = useRef(null)
   const legendInputRef = useRef(null)
   const toast = useToast()
@@ -1297,16 +1298,19 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
     const adapted = adaptCandidates(cached.candidates, plan.id)
     setPdfReviewPlan(plan)
     setPdfReviewCandidates(adapted)
+    setPdfDetectionMeta(cached.meta || null)
   }, [toast])
 
   const handleClosePdfReview = useCallback(() => {
     setPdfReviewPlan(null)
     setPdfReviewCandidates(null)
+    setPdfDetectionMeta(null)
   }, [])
 
   const handlePdfReviewDone = useCallback(() => {
     setPdfReviewPlan(null)
     setPdfReviewCandidates(null)
+    setPdfDetectionMeta(null)
     reload()
   }, [reload])
 
@@ -1449,6 +1453,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           projectId={projectId}
           onLocateDetection={null}
           onCaptureSymbol={handleCaptureSymbol}
+          detectionMeta={pdfDetectionMeta}
         />
       )}
     </div>
