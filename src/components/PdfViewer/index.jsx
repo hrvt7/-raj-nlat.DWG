@@ -934,47 +934,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     })
   }, [pageNum])
 
-  // ── Seed save handler: create SymbolRecipe from seed + assignment ──
-  // When a pendingRegion exists, also launch a count-workflow region search.
-  const handleSeedSave = useCallback(async (assemblyId, label, scope) => {
-    if (!pendingSeed || !planId) return
-    const asm = (assembliesProp || []).find(a => a.id === assemblyId)
-    const recipe = createRecipe({
-      projectId: projectId || '',
-      sourcePlanId: planId,
-      sourcePageNumber: pendingSeed.pageNum,
-      bbox: pendingSeed.bbox,
-      assemblyId,
-      assemblyName: asm?.name || '',
-      label,
-      sourceType: 'unknown',
-      seedTextHints: pendingSeed.textHints || [],
-      scope,
-    })
-    const saved = saveRecipe(recipe, pendingSeed.cropDataUrl)
-    // Await crop persist so it's ready for immediate matching
-    if (saved._cropSaved) await saved._cropSaved
-
-    const cropUrl = pendingSeed.cropDataUrl
-    const region = pendingRegion
-
-    setPendingSeed(null)
-    setPendingRegion(null)
-    setRecipeCount(getRecipesByPlan(planId).length)
-
-    // If a search region was drawn, automatically launch count-workflow region search
-    if (region && pdfDocRef.current) {
-      handleCreateCountObjectAndSearch({
-        ...recipe,
-        cropDataUrl: cropUrl,
-      }, region)
-    }
-  }, [pendingSeed, planId, projectId, assembliesProp, pendingRegion, handleCreateCountObjectAndSearch])
-
-  const handleSeedCancel = useCallback(() => {
-    setPendingSeed(null)
-  }, [])
-
   // ── Count session handlers (PlanSwift-style region search) ────────────────
 
   // After seed save: also create a CountObject for region-scoped search
@@ -1018,8 +977,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     }
   }, [planId, projectId, pageNum])
 
-  // Extended seed save: create recipe AND immediately launch region-scoped count search
-  const handleSeedSaveWithRegionSearch = useCallback(async (assemblyId, label, scope) => {
+  // ── Seed save handler: create SymbolRecipe from seed + assignment ──
+  // When a pendingRegion exists, also launch a count-workflow region search.
+  const handleSeedSave = useCallback(async (assemblyId, label, scope) => {
     if (!pendingSeed || !planId) return
     const asm = (assembliesProp || []).find(a => a.id === assemblyId)
     const recipe = createRecipe({
@@ -1035,21 +995,28 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       scope,
     })
     const saved = saveRecipe(recipe, pendingSeed.cropDataUrl)
+    // Await crop persist so it's ready for immediate matching
     if (saved._cropSaved) await saved._cropSaved
-    setRecipeCount(getRecipesByPlan(planId).length)
 
-    // If there's a pending region, use it for region-scoped search
-    const searchRegion = pendingRegion
+    const cropUrl = pendingSeed.cropDataUrl
+    const region = pendingRegion
+
     setPendingSeed(null)
     setPendingRegion(null)
+    setRecipeCount(getRecipesByPlan(planId).length)
 
-    // Launch count workflow search with this recipe's crop
-    const searchCo = {
-      ...recipe,
-      cropDataUrl: pendingSeed.cropDataUrl,
+    // If a search region was drawn, automatically launch count-workflow region search
+    if (region && pdfDocRef.current) {
+      handleCreateCountObjectAndSearch({
+        ...recipe,
+        cropDataUrl: cropUrl,
+      }, region)
     }
-    handleCreateCountObjectAndSearch(searchCo, searchRegion)
   }, [pendingSeed, planId, projectId, assembliesProp, pendingRegion, handleCreateCountObjectAndSearch])
+
+  const handleSeedCancel = useCallback(() => {
+    setPendingSeed(null)
+  }, [])
 
   const handleCountBatchAcceptLikely = useCallback(() => {
     if (!countSession) return
