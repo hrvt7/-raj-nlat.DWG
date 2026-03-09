@@ -66,6 +66,38 @@ const ASM_COLORS = {
   null: '#9CA3AF',         // unknown → gray
 }
 
+// ─── Match source display labels ──────────────────────────────────────────────
+const MATCH_SOURCE_LABELS = {
+  attribute:   { label: 'ATTRIB',  color: '#A78BFA' },  // purple
+  block_name:  { label: 'Bloknév', color: '#4CC9F0' },  // blue
+  nearby_text: { label: 'Közeli szöveg', color: '#FFD166' },  // yellow
+  dictionary:  { label: 'Szótár',  color: '#00E5A0' },  // green
+  unknown:     { label: 'Ismeretlen', color: '#9CA3AF' },  // gray
+}
+
+function MatchSourceBadge({ matchSource, attribTag, nearbyText, compact }) {
+  const info = MATCH_SOURCE_LABELS[matchSource] || MATCH_SOURCE_LABELS.unknown
+  const tooltip = matchSource === 'attribute' && attribTag
+    ? `ATTRIB: ${attribTag}`
+    : matchSource === 'nearby_text' && nearbyText
+    ? `Közeli: "${nearbyText}"`
+    : info.label
+  return (
+    <span
+      title={tooltip}
+      style={{
+        fontFamily: 'DM Mono', fontSize: compact ? 8 : 9,
+        color: info.color, background: info.color + '18',
+        border: `1px solid ${info.color}30`,
+        padding: compact ? '0px 4px' : '1px 5px', borderRadius: 3,
+        whiteSpace: 'nowrap', flexShrink: 0,
+      }}
+    >
+      {info.label}
+    </span>
+  )
+}
+
 function recognizeBlock(blockName) {
   const up = (blockName || '').toUpperCase().replace(/[_\-\.]/g, ' ')
 
@@ -93,6 +125,135 @@ function recognizeBlock(blockName) {
   if (bestMatch) return bestMatch
 
   return { asmId: null, confidence: 0, matchType: 'unknown', rule: null }
+}
+
+// ─── ATTRIB-aware keyword matching ────────────────────────────────────────────
+// Descriptive ATTRIB tags whose values are most likely to identify device type
+const ATTRIB_DESCRIPTIVE_TAGS = new Set([
+  'TYPE','DESC','DESCRIPTION','NAME','LABEL','DEVICE','TAG','CIRCUIT',
+  'PANEL','LOAD','NOTE','MODEL','FUNCTION','SYMBOL','CATEGORY','CLASS',
+  'TIP','TIPUS','TÍPUS','MEGNEVEZES','MEGNEVEZÉS','LEIRAS','LEÍRÁS',
+])
+
+function matchKeywordsInText(text) {
+  // Run the same BLOCK_ASM_RULES keyword matching on arbitrary text
+  const up = (text || '').toUpperCase().replace(/[_\-\.]/g, ' ')
+  if (!up || up.length < 2) return null
+  // Exact
+  for (const rule of BLOCK_ASM_RULES) {
+    for (const p of rule.patterns) {
+      if (up === p) return { asmId: rule.asmId, confidence: 1.0, rule }
+    }
+  }
+  // Partial
+  let best = null
+  for (const rule of BLOCK_ASM_RULES) {
+    for (const p of rule.patterns) {
+      if (up.includes(p)) {
+        const spec = Math.min(p.length / Math.max(up.replace(/ /g, '').length, 1), 1)
+        const conf = 0.55 + spec * 0.35
+        if (!best || conf > best.confidence) best = { asmId: rule.asmId, confidence: conf, rule }
+      }
+    }
+  }
+  return best
+}
+
+// ─── Spatial text association (nearby TEXT/MTEXT) ─────────────────────────────
+// For a given insert position, find the best keyword match from nearby text entities.
+// Distance threshold is relative to bounding box span to handle different unit systems.
+function findNearbyTextMatch(insertX, insertY, textPositions, geomBounds) {
+  if (!textPositions?.length) return null
+  // Adaptive distance threshold: 2% of the drawing span, min 50 raw units
+  const span = geomBounds ? Math.max(geomBounds.width, geomBounds.height, 1) : 10000
+  const threshold = Math.max(span * 0.02, 50)
+  const thresholdSq = threshold * threshold
+
+  let bestMatch = null
+  for (const tp of textPositions) {
+    const dx = tp.x - insertX, dy = tp.y - insertY
+    const distSq = dx * dx + dy * dy
+    if (distSq > thresholdSq) continue
+    const kwMatch = matchKeywordsInText(tp.text)
+    if (!kwMatch) continue
+    // Scale confidence by proximity (closer → higher)
+    const proximity = 1 - Math.sqrt(distSq) / threshold
+    const conf = kwMatch.confidence * (0.70 + 0.30 * proximity)  // range: 0.70×base to 1.0×base
+    if (!bestMatch || conf > bestMatch.confidence) {
+      bestMatch = { asmId: kwMatch.asmId, confidence: Math.min(conf, 0.60), rule: kwMatch.rule, nearbyText: tp.text, distance: Math.sqrt(distSq) }
+    }
+  }
+  return bestMatch
+}
+
+// ─── Enhanced recognition cascade ─────────────────────────────────────────────
+// 1. ATTRIB values → 2. blockName → 3. nearbyText → 4. unknown
+// Project dictionary is applied separately (post-process in handleFile)
+function recognizeBlockEnhanced(blockName, { attribs, textPositions, insertPositions, geomBounds } = {}) {
+  // Phase 1: ATTRIB values — check descriptive tags first
+  if (attribs?.length) {
+    let bestAttrib = null
+    for (const attr of attribs) {
+      const tagUp = (attr.tag || '').toUpperCase()
+      const isDescriptive = ATTRIB_DESCRIPTIVE_TAGS.has(tagUp)
+      const kwMatch = matchKeywordsInText(attr.value)
+      if (kwMatch) {
+        // Descriptive tags get higher confidence
+        const conf = isDescriptive
+          ? Math.min(kwMatch.confidence * 1.05, 0.95)  // boost descriptive
+          : Math.min(kwMatch.confidence * 0.95, 0.88)   // non-descriptive slightly lower
+        if (!bestAttrib || conf > bestAttrib.confidence) {
+          bestAttrib = { asmId: kwMatch.asmId, confidence: conf, matchType: 'partial', matchSource: 'attribute', rule: kwMatch.rule, _attribTag: attr.tag, _attribValue: attr.value }
+        }
+      }
+    }
+    if (bestAttrib && bestAttrib.confidence >= 0.60) return bestAttrib
+  }
+
+  // Phase 2: blockName (existing logic)
+  const blockMatch = recognizeBlock(blockName)
+  if (blockMatch.asmId && blockMatch.confidence >= 0.50) {
+    return { ...blockMatch, matchSource: 'block_name' }
+  }
+
+  // Phase 3: nearbyText fallback — only if we have positions
+  if (textPositions?.length && insertPositions?.length) {
+    // Find average position for this blockName across all inserts
+    const positions = insertPositions.filter(ins => ins.name === blockName)
+    if (positions.length > 0) {
+      // Try match from the first few instances (up to 5) and take the best
+      let bestNearby = null
+      const sample = positions.slice(0, 5)
+      for (const pos of sample) {
+        const m = findNearbyTextMatch(pos.x, pos.y, textPositions, geomBounds)
+        if (m && (!bestNearby || m.confidence > bestNearby.confidence)) bestNearby = m
+      }
+      if (bestNearby) {
+        return {
+          asmId: bestNearby.asmId, confidence: bestNearby.confidence,
+          matchType: 'partial', matchSource: 'nearby_text',
+          rule: bestNearby.rule, _nearbyText: bestNearby.nearbyText,
+          _nearbyDistance: Math.round(bestNearby.distance),
+        }
+      }
+    }
+  }
+
+  // Phase 4: unknown — also try ATTRIB with lower threshold
+  if (attribs?.length) {
+    let bestAny = null
+    for (const attr of attribs) {
+      const kwMatch = matchKeywordsInText(attr.value)
+      if (kwMatch && (!bestAny || kwMatch.confidence > bestAny.confidence)) {
+        bestAny = { ...kwMatch, _attribTag: attr.tag, _attribValue: attr.value }
+      }
+    }
+    if (bestAny && bestAny.confidence >= 0.40) {
+      return { asmId: bestAny.asmId, confidence: Math.min(bestAny.confidence, 0.55), matchType: 'partial', matchSource: 'attribute', rule: bestAny.rule, _attribTag: bestAny._attribTag, _attribValue: bestAny._attribValue }
+    }
+  }
+
+  return { ...blockMatch, matchSource: 'unknown' }
 }
 
 // ─── DXF cable-layer detection ────────────────────────────────────────────────
@@ -243,6 +404,28 @@ function RecognitionSummaryBar({ recognizedItems, totalInserts, onShowUnknown, i
             <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: statusColor, transition: 'width 0.3s' }} />
           </div>
         )}
+        {/* Match source breakdown */}
+        {hasInserts && known > 0 && (() => {
+          const bySource = {}
+          for (const item of recognizedItems.filter(i => i.asmId && i.confidence >= 0.5)) {
+            const src = item.matchSource || 'block_name'
+            bySource[src] = (bySource[src] || 0) + 1
+          }
+          const sources = Object.entries(bySource).sort((a, b) => b[1] - a[1])
+          if (sources.length <= 1) return null
+          return (
+            <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+              {sources.map(([src, count]) => {
+                const info = MATCH_SOURCE_LABELS[src] || MATCH_SOURCE_LABELS.unknown
+                return (
+                  <span key={src} style={{ fontFamily: 'DM Mono', fontSize: 9, color: info.color }}>
+                    {info.label}: {count}
+                  </span>
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
       {unknown > 0 && hasInserts && (
         <button
@@ -309,7 +492,10 @@ function UnknownBlocksPanel({ items, assemblies, onAssign, onClose }) {
               </div>
             </div>
 
-            {/* Confidence badge if partial match */}
+            {/* Match source + confidence badge */}
+            {item.matchSource && item.matchSource !== 'unknown' && (
+              <MatchSourceBadge matchSource={item.matchSource} attribTag={item._attribTag} nearbyText={item._nearbyText} compact />
+            )}
             {item.confidence > 0 && item.confidence < 0.5 && (
               <div style={{
                 fontFamily: 'DM Mono', fontSize: 9, color: C.red, background: C.redDim,
@@ -551,6 +737,11 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
       }}>
         {confPct}%
       </div>
+
+      {/* Match source badge */}
+      {item.matchSource && item.matchSource !== 'unknown' && (
+        <MatchSourceBadge matchSource={item.matchSource} attribTag={item._attribTag} nearbyText={item._nearbyText} compact />
+      )}
 
       {/* Block info */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1099,14 +1290,20 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
       setParsedDxf(result)
 
-      // Run recognition on all unique block types
+      // Run enhanced recognition on all unique block types
       const blockMap = {}
       for (const b of (result.blocks || [])) {
         if (!blockMap[b.name]) blockMap[b.name] = 0
         blockMap[b.name] += b.count
       }
+      const enhancedCtx = {
+        textPositions: result.textPositions || [],
+        insertPositions: result.inserts || [],
+        geomBounds: result.geomBounds,
+      }
       let items = Object.entries(blockMap).map(([blockName, qty]) => {
-        const rec = recognizeBlock(blockName)
+        const attribs = result.insertAttribs?.[blockName] || []
+        const rec = recognizeBlockEnhanced(blockName, { ...enhancedCtx, attribs })
         return { blockName, qty, ...rec }
       }).sort((a, b) => b.confidence - a.confidence || b.qty - a.qty)
 

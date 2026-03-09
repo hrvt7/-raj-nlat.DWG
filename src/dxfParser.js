@@ -94,12 +94,42 @@ export function parseDxfText(text) {
   }
   let [unitName, unitFactor] = INSUNITS_MAP[insunits] || ['unknown', null]
 
-  // ── Find ENTITIES section ──────────────────────────────────────────────────
-  let entityStart = -1, sectionName = '', inSection = false
+  // ── Find BLOCKS and ENTITIES sections ─────────────────────────────────────
+  let blocksStart = -1, entityStart = -1, sectionName = '', inSection = false
   for (let i = 0; i < tokens.length; i++) {
     const [code, val] = tokens[i]
     if (code === 0 && val === 'SECTION') { inSection = true; continue }
-    if (inSection && code === 2) { sectionName = val; inSection = false; if (val === 'ENTITIES') { entityStart = i + 1; break } }
+    if (inSection && code === 2) {
+      sectionName = val; inSection = false
+      if (val === 'BLOCKS')   blocksStart = i + 1
+      if (val === 'ENTITIES') { entityStart = i + 1; break }
+    }
+  }
+
+  // ── Parse BLOCKS section for ATTDEF (attribute definitions per block) ────
+  const blockAttdefs = {}  // blockName → [{tag, defaultValue}]
+  if (blocksStart >= 0) {
+    let curBlock = null
+    for (let i = blocksStart; i < tokens.length; i++) {
+      const [code, val] = tokens[i]
+      if (code === 0 && val === 'ENDSEC') break
+      if (code === 0 && val === 'BLOCK') { curBlock = null; continue }
+      if (code === 0 && val === 'ENDBLK') { curBlock = null; continue }
+      if (curBlock === null && code === 2) { curBlock = val; if (!blockAttdefs[curBlock]) blockAttdefs[curBlock] = []; continue }
+      if (code === 0 && val === 'ATTDEF') {
+        // Collect tag (code 2) and default value (code 1) from following tokens
+        let adTag = '', adDefault = ''
+        for (let j = i + 1; j < tokens.length; j++) {
+          const [c2, v2] = tokens[j]
+          if (c2 === 0) break  // next entity
+          if (c2 === 2) adTag = v2
+          if (c2 === 1) adDefault = v2
+        }
+        if (adTag && curBlock) {
+          blockAttdefs[curBlock].push({ tag: adTag, defaultValue: adDefault })
+        }
+      }
+    }
   }
 
   const blockCounts   = {}
@@ -115,10 +145,21 @@ export function parseDxfText(text) {
   const polylineGeom    = []           // [{layer, points}] — capped at 800
   const MAX_LINES = 3000, MAX_POLYS = 800
 
+  // ── TEXT/MTEXT with positions (for spatial text association) ──────────────
+  const textPositions = []   // [{text, x, y, layer}] — capped at 5000
+  const MAX_TEXT_POS = 5000
+
+  // ── INSERT attribute tracking ───────────────────────────────────────────
+  const insertAttribs = {}   // blockName → [{tag, value}] (deduplicated across all inserts of same block)
+  const _seenAttribs = {}    // blockName → Set of "tag||value" for dedup
+
   let entityType = null, entityLayer = 'DEFAULT', pts = [], ptX = null, ptY = null
   let closed = false, lineStart = null, textVal = null
   // INSERT position tracking
   let insName = null, insX = null, insY = null
+  let insHasAttribs = false  // group code 66 = 1 means attribs follow
+  // ATTRIB entity tracking (inline after INSERT with code 66=1)
+  let attribTag = null, attribVal = null
 
   const flushPolyline = () => {
     if (entityType === 'LWPOLYLINE' && pts.length > 1) {
@@ -138,13 +179,28 @@ export function parseDxfText(text) {
     }
   }
 
+  const flushAttrib = () => {
+    if (attribTag && attribVal && insName) {
+      const key = `${attribTag}||${attribVal}`
+      if (!_seenAttribs[insName]) _seenAttribs[insName] = new Set()
+      if (!_seenAttribs[insName].has(key)) {
+        _seenAttribs[insName].add(key)
+        if (!insertAttribs[insName]) insertAttribs[insName] = []
+        insertAttribs[insName].push({ tag: attribTag, value: attribVal })
+      }
+    }
+    attribTag = null; attribVal = null
+  }
+
   const flushInsert = () => {
     if (entityType === 'INSERT' && insName !== null && insX !== null) {
       const key = `${insName}||${entityLayer}`
       blockCounts[key] = (blockCounts[key]||0) + 1
       insertPositions.push({ name: insName, layer: entityLayer, x: insX, y: insY ?? 0 })
-      insName = null; insX = null; insY = null
     }
+    // Reset — but keep insName alive for ATTRIB collection (if insHasAttribs)
+    if (!insHasAttribs) { insName = null }
+    insX = null; insY = null
   }
 
   for (let i = entityStart >= 0 ? entityStart : 0; i < tokens.length; i++) {
@@ -152,11 +208,20 @@ export function parseDxfText(text) {
     if (code === 0 && val === 'ENDSEC') { flushPolyline(); flushInsert(); break }
 
     if (code === 0) {
+      // Flush current ATTRIB before transitioning
+      if (entityType === 'ATTRIB') flushAttrib()
+      // SEQEND closes attrib sequence — reset insName
+      if (val === 'SEQEND') { insName = null; insHasAttribs = false; entityType = null; continue }
+      // ATTRIB entities belong to the preceding INSERT (don't flush the insert)
+      if (val === 'ATTRIB' && insHasAttribs && insName) {
+        entityType = 'ATTRIB'; attribTag = null; attribVal = null; continue
+      }
       flushPolyline()
       flushInsert()
       entityType = val; entityLayer = 'DEFAULT'; pts = []; ptX = null; ptY = null
       closed = false; lineStart = null; textVal = null
-      insName = null; insX = null; insY = null
+      insName = null; insX = null; insY = null; insHasAttribs = false
+      attribTag = null; attribVal = null
       continue
     }
 
@@ -165,10 +230,17 @@ export function parseDxfText(text) {
       if (!layerInfo[val]) { const info = parseLayerName(val); if (info) layerInfo[val] = info }
     }
 
+    // ── ATTRIB entity (inline after INSERT with code 66=1) ──────────────
+    if (entityType === 'ATTRIB') {
+      if (code === 2) attribTag = val
+      if (code === 1) attribVal = val
+    }
+
     if (entityType === 'INSERT') {
       if (code === 2) insName = val
       if (code === 10) insX = parseFloat(val)
       if (code === 20) insY = parseFloat(val)
+      if (code === 66 && val === '1') insHasAttribs = true
     }
 
     if (entityType === 'LWPOLYLINE') {
@@ -194,14 +266,22 @@ export function parseDxfText(text) {
       }
     }
 
-    if ((entityType==='TEXT'||entityType==='MTEXT') && code===1) {
-      const trimmed = val.trim()
-      if (trimmed.length > 1) {
-        allText.push(trimmed)
-        const lu = entityLayer.toUpperCase()
-        if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
-          if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
-          titleBlock[entityLayer].push(trimmed)
+    if (entityType==='TEXT'||entityType==='MTEXT') {
+      if (code === 10) ptX = parseFloat(val)
+      if (code === 20) ptY = parseFloat(val)
+      if (code === 1) {
+        const trimmed = val.trim()
+        if (trimmed.length > 1) {
+          allText.push(trimmed)
+          // Capture text with position for spatial association
+          if (textPositions.length < MAX_TEXT_POS && ptX !== null) {
+            textPositions.push({ text: trimmed, x: ptX, y: ptY ?? 0, layer: entityLayer })
+          }
+          const lu = entityLayer.toUpperCase()
+          if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
+            if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
+            titleBlock[entityLayer].push(trimmed)
+          }
         }
       }
     }
@@ -259,6 +339,10 @@ export function parseDxfText(text) {
     units: { insunits, name: unitName, factor: unitFactor, auto_detected: true },
     title_block: titleBlock,
     all_text: allText,                   // all TEXT/MTEXT for metadata inference
+    // ── ATTRIB/ATTDEF data for enhanced recognition ──────────────────────
+    insertAttribs,                     // {blockName: [{tag, value}]} — unique attribs per block
+    blockAttdefs,                      // {blockName: [{tag, defaultValue}]} — template definitions
+    textPositions,                     // [{text, x, y, layer}] — for spatial text association
     // ── Geometry for SVG viewer overlay ───────────────────────────────────
     inserts: insertPositions,          // [{name, layer, x, y}]
     lineGeom,                          // [{layer, x1, y1, x2, y2}]
