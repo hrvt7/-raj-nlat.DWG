@@ -99,6 +99,29 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const viewRef = useRef({ offsetX: 0, offsetY: 0, zoom: 1, pageWidth: 0, pageHeight: 0 })
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startOX: 0, startOY: 0 })
 
+  // ── View constants ──
+  const MIN_ZOOM = 0.25
+  const MAX_ZOOM = 10
+  const FIT_MARGIN = 0.95 // 5% padding — tighter than old 0.92
+
+  // ── Clamp pan so page never drifts more than 50% off viewport ──
+  const clampView = useCallback(() => {
+    const ct = containerRef.current
+    if (!ct) return
+    const v = viewRef.current
+    const cw = ct.clientWidth
+    const ch = ct.clientHeight
+    const pw = v.pageWidth * v.zoom
+    const ph = v.pageHeight * v.zoom
+    // Allow at most 50% of the page to go off-screen in any direction
+    const maxOffX = cw * 0.5
+    const maxOffY = ch * 0.5
+    const minOffX = cw - pw - cw * 0.5
+    const minOffY = ch - ph - ch * 0.5
+    v.offsetX = Math.max(Math.min(v.offsetX, maxOffX), minOffX)
+    v.offsetY = Math.max(Math.min(v.offsetY, maxOffY), minOffY)
+  }, [])
+
   // ── Tools ──
   const [activeTool, setActiveTool] = useState(null)
   // activeCategory can be an assembly ID (ASM-xxx) or a special key (panel, junction, other)
@@ -415,16 +438,17 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const ctx = canvas.getContext('2d')
       await page.render({ canvasContext: ctx, viewport }).promise
 
-      // Fit view initially
+      // Fit view initially — page fills viewport with minimal padding
       if (containerRef.current) {
         const cw = containerRef.current.clientWidth
         const ch = containerRef.current.clientHeight
         const pw = viewport.width / 2
         const ph = viewport.height / 2
-        const zoom = Math.min(cw / pw, ch / ph) * 0.92
+        const zoom = Math.min(cw / pw, ch / ph) * FIT_MARGIN
         viewRef.current.zoom = zoom
         viewRef.current.offsetX = (cw - pw * zoom) / 2
         viewRef.current.offsetY = (ch - ph * zoom) / 2
+        clampView()
       }
       drawOverlay()
 
@@ -507,8 +531,20 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     })
     const sf = scaleRef.current
 
-    // Draw PDF canvas at current transform
+    // Draw PDF canvas at current transform + page shadow for visual separation
     if (pdfCanvasRef.current) {
+      // Page drop-shadow — makes PDF boundary clear against dark background
+      const pw = v.pageWidth * v.zoom
+      const ph = v.pageHeight * v.zoom
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'
+      ctx.shadowBlur = 18
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 4
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(v.offsetX, v.offsetY, pw, ph)
+      ctx.restore()
+
       ctx.save()
       ctx.translate(v.offsetX, v.offsetY)
       ctx.scale(v.zoom / 2, v.zoom / 2) // PDF rendered at 2x
@@ -837,6 +873,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const dy = e.clientY - dragRef.current.startY
       viewRef.current.offsetX = dragRef.current.startOX + dx
       viewRef.current.offsetY = dragRef.current.startOY + dy
+      clampView()
       drawOverlay()
       return
     }
@@ -1402,11 +1439,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const sy = e.clientY - rect.top
     const delta = e.deltaY > 0 ? 0.9 : 1.1
     const v = viewRef.current
-    const newZoom = Math.max(0.1, Math.min(20, v.zoom * delta))
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, v.zoom * delta))
     // Zoom towards cursor
     v.offsetX = sx - (sx - v.offsetX) * (newZoom / v.zoom)
     v.offsetY = sy - (sy - v.offsetY) * (newZoom / v.zoom)
     v.zoom = newZoom
+    clampView()
     drawOverlay()
   }, [drawOverlay])
 
@@ -1489,19 +1527,20 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const cw = containerRef.current.clientWidth
     const ch = containerRef.current.clientHeight
     const v = viewRef.current
-    const zoom = Math.min(cw / v.pageWidth, ch / v.pageHeight) * 0.92
+    const zoom = Math.min(cw / v.pageWidth, ch / v.pageHeight) * FIT_MARGIN
     v.zoom = zoom
     v.offsetX = (cw - v.pageWidth * zoom) / 2
     v.offsetY = (ch - v.pageHeight * zoom) / 2
+    clampView()
     drawOverlay()
-  }, [drawOverlay])
+  }, [drawOverlay, clampView])
 
-  // ── Resize ──
+  // ── Resize — clamp view on container size change ──
   useEffect(() => {
-    const obs = new ResizeObserver(() => drawOverlay())
+    const obs = new ResizeObserver(() => { clampView(); drawOverlay() })
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
-  }, [drawOverlay])
+  }, [drawOverlay, clampView])
 
   // ── Count summary ──
   // UNIFIED: groups markers by asmId for assembly-level detail.
@@ -1591,8 +1630,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
-        onZoomIn={() => { viewRef.current.zoom *= 1.2; drawOverlay() }}
-        onZoomOut={() => { viewRef.current.zoom /= 1.2; drawOverlay() }}
+        onZoomIn={() => { viewRef.current.zoom = Math.min(MAX_ZOOM, viewRef.current.zoom * 1.2); clampView(); drawOverlay() }}
+        onZoomOut={() => { viewRef.current.zoom = Math.max(MIN_ZOOM, viewRef.current.zoom / 1.2); clampView(); drawOverlay() }}
         onUndo={handleUndo} onClearAll={handleClearAll}
         onToggleCountPanel={() => setCountPanelOpen(!countPanelOpen)}
         countPanelOpen={countPanelOpen}

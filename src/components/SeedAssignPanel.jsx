@@ -10,7 +10,6 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useRef, useEffect } from 'react'
-import { RECIPE_SCOPE } from '../data/recipeStore.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', bgHover: '#17171A',
@@ -31,7 +30,6 @@ const ASM_CATEGORY_GROUPS = [
 export default function SeedAssignPanel({ seed, assemblies, onSave, onCancel }) {
   const [selectedAsm, setSelectedAsm] = useState(null)
   const [label, setLabel] = useState('')
-  const [scope, setScope] = useState(RECIPE_SCOPE.WHOLE_PLAN)
   const panelRef = useRef(null)
 
   // Focus panel on mount
@@ -46,7 +44,8 @@ export default function SeedAssignPanel({ seed, assemblies, onSave, onCancel }) 
 
   const handleSave = () => {
     if (!canSave) return
-    onSave(selectedAsm, label.trim(), scope)
+    // Region-first workflow: scope is always current_region — user draws search area next
+    onSave(selectedAsm, label.trim(), 'current_region')
   }
 
   const handleKeyDown = (e) => {
@@ -161,27 +160,9 @@ export default function SeedAssignPanel({ seed, assemblies, onSave, onCancel }) 
           onBlur={e => e.target.style.borderColor = C.border}
         />
 
-        {/* Scope selector */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted }}>Hatókör:</span>
-          {[
-            { key: RECIPE_SCOPE.CURRENT_PAGE, label: 'Aktuális oldal' },
-            { key: RECIPE_SCOPE.WHOLE_PLAN, label: 'Teljes terv' },
-          ].map(s => (
-            <button
-              key={s.key}
-              onClick={() => setScope(s.key)}
-              style={{
-                padding: '3px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono',
-                cursor: 'pointer',
-                background: scope === s.key ? C.accentDim : 'transparent',
-                border: `1px solid ${scope === s.key ? 'rgba(0,229,160,0.3)' : C.border}`,
-                color: scope === s.key ? C.accent : C.muted,
-              }}
-            >
-              {s.label}
-            </button>
-          ))}
+        {/* Region-first hint — scope is automatic via search region */}
+        <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: C.accent }}>▸</span> Mentés után keresési területet jelölhetsz ki
         </div>
 
         {/* Actions */}
