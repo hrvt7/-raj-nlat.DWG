@@ -264,10 +264,11 @@ describe('toMarkerFields', () => {
     expect(fields.y).toBe(200)
     expect(fields.pageNum).toBe(1)
     expect(fields.category).toBe('socket')    // szerelvenyek → socket
-    expect(fields.source).toBe('detection')
+    expect(fields.source).toBe('recipe_match')
     expect(fields.confidence).toBe(0.85)
     expect(fields.detectionId).toMatch(/^RMC-/)
-    expect(fields.templateId).toBe('RCP-test1')
+    expect(fields.recipeId).toBe('RCP-test1')
+    expect(fields.templateId).toBe('RCP-test1') // legacy compat
     expect(fields.asmId).toBe('asm-001')
     expect(fields.label).toBe('Dugalj egyszerű')
   })

@@ -39,6 +39,14 @@ function generateCandidateId() {
 }
 
 /**
+ * Generate a batch ID for grouping markers from a single apply action.
+ * Prefix: BAT- (Batch Apply)
+ */
+export function generateBatchId() {
+  return `BAT-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+}
+
+/**
  * Create a RecipeMatchCandidate from raw match result + recipe context.
  *
  * @param {Object} match — raw match from matcher.js
@@ -171,10 +179,11 @@ export function toMarkerFields(candidate, assemblies) {
     pageNum: candidate.pageNumber,
     category,
     color,
-    source: 'detection',           // marker model accepts 'detection' — we tag via detectionId
+    source: 'recipe_match',
     confidence: candidate.confidence,
-    detectionId: candidate.id,     // links back to RMC-xxx
-    templateId: candidate.recipeId, // links to RCP-xxx
+    detectionId: candidate.id,      // links back to RMC-xxx
+    templateId: candidate.recipeId, // links to RCP-xxx (legacy compat)
+    recipeId: candidate.recipeId,   // explicit recipe provenance
     label: candidate.label,
     asmId: candidate.assemblyId,
   }

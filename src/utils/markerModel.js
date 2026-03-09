@@ -23,9 +23,10 @@ export function generateMarkerId() {
 
 /**
  * Allowed source values.
- * @type {readonly ['manual','detection','import']}
+ * 'recipe_match' — marker born from recipe matching apply flow
+ * @type {readonly ['manual','detection','import','recipe_match']}
  */
-export const MARKER_SOURCES = Object.freeze(['manual', 'detection', 'import'])
+export const MARKER_SOURCES = Object.freeze(['manual', 'detection', 'import', 'recipe_match'])
 
 /**
  * Create a brand-new marker with all required fields.
@@ -43,6 +44,9 @@ export const MARKER_SOURCES = Object.freeze(['manual', 'detection', 'import'])
  * @param {string|null} [fields.detectionRunId] — ref to DetectionRun
  * @param {string|null} [fields.templateId]     — which template matched
  * @param {string|null} [fields.label]          — display label from detection
+ * @param {string|null} [fields.recipeId]       — recipe that produced this marker
+ * @param {string|null} [fields.appliedAt]      — ISO timestamp of apply action
+ * @param {string|null} [fields.batchId]        — batch/run identifier for undo
  * @returns {object} unified marker
  */
 export function createMarker(fields) {
@@ -67,6 +71,11 @@ export function createMarker(fields) {
     detectionRunId: fields.detectionRunId ?? null,
     templateId:     fields.templateId ?? null,
     label:          fields.label ?? null,
+
+    // ── recipe provenance ────────────────────────
+    recipeId:       fields.recipeId ?? null,
+    appliedAt:      fields.appliedAt ?? null,
+    batchId:        fields.batchId ?? null,
 
     // ── audit ──────────────────────────────────────
     createdAt:    fields.createdAt || new Date().toISOString(),
@@ -97,6 +106,9 @@ export function normalizeMarker(m) {
     detectionRunId: m.detectionRunId ?? null,
     templateId:     m.templateId     ?? null,
     label:          m.label          ?? null,
+    recipeId:       m.recipeId       ?? null,
+    appliedAt:      m.appliedAt      ?? null,
+    batchId:        m.batchId        ?? null,
     createdAt:    m.createdAt  || new Date().toISOString(),
   }
 }
@@ -120,7 +132,7 @@ export const DEDUP_PROXIMITY = 15
  * Source priority — lower number wins when two markers collide.
  * Manual markers ALWAYS win over detection/import.
  */
-const SOURCE_PRIORITY = { manual: 0, import: 1, detection: 2 }
+const SOURCE_PRIORITY = { manual: 0, import: 1, detection: 2, recipe_match: 2 }
 
 function sourcePriority(marker) {
   return SOURCE_PRIORITY[marker.source] ?? SOURCE_PRIORITY.detection

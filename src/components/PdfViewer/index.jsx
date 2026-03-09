@@ -9,7 +9,7 @@ import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getAll
 import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
 import RecipeListPanel from '../RecipeListPanel.jsx'
 import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
-import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket } from '../../services/recipeMatching/index.js'
+import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket, generateBatchId } from '../../services/recipeMatching/index.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -147,6 +147,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => { recipeMatchCandidatesRef.current = recipeMatchCandidates; setRenderTick(t => t + 1) }, [recipeMatchCandidates])
   const [recipeMatchRunning, setRecipeMatchRunning] = useState(false)
   const [recipeMatchPanelOpen, setRecipeMatchPanelOpen] = useState(false)
+
+  // ── Apply summary + undo state ──
+  const [applyResult, setApplyResult] = useState(null)     // { markersCreated, markersDeduplicated, assemblySummary, batchId }
+  const [lastApplyBatchId, setLastApplyBatchId] = useState(null)
 
   // ── Reuse banner state ──
   const [reuseBannerDismissed, setReuseBannerDismissed] = useState(false)
@@ -939,14 +943,32 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const rejected = recipeMatchCandidates.filter(c => !c.accepted)
     if (!accepted.length && !rejected.length) return
 
+    const batchId = generateBatchId()
+    const appliedAt = new Date().toISOString()
+    let markersCreated = 0
+    let markersDeduplicated = 0
+    const assemblySummary = {}
+
     if (accepted.length) {
       const newMarkers = accepted.map(c => {
         const fields = recipeToMarkerFields(c, assembliesProp)
-        return createMarker(fields)
+        return createMarker({ ...fields, batchId, appliedAt })
       })
 
-      // Merge with existing markers (manual-first dedup)
+      // Count pre-dedup
+      const beforeCount = markersRef.current.length
       markersRef.current = deduplicateMarkersManualFirst([...markersRef.current, ...newMarkers])
+      const afterCount = markersRef.current.length
+
+      markersCreated = afterCount - beforeCount
+      markersDeduplicated = newMarkers.length - markersCreated
+
+      // Assembly summary
+      for (const m of newMarkers) {
+        const asmName = m.label || m.asmId || m.category || 'egyéb'
+        assemblySummary[asmName] = (assemblySummary[asmName] || 0) + 1
+      }
+
       markDirty()
       setRenderTick(t => t + 1)
       if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
@@ -966,6 +988,13 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       try { updateRecipeRunStats(rid, stats) } catch { /* non-critical */ }
     }
 
+    // ── Apply summary + undo tracking ──
+    setLastApplyBatchId(batchId)
+    setApplyResult({ markersCreated, markersDeduplicated, assemblySummary, batchId })
+
+    // Auto-dismiss summary after 8 seconds
+    setTimeout(() => setApplyResult(prev => prev?.batchId === batchId ? null : prev), 8000)
+
     // Clear match state
     setRecipeMatchCandidates([])
     setRecipeMatchPanelOpen(false)
@@ -978,6 +1007,21 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     setRecipeMatchCandidates([])
     setRecipeMatchPanelOpen(false)
   }, [])
+
+  // ── Undo last recipe apply ──
+  const handleUndoLastApply = useCallback(() => {
+    if (!lastApplyBatchId) return
+    const before = markersRef.current.length
+    markersRef.current = markersRef.current.filter(m => m.batchId !== lastApplyBatchId)
+    const removed = before - markersRef.current.length
+    if (removed > 0) {
+      markDirty()
+      setRenderTick(t => t + 1)
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
+    }
+    setApplyResult(null)
+    setLastApplyBatchId(null)
+  }, [lastApplyBatchId, markDirty])
 
   const handleReuseBannerRunRecommended = useCallback(() => {
     setReuseBannerDismissed(true)
@@ -1341,6 +1385,60 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           onDismiss={handleReuseBannerDismiss}
           visible={showReuseBanner}
         />
+
+        {/* Apply summary toast with undo */}
+        {applyResult && (
+          <div style={{
+            position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 35, display: 'flex', alignItems: 'center', gap: 10,
+            background: 'rgba(17,17,19,0.95)', border: `1px solid rgba(0,229,160,0.25)`,
+            borderRadius: 10, padding: '8px 14px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)',
+            maxWidth: 560,
+          }}>
+            {/* Check icon */}
+            <div style={{
+              width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+              background: 'rgba(0,229,160,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+
+            {/* Summary text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontFamily: 'Syne', fontWeight: 700, color: C.text }}>
+                {applyResult.markersCreated} marker alkalmazva
+                {applyResult.markersDeduplicated > 0 && (
+                  <span style={{ color: C.muted, fontWeight: 500 }}> · {applyResult.markersDeduplicated} átugorva</span>
+                )}
+              </div>
+              {Object.keys(applyResult.assemblySummary).length > 0 && (
+                <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginTop: 1 }}>
+                  {Object.entries(applyResult.assemblySummary).map(([name, count]) => `${name} (${count})`).join(' · ')}
+                </div>
+              )}
+            </div>
+
+            {/* Undo button */}
+            {lastApplyBatchId === applyResult.batchId && (
+              <button onClick={handleUndoLastApply} style={{
+                padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                background: 'rgba(255,107,107,0.12)', border: '1px solid rgba(255,107,107,0.3)',
+                color: C.red, fontSize: 10, fontFamily: 'DM Mono', fontWeight: 500, flexShrink: 0,
+              }}>
+                Visszavonás
+              </button>
+            )}
+
+            {/* Dismiss */}
+            <button onClick={() => setApplyResult(null)} style={{
+              background: 'none', border: 'none', color: C.muted, cursor: 'pointer',
+              fontSize: 12, padding: '2px 4px', borderRadius: 4, flexShrink: 0,
+            }} title="Bezárás">✕</button>
+          </div>
+        )}
 
         {/* Count summary panel */}
         {countPanelOpen && markerCount > 0 && (
