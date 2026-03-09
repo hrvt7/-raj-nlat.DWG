@@ -22,6 +22,7 @@ import {
   renderPageImageData,
   toGray,
   buildSAT,
+  DETECTION_SCALE,
 } from '../../utils/templateMatching.js'
 import { getRecipeCrop } from '../../data/recipeStore.js'
 import {
@@ -106,13 +107,16 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, s
 
   // Resolve strictness preset for this recipe
   const preset = resolveStrictnessPreset(strictnessOpts.matchStrictness)
-  const effectiveNccThreshold = NCC_THRESHOLD_BASE + preset.nccThresholdDelta
+  const isCurrentPage = scopeOpts.isCurrentPage === true
+  // Current-page rescue path: lower threshold for same-page matching (seed is from this page)
+  const currentPageBonus = isCurrentPage ? -0.08 : 0
+  const effectiveNccThreshold = NCC_THRESHOLD_BASE + preset.nccThresholdDelta + currentPageBonus
   const effectiveMaxPerPage = preset.maxMatchesPerPage || MAX_MATCHES_PER_PAGE_DEFAULT
 
-  // Run NCC matching
+  // Run NCC matching at DETECTION_SCALE (=2, matches seed capture resolution)
   let nccDetections
   try {
-    nccDetections = await detectTemplateOnPage(pdfPage, templateLike, 1, effectiveNccThreshold)
+    nccDetections = await detectTemplateOnPage(pdfPage, templateLike, DETECTION_SCALE, effectiveNccThreshold)
   } catch {
     return [] // canvas/rendering failure
   }
@@ -236,7 +240,8 @@ export async function matchRecipeOnPages(recipe, pdfDoc, options = {}, onProgres
   for (let i = 0; i < pageRange.length; i++) {
     const pageNum = pageRange[i]
     const pdfPage = await pdfDoc.getPage(pageNum)
-    const results = await matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, { isWholePlan })
+    const isCurrentPage = !isWholePlan && pageNum === currentPage
+    const results = await matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, { isWholePlan, isCurrentPage })
     allResults.push(...results)
 
     if (onProgress) onProgress((i + 1) / pageRange.length, pageNum)

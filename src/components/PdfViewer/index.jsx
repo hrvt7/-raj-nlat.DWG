@@ -883,6 +883,15 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         scope,
       }
       setRecipeMatchCandidates(candidates)
+      // Explicit 0-match feedback — don't leave the user guessing
+      if (candidates.length === 0) {
+        setRecipeMatchPanelOpen(false)
+        setApplyResult({
+          zeroMatch: true,
+          recipeCount: recipes.length,
+          scope,
+        })
+      }
     } catch (err) {
       console.error('[RecipeMatching] run failed:', err)
       lastRunMetaRef.current = null
@@ -1460,43 +1469,63 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           visible={showReuseBanner}
         />
 
-        {/* Apply summary toast with undo */}
+        {/* Apply summary toast / zero-match feedback */}
         {applyResult && (
           <div style={{
             position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
             zIndex: 35, display: 'flex', alignItems: 'center', gap: 10,
-            background: 'rgba(17,17,19,0.95)', border: `1px solid rgba(0,229,160,0.25)`,
+            background: 'rgba(17,17,19,0.95)',
+            border: `1px solid ${applyResult.zeroMatch ? 'rgba(255,209,102,0.3)' : 'rgba(0,229,160,0.25)'}`,
             borderRadius: 10, padding: '8px 14px',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)',
             maxWidth: 560,
           }}>
-            {/* Check icon */}
+            {/* Icon — warning for zero match, check for applied */}
             <div style={{
               width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-              background: 'rgba(0,229,160,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: applyResult.zeroMatch ? 'rgba(255,209,102,0.15)' : 'rgba(0,229,160,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
+              {applyResult.zeroMatch ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.yellow} strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill={C.yellow}/>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              )}
             </div>
 
             {/* Summary text */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontFamily: 'Syne', fontWeight: 700, color: C.text }}>
-                {applyResult.markersCreated} marker alkalmazva
-                {applyResult.markersDeduplicated > 0 && (
-                  <span style={{ color: C.muted, fontWeight: 500 }}> · {applyResult.markersDeduplicated} átugorva</span>
-                )}
-              </div>
-              {Object.keys(applyResult.assemblySummary).length > 0 && (
-                <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginTop: 1 }}>
-                  {Object.entries(applyResult.assemblySummary).map(([name, count]) => `${name} (${count})`).join(' · ')}
+              {applyResult.zeroMatch ? (
+                <div style={{ fontSize: 11, fontFamily: 'Syne', fontWeight: 700, color: C.yellow }}>
+                  Nincs találat
+                  <span style={{ color: C.muted, fontWeight: 500, marginLeft: 4 }}>
+                    ({applyResult.recipeCount} minta · {applyResult.scope === 'current_page' ? 'aktuális oldal' : 'teljes terv'})
+                  </span>
                 </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, fontFamily: 'Syne', fontWeight: 700, color: C.text }}>
+                    {applyResult.markersCreated} marker alkalmazva
+                    {applyResult.markersDeduplicated > 0 && (
+                      <span style={{ color: C.muted, fontWeight: 500 }}> · {applyResult.markersDeduplicated} átugorva</span>
+                    )}
+                  </div>
+                  {applyResult.assemblySummary && Object.keys(applyResult.assemblySummary).length > 0 && (
+                    <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginTop: 1 }}>
+                      {Object.entries(applyResult.assemblySummary).map(([name, count]) => `${name} (${count})`).join(' · ')}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            {/* Undo button */}
-            {lastApplyBatchId === applyResult.batchId && (
+            {/* Undo button — only for apply results */}
+            {!applyResult.zeroMatch && lastApplyBatchId === applyResult.batchId && (
               <button onClick={handleUndoLastApply} style={{
                 padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
                 background: 'rgba(255,107,107,0.12)', border: '1px solid rgba(255,107,107,0.3)',

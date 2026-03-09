@@ -1,7 +1,10 @@
 // ─── Template Matching (NCC + Integral Images) ──────────────────────────────
 // Normalized Cross-Correlation with Summed Area Tables for fast detection.
-// All detection runs at scale=1 PDF coordinates (A4 = 595×842 logical px).
-// Detected (x, y) positions are stored directly as marker coordinates.
+// Seed crops are captured at renderScale=2; matching also renders at scale=2
+// for pixel-level correspondence. Results are converted to PDF scale=1 coords.
+
+/** Default detection scale — must match seed capture renderScale */
+export const DETECTION_SCALE = 2
 
 /**
  * Convert ImageData (RGBA) to grayscale Float32Array [0,1]
@@ -16,6 +19,78 @@ export function toGray(imageData) {
     gray[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255
   }
   return gray
+}
+
+/**
+ * Trim whitespace from a grayscale template image (content-aware crop).
+ * Removes rows/columns from edges where all pixels are near-white (> whiteThreshold).
+ * Returns a new trimmed grayscale array + dimensions, or null if template is entirely blank.
+ *
+ * @param {Float32Array} gray - grayscale [0,1], shape [h × w]
+ * @param {number} w - width
+ * @param {number} h - height
+ * @param {number} whiteThreshold - pixel value above which counts as "white" (default 0.92)
+ * @param {number} minPad - minimum padding pixels to keep around content (default 2)
+ * @returns {{ gray: Float32Array, w: number, h: number, trimRect: {x,y,w,h} } | null}
+ */
+export function trimWhitespace(gray, w, h, whiteThreshold = 0.92, minPad = 2) {
+  let top = h, bottom = 0, left = w, right = 0
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (gray[y * w + x] < whiteThreshold) {
+        if (y < top) top = y
+        if (y > bottom) bottom = y
+        if (x < left) left = x
+        if (x > right) right = x
+      }
+    }
+  }
+
+  // Entirely blank template
+  if (top > bottom || left > right) return null
+
+  // Add padding (clamped to image bounds)
+  top = Math.max(0, top - minPad)
+  bottom = Math.min(h - 1, bottom + minPad)
+  left = Math.max(0, left - minPad)
+  right = Math.min(w - 1, right + minPad)
+
+  const tw = right - left + 1
+  const th = bottom - top + 1
+
+  // Skip trim if it doesn't remove much (< 10% reduction)
+  if (tw >= w * 0.9 && th >= h * 0.9) {
+    return { gray, w, h, trimRect: { x: 0, y: 0, w, h } }
+  }
+
+  const trimmed = new Float32Array(tw * th)
+  for (let y = 0; y < th; y++) {
+    for (let x = 0; x < tw; x++) {
+      trimmed[y * tw + x] = gray[(y + top) * w + (x + left)]
+    }
+  }
+  return { gray: trimmed, w: tw, h: th, trimRect: { x: left, y: top, w: tw, h: th } }
+}
+
+/**
+ * Apply simple contrast enhancement for line drawings.
+ * Maps grayscale values through a sigmoid-like curve that pushes
+ * near-white toward white and dark lines toward black.
+ *
+ * @param {Float32Array} gray - grayscale [0,1]
+ * @param {number} strength - contrast strength (default 3.0)
+ * @returns {Float32Array} - enhanced grayscale (same length)
+ */
+export function enhanceContrast(gray, strength = 3.0) {
+  const out = new Float32Array(gray.length)
+  for (let i = 0; i < gray.length; i++) {
+    // Centered sigmoid: push values toward 0 or 1
+    const v = gray[i]
+    const s = 1 / (1 + Math.exp(-strength * (v - 0.5)))
+    out[i] = s
+  }
+  return out
 }
 
 /**
@@ -199,26 +274,65 @@ export function renderDataUrlImageData(dataUrl) {
  *
  * @param {Object} pdfPage   - pdf.js page object
  * @param {Object} template  - { id, category, color, imageDataUrl, width, height, label }
- * @param {number} detectionScale - scale to render PDF for matching (1 = native)
+ * @param {number} detectionScale - scale to render PDF for matching (DETECTION_SCALE=2 to match seed capture)
  * @param {number} threshold - NCC threshold
+ * @param {Object} [options] - { enableTrim, enableContrast }
  * @returns {Promise<Array>} - detections in PDF scale=1 coordinates
  */
-export async function detectTemplateOnPage(pdfPage, template, detectionScale = 1, threshold = 0.60) {
+export async function detectTemplateOnPage(pdfPage, template, detectionScale = DETECTION_SCALE, threshold = 0.60, options = {}) {
   if (!template.imageDataUrl) return []
 
-  // Render PDF page at detectionScale
-  const { imageData: pageImageData, width: pageW, height: pageH } = await renderPageImageData(pdfPage, detectionScale)
-  const pageGray = toGray(pageImageData)
-  const pageSAT = buildSAT(pageGray, pageW, pageH)
+  const { enableTrim = true, enableContrast = true } = options
 
-  // Render template image
-  const { imageData: tplImageData, width: tplW, height: tplH } = await renderDataUrlImageData(template.imageDataUrl)
-  const tplGray = toGray(tplImageData)
+  // Render PDF page at detectionScale (must match seed capture renderScale)
+  const { imageData: pageImageData, width: pageW, height: pageH } = await renderPageImageData(pdfPage, detectionScale)
+  let pageGray = toGray(pageImageData)
+
+  // Render template image (already at capture resolution)
+  const { imageData: tplImageData, width: rawTplW, height: rawTplH } = await renderDataUrlImageData(template.imageDataUrl)
+  let tplGray = toGray(tplImageData)
+  let tplW = rawTplW
+  let tplH = rawTplH
+
+  // Optional contrast enhancement for line drawings
+  if (enableContrast) {
+    pageGray = enhanceContrast(pageGray, 3.0)
+    tplGray = enhanceContrast(tplGray, 3.0)
+  }
+
+  // Auto-trim whitespace from template (removes user-drawn bbox margins)
+  let trimResult = null
+  if (enableTrim) {
+    trimResult = trimWhitespace(tplGray, tplW, tplH)
+    if (!trimResult) {
+      // Entirely blank template — nothing to match
+      if (import.meta.env.DEV) console.log('[Matcher] template is entirely blank after trim, skipping:', template.id)
+      return []
+    }
+    tplGray = trimResult.gray
+    tplW = trimResult.w
+    tplH = trimResult.h
+  }
 
   if (tplW > pageW || tplH > pageH) return []  // template bigger than page
+  if (tplW < 4 || tplH < 4) return []  // template too small after trim
+
+  // Build SAT for page (after contrast enhancement)
+  const pageSAT = buildSAT(pageGray, pageW, pageH)
 
   // Run NCC
   const rawDetections = matchTemplate(pageGray, pageW, pageH, tplGray, tplW, tplH, pageSAT, threshold)
+
+  // Dev-only diagnostics
+  if (import.meta.env.DEV) {
+    const tplStd = (() => {
+      let s = 0, s2 = 0
+      for (let i = 0; i < tplGray.length; i++) { s += tplGray[i]; s2 += tplGray[i] * tplGray[i] }
+      const m = s / tplGray.length
+      return Math.sqrt(Math.max(0, s2 / tplGray.length - m * m))
+    })()
+    console.log(`[Matcher] template=${template.id} size=${rawTplW}×${rawTplH} trimmed=${tplW}×${tplH} tplStd=${tplStd.toFixed(4)} threshold=${threshold.toFixed(2)} rawHits=${rawDetections.length} maxScore=${rawDetections[0]?.score?.toFixed(4) || 'n/a'}`)
+  }
 
   // NMS
   const filtered = nonMaxSuppression(rawDetections, tplW, tplH)
@@ -248,7 +362,7 @@ export async function detectTemplateOnPage(pdfPage, template, detectionScale = 1
  */
 export async function detectAllTemplates(pdfDoc, templates, options = {}) {
   const {
-    detectionScale = 1,
+    detectionScale = DETECTION_SCALE,
     threshold = 0.60,
     onProgress = null,
   } = options
