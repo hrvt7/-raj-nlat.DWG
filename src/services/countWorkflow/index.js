@@ -22,6 +22,11 @@ import {
   detectTemplateInRegion,
   DETECTION_SCALE,
 } from '../../utils/templateMatching.js'
+import {
+  matchRegionRaster,
+  RASTER_DPI,
+  RASTER_SCALE,
+} from '../../utils/rasterPipeline.js'
 import { getRecipeCrop } from '../../data/recipeStore.js'
 import {
   createSearchSession,
@@ -201,11 +206,19 @@ export async function executeSearch(countObject, pdfDoc, options = {}) {
     label: countObject.label || countObject.assemblyName || '',
   }
 
-  // Determine if we have a region to pre-crop
-  const useRegionCrop = scope === SEARCH_SCOPE.CURRENT_REGION && countObject.searchRegion
+  // Determine if we have a region for the raster pipeline
+  const useRasterPipeline = scope === SEARCH_SCOPE.CURRENT_REGION
+    && countObject.searchRegion
+    && countObject.sampleBbox
 
   // Run NCC detection across pages
   const allDetections = []
+
+  // Pre-load sample page for raster pipeline (render once, reuse across pages)
+  let samplePage = null
+  if (useRasterPipeline) {
+    samplePage = await pdfDoc.getPage(countObject.pageNumber)
+  }
 
   for (let i = 0; i < pageRange.length; i++) {
     const pageNum = pageRange[i]
@@ -217,8 +230,30 @@ export async function executeSearch(countObject, pdfDoc, options = {}) {
 
     let detections
     try {
-      if (useRegionCrop) {
-        // PRE-CROP: clamp region to page bounds, then run NCC only on region pixels
+      if (useRasterPipeline) {
+        // ── UNIFIED RASTER PIPELINE ──────────────────────────────────────
+        // Both sample and target are rasterized from PDF at RASTER_DPI (150),
+        // go through identical preprocessing (gray → trim → contrast).
+        // No PNG encode/decode, no resolution mismatch, no viewer-zoom dependency.
+        const clampedRegion = clampRegionToPage(countObject.searchRegion, pageBounds)
+        if (clampedRegion.w < 8 || clampedRegion.h < 8) {
+          detections = []
+        } else {
+          detections = await matchRegionRaster(
+            pdfPage,
+            countObject.sampleBbox,
+            clampedRegion,
+            {
+              samplePage: pageNum === countObject.pageNumber ? null : samplePage,
+              threshold: config.nccThreshold,
+              maxResults: config.maxPerPage,
+              templateId: countObject.id,
+              label: countObject.label || countObject.assemblyName || '',
+            },
+          )
+        }
+      } else if (scope === SEARCH_SCOPE.CURRENT_REGION && countObject.searchRegion) {
+        // Fallback: legacy region pre-crop (no sampleBbox available)
         const clampedRegion = clampRegionToPage(countObject.searchRegion, pageBounds)
         if (clampedRegion.w < 8 || clampedRegion.h < 8) {
           detections = []
@@ -261,13 +296,14 @@ export async function executeSearch(countObject, pdfDoc, options = {}) {
     const region = countObject.searchRegion
     console.log(
       `[CountWorkflow:search] scope=${scope} scaleMode=${countObject.scaleMode} ` +
-      `pages=${pageRange.join(',')} preCrop=${useRegionCrop} detections=${allDetections.length} ` +
+      `pages=${pageRange.join(',')} rasterPipeline=${useRasterPipeline} DPI=${useRasterPipeline ? RASTER_DPI : 'legacy'} ` +
+      `detections=${allDetections.length} ` +
       `region=${region ? `(${region.x.toFixed(1)},${region.y.toFixed(1)} ${region.w.toFixed(1)}×${region.h.toFixed(1)})` : 'none'}`
     )
   }
 
   // Safety net: apply post-filter as second layer of defense for region scope
-  const regionFiltered = useRegionCrop
+  const regionFiltered = (useRasterPipeline || countObject.searchRegion)
     ? filterBySearchRegion(allDetections, countObject.searchRegion)
     : allDetections
 
