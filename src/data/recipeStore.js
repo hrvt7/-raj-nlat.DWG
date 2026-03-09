@@ -210,6 +210,94 @@ export function getRecipeCount(projectId) {
 }
 
 /**
+ * Get relevant recipes for a plan, filtered by plan metadata similarity.
+ * Falls back to all project recipes if no metadata match is possible.
+ *
+ * Relevance criteria (when plan meta is available):
+ *   - Same floor → highest relevance
+ *   - Same systemType → high relevance
+ *   - Same docType → moderate relevance
+ *   - Different meta → still included but ranked lower
+ *
+ * Always sorted: relevance desc, then usageCount desc, then newest first.
+ *
+ * @param {string} projectId
+ * @param {Object} [planMeta] — { floor, systemType, docType }
+ * @returns {SymbolRecipe[]} — sorted by relevance
+ */
+export function getRelevantRecipes(projectId, planMeta = null) {
+  const all = getRecipesByProject(projectId)
+  if (!all.length) return []
+
+  // If no plan metadata, fall back to all project recipes (backward compat)
+  if (!planMeta || (!planMeta.floor && !planMeta.systemType && !planMeta.docType)) {
+    return all.sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0))
+  }
+
+  // Load source plan meta for each recipe to score relevance
+  // We use the recipe's sourcePlanId to look up stored plan metadata.
+  // Plan metadata is stored in localStorage under plan entries.
+  const scored = all.map(recipe => {
+    let relevance = 0
+    const sourceMeta = _getPlanMeta(recipe.sourcePlanId)
+
+    if (sourceMeta) {
+      if (planMeta.floor && sourceMeta.floor && planMeta.floor === sourceMeta.floor) relevance += 3
+      if (planMeta.systemType && sourceMeta.systemType && planMeta.systemType === sourceMeta.systemType) relevance += 2
+      if (planMeta.docType && sourceMeta.docType && planMeta.docType === sourceMeta.docType) relevance += 1
+    }
+
+    return { recipe, relevance }
+  })
+
+  scored.sort((a, b) => {
+    if (b.relevance !== a.relevance) return b.relevance - a.relevance
+    const usageDiff = (b.recipe.usageCount || 0) - (a.recipe.usageCount || 0)
+    if (usageDiff !== 0) return usageDiff
+    return (b.recipe.createdAt || '').localeCompare(a.recipe.createdAt || '')
+  })
+
+  return scored.map(s => s.recipe)
+}
+
+/**
+ * Get count of relevant recipes for a plan.
+ * @param {string} projectId
+ * @param {Object} [planMeta]
+ * @returns {number}
+ */
+export function getRelevantRecipeCount(projectId, planMeta = null) {
+  return getRelevantRecipes(projectId, planMeta).length
+}
+
+/**
+ * Load plan metadata from localStorage.
+ * Plan entries may store floor, systemType, docType.
+ * @param {string} planId
+ * @returns {{ floor?: string, systemType?: string, docType?: string }|null}
+ */
+function _getPlanMeta(planId) {
+  if (!planId) return null
+  try {
+    // Plans are stored under 'takeoffpro_plans' key
+    const raw = localStorage.getItem('takeoffpro_plans')
+    if (!raw) return null
+    const plans = JSON.parse(raw)
+    const plan = Array.isArray(plans)
+      ? plans.find(p => p.id === planId)
+      : plans[planId]
+    if (!plan) return null
+    return {
+      floor: plan.floor || null,
+      systemType: plan.systemType || null,
+      docType: plan.docType || null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Clear all recipes (for testing).
  */
 export function clearAllRecipes() {

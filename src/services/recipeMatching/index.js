@@ -7,13 +7,19 @@
 // Input:  SymbolRecipe[] + pdfDoc
 // Output: RecipeMatchCandidate[] — separate from DetectionCandidate[]
 //
+// Quality guards (v2):
+//   - Cross-recipe proximity dedup (15 px radius)
+//   - Total match safety cap (200)
+//   - Scope-aware confidence penalty (whole_plan)
+//   - Min seed area filter (in matcher.js)
+//
 // Integration:
 //   - Called from PdfViewer when user triggers recipe matching
 //   - Results displayed as overlay + review panel
 //   - Accepted matches → createMarker() with source='recipe_match'
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { matchRecipeOnPages } from './matcher.js'
+import { matchRecipeOnPages, deduplicateMatchesByProximity, MAX_TOTAL_MATCHES } from './matcher.js'
 import { CONFIDENCE_BUCKET, toBucket } from './scoring.js'
 import { incrementRecipeUsage, RECIPE_SCOPE } from '../../data/recipeStore.js'
 
@@ -89,6 +95,21 @@ export function groupByBucket(candidates) {
     else red.push(c)
   }
   return { green, yellow, red, total: candidates.length }
+}
+
+/**
+ * Group candidates by page number for display.
+ * @param {Object[]} candidates — RecipeMatchCandidate[]
+ * @returns {Map<number, Object[]>} — page number → candidates on that page
+ */
+export function groupByPage(candidates) {
+  const pages = new Map()
+  for (const c of candidates) {
+    const arr = pages.get(c.pageNumber) || []
+    arr.push(c)
+    pages.set(c.pageNumber, arr)
+  }
+  return pages
 }
 
 /**
@@ -169,34 +190,54 @@ export function toMarkerFields(candidate, assemblies) {
  * @param {string} planId — target plan ID
  * @param {Object} options
  * @param {number} [options.currentPage=1] — current page for scope filtering
+ * @param {'current_page'|'whole_plan'} [options.scopeOverride] — force scope for all recipes
  * @param {Function|null} [options.onProgress] — (fraction, recipeId) => void
  * @returns {Promise<Object[]>} RecipeMatchCandidate[]
  */
 export async function runRecipeMatching(recipes, pdfDoc, planId, options = {}) {
-  const { currentPage = 1, onProgress = null } = options
+  const { currentPage = 1, scopeOverride = null, onProgress = null } = options
 
   if (!recipes?.length || !pdfDoc) return []
 
-  const allCandidates = []
+  const allRawMatches = []
 
   for (let i = 0; i < recipes.length; i++) {
     const recipe = recipes[i]
-    const scope = recipe.scope || RECIPE_SCOPE.WHOLE_PLAN
+    const scope = scopeOverride || recipe.scope || RECIPE_SCOPE.WHOLE_PLAN
 
     const rawMatches = await matchRecipeOnPages(recipe, pdfDoc, {
       scope,
       currentPage,
     })
 
+    // Tag each raw match with the recipe reference for candidate creation
     for (const match of rawMatches) {
-      allCandidates.push(createMatchCandidate(match, recipe, planId))
+      match._recipe = recipe
     }
+    allRawMatches.push(...rawMatches)
 
     // Increment usage counter
     try { incrementRecipeUsage(recipe.id) } catch { /* non-critical */ }
 
     if (onProgress) onProgress((i + 1) / recipes.length, recipe.id)
+
+    // Safety: abort if total raw matches already exceed limit
+    if (allRawMatches.length >= MAX_TOTAL_MATCHES * 1.5) break
   }
+
+  // ── Cross-recipe proximity dedup ──
+  // If two recipes found matches at the same location, keep the higher-confidence one
+  const deduped = deduplicateMatchesByProximity(allRawMatches)
+
+  // ── Total match safety cap ──
+  const capped = deduped.length > MAX_TOTAL_MATCHES
+    ? deduped.sort((a, b) => b.confidence - a.confidence).slice(0, MAX_TOTAL_MATCHES)
+    : deduped
+
+  // ── Create RecipeMatchCandidates ──
+  const allCandidates = capped.map(match =>
+    createMatchCandidate(match, match._recipe, planId)
+  )
 
   return allCandidates
 }

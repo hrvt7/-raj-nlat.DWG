@@ -5,6 +5,9 @@
 // Separate from DetectionReviewPanel — operates on RecipeMatchCandidate[],
 // NOT on DetectionCandidate[].
 //
+// v2: Page-grouped display for whole_plan results.
+//     Shows per-page summary badges when matches span multiple pages.
+//
 // Keyboard shortcuts:
 //   Enter   — accept all green + apply (fast path)
 //   Escape  — dismiss panel
@@ -53,6 +56,32 @@ export default function RecipeMatchReviewPanel({
     }
     return { green, yellow, red }
   }, [candidates])
+
+  // Page summary for multi-page results
+  const pageGroups = useMemo(() => {
+    const pages = new Map()
+    for (const c of (candidates || [])) {
+      const arr = pages.get(c.pageNumber) || []
+      arr.push(c)
+      pages.set(c.pageNumber, arr)
+    }
+    return pages
+  }, [candidates])
+
+  const isMultiPage = pageGroups.size > 1
+
+  // Group current bucket's candidates by page (for multi-page display)
+  const bucketByPage = useMemo(() => {
+    if (!isMultiPage) return null
+    const items = buckets[expandedBucket] || []
+    const pages = new Map()
+    for (const c of items) {
+      const arr = pages.get(c.pageNumber) || []
+      arr.push(c)
+      pages.set(c.pageNumber, arr)
+    }
+    return pages
+  }, [buckets, expandedBucket, isMultiPage])
 
   const acceptedCount = (candidates || []).filter(c => c.accepted).length
   const total = (candidates || []).length
@@ -120,6 +149,21 @@ export default function RecipeMatchReviewPanel({
         </div>
       </div>
 
+      {/* Page summary badges (multi-page mode) */}
+      {isMultiPage && (
+        <div style={{ display: 'flex', gap: 4, padding: '6px 14px', flexWrap: 'wrap', borderBottom: `1px solid ${C.border}` }}>
+          {Array.from(pageGroups.entries()).sort((a, b) => a[0] - b[0]).map(([pg, items]) => (
+            <span key={pg} style={{
+              fontFamily: 'DM Mono', fontSize: 9, padding: '2px 6px',
+              borderRadius: 8, background: 'rgba(76,201,240,0.10)', color: C.blue,
+              border: `1px solid rgba(76,201,240,0.20)`,
+            }}>
+              p{pg}: {items.length}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Summary pills */}
       <div style={{ display: 'flex', gap: 6, padding: '8px 14px', flexWrap: 'wrap' }}>
         <Pill color={C.accent} count={buckets.green.length} label="Magas" active={expandedBucket === 'green'} onClick={() => setExpandedBucket('green')} />
@@ -153,17 +197,41 @@ export default function RecipeMatchReviewPanel({
         </div>
       )}
 
-      {/* Expanded bucket list */}
-      <div style={{ maxHeight: 220, overflowY: 'auto', padding: '0 14px 8px' }}>
-        {(buckets[expandedBucket] || []).map(c => (
-          <CandidateRow
-            key={c.id}
-            candidate={c}
-            asmColor={asmColorMap[c.assemblyId]}
-            onToggle={() => onToggleCandidate(c.id, !c.accepted)}
-            onFocus={() => onFocusCandidate?.(c)}
-          />
-        ))}
+      {/* Expanded bucket list — page-grouped for multi-page, flat for single-page */}
+      <div style={{ maxHeight: 240, overflowY: 'auto', padding: '0 14px 8px' }}>
+        {isMultiPage && bucketByPage ? (
+          Array.from(bucketByPage.entries()).sort((a, b) => a[0] - b[0]).map(([pg, items]) => (
+            <div key={pg}>
+              <div style={{
+                fontFamily: 'DM Mono', fontSize: 9, color: C.blue,
+                padding: '4px 0 2px', fontWeight: 600,
+                borderBottom: `1px solid ${C.border}40`,
+                marginTop: 4,
+              }}>
+                Oldal {pg} ({items.length})
+              </div>
+              {items.map(c => (
+                <CandidateRow
+                  key={c.id}
+                  candidate={c}
+                  asmColor={asmColorMap[c.assemblyId]}
+                  onToggle={() => onToggleCandidate(c.id, !c.accepted)}
+                  onFocus={() => onFocusCandidate?.(c)}
+                />
+              ))}
+            </div>
+          ))
+        ) : (
+          (buckets[expandedBucket] || []).map(c => (
+            <CandidateRow
+              key={c.id}
+              candidate={c}
+              asmColor={asmColorMap[c.assemblyId]}
+              onToggle={() => onToggleCandidate(c.id, !c.accepted)}
+              onFocus={() => onFocusCandidate?.(c)}
+            />
+          ))
+        )}
         {(buckets[expandedBucket] || []).length === 0 && (
           <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, padding: '8px 0' }}>
             Nincs találat ebben a kategóriában.

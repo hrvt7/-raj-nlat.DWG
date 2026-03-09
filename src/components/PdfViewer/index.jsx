@@ -5,7 +5,7 @@ import SeedAssignPanel from '../SeedAssignPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
-import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject } from '../../data/recipeStore.js'
+import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getRelevantRecipes } from '../../data/recipeStore.js'
 import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
 import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
 import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket } from '../../services/recipeMatching/index.js'
@@ -149,11 +149,13 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   // ── Reuse banner state ──
   const [reuseBannerDismissed, setReuseBannerDismissed] = useState(false)
-  const projectRecipeCount = getProjectRecipeCount(projectId, getRecipesByProject)
+  // Use relevance-aware recipe lookup for recommendations
+  const getRelevantProjectRecipes = useCallback((pid) => getRelevantRecipes(pid), [])
+  const projectRecipeCount = getProjectRecipeCount(projectId, getRelevantProjectRecipes)
   const markerCount_forBanner = markersRef.current?.length || 0
   const showReuseBanner = !reuseBannerDismissed
     && !recipeMatchPanelOpen && !pendingSeed
-    && shouldShowReuseBanner(projectId, planId, markerCount_forBanner, getRecipesByProject)
+    && shouldShowReuseBanner(projectId, planId, markerCount_forBanner, getRelevantProjectRecipes)
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -843,9 +845,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   }, [planId, pageNum])
 
   // Run project-wide recipes on this plan (reuse entry point)
+  // Uses relevance-sorted recipes for smarter recommendation
   const handleRunProjectRecipes = useCallback(async () => {
     if (!pdfDocRef.current || !projectId) return
-    const recipes = getRecipesByProject(projectId)
+    const recipes = getRelevantRecipes(projectId)
     if (!recipes.length) return
     await handleRunRecipeMatching(recipes)
   }, [projectId, handleRunRecipeMatching])
@@ -1139,7 +1142,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         onRunRecipeMatching={() => handleRunRecipeMatching()}
         onRunProjectRecipes={handleRunProjectRecipes}
         recipeMatchRunning={recipeMatchRunning}
-        hasProjectRecipes={projectId ? getRecipesByProject(projectId).length > 0 : false}
+        hasProjectRecipes={projectId ? getRelevantRecipes(projectId).length > 0 : false}
       />
 
       {/* Main area */}

@@ -19,6 +19,17 @@ const WEIGHT_NCC = 0.70        // template visual similarity (primary)
 const WEIGHT_TEXT_HINT = 0.20  // nearby text match
 const WEIGHT_ASPECT = 0.10    // bbox aspect ratio similarity
 
+// ── Quality guard: minimum seed area ─────────────────────────────────────────
+// Seeds smaller than this (in PDF px²) are too small for reliable NCC matching.
+// They match too many regions and produce false positives.
+export const MIN_SEED_AREA = 100  // 10×10 px minimum
+
+// ── Scope penalty ────────────────────────────────────────────────────────────
+// Whole-plan matching is noisier than single-page matching.
+// Apply a small confidence penalty to shift borderline results to a
+// more conservative bucket, reducing false positives in whole_plan scope.
+export const SCOPE_PENALTY_WHOLE_PLAN = 0.05
+
 // ── Text hint scoring ────────────────────────────────────────────────────────
 
 /**
@@ -67,6 +78,35 @@ export function scoreAspectRatio(recipeAspect, matchAspect) {
   return 0.2                          // significant mismatch
 }
 
+// ── Seed area penalty ────────────────────────────────────────────────────────
+
+/**
+ * Compute a penalty multiplier for undersized seeds.
+ * Seeds below MIN_SEED_AREA get a harsh penalty, those just above get moderate.
+ * Returns 1.0 (no penalty) when bbox is not provided — backward compat.
+ *
+ * @param {{ w: number, h: number }|null|undefined} bbox — recipe seed bounding box
+ * @returns {number} 0–1 multiplier (1.0 = no penalty)
+ */
+export function seedAreaPenalty(bbox) {
+  if (bbox === null || bbox === undefined) return 1.0 // not provided → no penalty (backward compat)
+  if (!bbox.w || !bbox.h) return 0.7 // provided but invalid → moderate penalty
+  const area = bbox.w * bbox.h
+  if (area >= MIN_SEED_AREA * 2) return 1.0  // healthy size, no penalty
+  if (area >= MIN_SEED_AREA) return 0.85     // borderline, slight penalty
+  return 0.5                                  // too small, heavy penalty
+}
+
+/**
+ * Check if a seed is too small to match reliably.
+ * @param {{ w: number, h: number }|null} bbox
+ * @returns {boolean}
+ */
+export function isSeedTooSmall(bbox) {
+  if (!bbox?.w || !bbox?.h) return false // unknown → allow, penalty handles it
+  return (bbox.w * bbox.h) < MIN_SEED_AREA
+}
+
 // ── Combined scoring ─────────────────────────────────────────────────────────
 
 /**
@@ -76,16 +116,27 @@ export function scoreAspectRatio(recipeAspect, matchAspect) {
  * @param {number} evidence.nccScore — NCC similarity (0–1)
  * @param {number} evidence.textHintScore — text proximity overlap (0–1)
  * @param {number} evidence.aspectScore — aspect ratio similarity (0–1)
+ * @param {object} [modifiers]
+ * @param {{ w: number, h: number }|null} [modifiers.seedBbox] — for area penalty
+ * @param {boolean} [modifiers.isWholePlan=false] — scope penalty
  * @returns {{ confidence: number, confidenceBucket: string, evidence: object }}
  */
-export function computeRecipeMatchConfidence({ nccScore, textHintScore, aspectScore }) {
+export function computeRecipeMatchConfidence({ nccScore, textHintScore, aspectScore }, modifiers = {}) {
+  const { seedBbox = null, isWholePlan = false } = modifiers
+
   const raw = (
     WEIGHT_NCC * nccScore +
     WEIGHT_TEXT_HINT * textHintScore +
     WEIGHT_ASPECT * aspectScore
   )
 
-  const confidence = Math.max(0, Math.min(1, raw))
+  // Apply seed area penalty (undersized seeds get reduced confidence)
+  const areaMul = seedAreaPenalty(seedBbox)
+
+  // Apply scope penalty (whole_plan is noisier)
+  const scopePen = isWholePlan ? SCOPE_PENALTY_WHOLE_PLAN : 0
+
+  const confidence = Math.max(0, Math.min(1, raw * areaMul - scopePen))
   const confidenceBucket = toBucket(confidence)
 
   return {
@@ -95,6 +146,8 @@ export function computeRecipeMatchConfidence({ nccScore, textHintScore, aspectSc
       ncc: { score: nccScore, weight: WEIGHT_NCC },
       textHint: { score: textHintScore, weight: WEIGHT_TEXT_HINT },
       aspect: { score: aspectScore, weight: WEIGHT_ASPECT },
+      areaPenalty: areaMul,
+      scopePenalty: scopePen,
     },
   }
 }

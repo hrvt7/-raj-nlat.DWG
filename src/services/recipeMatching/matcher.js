@@ -7,6 +7,13 @@
 // Reuses templateMatching.js NCC pipeline for visual matching.
 // Reuses recipeStore.js for recipe + crop retrieval.
 //
+// Quality guards (v2):
+//   - Min seed area filter (skip tiny seeds)
+//   - Per-page match cap (30)
+//   - Cross-recipe proximity dedup (15 px radius)
+//   - Total match safety limit (200 for whole_plan)
+//   - Scope-aware confidence penalty
+//
 // Truth source: RecipeMatchCandidate[] — separate from DetectionCandidate[]
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -17,13 +24,22 @@ import {
   buildSAT,
 } from '../../utils/templateMatching.js'
 import { getRecipeCrop } from '../../data/recipeStore.js'
-import { scoreTextHints, scoreAspectRatio, computeRecipeMatchConfidence } from './scoring.js'
+import {
+  scoreTextHints,
+  scoreAspectRatio,
+  computeRecipeMatchConfidence,
+  isSeedTooSmall,
+} from './scoring.js'
 
 // ── NCC matching threshold (lower than generic because user-taught + review) ──
 const NCC_THRESHOLD = 0.55
 
-// ── Max matches per recipe per page (safety cap) ──
-const MAX_MATCHES_PER_PAGE = 50
+// ── Safety caps ──────────────────────────────────────────────────────────────
+const MAX_MATCHES_PER_PAGE = 30          // was 50 — reduced to cut noise
+export const MAX_TOTAL_MATCHES = 200     // whole_plan safety limit
+
+// ── Proximity dedup radius ──────────────────────────────────────────────────
+export const DEDUP_RADIUS_PX = 15        // matches within this distance → keep higher confidence
 
 /**
  * Extract text items in a bbox region from a PDF page.
@@ -64,14 +80,19 @@ async function extractTextInBbox(pdfPage, bbox) {
  * @param {Object} pdfPage — pdf.js page object
  * @param {number} pageNum — 1-based page number
  * @param {string|null} cropDataUrl — recipe crop data URL (pre-fetched)
+ * @param {object} [scopeOpts] — scope-aware modifiers
+ * @param {boolean} [scopeOpts.isWholePlan=false] — apply scope penalty
  * @returns {Promise<Array<{
  *   x: number, y: number, score: number,
  *   nccScore: number, textHintScore: number, aspectScore: number,
  *   confidence: number, confidenceBucket: string, evidence: object
  * }>>}
  */
-export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl) {
+export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, scopeOpts = {}) {
   if (!cropDataUrl) return []
+
+  // Quality guard: skip tiny seeds that produce noisy NCC matches
+  if (isSeedTooSmall(recipe.bbox)) return []
 
   // Build a template-compatible shape for detectTemplateOnPage
   const templateLike = {
@@ -92,13 +113,15 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl) {
 
   if (!nccDetections?.length) return []
 
-  // Cap detections
+  // Cap detections per page
   const capped = nccDetections.slice(0, MAX_MATCHES_PER_PAGE)
 
   // Recipe bbox aspect for aspect scoring
   const recipeAspect = recipe.bbox?.w && recipe.bbox?.h
     ? recipe.bbox.w / recipe.bbox.h
     : null
+
+  const { isWholePlan = false } = scopeOpts
 
   // For each NCC detection, compute full confidence
   const results = []
@@ -119,12 +142,11 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl) {
     const matchAspect = matchBbox.w / matchBbox.h
     const aspectScore = scoreAspectRatio(recipeAspect, matchAspect)
 
-    // Combined confidence
-    const { confidence, confidenceBucket, evidence } = computeRecipeMatchConfidence({
-      nccScore: det.score,
-      textHintScore,
-      aspectScore,
-    })
+    // Combined confidence with quality modifiers
+    const { confidence, confidenceBucket, evidence } = computeRecipeMatchConfidence(
+      { nccScore: det.score, textHintScore, aspectScore },
+      { seedBbox: recipe.bbox, isWholePlan },
+    )
 
     results.push({
       x: det.x,
@@ -137,10 +159,45 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl) {
       confidenceBucket,
       evidence,
       matchBbox,
+      recipeId: recipe.id,
     })
   }
 
   return results
+}
+
+/**
+ * Proximity-based deduplication across ALL matches (from any recipe).
+ * If two matches are within DEDUP_RADIUS_PX of each other (Euclidean),
+ * keep only the one with higher confidence.
+ *
+ * @param {Array} matches — raw match results (must have x, y, confidence, pageNum)
+ * @returns {Array} — deduplicated matches
+ */
+export function deduplicateMatchesByProximity(matches) {
+  if (!matches?.length) return []
+
+  // Sort by confidence desc so we keep the best match in each cluster
+  const sorted = [...matches].sort((a, b) => b.confidence - a.confidence)
+  const kept = []
+  const radiusSq = DEDUP_RADIUS_PX * DEDUP_RADIUS_PX
+
+  for (const m of sorted) {
+    let isDuplicate = false
+    for (const k of kept) {
+      // Only compare matches on the same page
+      if (k.pageNum !== m.pageNum) continue
+      const dx = k.x - m.x
+      const dy = k.y - m.y
+      if (dx * dx + dy * dy < radiusSq) {
+        isDuplicate = true
+        break
+      }
+    }
+    if (!isDuplicate) kept.push(m)
+  }
+
+  return kept
 }
 
 /**
@@ -158,6 +215,7 @@ export async function matchRecipeOnPages(recipe, pdfDoc, options = {}, onProgres
 
   const { scope = 'whole_plan', currentPage = 1 } = options
   const numPages = pdfDoc.numPages
+  const isWholePlan = scope !== 'current_page'
 
   const pageRange = scope === 'current_page'
     ? [currentPage]
@@ -168,13 +226,16 @@ export async function matchRecipeOnPages(recipe, pdfDoc, options = {}, onProgres
   for (let i = 0; i < pageRange.length; i++) {
     const pageNum = pageRange[i]
     const pdfPage = await pdfDoc.getPage(pageNum)
-    const results = await matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl)
+    const results = await matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, { isWholePlan })
     allResults.push(...results)
 
     if (onProgress) onProgress((i + 1) / pageRange.length, pageNum)
 
     // Yield to keep UI responsive
     await new Promise(r => setTimeout(r, 0))
+
+    // Safety: abort early if we've already hit the total limit
+    if (isWholePlan && allResults.length >= MAX_TOTAL_MATCHES) break
   }
 
   return allResults

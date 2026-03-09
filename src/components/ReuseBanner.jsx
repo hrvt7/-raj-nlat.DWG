@@ -72,12 +72,13 @@ export default function ReuseBanner({ recipeCount, onRun, onDismiss, visible }) 
 
 // ── Helper: check if reuse banner should show ─────────────────────────────
 // Returns true when the project has recipes but the current plan has no markers.
-export function shouldShowReuseBanner(projectId, planId, markerCount, getRecipesByProject) {
+// Now uses relevance-aware recipe lookup when planMeta is available.
+export function shouldShowReuseBanner(projectId, planId, markerCount, getRecipesFn) {
   if (!projectId || !planId) return false
   if (markerCount > 0) return false
   const dismissed = sessionStorage.getItem(`reuse-dismissed-${planId}`)
   if (dismissed) return false
-  const recipes = getRecipesByProject(projectId)
+  const recipes = getRecipesFn(projectId)
   return recipes.length > 0
 }
 
@@ -85,7 +86,7 @@ export function dismissReuseBanner(planId) {
   sessionStorage.setItem(`reuse-dismissed-${planId}`, '1')
 }
 
-export function getProjectRecipeCount(projectId, getRecipesByProject) {
+export function getProjectRecipeCount(projectId, getRecipesFn) {
   if (!projectId) return 0
-  return getRecipesByProject(projectId).length
+  return getRecipesFn(projectId).length
 }
