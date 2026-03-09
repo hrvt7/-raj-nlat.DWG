@@ -137,12 +137,16 @@ export async function matchRecipeOnPage(recipe, pdfPage, pageNum, cropDataUrl, s
   // For each NCC detection, compute full confidence
   const results = []
   for (const det of capped) {
-    // Estimate match bbox (centered on detection x,y)
+    // Use actual matched region size if available (from trimmed template),
+    // fall back to original recipe bbox for backward compat
+    const bboxW = det.matchW || recipe.bbox?.w || 40
+    const bboxH = det.matchH || recipe.bbox?.h || 40
+    // Estimate match bbox (centered on detection x,y — which is now correctly offset)
     const matchBbox = {
-      x: det.x - (recipe.bbox?.w || 20) / 2,
-      y: det.y - (recipe.bbox?.h || 20) / 2,
-      w: recipe.bbox?.w || 40,
-      h: recipe.bbox?.h || 40,
+      x: det.x - bboxW / 2,
+      y: det.y - bboxH / 2,
+      w: bboxW,
+      h: bboxH,
     }
 
     // Text hint scoring
@@ -216,7 +220,7 @@ export function deduplicateMatchesByProximity(matches) {
  *
  * @param {Object} recipe — SymbolRecipe
  * @param {Object} pdfDoc — pdf.js document
- * @param {{ scope: 'current_page'|'whole_plan', currentPage?: number }} options
+ * @param {{ scope: 'current_page'|'whole_plan', currentPage?: number, searchRegion?: { x: number, y: number, w: number, h: number } }} options
  * @param {Function|null} onProgress — (fraction, pageNum) => void
  * @returns {Promise<Array>} — raw match results across pages
  */
@@ -227,7 +231,8 @@ export async function matchRecipeOnPages(recipe, pdfDoc, options = {}, onProgres
     return []
   }
 
-  const { scope = 'whole_plan', currentPage = 1 } = options
+  const { scope = 'whole_plan', currentPage = 1, searchRegion = null } = options
+  // searchRegion: optional PDF scale=1 bbox to restrict matching area (future use)
   const numPages = pdfDoc.numPages
   const isWholePlan = scope !== 'current_page'
 

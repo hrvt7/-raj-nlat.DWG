@@ -294,13 +294,9 @@ export async function detectTemplateOnPage(pdfPage, template, detectionScale = D
   let tplW = rawTplW
   let tplH = rawTplH
 
-  // Optional contrast enhancement for line drawings
-  if (enableContrast) {
-    pageGray = enhanceContrast(pageGray, 3.0)
-    tplGray = enhanceContrast(tplGray, 3.0)
-  }
-
-  // Auto-trim whitespace from template (removes user-drawn bbox margins)
+  // Auto-trim whitespace from template FIRST (on raw grayscale where bg=1.0).
+  // Must happen before enhanceContrast because sigmoid maps 1.0→~0.817 which
+  // falls below trimWhitespace's whiteThreshold=0.92, preventing any trimming.
   let trimResult = null
   if (enableTrim) {
     trimResult = trimWhitespace(tplGray, tplW, tplH)
@@ -314,6 +310,12 @@ export async function detectTemplateOnPage(pdfPage, template, detectionScale = D
     tplH = trimResult.h
   }
 
+  // Optional contrast enhancement for line drawings (after trim)
+  if (enableContrast) {
+    pageGray = enhanceContrast(pageGray, 3.0)
+    tplGray = enhanceContrast(tplGray, 3.0)
+  }
+
   if (tplW > pageW || tplH > pageH) return []  // template bigger than page
   if (tplW < 4 || tplH < 4) return []  // template too small after trim
 
@@ -323,7 +325,7 @@ export async function detectTemplateOnPage(pdfPage, template, detectionScale = D
   // Run NCC
   const rawDetections = matchTemplate(pageGray, pageW, pageH, tplGray, tplW, tplH, pageSAT, threshold)
 
-  // Dev-only diagnostics
+  // Dev-only diagnostics (includes localization debug info)
   if (import.meta.env.DEV) {
     const tplStd = (() => {
       let s = 0, s2 = 0
@@ -331,24 +333,45 @@ export async function detectTemplateOnPage(pdfPage, template, detectionScale = D
       const m = s / tplGray.length
       return Math.sqrt(Math.max(0, s2 / tplGray.length - m * m))
     })()
-    console.log(`[Matcher] template=${template.id} size=${rawTplW}×${rawTplH} trimmed=${tplW}×${tplH} tplStd=${tplStd.toFixed(4)} threshold=${threshold.toFixed(2)} rawHits=${rawDetections.length} maxScore=${rawDetections[0]?.score?.toFixed(4) || 'n/a'}`)
+    const trimInfo = trimResult
+      ? `trimRect=(${trimResult.trimRect.x},${trimResult.trimRect.y}) trimSize=${tplW}×${tplH}`
+      : 'noTrim'
+    console.log(`[Matcher] template=${template.id} size=${rawTplW}×${rawTplH} ${trimInfo} tplStd=${tplStd.toFixed(4)} threshold=${threshold.toFixed(2)} rawHits=${rawDetections.length} maxScore=${rawDetections[0]?.score?.toFixed(4) || 'n/a'}`)
   }
 
   // NMS
   const filtered = nonMaxSuppression(rawDetections, tplW, tplH)
 
   // Convert to PDF coordinates at scale=1
-  // Detection at detectionScale → divide by detectionScale → scale=1 coords
-  return filtered.map(d => ({
-    // Center of template box, in scale=1 PDF units
-    x: (d.x + tplW / 2) / detectionScale,
-    y: (d.y + tplH / 2) / detectionScale,
-    score: d.score,
-    templateId: template.id,
-    category: template.category,
-    color: template.color,
-    label: template.label,
-  }))
+  // d.x/d.y = top-left of where the TRIMMED template matched in detection-scale pixels.
+  // The trimmed template contains only the symbol content (whitespace margins removed).
+  // So the center of the trimmed match region IS the symbol center on the page.
+  // Formula: center = (d.x + tplW/2) / detectionScale → PDF scale=1
+  return filtered.map(d => {
+    const centerX = (d.x + tplW / 2) / detectionScale
+    const centerY = (d.y + tplH / 2) / detectionScale
+    // Matched region dimensions in PDF scale=1 (trimmed template size)
+    const matchW = tplW / detectionScale
+    const matchH = tplH / detectionScale
+
+    if (import.meta.env.DEV && filtered.indexOf(d) < 3) {
+      const trimOff = trimResult ? `trimRect=(${trimResult.trimRect.x},${trimResult.trimRect.y})` : 'noTrim'
+      console.log(`[Matcher:loc] hit@(${d.x},${d.y}) ${trimOff} tpl=${tplW}×${tplH} →center(${centerX.toFixed(1)},${centerY.toFixed(1)}) matchSize=${matchW.toFixed(1)}×${matchH.toFixed(1)} score=${d.score.toFixed(4)}`)
+    }
+
+    return {
+      x: centerX,
+      y: centerY,
+      score: d.score,
+      templateId: template.id,
+      category: template.category,
+      color: template.color,
+      label: template.label,
+      // Expose actual matched region dimensions (trimmed template in PDF scale=1)
+      matchW,
+      matchH,
+    }
+  })
 }
 
 /**
