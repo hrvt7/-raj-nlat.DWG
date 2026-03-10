@@ -152,7 +152,7 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
                     style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={e => e.currentTarget.style.background = C.bgHover}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    onClick={() => onOpenQuote?.(q) || onNavigate('quotes')}
+                    onClick={() => onOpenQuote ? onOpenQuote(q) : onNavigate('quotes')}
                   >
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>{q.project_name || 'Névtelen projekt'}</div>
