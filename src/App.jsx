@@ -1204,10 +1204,12 @@ function SaaSShell() {
       />
       <div style={{ marginLeft: isMobile ? 0 : sidebarW, flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', minWidth: 0, transition: 'margin-left 0.2s ease' }}>
 
-        {/* ── Top bar ───────────────────────────────────────────────────────── */}
+        {/* ── Top bar (hidden in workspace — TakeoffWorkspace has its own bar) ── */}
         <div style={{
-          height: 52, background: C.bgCard, borderBottom: `1px solid ${C.border}`,
-          display: 'flex', alignItems: 'center', padding: '0 16px',
+          height: page === 'projektek-workspace' ? 0 : 52,
+          background: C.bgCard, borderBottom: page === 'projektek-workspace' ? 'none' : `1px solid ${C.border}`,
+          display: page === 'projektek-workspace' ? 'none' : 'flex',
+          alignItems: 'center', padding: '0 16px',
           justifyContent: 'space-between', flexShrink: 0, gap: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>

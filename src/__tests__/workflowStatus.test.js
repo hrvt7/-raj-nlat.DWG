@@ -325,7 +325,7 @@ describe('getSaveGating', () => {
     expect(gating.disabled).toBe(true)
   })
 
-  it('disabled for unresolved_blocks stage with reason', () => {
+  it('enabled for unresolved_blocks stage with soft warning', () => {
     const ws = computeWorkflowStatus({
       hasFile: true,
       dxfAudit: makeDxfAudit(),
@@ -334,9 +334,9 @@ describe('getSaveGating', () => {
       takeoffRowCount: 5,
     })
     const gating = getSaveGating(ws)
-    expect(gating.disabled).toBe(true)
+    expect(gating.disabled).toBe(false)
     expect(gating.reason).toBeTruthy()
-    expect(gating.reason).toContain('ismeretlen')
+    expect(gating.reason).toContain('blokk')
   })
 
   it('enabled for review_warnings stage', () => {
@@ -376,9 +376,9 @@ describe('getSaveLabel', () => {
     expect(getSaveLabel(null, null, true)).toBe('...')
   })
 
-  it('returns review label for unresolved_blocks', () => {
+  it('returns create label for unresolved_blocks (save is allowed)', () => {
     const ws = { stage: 'unresolved_blocks' }
-    expect(getSaveLabel(ws, null, false)).toContain('Felülvizsgálat')
+    expect(getSaveLabel(ws, null, false)).toContain('létrehozása')
   })
 
   it('returns plan label when planId exists', () => {
@@ -394,9 +394,9 @@ describe('getSaveLabel', () => {
 
 // ──────────────────────────────────────────────────────────────────────────────
 describe('getSaveColor', () => {
-  it('returns gray for unresolved_blocks', () => {
+  it('returns yellow for unresolved_blocks (saveable with warning)', () => {
     const color = getSaveColor({ stage: 'unresolved_blocks' })
-    expect(color).toBe('#71717A')
+    expect(color).toBe('#FFD166')
   })
 
   it('returns yellow for review_warnings', () => {
