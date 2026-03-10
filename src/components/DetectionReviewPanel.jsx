@@ -133,7 +133,7 @@ function CategoryPicker({ currentCategory, onPick, detectionId }) {
   )
 }
 
-function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle, onLocate, onRemap, scoreThreshold, onCaptureSymbol }) {
+function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onToggle, onLocate, onRemap, scoreThreshold }) {
   const cat = getCat(category)
   const accepted = detections.filter(d => d.accepted !== false)
   // Sort by score descending for easier review
@@ -199,42 +199,10 @@ function DetectionGroup({ category, detections, onAcceptAll, onRejectAll, onTogg
                 }
                 {Math.round(d.score * 100)}%
                 {d.pageNum > 1 && <span style={{ opacity: 0.7 }}>· o{d.pageNum}</span>}
-                {/* Source badge: project_memory vs standard */}
-                {d.detectionSource === 'project_memory' && (
-                  <span style={{
-                    fontSize: 7, padding: '1px 3px', borderRadius: 3,
-                    background: 'rgba(76,201,240,0.15)', color: C.blue,
-                    border: '1px solid rgba(76,201,240,0.3)',
-                    marginLeft: 2,
-                  }}>PM</span>
-                )}
-                {/* Limited mode badge */}
-                {d.isLimitedMode && (
-                  <span title="Korlátozott detekció — raster/szkennelt oldal" style={{
-                    fontSize: 7, padding: '1px 3px', borderRadius: 3,
-                    background: 'rgba(255,209,102,0.12)', color: C.yellow,
-                    border: '1px solid rgba(255,209,102,0.25)',
-                    marginLeft: 2,
-                  }}>LTD</span>
-                )}
               </button>
               {/* Category remap picker */}
               {onRemap && (
                 <CategoryPicker currentCategory={d.category} onPick={onRemap} detectionId={d.id} />
-              )}
-              {/* Capture as custom symbol — only on standard detections (project memory already is captured) */}
-              {onCaptureSymbol && d.detectionSource !== 'project_memory' && (
-                <button
-                  onClick={() => onCaptureSymbol(d)}
-                  title="Mentés projekt szimbólumként"
-                  style={{
-                    fontFamily: 'DM Mono', fontSize: 7,
-                    color: C.blue, background: 'rgba(76,201,240,0.06)',
-                    border: `1px solid rgba(76,201,240,0.2)`,
-                    borderRadius: 4, padding: '2px 4px', cursor: 'pointer',
-                    marginLeft: 1,
-                  }}
-                >💾</button>
               )}
               {/* Locate button — shows where this detection is on the plan */}
               {onLocate && (
@@ -365,7 +333,7 @@ function NoTemplatesWarning({ onClose }) {
 }
 
 // ─── DetectionReviewPanel ─────────────────────────────────────────────────────
-export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun, pdfCandidates, onCaptureSymbol, detectionMeta }) {
+export default function DetectionReviewPanel({ plans, onClose, onDone, projectId, onLocateDetection, existingRun }) {
   const [phase, setPhase] = useState('loading') // loading | no_templates | detecting | review | saving | done
   const [templates, setTemplates] = useState([])
   const [progress, setProgress] = useState(0)
@@ -376,72 +344,6 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
   const runIdRef = useRef(null) // DetectionRun.id for persistence
   const [scoreThreshold, setScoreThreshold] = useState(0.70)
   const [reviewFilter, setReviewFilter] = useState('all') // all | accepted | rejected | pending
-  const [focusIndex, setFocusIndex] = useState(-1) // keyboard navigation index
-
-  // ── PDF rule-engine candidates (skip template scanning entirely) ──
-  useEffect(() => {
-    if (!pdfCandidates || !pdfCandidates.length) return
-    setAllDetections(pdfCandidates)
-    setPhase('review')
-  }, [pdfCandidates])
-
-  // ── Keyboard refs for stable closure ──
-  const filteredRef = useRef([])
-  const focusRef = useRef(-1)
-  focusRef.current = focusIndex
-
-  // ── Keyboard support (A=accept, R=reject, J/↓=next, K/↑=prev) ──
-  useEffect(() => {
-    if (phase !== 'review' || allDetections.length === 0) return
-    function handleKey(e) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-      const key = e.key.toLowerCase()
-      const list = filteredRef.current
-      const idx = focusRef.current
-      if (key === 'j' || key === 'arrowdown') {
-        e.preventDefault()
-        setFocusIndex(prev => Math.min(prev + 1, list.length - 1))
-      } else if (key === 'k' || key === 'arrowup') {
-        e.preventDefault()
-        setFocusIndex(prev => Math.max(prev - 1, 0))
-      } else if (key === 'a' && idx >= 0 && idx < list.length) {
-        e.preventDefault()
-        handleToggleAccept(list[idx].id, true)
-      } else if (key === 'r' && idx >= 0 && idx < list.length) {
-        e.preventDefault()
-        handleToggleAccept(list[idx].id, false)
-      }
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [phase, allDetections, reviewFilter])
-
-  // ── Set explicit acceptance state ──
-  const handleToggleAccept = useCallback((detId, accepted) => {
-    setAllDetections(prev => prev.map(d =>
-      d.id === detId ? { ...d, accepted } : d
-    ))
-  }, [])
-
-  // ── Custom symbol capture (delegates to parent) ──
-  const handleCaptureSymbol = useCallback((detection) => {
-    if (onCaptureSymbol) {
-      onCaptureSymbol(detection)
-    }
-  }, [onCaptureSymbol])
-
-  // ── Batch bucket actions ──
-  const handleAcceptAllGreen = useCallback(() => {
-    setAllDetections(prev => prev.map(d =>
-      d.confidenceBucket === 'high' ? { ...d, accepted: true } : d
-    ))
-  }, [])
-
-  const handleIgnoreAllRed = useCallback(() => {
-    setAllDetections(prev => prev.map(d =>
-      d.confidenceBucket === 'low' ? { ...d, accepted: false } : d
-    ))
-  }, [])
 
   // ── Reopen existing run (skip detection) ──
   useEffect(() => {
@@ -455,9 +357,9 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
     setPhase('review')
   }, [existingRun])
 
-  // ── Load templates and start detection (skip if reopening or pdfCandidates) ──
+  // ── Load templates and start detection (skip if reopening) ──
   useEffect(() => {
-    if (existingRun || (pdfCandidates && pdfCandidates.length)) return // skip detection when reopening or pdf candidates
+    if (existingRun) return // skip detection when reopening
     ;(async () => {
       setPhase('loading')
       // Load project-scoped templates if projectId provided, otherwise global
@@ -615,15 +517,12 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
 
   // ── Filtered detections for display ──
   const filteredDetections = useMemo(() => {
-    let result
     switch (reviewFilter) {
-      case 'accepted': result = allDetections.filter(d => d.accepted !== false); break
-      case 'rejected': result = allDetections.filter(d => d.accepted === false); break
-      case 'pending':  result = allDetections.filter(d => d.score < scoreThreshold); break
-      default:         result = allDetections
+      case 'accepted': return allDetections.filter(d => d.accepted !== false)
+      case 'rejected': return allDetections.filter(d => d.accepted === false)
+      case 'pending':  return allDetections.filter(d => d.score < scoreThreshold)
+      default:         return allDetections
     }
-    filteredRef.current = result
-    return result
   }, [allDetections, reviewFilter, scoreThreshold])
 
   // ── Filter counts ──
@@ -794,49 +693,6 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
             </div>
           )}
 
-          {/* Limited detection mode banner */}
-          {phase === 'review' && detectionMeta && detectionMeta.detectionMode && detectionMeta.detectionMode !== 'full' && (
-            <div style={{
-              background: 'rgba(255,209,102,0.08)', border: '1px solid rgba(255,209,102,0.2)',
-              borderRadius: 10, padding: '10px 14px', marginBottom: 12,
-              fontFamily: 'DM Mono', fontSize: 10, color: C.yellow,
-              display: 'flex', alignItems: 'flex-start', gap: 8,
-            }}>
-              <span style={{ fontSize: 14, lineHeight: 1 }}>⚠</span>
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 3, fontSize: 11 }}>
-                  {detectionMeta.detectionMode === 'limited' ? 'Korlátozott detekció' : 'Vegyes detekciós mód'}
-                </div>
-                <div style={{ color: C.textSub, lineHeight: 1.5 }}>
-                  {(detectionMeta.limitedModeReasons || []).join(' · ') || 'Raster/szkennelt oldalak esetén a detekció korlátozott.'}
-                  {' '}A geometria alapú felismerés nem elérhető. Minden detekció manuális ellenőrzést igényel.
-                </div>
-                {(detectionMeta.rasterPageNumbers || []).length > 0 && (
-                  <div style={{ marginTop: 4, opacity: 0.8 }}>
-                    Érintett oldalak: {detectionMeta.rasterPageNumbers.join(', ')}
-                  </div>
-                )}
-                {/* OCR text hint status */}
-                {detectionMeta.ocrResult && (
-                  <div style={{
-                    marginTop: 6, padding: '4px 8px',
-                    background: detectionMeta.ocrResult.hasAnyText ? 'rgba(0,229,160,0.06)' : 'rgba(255,107,107,0.06)',
-                    borderRadius: 6, fontSize: 10,
-                    color: detectionMeta.ocrResult.hasAnyText ? C.accent : C.red,
-                  }}>
-                    {detectionMeta.ocrResult.hasAnyText ? '📝' : '⬜'}{' '}
-                    OCR: {detectionMeta.ocrResult.summary}
-                    {detectionMeta.ocrResult.hasAnyText && detectionMeta.ocrMetaAssist?.metaConfidence > 0 && (
-                      <span style={{ marginLeft: 8, opacity: 0.8 }}>
-                        · Metadata assist aktív
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Review phase */}
           {phase === 'review' && (
             <>
@@ -878,56 +734,6 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                     </div>
                   </div>
 
-                  {/* ── Bucket batch actions (PDF rule-engine mode) ── */}
-                  {pdfCandidates && pdfCandidates.length > 0 && (() => {
-                    const greenCount = allDetections.filter(d => d.confidenceBucket === 'high').length
-                    const yellowCount = allDetections.filter(d => d.confidenceBucket === 'review').length
-                    const redCount = allDetections.filter(d => d.confidenceBucket === 'low').length
-                    return (
-                      <div style={{
-                        background: C.bgCard, border: `1px solid ${C.border}`,
-                        borderRadius: 12, padding: '10px 16px',
-                        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                      }}>
-                        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginRight: 4 }}>
-                          Gyors műveletek:
-                        </span>
-                        {greenCount > 0 && (
-                          <button
-                            onClick={handleAcceptAllGreen}
-                            style={{
-                              ...actionBtnStyle, color: C.accent,
-                              borderColor: C.accentBorder, background: C.accentDim,
-                            }}
-                          >
-                            <CheckIcon size={11} color={C.accent} /> {greenCount} zöld elfogadása
-                          </button>
-                        )}
-                        {redCount > 0 && (
-                          <button
-                            onClick={handleIgnoreAllRed}
-                            style={{
-                              ...actionBtnStyle, color: C.red,
-                              borderColor: 'rgba(255,107,107,0.3)',
-                              background: 'rgba(255,107,107,0.06)',
-                            }}
-                          >
-                            <XSmIcon size={11} color={C.red} /> {redCount} piros kihagyása
-                          </button>
-                        )}
-                        {yellowCount > 0 && (
-                          <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.yellow }}>
-                            {yellowCount} sárga vár review-ra
-                          </span>
-                        )}
-                        <div style={{ flex: 1 }} />
-                        <span style={{ fontFamily: 'DM Mono', fontSize: 8, color: C.muted, opacity: 0.7 }}>
-                          ⌨ J/K = nav · A = elfogad · R = elvet
-                        </span>
-                      </div>
-                    )
-                  })()}
-
                   {/* Score threshold slider */}
                   <ScoreThresholdSlider
                     value={scoreThreshold}
@@ -958,7 +764,6 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
                         onLocate={handleLocate}
                         onRemap={handleRemap}
                         scoreThreshold={scoreThreshold}
-                        onCaptureSymbol={handleCaptureSymbol}
                       />
                     )
                   })}

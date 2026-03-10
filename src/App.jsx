@@ -18,7 +18,7 @@ const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPa
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
-import { generateProjectId, saveProject, loadProjects, getProject, ensureFallbackProject } from './data/projectStore.js'
+import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
 import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM, ToastProvider } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
@@ -995,9 +995,14 @@ function SaaSShell() {
   useEffect(() => {
     const orphans = loadPlans().filter(p => !p.projectId)
     if (orphans.length === 0) return
-    const projectId = ensureFallbackProject()
+    // Check if "Importált tervek" project already exists
+    const existing = loadProjects().find(p => p.name === 'Importált tervek')
+    const projectId = existing ? existing.id : generateProjectId()
+    if (!existing) {
+      saveProject({ id: projectId, name: 'Importált tervek', defaultQuoteOutputMode: 'combined', createdAt: new Date().toISOString() })
+    }
     orphans.forEach(p => updatePlanMeta(p.id, { projectId }))
-    console.log(`[App] Migrated ${orphans.length} orphan plan(s) → fallback project (${projectId})`)
+    console.log(`[App] Migrated ${orphans.length} orphan plan(s) → "Importált tervek" project (${projectId})`)
   }, [])
 
   const handleSignOut = async () => {
@@ -1032,7 +1037,7 @@ function SaaSShell() {
       'work-items': 'Munkatételek', materials: 'Anyagok',
       assemblies: 'Assemblyk', settings: 'Beállítások',
     }
-    const base = baseTitles[page] ?? page
+    const base = baseTitles[page] || page
     return tradeLabel ? `${base} — ${tradeLabel}` : base
   }
 

@@ -23,27 +23,15 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMarkersChange, onMeasurementsChange, focusTarget, assemblies: assembliesProp }, ref) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, focusTarget, assemblies: assembliesProp }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
 
-  // Stable callback refs — prevents infinite re-render loop when parent passes
-  // inline callbacks (new reference each render → useEffect re-fires → setState → re-render → …)
+  // Stable callback ref — prevents infinite re-render loop when parent passes
+  // inline onCableData (new reference each render → useEffect re-fires → setState → re-render → …)
   const onCableDataRef = useRef(onCableData)
   useEffect(() => { onCableDataRef.current = onCableData })
-  const onMarkersChangeRef = useRef(onMarkersChange)
-  useEffect(() => { onMarkersChangeRef.current = onMarkersChange })
-  const onMeasurementsChangeRef = useRef(onMeasurementsChange)
-  useEffect(() => { onMeasurementsChangeRef.current = onMeasurementsChange })
-
-  // ── Notify parent of marker/measurement changes ──
-  const notifyMarkersChanged = useCallback(() => {
-    onMarkersChangeRef.current?.([...markersRef.current])
-  }, [])
-  const notifyMeasurementsChanged = useCallback(() => {
-    onMeasurementsChangeRef.current?.([...measuresRef.current])
-  }, [])
 
   // Expose inner DxfViewerCanvas imperative API so parents (e.g. DxfBlockOverlay) can use
   // sceneToScreen, getViewer, subscribe, etc. through the forwarded ref.
@@ -109,8 +97,8 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   useEffect(() => {
     if (!planId) return
     getPlanAnnotations(planId).then(ann => {
-      if (ann.markers?.length) { markersRef.current = normalizeMarkers(ann.markers); setRenderTick(t => t + 1); notifyMarkersChanged() }
-      if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurementsChanged() }
+      if (ann.markers?.length) { markersRef.current = normalizeMarkers(ann.markers); setRenderTick(t => t + 1) }
+      if (ann.measurements?.length) { measuresRef.current = ann.measurements }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
@@ -124,7 +112,6 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     const unsub = onAnnotationsChanged(planId, ({ markers }) => {
       markersRef.current = normalizeMarkers(markers)
       setRenderTick(t => t + 1)
-      notifyMarkersChanged()
     })
     return unsub
   }, [planId])
@@ -434,7 +421,6 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         asmId: asm ? asm.id : null, source: 'manual',
       })]
       setRenderTick(t => t + 1)
-      notifyMarkersChanged()
     }
 
     if (tool === 'measure') {
@@ -452,7 +438,6 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         }]
         activeStartRef.current = null
         setRenderTick(t => t + 1)
-        notifyMeasurementsChanged()
       }
     }
 
@@ -531,21 +516,19 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     if (activeTool === 'count' && markersRef.current.length > 0) {
       markersRef.current = markersRef.current.slice(0, -1)
       setRenderTick(t => t + 1)
-      notifyMarkersChanged()
     }
     if (activeTool === 'measure' && measuresRef.current.length > 0) {
       measuresRef.current = measuresRef.current.slice(0, -1)
       setRenderTick(t => t + 1)
-      notifyMeasurementsChanged()
     }
-  }, [activeTool, notifyMarkersChanged, notifyMeasurementsChanged])
+  }, [activeTool])
 
   const handleClearAll = useCallback(() => {
-    if (activeTool === 'count') { markersRef.current = []; notifyMarkersChanged() }
-    if (activeTool === 'measure') { measuresRef.current = []; notifyMeasurementsChanged() }
+    if (activeTool === 'count') markersRef.current = []
+    if (activeTool === 'measure') measuresRef.current = []
     activeStartRef.current = null
     setRenderTick(t => t + 1)
-  }, [activeTool, notifyMarkersChanged, notifyMeasurementsChanged])
+  }, [activeTool])
 
   // ── Scale calibration submit ──
   const handleCalibSubmit = useCallback(() => {
@@ -570,8 +553,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       return { ...m, distance: distM, label: formatDist(distM) }
     })
     setRenderTick(t => t + 1)
-    notifyMeasurementsChanged()
-  }, [calibDialog, calibInput, calibUnit, notifyMeasurementsChanged])
+  }, [calibDialog, calibInput, calibUnit])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {

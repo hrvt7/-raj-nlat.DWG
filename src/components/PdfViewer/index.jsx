@@ -1,21 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
-import SeedAssignPanel from '../SeedAssignPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments, saveCategoryAssemblyBatch } from '../../data/categoryAssemblyMap.js'
-import { createRecipe, saveRecipe, getRecipesByPlan, getRecipesByProject, getAllRecipesByProject, getRelevantRecipes, getRecommendedRecipeSet, updateRecipe, archiveRecipe, restoreRecipe, updateRecipeRunStats, RECIPE_SCOPE, MATCH_STRICTNESS } from '../../data/recipeStore.js'
-import RecipeMatchReviewPanel from '../RecipeMatchReviewPanel.jsx'
-import CountSessionPanel from '../CountSessionPanel.jsx'
-import { createCountObject, saveCountObject, SCALE_MODE, SEARCH_SCOPE } from '../../data/countObjectStore.js'
-import { executeSearch, batchAcceptLikely, batchIgnoreLow, setCandidateStatus as setCSCandidateStatus, materializeAccepted, screenRectToPdfRegion, pdfRegionToScreenRect } from '../../services/countWorkflow/index.js'
-import { CANDIDATE_STATUS } from '../../data/searchSessionStore.js'
-import RecipeListPanel from '../RecipeListPanel.jsx'
-import ReuseBanner, { shouldShowReuseBanner, dismissReuseBanner, getProjectRecipeCount } from '../ReuseBanner.jsx'
-import { runRecipeMatching, batchAcceptGreen as batchAcceptGreenMatches, toMarkerFields as recipeToMarkerFields, groupByBucket as groupMatchByBucket, generateBatchId } from '../../services/recipeMatching/index.js'
-import { createRunRecord, saveRun, getRunsByPlan, getLastRun, markRunUndone, getRunByBatchId } from '../../data/recipeRunStore.js'
-import RunHistoryDrawer from '../RunHistoryDrawer.jsx'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -67,16 +55,11 @@ function formatDist(m) {
   return `${m.toFixed(1)} m`
 }
 
-// ── Feature flag: PDF symbol search / identification ──
-// Disabled for pilot — generates too many false positives, corrupts right-panel calcs.
-// Set to true to re-enable the experimental Azonosítás tool + recipe matching.
-const PDF_SYMBOL_SEARCH_ENABLED = false
-
 // ═══════════════════════════════════════════════════════════════════════════
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, projectId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -93,8 +76,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   // ── PDF state ──
   const [pdfDoc, setPdfDoc] = useState(null)
-  const pdfDocRef = useRef(null)
-  useEffect(() => { pdfDocRef.current = pdfDoc }, [pdfDoc])
   const [pageNum, setPageNum] = useState(1)
   const [numPages, setNumPages] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -103,29 +84,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   // ── View transform (pan/zoom) ──
   const viewRef = useRef({ offsetX: 0, offsetY: 0, zoom: 1, pageWidth: 0, pageHeight: 0 })
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startOX: 0, startOY: 0 })
-
-  // ── View constants ──
-  const MIN_ZOOM = 0.25
-  const MAX_ZOOM = 10
-  const FIT_MARGIN = 0.95 // 5% padding — tighter than old 0.92
-
-  // ── Clamp pan so page never drifts more than 50% off viewport ──
-  const clampView = useCallback(() => {
-    const ct = containerRef.current
-    if (!ct) return
-    const v = viewRef.current
-    const cw = ct.clientWidth
-    const ch = ct.clientHeight
-    const pw = v.pageWidth * v.zoom
-    const ph = v.pageHeight * v.zoom
-    // Allow at most 50% of the page to go off-screen in any direction
-    const maxOffX = cw * 0.5
-    const maxOffY = ch * 0.5
-    const minOffX = cw - pw - cw * 0.5
-    const minOffY = ch - ph - ch * 0.5
-    v.offsetX = Math.max(Math.min(v.offsetX, maxOffX), minOffX)
-    v.offsetY = Math.max(Math.min(v.offsetY, maxOffY), minOffY)
-  }, [])
 
   // ── Tools ──
   const [activeTool, setActiveTool] = useState(null)
@@ -163,76 +121,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       if (onDirtyChange) onDirtyChange(true)
     }
   }, [onDirtyChange])
-
-  // ── Seed capture state (Azonosítás mode) ──
-  const seedStartRef = useRef(null)        // { x, y } in screen coords — drag start
-  const seedRectRef = useRef(null)          // { x, y, w, h } in screen coords — live rect
-  const [pendingSeed, setPendingSeed] = useState(null) // { bbox, pageNum, cropDataUrl, textHints }
-  const [recipeCount, setRecipeCount] = useState(0)    // recipe count badge
-
-  // Load recipe count for this plan
-  useEffect(() => {
-    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
-  }, [planId])
-
-  // ── Count session state (PlanSwift-style region search) ──
-  const [countSession, setCountSession] = useState(null)          // active SearchSession
-  const countSessionRef = useRef(null)
-  const [countObject, setCountObject] = useState(null)            // active CountObject
-  const [countSearching, setCountSearching] = useState(false)
-  const [countSessionPanelOpen, setCountSessionPanelOpen] = useState(false)
-  const [countCropPreview, setCountCropPreview] = useState(null)  // crop data URL for panel
-  // Region draw refs (reuse seed capture pattern)
-  const regionStartRef = useRef(null)    // { x, y } screen coords
-  const regionRectRef = useRef(null)     // { x, y, w, h } screen coords — live
-  const [pendingRegion, setPendingRegion] = useState(null) // PDF scale=1 bbox after draw
-  const [awaitingRegionForRecipe, setAwaitingRegionForRecipe] = useState(null) // recipe + cropUrl waiting for region draw
-  const awaitingRegionRef = useRef(null)
-  useEffect(() => { awaitingRegionRef.current = awaitingRegionForRecipe }, [awaitingRegionForRecipe])
-  useEffect(() => { countSessionRef.current = countSession; setRenderTick(t => t + 1) }, [countSession])
-
-  // ── Recipe matching state ──
-  const [recipeMatchCandidates, setRecipeMatchCandidates] = useState([])
-  const recipeMatchCandidatesRef = useRef([])
-  useEffect(() => { recipeMatchCandidatesRef.current = recipeMatchCandidates; setRenderTick(t => t + 1) }, [recipeMatchCandidates])
-  const [recipeMatchRunning, setRecipeMatchRunning] = useState(false)
-  const [recipeMatchPanelOpen, setRecipeMatchPanelOpen] = useState(false)
-  const lastRunMetaRef = useRef(null) // { recipeIds, recipeCount, totalMatches, scope }
-
-  // ── Apply summary + undo state ──
-  const [applyResult, setApplyResult] = useState(null)     // { markersCreated, markersDeduplicated, assemblySummary, batchId }
-  const [lastApplyBatchId, setLastApplyBatchId] = useState(null)
-
-  // ── Run history state ──
-  const [runHistoryOpen, setRunHistoryOpen] = useState(false)
-  const [recentRuns, setRecentRuns] = useState([])
-  const refreshRunHistory = useCallback(() => {
-    if (planId) setRecentRuns(getRunsByPlan(planId).slice(0, 5))
-  }, [planId])
-  useEffect(() => { refreshRunHistory() }, [refreshRunHistory])
-
-  // ── Reuse banner state ──
-  const [reuseBannerDismissed, setReuseBannerDismissed] = useState(false)
-  // Use relevance-aware recipe lookup for recommendations
-  const getRelevantProjectRecipes = useCallback((pid) => getRelevantRecipes(pid), [])
-  const projectRecipeCount = getProjectRecipeCount(projectId, getRelevantProjectRecipes)
-  const markerCount_forBanner = markersRef.current?.length || 0
-  const showReuseBanner = !reuseBannerDismissed
-    && !recipeMatchPanelOpen && !pendingSeed
-    && shouldShowReuseBanner(projectId, planId, markerCount_forBanner, getRelevantProjectRecipes)
-
-  // ── Recommended recipe set (for banner presets) ──
-  // planMeta would come from plan metadata (floor, systemType, docType) if available.
-  // For now we pass null — quality + usage scoring still ranks recipes properly.
-  const recommendationSet = React.useMemo(() => {
-    if (!projectId || !showReuseBanner) return { recommended: [], rest: [], reasons: [] }
-    return getRecommendedRecipeSet(projectId, null)
-  }, [projectId, showReuseBanner])
-
-  // ── Recipe list panel state ──
-  const [recipeListOpen, setRecipeListOpen] = useState(false)
-  const [recipeListItems, setRecipeListItems] = useState([])
-  const [showArchivedRecipes, setShowArchivedRecipes] = useState(false)
 
   // ── Count panel + estimation ──
   const [countPanelOpen, setCountPanelOpen] = useState(false)
@@ -443,17 +331,16 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const ctx = canvas.getContext('2d')
       await page.render({ canvasContext: ctx, viewport }).promise
 
-      // Fit view initially — page fills viewport with minimal padding
+      // Fit view initially
       if (containerRef.current) {
         const cw = containerRef.current.clientWidth
         const ch = containerRef.current.clientHeight
         const pw = viewport.width / 2
         const ph = viewport.height / 2
-        const zoom = Math.min(cw / pw, ch / ph) * FIT_MARGIN
+        const zoom = Math.min(cw / pw, ch / ph) * 0.92
         viewRef.current.zoom = zoom
         viewRef.current.offsetX = (cw - pw * zoom) / 2
         viewRef.current.offsetY = (ch - ph * zoom) / 2
-        clampView()
       }
       drawOverlay()
 
@@ -536,20 +423,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     })
     const sf = scaleRef.current
 
-    // Draw PDF canvas at current transform + page shadow for visual separation
+    // Draw PDF canvas at current transform
     if (pdfCanvasRef.current) {
-      // Page drop-shadow — makes PDF boundary clear against dark background
-      const pw = v.pageWidth * v.zoom
-      const ph = v.pageHeight * v.zoom
-      ctx.save()
-      ctx.shadowColor = 'rgba(0,0,0,0.5)'
-      ctx.shadowBlur = 18
-      ctx.shadowOffsetX = 0
-      ctx.shadowOffsetY = 4
-      ctx.fillStyle = '#FFFFFF'
-      ctx.fillRect(v.offsetX, v.offsetY, pw, ph)
-      ctx.restore()
-
       ctx.save()
       ctx.translate(v.offsetX, v.offsetY)
       ctx.scale(v.zoom / 2, v.zoom / 2) // PDF rendered at 2x
@@ -655,131 +530,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       ctx.moveTo(0, s.y); ctx.lineTo(cw, s.y)
       ctx.stroke()
     }
-
-    // ── Recipe match candidate overlays ──
-    const rmCandidates = recipeMatchCandidatesRef.current
-    if (rmCandidates?.length) {
-      for (const c of rmCandidates) {
-        if (c.pageNumber !== pageNum) continue
-        const sx = c.x * v.zoom + v.offsetX
-        const sy = c.y * v.zoom + v.offsetY
-        const bucketColor = c.confidenceBucket === 'high' ? C.accent
-          : c.confidenceBucket === 'review' ? C.yellow : C.red
-        const r = Math.max(8, 12 * Math.min(v.zoom, 1.5))
-
-        ctx.save()
-        // Outer ring
-        ctx.beginPath()
-        ctx.arc(sx, sy, r, 0, Math.PI * 2)
-        ctx.fillStyle = bucketColor + (c.accepted ? '40' : '18')
-        ctx.fill()
-        ctx.lineWidth = c.accepted ? 2.5 : 1.5
-        ctx.setLineDash(c.accepted ? [] : [4, 3])
-        ctx.strokeStyle = bucketColor
-        ctx.stroke()
-        ctx.setLineDash([])
-
-        // Inner marker if accepted
-        if (c.accepted) {
-          ctx.beginPath()
-          const cr = r * 0.4
-          ctx.moveTo(sx - cr, sy)
-          ctx.lineTo(sx + cr, sy)
-          ctx.moveTo(sx, sy - cr)
-          ctx.lineTo(sx, sy + cr)
-          ctx.lineWidth = 2
-          ctx.strokeStyle = bucketColor
-          ctx.stroke()
-        }
-        ctx.restore()
-      }
-    }
-
-    // ── Count session candidate overlays ──
-    const csCandidates = countSessionRef.current?.candidates
-    if (csCandidates?.length) {
-      for (const c of csCandidates) {
-        if (c.pageNumber !== pageNum) continue
-        const sx = c.x * v.zoom + v.offsetX
-        const sy = c.y * v.zoom + v.offsetY
-        const bucketColor = c.confidenceBucket === 'high' ? C.accent
-          : c.confidenceBucket === 'review' ? C.yellow : C.red
-        const r = Math.max(8, 12 * Math.min(v.zoom, 1.5))
-        const isAccepted = c.status === CANDIDATE_STATUS.ACCEPTED
-        const isIgnored = c.status === CANDIDATE_STATUS.IGNORED
-
-        if (isIgnored) continue // don't render ignored candidates
-
-        ctx.save()
-        ctx.beginPath()
-        ctx.arc(sx, sy, r, 0, Math.PI * 2)
-        ctx.fillStyle = bucketColor + (isAccepted ? '40' : '18')
-        ctx.fill()
-        ctx.lineWidth = isAccepted ? 2.5 : 1.5
-        ctx.setLineDash(isAccepted ? [] : [4, 3])
-        ctx.strokeStyle = bucketColor
-        ctx.stroke()
-        ctx.setLineDash([])
-
-        if (isAccepted) {
-          ctx.beginPath()
-          const cr = r * 0.4
-          ctx.moveTo(sx - cr, sy)
-          ctx.lineTo(sx + cr, sy)
-          ctx.moveTo(sx, sy - cr)
-          ctx.lineTo(sx, sy + cr)
-          ctx.lineWidth = 2
-          ctx.strokeStyle = bucketColor
-          ctx.stroke()
-        }
-        ctx.restore()
-      }
-    }
-
-    // ── Count search region rect (if set) ──
-    if (countSession?.region) {
-      const sr = pdfRegionToScreenRect(countSession.region, v)
-      ctx.save()
-      ctx.strokeStyle = C.blue
-      ctx.lineWidth = 1.5
-      ctx.setLineDash([8, 4])
-      ctx.strokeRect(sr.x, sr.y, sr.w, sr.h)
-      ctx.fillStyle = 'rgba(76,201,240,0.06)'
-      ctx.fillRect(sr.x, sr.y, sr.w, sr.h)
-      ctx.setLineDash([])
-      ctx.restore()
-    }
-
-    // ── Region draw rect (live, during drag) ──
-    if (regionRectRef.current && activeTool === 'select') {
-      const rr = regionRectRef.current
-      ctx.save()
-      ctx.strokeStyle = C.blue
-      ctx.lineWidth = 2
-      ctx.setLineDash([6, 3])
-      ctx.strokeRect(rr.x, rr.y, rr.w, rr.h)
-      ctx.fillStyle = 'rgba(76,201,240,0.08)'
-      ctx.fillRect(rr.x, rr.y, rr.w, rr.h)
-      ctx.setLineDash([])
-      // Label
-      ctx.font = '10px "DM Mono"'
-      ctx.fillStyle = C.blue
-      ctx.fillText('Keresési régió', rr.x + 4, rr.y - 4)
-      ctx.restore()
-    }
-
-    // ── Seed capture rect (Azonosítás mode) ──
-    if (seedRectRef.current && activeTool === 'select') {
-      const sr = seedRectRef.current
-      ctx.save()
-      ctx.strokeStyle = C.accent
-      ctx.lineWidth = 2
-      ctx.setLineDash([6, 3])
-      ctx.strokeRect(sr.x, sr.y, sr.w, sr.h)
-      ctx.fillStyle = 'rgba(0, 229, 160, 0.08)'
-      ctx.fillRect(sr.x, sr.y, sr.w, sr.h)
-      ctx.restore()
-    }
   }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes])
 
   // ── Mouse handlers ──
@@ -793,19 +543,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     if (!activeTool || e.button === 1) {
       // Pan mode when no tool active or middle mouse
       dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, startOX: viewRef.current.offsetX, startOY: viewRef.current.offsetY }
-      return
-    }
-
-    if (activeTool === 'select') {
-      if (e.shiftKey || awaitingRegionRef.current) {
-        // Shift+drag OR awaiting-region mode: draw search region
-        regionStartRef.current = { x: sx, y: sy }
-        regionRectRef.current = null
-        return
-      }
-      // Azonosítás mode: start box draw for seed capture
-      seedStartRef.current = { x: sx, y: sy }
-      seedRectRef.current = null
       return
     }
 
@@ -878,33 +615,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const dy = e.clientY - dragRef.current.startY
       viewRef.current.offsetX = dragRef.current.startOX + dx
       viewRef.current.offsetY = dragRef.current.startOY + dy
-      clampView()
-      drawOverlay()
-      return
-    }
-
-    // Region draw: live box draw (Shift+drag)
-    if (activeTool === 'select' && regionStartRef.current) {
-      const s = regionStartRef.current
-      regionRectRef.current = {
-        x: Math.min(s.x, sx),
-        y: Math.min(s.y, sy),
-        w: Math.abs(sx - s.x),
-        h: Math.abs(sy - s.y),
-      }
-      drawOverlay()
-      return
-    }
-
-    // Azonosítás mode: live box draw
-    if (activeTool === 'select' && seedStartRef.current) {
-      const s = seedStartRef.current
-      seedRectRef.current = {
-        x: Math.min(s.x, sx),
-        y: Math.min(s.y, sy),
-        w: Math.abs(sx - s.x),
-        h: Math.abs(sy - s.y),
-      }
       drawOverlay()
       return
     }
@@ -913,528 +623,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     if (activeTool) drawOverlay()
   }, [activeTool, screenToPdf, drawOverlay])
 
-  // ── Seed capture: extract crop + text hints ──
-  const finalizeSeedCapture = useCallback(async (screenRect) => {
-    const v = viewRef.current
-    // Convert screen rect to PDF coordinate space
-    const pdfBbox = {
-      x: (screenRect.x - v.offsetX) / v.zoom,
-      y: (screenRect.y - v.offsetY) / v.zoom,
-      w: screenRect.w / v.zoom,
-      h: screenRect.h / v.zoom,
-    }
-
-    // Extract crop snapshot from the PDF canvas
-    let cropDataUrl = null
-    try {
-      const pdfCanvas = pdfCanvasRef.current
-      if (pdfCanvas) {
-        // The PDF canvas uses renderScale, so compute pixel coordinates
-        const renderScale = pdfCanvas.width / v.pageWidth
-        const cropCanvas = document.createElement('canvas')
-        const cw = Math.round(pdfBbox.w * renderScale)
-        const ch = Math.round(pdfBbox.h * renderScale)
-        if (cw > 2 && ch > 2) {
-          cropCanvas.width = Math.min(cw, 256)
-          cropCanvas.height = Math.min(ch, 256)
-          const ctx = cropCanvas.getContext('2d')
-          ctx.drawImage(
-            pdfCanvas,
-            Math.round(pdfBbox.x * renderScale),
-            Math.round(pdfBbox.y * renderScale),
-            cw, ch,
-            0, 0, cropCanvas.width, cropCanvas.height,
-          )
-          cropDataUrl = cropCanvas.toDataURL('image/png')
-        }
-      }
-    } catch { /* crop extraction is best-effort */ }
-
-    // Extract text hints from PDF text layer in the bbox region
-    let textHints = []
-    try {
-      if (pdfDocRef.current) {
-        const page = await pdfDocRef.current.getPage(pageNum)
-        const textContent = await page.getTextContent()
-        const vp = page.getViewport({ scale: 1 })
-        // pdf.js text items have transform [scaleX, 0, 0, scaleY, x, y]
-        for (const item of textContent.items) {
-          if (!item.str?.trim()) continue
-          const tx = item.transform[4]
-          const ty = vp.height - item.transform[5] // flip Y
-          if (tx >= pdfBbox.x && tx <= pdfBbox.x + pdfBbox.w &&
-              ty >= pdfBbox.y && ty <= pdfBbox.y + pdfBbox.h) {
-            textHints.push(item.str.trim())
-          }
-        }
-        textHints = textHints.slice(0, 20) // cap
-      }
-    } catch { /* text hint extraction is best-effort */ }
-
-    setPendingSeed({
-      bbox: pdfBbox,
-      pageNum,
-      cropDataUrl,
-      textHints,
-    })
-  }, [pageNum])
-
-  // ── Count session handlers (PlanSwift-style region search) ────────────────
-
-  // After seed save: also create a CountObject for region-scoped search
-  const handleCreateCountObjectAndSearch = useCallback(async (recipe, searchRegion) => {
-    if (!pdfDocRef.current || !planId) return
-
-    const searchScope = searchRegion ? SEARCH_SCOPE.CURRENT_REGION : SEARCH_SCOPE.CURRENT_PAGE
-    const co = createCountObject({
-      projectId: projectId || '',
-      planId,
-      pageNumber: pageNum,
-      sampleBbox: recipe.bbox,
-      sampleCropId: recipe.id,
-      assemblyId: recipe.assemblyId,
-      assemblyName: recipe.assemblyName,
-      label: recipe.label,
-      scaleMode: SCALE_MODE.EXACT,
-      searchScope,
-      searchRegion: searchRegion || null,
-      seedTextHints: recipe.seedTextHints || [],
-    })
-    saveCountObject(co)
-    setCountObject(co)
-    setCountCropPreview(recipe.cropDataUrl || null)
-    setCountSearching(true)
-    setCountSessionPanelOpen(true)
-
-    if (import.meta.env.DEV) {
-      console.log('[CountSession] creating CO:', co.id, 'scope:', searchScope,
-        'region:', searchRegion ? `(${searchRegion.x.toFixed(1)},${searchRegion.y.toFixed(1)} ${searchRegion.w.toFixed(1)}×${searchRegion.h.toFixed(1)})` : 'none')
-    }
-
-    try {
-      const session = await executeSearch(co, pdfDocRef.current, { cropDataUrl: recipe.cropDataUrl })
-      setCountSession(session)
-      if (import.meta.env.DEV) console.log('[CountSession] search complete:', session.candidateCount, 'candidates')
-    } catch (err) {
-      console.error('[CountSession] search failed:', err)
-    } finally {
-      setCountSearching(false)
-    }
-  }, [planId, projectId, pageNum])
-
-  // ── Seed save handler: create SymbolRecipe from seed + assignment ──
-  // After save, prompts user to draw a search region (region-first workflow).
-  // If a region was already drawn (pre-region), auto-launches search.
-  const handleSeedSave = useCallback(async (assemblyId, label, scope) => {
-    if (!pendingSeed || !planId) return
-    const asm = (assembliesProp || []).find(a => a.id === assemblyId)
-    const recipe = createRecipe({
-      projectId: projectId || '',
-      sourcePlanId: planId,
-      sourcePageNumber: pendingSeed.pageNum,
-      bbox: pendingSeed.bbox,
-      assemblyId,
-      assemblyName: asm?.name || '',
-      label,
-      sourceType: 'unknown',
-      seedTextHints: pendingSeed.textHints || [],
-      scope,
-    })
-    const saved = saveRecipe(recipe, pendingSeed.cropDataUrl)
-    // Await crop persist so it's ready for immediate matching
-    if (saved._cropSaved) await saved._cropSaved
-
-    const cropUrl = pendingSeed.cropDataUrl
-    const region = pendingRegion
-
-    setPendingSeed(null)
-    setPendingRegion(null)
-    setRecipeCount(getRecipesByPlan(planId).length)
-
-    if (region && pdfDocRef.current) {
-      // Region was already drawn (pre-region workflow) → auto-launch search
-      handleCreateCountObjectAndSearch({
-        ...recipe,
-        cropDataUrl: cropUrl,
-      }, region)
-    } else {
-      // Region-first workflow: prompt user to draw a search region next
-      setAwaitingRegionForRecipe({ ...recipe, cropDataUrl: cropUrl })
-    }
-  }, [pendingSeed, planId, projectId, assembliesProp, pendingRegion, handleCreateCountObjectAndSearch])
-
-  const handleSeedCancel = useCallback(() => {
-    setPendingSeed(null)
-  }, [])
-
-  const handleCountBatchAcceptLikely = useCallback(() => {
-    if (!countSession) return
-    const updated = batchAcceptLikely(countSession.candidates)
-    setCountSession(prev => ({ ...prev, candidates: updated }))
-  }, [countSession])
-
-  const handleCountBatchIgnoreLow = useCallback(() => {
-    if (!countSession) return
-    const updated = batchIgnoreLow(countSession.candidates)
-    setCountSession(prev => ({ ...prev, candidates: updated }))
-  }, [countSession])
-
-  const handleCountCandidateStatusChange = useCallback((candidateId, status) => {
-    if (!countSession) return
-    const updated = setCSCandidateStatus(countSession.candidates, candidateId, status)
-    setCountSession(prev => ({ ...prev, candidates: updated }))
-  }, [countSession])
-
-  const handleCountMaterialize = useCallback(() => {
-    if (!countSession || !countObject) return
-    const markerFields = materializeAccepted(countSession.candidates, countObject, assembliesProp || [])
-    if (import.meta.env.DEV) console.log('[CountSession] materializing', markerFields.length, 'accepted candidates')
-    for (const mf of markerFields) {
-      markersRef.current.push(createMarker(mf))
-    }
-    markDirty()
-    setRenderTick(t => t + 1)
-    drawOverlay()
-    if (onMarkersChange) onMarkersChange([...markersRef.current])
-    // Close session panel
-    setCountSessionPanelOpen(false)
-    setCountSession(null)
-    setCountObject(null)
-  }, [countSession, countObject, assembliesProp, markDirty, drawOverlay, onMarkersChange])
-
-  const handleCountDismiss = useCallback(() => {
-    setCountSessionPanelOpen(false)
-    setCountSession(null)
-    setCountObject(null)
-    setCountCropPreview(null)
-  }, [])
-
-  const handleCountFocusCandidate = useCallback((candidate) => {
-    if (!candidate) return
-    // Center view on candidate
-    const canvas = overlayRef.current
-    if (canvas) {
-      const v = viewRef.current
-      const canvasW = canvas.width
-      const canvasH = canvas.height
-      v.offsetX = canvasW / 2 - candidate.x * v.zoom
-      v.offsetY = canvasH / 2 - candidate.y * v.zoom
-      drawOverlay()
-    }
-  }, [drawOverlay])
-
-  // ── Recipe matching handlers ──────────────────────────────────────────────
-
-  const handleRunRecipeMatching = useCallback(async (recipesToRun, runScope) => {
-    if (!pdfDocRef.current || !planId) return
-    const recipes = recipesToRun || getRecipesByPlan(planId)
-    if (!recipes.length) {
-      console.warn('[RecipeMatching] no recipes found for plan:', planId)
-      return
-    }
-
-    // Determine scope — explicit arg, or infer from recipe source
-    const scope = runScope || (recipes.length === 1 && recipes[0].scope === 'current_page' ? 'current_page' : 'whole_plan')
-
-    if (import.meta.env.DEV) console.log('[RecipeMatching] starting run with', recipes.length, 'recipes on plan:', planId, 'page:', pageNum)
-    setRecipeMatchRunning(true)
-    setRecipeMatchPanelOpen(true)
-    setRecipeMatchCandidates([])
-
-    try {
-      const candidates = await runRecipeMatching(recipes, pdfDocRef.current, planId, {
-        currentPage: pageNum,
-      })
-      if (import.meta.env.DEV) console.log('[RecipeMatching] run complete:', candidates.length, 'candidates found')
-      // Store run metadata for the apply step
-      lastRunMetaRef.current = {
-        recipeIds: recipes.map(r => r.id),
-        recipeCount: recipes.length,
-        totalMatches: candidates.length,
-        scope,
-      }
-      setRecipeMatchCandidates(candidates)
-      // Explicit 0-match feedback — don't leave the user guessing
-      if (candidates.length === 0) {
-        setRecipeMatchPanelOpen(false)
-        setApplyResult({
-          zeroMatch: true,
-          recipeCount: recipes.length,
-          scope,
-        })
-      }
-    } catch (err) {
-      console.error('[RecipeMatching] run failed:', err)
-      lastRunMetaRef.current = null
-    } finally {
-      setRecipeMatchRunning(false)
-    }
-  }, [planId, pageNum])
-
-  // Run project-wide recipes on this plan (reuse entry point)
-  // Uses relevance-sorted recipes for smarter recommendation
-  const handleRunProjectRecipes = useCallback(async () => {
-    if (!pdfDocRef.current || !projectId) return
-    const recipes = getRelevantRecipes(projectId)
-    if (!recipes.length) return
-    await handleRunRecipeMatching(recipes)
-  }, [projectId, handleRunRecipeMatching])
-
-  // ── Recipe list panel handlers ──────────────────────────────────────────
-  const refreshRecipeList = useCallback(() => {
-    if (projectId) setRecipeListItems(getAllRecipesByProject(projectId))
-  }, [projectId])
-
-  const handleOpenRecipeList = useCallback(() => {
-    refreshRecipeList()
-    setRecipeListOpen(true)
-  }, [refreshRecipeList])
-
-  const handleCloseRecipeList = useCallback(() => {
-    setRecipeListOpen(false)
-    setShowArchivedRecipes(false)
-  }, [])
-
-  const handleRunSingleRecipe = useCallback(async (recipe) => {
-    setRecipeListOpen(false)
-    await handleRunRecipeMatching([recipe])
-  }, [handleRunRecipeMatching])
-
-  const handleRunAllFromList = useCallback(async () => {
-    setRecipeListOpen(false)
-    await handleRunProjectRecipes()
-  }, [handleRunProjectRecipes])
-
-  const handleRenameRecipe = useCallback((recipeId, newLabel) => {
-    updateRecipe(recipeId, { label: newLabel })
-    refreshRecipeList()
-  }, [refreshRecipeList])
-
-  const handleDeleteRecipe = useCallback((recipeId) => {
-    archiveRecipe(recipeId)
-    refreshRecipeList()
-    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
-  }, [refreshRecipeList, planId])
-
-  const handleRestoreRecipe = useCallback((recipeId) => {
-    restoreRecipe(recipeId)
-    refreshRecipeList()
-    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
-  }, [refreshRecipeList, planId])
-
-  const handleScopeToggleRecipe = useCallback((recipeId, newScope) => {
-    updateRecipe(recipeId, { scope: newScope })
-    refreshRecipeList()
-  }, [refreshRecipeList])
-
-  const handleStrictnessChangeRecipe = useCallback((recipeId, newStrictness) => {
-    updateRecipe(recipeId, { matchStrictness: newStrictness })
-    refreshRecipeList()
-  }, [refreshRecipeList])
-
-  const handleAssemblySwapRecipe = useCallback((recipeId, newAssemblyId, newAssemblyName) => {
-    updateRecipe(recipeId, { assemblyId: newAssemblyId, assemblyName: newAssemblyName })
-    refreshRecipeList()
-  }, [refreshRecipeList])
-
-  const handleAcceptAllGreenMatches = useCallback(() => {
-    setRecipeMatchCandidates(prev => batchAcceptGreenMatches(prev))
-  }, [])
-
-  const handleToggleMatchCandidate = useCallback((candidateId, accepted) => {
-    setRecipeMatchCandidates(prev =>
-      prev.map(c => c.id === candidateId ? { ...c, accepted } : c)
-    )
-  }, [])
-
-  const handleApplyRecipeMatches = useCallback(() => {
-    const accepted = recipeMatchCandidates.filter(c => c.accepted)
-    const rejected = recipeMatchCandidates.filter(c => !c.accepted)
-    if (!accepted.length && !rejected.length) return
-
-    const batchId = generateBatchId()
-    const appliedAt = new Date().toISOString()
-    let markersCreated = 0
-    let markersDeduplicated = 0
-    const assemblySummary = {}
-
-    if (accepted.length) {
-      const newMarkers = accepted.map(c => {
-        const fields = recipeToMarkerFields(c, assembliesProp)
-        return createMarker({ ...fields, batchId, appliedAt })
-      })
-
-      // Count pre-dedup
-      const beforeCount = markersRef.current.length
-      markersRef.current = deduplicateMarkersManualFirst([...markersRef.current, ...newMarkers])
-      const afterCount = markersRef.current.length
-
-      markersCreated = afterCount - beforeCount
-      markersDeduplicated = newMarkers.length - markersCreated
-
-      // Assembly summary
-      for (const m of newMarkers) {
-        const asmName = m.label || m.asmId || m.category || 'egyéb'
-        assemblySummary[asmName] = (assemblySummary[asmName] || 0) + 1
-      }
-
-      markDirty()
-      setRenderTick(t => t + 1)
-      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
-    }
-
-    // ── Quality feedback: update per-recipe run stats ──
-    const byRecipe = new Map()
-    for (const c of recipeMatchCandidates) {
-      const rid = c.recipeId
-      if (!byRecipe.has(rid)) byRecipe.set(rid, { accepted: 0, rejected: 0, total: 0 })
-      const s = byRecipe.get(rid)
-      s.total++
-      if (c.accepted) s.accepted++
-      else s.rejected++
-    }
-    for (const [rid, stats] of byRecipe) {
-      try { updateRecipeRunStats(rid, stats) } catch { /* non-critical */ }
-    }
-
-    // ── Apply summary + undo tracking ──
-    setLastApplyBatchId(batchId)
-    setApplyResult({ markersCreated, markersDeduplicated, assemblySummary, batchId })
-
-    // ── Record run in history ──
-    const runMeta = lastRunMetaRef.current || {}
-    const run = createRunRecord({
-      planId,
-      scope: runMeta.scope || 'whole_plan',
-      recipeIds: runMeta.recipeIds || [],
-      recipeCount: runMeta.recipeCount || 0,
-      totalMatches: runMeta.totalMatches || 0,
-      acceptedCount: accepted.length,
-      appliedMarkerCount: markersCreated,
-      skippedCount: markersDeduplicated,
-      assemblySummary,
-      batchId,
-      undoAvailable: true,
-    })
-    saveRun(run)
-    lastRunMetaRef.current = null
-    refreshRunHistory()
-
-    // Auto-dismiss summary after 8 seconds
-    setTimeout(() => setApplyResult(prev => prev?.batchId === batchId ? null : prev), 8000)
-
-    // Clear match state
-    setRecipeMatchCandidates([])
-    setRecipeMatchPanelOpen(false)
-
-    // Update recipe count badge
-    if (planId) setRecipeCount(getRecipesByPlan(planId).length)
-  }, [recipeMatchCandidates, assembliesProp, planId, markDirty, refreshRunHistory])
-
-  const handleDismissRecipeMatches = useCallback(() => {
-    setRecipeMatchCandidates([])
-    setRecipeMatchPanelOpen(false)
-  }, [])
-
-  // ── Undo last recipe apply ──
-  const handleUndoLastApply = useCallback((batchIdOverride) => {
-    const bid = batchIdOverride || lastApplyBatchId
-    if (!bid) return
-    const before = markersRef.current.length
-    markersRef.current = markersRef.current.filter(m => m.batchId !== bid)
-    const removed = before - markersRef.current.length
-    if (removed > 0) {
-      markDirty()
-      setRenderTick(t => t + 1)
-      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
-    }
-    // Mark run as undone in history
-    if (planId) {
-      const run = getRunByBatchId(planId, bid)
-      if (run) markRunUndone(planId, run.runId)
-      refreshRunHistory()
-    }
-    setApplyResult(null)
-    if (bid === lastApplyBatchId) setLastApplyBatchId(null)
-  }, [lastApplyBatchId, markDirty, planId, refreshRunHistory])
-
-  // Undo from history drawer — finds the run's batchId
-  const handleUndoFromHistory = useCallback((runId) => {
-    const run = recentRuns.find(r => r.runId === runId)
-    if (!run?.batchId) return
-    handleUndoLastApply(run.batchId)
-  }, [recentRuns, handleUndoLastApply])
-
-  const handleReuseBannerRunRecommended = useCallback(() => {
-    setReuseBannerDismissed(true)
-    if (planId) dismissReuseBanner(planId)
-    const { recommended } = getRecommendedRecipeSet(projectId, null)
-    if (recommended.length > 0) {
-      handleRunRecipeMatching(recommended)
-    } else {
-      handleRunProjectRecipes()
-    }
-  }, [planId, projectId, handleRunRecipeMatching, handleRunProjectRecipes])
-
-  const handleReuseBannerRunAll = useCallback(() => {
-    setReuseBannerDismissed(true)
-    if (planId) dismissReuseBanner(planId)
-    handleRunProjectRecipes()
-  }, [planId, handleRunProjectRecipes])
-
-  const handleReuseBannerDismiss = useCallback(() => {
-    setReuseBannerDismissed(true)
-    if (planId) dismissReuseBanner(planId)
-  }, [planId])
-
-  const handleFocusMatchCandidate = useCallback((candidate) => {
-    // TODO: pan/zoom to candidate location (future enhancement)
-    // For now, just switch to the right page
-    if (candidate.pageNumber && candidate.pageNumber !== pageNum) {
-      setPageNum(candidate.pageNumber)
-    }
-  }, [pageNum])
-
   const handleMouseUp = useCallback(() => {
-    // Region draw: finalize → convert to PDF coords
-    if (activeTool === 'select' && regionStartRef.current && regionRectRef.current) {
-      const rr = regionRectRef.current
-      if (rr.w > 20 && rr.h > 20) {
-        const pdfRegion = screenRectToPdfRegion(rr, viewRef.current)
-
-        // Region-first workflow: if a recipe is awaiting region, auto-launch search
-        const awaiting = awaitingRegionRef.current
-        if (awaiting && pdfDocRef.current) {
-          setAwaitingRegionForRecipe(null)
-          setPendingRegion(null)
-          handleCreateCountObjectAndSearch(awaiting, pdfRegion)
-          if (import.meta.env.DEV) {
-            console.log('[RegionFirst] auto-launching search for awaiting recipe:', awaiting.id, 'region:', pdfRegion)
-          }
-        } else {
-          setPendingRegion(pdfRegion)
-          if (import.meta.env.DEV) {
-            console.log('[RegionDraw] finalized region PDF coords:', pdfRegion)
-          }
-        }
-      }
-      regionStartRef.current = null
-      regionRectRef.current = null
-      drawOverlay()
-    }
-    // Azonosítás mode: finalize box draw → seed capture
-    if (activeTool === 'select' && seedStartRef.current && seedRectRef.current) {
-      const sr = seedRectRef.current
-      if (sr.w > 10 && sr.h > 10) {
-        // Valid box draw — extract seed data
-        finalizeSeedCapture(sr)
-      }
-      seedStartRef.current = null
-      seedRectRef.current = null
-      drawOverlay()
-    }
     dragRef.current.dragging = false
-  }, [activeTool, finalizeSeedCapture, drawOverlay])
+  }, [])
 
   const handleWheel = useCallback((e) => {
     e.preventDefault()
@@ -1444,12 +635,11 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const sy = e.clientY - rect.top
     const delta = e.deltaY > 0 ? 0.9 : 1.1
     const v = viewRef.current
-    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, v.zoom * delta))
+    const newZoom = Math.max(0.1, Math.min(20, v.zoom * delta))
     // Zoom towards cursor
     v.offsetX = sx - (sx - v.offsetX) * (newZoom / v.zoom)
     v.offsetY = sy - (sy - v.offsetY) * (newZoom / v.zoom)
     v.zoom = newZoom
-    clampView()
     drawOverlay()
   }, [drawOverlay])
 
@@ -1457,8 +647,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => {
     const h = (e) => {
       if (calibDialog) return
-      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; setPendingSeed(null); seedStartRef.current = null; seedRectRef.current = null; regionStartRef.current = null; regionRectRef.current = null; setPendingRegion(null); setAwaitingRegionForRecipe(null); handleCountDismiss(); drawOverlay() }
-      if ((e.key === 'i' || e.key === 'I') && PDF_SYMBOL_SEARCH_ENABLED) setActiveTool(t => t === 'select' ? null : 'select')
+      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; drawOverlay() }
       if (e.key === 'c' || e.key === 'C') setActiveTool(t => t === 'count' ? null : 'count')
       if (e.key === 'm' || e.key === 'M') setActiveTool(t => t === 'measure' ? null : 'measure')
       if (e.key === 's' || e.key === 'S') setActiveTool(t => t === 'calibrate' ? null : 'calibrate')
@@ -1532,20 +721,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const cw = containerRef.current.clientWidth
     const ch = containerRef.current.clientHeight
     const v = viewRef.current
-    const zoom = Math.min(cw / v.pageWidth, ch / v.pageHeight) * FIT_MARGIN
+    const zoom = Math.min(cw / v.pageWidth, ch / v.pageHeight) * 0.92
     v.zoom = zoom
     v.offsetX = (cw - v.pageWidth * zoom) / 2
     v.offsetY = (ch - v.pageHeight * zoom) / 2
-    clampView()
     drawOverlay()
-  }, [drawOverlay, clampView])
+  }, [drawOverlay])
 
-  // ── Resize — clamp view on container size change ──
+  // ── Resize ──
   useEffect(() => {
-    const obs = new ResizeObserver(() => { clampView(); drawOverlay() })
+    const obs = new ResizeObserver(() => drawOverlay())
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
-  }, [drawOverlay, clampView])
+  }, [drawOverlay])
 
   // ── Count summary ──
   // UNIFIED: groups markers by asmId for assembly-level detail.
@@ -1635,8 +823,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
-        onZoomIn={() => { viewRef.current.zoom = Math.min(MAX_ZOOM, viewRef.current.zoom * 1.2); clampView(); drawOverlay() }}
-        onZoomOut={() => { viewRef.current.zoom = Math.max(MIN_ZOOM, viewRef.current.zoom / 1.2); clampView(); drawOverlay() }}
+        onZoomIn={() => { viewRef.current.zoom *= 1.2; drawOverlay() }}
+        onZoomOut={() => { viewRef.current.zoom /= 1.2; drawOverlay() }}
         onUndo={handleUndo} onClearAll={handleClearAll}
         onToggleCountPanel={() => setCountPanelOpen(!countPanelOpen)}
         countPanelOpen={countPanelOpen}
@@ -1651,16 +839,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         onRotateLeft={() => setRotation(r => (r - 90 + 360) % 360)}
         onRotateRight={() => setRotation(r => (r + 90) % 360)}
         assemblies={assembliesProp}
-        recipeCount={recipeCount}
-        onRunRecipeMatching={() => handleRunRecipeMatching()}
-        onRunProjectRecipes={handleRunProjectRecipes}
-        recipeMatchRunning={recipeMatchRunning}
-        hasProjectRecipes={projectId ? getRelevantRecipes(projectId).length > 0 : false}
-        onOpenRecipeList={handleOpenRecipeList}
-        recipeListOpen={recipeListOpen}
-        lastRun={recentRuns[0] || null}
-        onOpenRunHistory={() => setRunHistoryOpen(true)}
-        runHistoryOpen={runHistoryOpen}
       />
 
       {/* Main area */}
@@ -1701,202 +879,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
             <div style={{ color: C.red, fontSize: 13, fontFamily: 'Syne', textAlign: 'center', maxWidth: 280, marginTop: 8 }}>{error}</div>
-          </div>
-        )}
-
-        {/* Seed assignment panel (Azonosítás mode) — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && pendingSeed && (
-          <SeedAssignPanel
-            seed={pendingSeed}
-            assemblies={assembliesProp}
-            onSave={handleSeedSave}
-            onCancel={handleSeedCancel}
-          />
-        )}
-
-        {/* Recipe match review panel — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && recipeMatchPanelOpen && (
-          <RecipeMatchReviewPanel
-            candidates={recipeMatchCandidates}
-            onAcceptAllGreen={handleAcceptAllGreenMatches}
-            onToggleCandidate={handleToggleMatchCandidate}
-            onApply={handleApplyRecipeMatches}
-            onDismiss={handleDismissRecipeMatches}
-            onFocusCandidate={handleFocusMatchCandidate}
-            isRunning={recipeMatchRunning}
-            assemblies={assembliesProp}
-          />
-        )}
-
-        {/* Count session panel (PlanSwift-style region search) — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && countSessionPanelOpen && (
-          <CountSessionPanel
-            session={countSession}
-            countObject={countObject}
-            onCandidateStatusChange={handleCountCandidateStatusChange}
-            onBatchAcceptLikely={handleCountBatchAcceptLikely}
-            onBatchIgnoreLow={handleCountBatchIgnoreLow}
-            onMaterialize={handleCountMaterialize}
-            onDismiss={handleCountDismiss}
-            onFocusCandidate={handleCountFocusCandidate}
-            isSearching={countSearching}
-            cropPreviewUrl={countCropPreview}
-          />
-        )}
-
-        {/* Region-first prompt — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && awaitingRegionForRecipe && activeTool === 'select' && (
-          <div style={{
-            position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
-            background: 'rgba(0,229,160,0.15)', border: `1px solid rgba(0,229,160,0.4)`,
-            borderRadius: 8, padding: '8px 16px', zIndex: 25,
-            fontFamily: 'DM Mono', fontSize: 12, color: C.accent,
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-            <span style={{ fontSize: 16 }}>▸</span>
-            Minta mentve — most húzz egy keresési területet (Shift+húzás) ahol keresni akarsz
-            <button onClick={() => {
-              // Skip region → launch full-page search instead
-              if (awaitingRegionForRecipe && pdfDocRef.current) {
-                const r = awaitingRegionForRecipe
-                setAwaitingRegionForRecipe(null)
-                handleCreateCountObjectAndSearch(r, null)
-              }
-            }} style={{
-              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: 4, padding: '2px 8px', color: '#a1a1aa', cursor: 'pointer',
-              fontFamily: 'DM Mono', fontSize: 10,
-            }}>Teljes oldal</button>
-            <button onClick={() => setAwaitingRegionForRecipe(null)} style={{
-              background: 'none', border: 'none', color: '#71717A', cursor: 'pointer',
-              fontFamily: 'DM Mono', fontSize: 10,
-            }}>✕</button>
-          </div>
-        )}
-
-        {/* Region hint — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && pendingRegion && !pendingSeed && !awaitingRegionForRecipe && activeTool === 'select' && (
-          <div style={{
-            position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
-            background: 'rgba(76,201,240,0.15)', border: `1px solid rgba(76,201,240,0.3)`,
-            borderRadius: 8, padding: '6px 14px', zIndex: 25,
-            fontFamily: 'DM Mono', fontSize: 11, color: C.blue,
-          }}>
-            Régió kijelölve ({pendingRegion.w.toFixed(0)}×{pendingRegion.h.toFixed(0)}) — most jelölj ki egy szimbólumot a régión belül
-          </div>
-        )}
-
-        {/* Recipe list / management panel — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && recipeListOpen && (
-          <RecipeListPanel
-            recipes={recipeListItems}
-            assemblies={assembliesProp}
-            onRun={handleRunSingleRecipe}
-            onRunAll={handleRunAllFromList}
-            onRename={handleRenameRecipe}
-            onDelete={handleDeleteRecipe}
-            onRestore={handleRestoreRecipe}
-            onScopeToggle={handleScopeToggleRecipe}
-            onStrictnessChange={handleStrictnessChangeRecipe}
-            onAssemblySwap={handleAssemblySwapRecipe}
-            onClose={handleCloseRecipeList}
-            isRunning={recipeMatchRunning}
-            showArchived={showArchivedRecipes}
-            onToggleArchived={() => setShowArchivedRecipes(prev => !prev)}
-          />
-        )}
-
-        {/* Run history drawer — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && runHistoryOpen && !recipeMatchPanelOpen && (
-          <RunHistoryDrawer
-            runs={recentRuns}
-            onUndo={handleUndoFromHistory}
-            onClose={() => setRunHistoryOpen(false)}
-          />
-        )}
-
-        {/* Reuse banner — experimental, behind feature flag */}
-        {PDF_SYMBOL_SEARCH_ENABLED && <ReuseBanner
-          recommendedCount={recommendationSet.recommended.length}
-          totalCount={projectRecipeCount}
-          reasons={recommendationSet.reasons}
-          onRunRecommended={handleReuseBannerRunRecommended}
-          onRunAll={handleReuseBannerRunAll}
-          onDismiss={handleReuseBannerDismiss}
-          visible={showReuseBanner}
-        />}
-
-        {/* Apply summary toast / zero-match feedback */}
-        {applyResult && (
-          <div style={{
-            position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 35, display: 'flex', alignItems: 'center', gap: 10,
-            background: 'rgba(17,17,19,0.95)',
-            border: `1px solid ${applyResult.zeroMatch ? 'rgba(255,209,102,0.3)' : 'rgba(0,229,160,0.25)'}`,
-            borderRadius: 10, padding: '8px 14px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)',
-            maxWidth: 560,
-          }}>
-            {/* Icon — warning for zero match, check for applied */}
-            <div style={{
-              width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-              background: applyResult.zeroMatch ? 'rgba(255,209,102,0.15)' : 'rgba(0,229,160,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              {applyResult.zeroMatch ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.yellow} strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M12 9v4"/><circle cx="12" cy="16" r="0.5" fill={C.yellow}/>
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                </svg>
-              ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              )}
-            </div>
-
-            {/* Summary text */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {applyResult.zeroMatch ? (
-                <div style={{ fontSize: 11, fontFamily: 'Syne', fontWeight: 700, color: C.yellow }}>
-                  Nincs találat
-                  <span style={{ color: C.muted, fontWeight: 500, marginLeft: 4 }}>
-                    ({applyResult.recipeCount} minta · {applyResult.scope === 'current_page' ? 'aktuális oldal' : 'teljes terv'})
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <div style={{ fontSize: 11, fontFamily: 'Syne', fontWeight: 700, color: C.text }}>
-                    {applyResult.markersCreated} marker alkalmazva
-                    {applyResult.markersDeduplicated > 0 && (
-                      <span style={{ color: C.muted, fontWeight: 500 }}> · {applyResult.markersDeduplicated} átugorva</span>
-                    )}
-                  </div>
-                  {applyResult.assemblySummary && Object.keys(applyResult.assemblySummary).length > 0 && (
-                    <div style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginTop: 1 }}>
-                      {Object.entries(applyResult.assemblySummary).map(([name, count]) => `${name} (${count})`).join(' · ')}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Undo button — only for apply results */}
-            {!applyResult.zeroMatch && lastApplyBatchId === applyResult.batchId && (
-              <button onClick={handleUndoLastApply} style={{
-                padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
-                background: 'rgba(255,107,107,0.12)', border: '1px solid rgba(255,107,107,0.3)',
-                color: C.red, fontSize: 10, fontFamily: 'DM Mono', fontWeight: 500, flexShrink: 0,
-              }}>
-                Visszavonás
-              </button>
-            )}
-
-            {/* Dismiss */}
-            <button onClick={() => setApplyResult(null)} style={{
-              background: 'none', border: 'none', color: C.muted, cursor: 'pointer',
-              fontSize: 12, padding: '2px 4px', borderRadius: 4, flexShrink: 0,
-            }} title="Bezárás">✕</button>
           </div>
         )}
 
@@ -2122,14 +1104,9 @@ function PdfToolbar({
   /* onToggleEstimation, estimationOpen — removed with Részletek button */
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
-  assemblies, recipeCount,
-  onRunRecipeMatching, onRunProjectRecipes, recipeMatchRunning, hasProjectRecipes,
-  onOpenRecipeList, recipeListOpen,
-  lastRun, onOpenRunHistory, runHistoryOpen,
+  assemblies,
 }) {
   const TOOLS = [
-    // Azonosítás (select) is experimental — hidden when PDF_SYMBOL_SEARCH_ENABLED is false
-    ...(PDF_SYMBOL_SEARCH_ENABLED ? [{ id: 'select', label: 'Azonosítás', key: 'I' }] : []),
     { id: 'count', label: 'Számlálás', key: 'C' },
     { id: 'measure', label: 'Mérés', key: 'M' },
     { id: 'calibrate', label: 'Skála', key: 'S' },
@@ -2150,22 +1127,18 @@ function PdfToolbar({
         </div>
       )}
 
-      {/* Tool buttons — Azonosítás primary, others secondary */}
+      {/* Tool buttons */}
       {TOOLS.map(t => {
         const on = activeTool === t.id
-        const isPrimary = t.id === 'select'
         return (
           <button key={t.id} onClick={() => onToolChange(on ? null : t.id)} title={`${t.label} (${t.key})`} style={{
-            padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
-            fontSize: isPrimary ? 12 : 11, fontFamily: 'Syne', fontWeight: isPrimary ? 700 : 600,
+            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
             display: 'flex', alignItems: 'center', gap: 5,
             background: on ? 'rgba(0,229,160,0.12)' : 'transparent',
             border: `1px solid ${on ? 'rgba(0,229,160,0.3)' : 'transparent'}`,
-            color: on ? C.accent : isPrimary ? C.text : C.textSub,
-            transition: 'all 0.12s',
+            color: on ? C.accent : C.text, transition: 'all 0.12s',
           }}>
             {t.label}
-            {t.id === 'select' && recipeCount > 0 && <span style={{ background: C.blue, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{recipeCount}</span>}
             {t.id === 'count' && markerCount > 0 && <span style={{ background: C.accent, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{markerCount}</span>}
             {t.id === 'measure' && measureCount > 0 && <span style={{ background: C.yellow, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{measureCount}</span>}
             {t.id === 'calibrate' && scale.calibrated && <span style={{ background: C.blue, color: C.bg, borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 700, fontFamily: 'DM Mono' }}>✓</span>}
@@ -2182,86 +1155,6 @@ function PdfToolbar({
       )}
       {activeTool === 'measure' && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
-      )}
-
-      {/* Azonosítás context area — empty state hint OR recipe run buttons */}
-      {activeTool === 'select' && recipeCount === 0 && !hasProjectRecipes && (
-        <span style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted, marginLeft: 8, userSelect: 'none' }}>
-          Jelölj ki egy szimbólumot ▸ &nbsp;|&nbsp; Shift+húzás = keresési régió
-        </span>
-      )}
-      {activeTool === 'select' && recipeCount === 0 && hasProjectRecipes && (
-        <div style={{ display: 'flex', gap: 4, marginLeft: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 10, fontFamily: 'DM Mono', color: C.muted }}>Nincs terv-minta</span>
-          <button onClick={onRunProjectRecipes} disabled={recipeMatchRunning} title="Projekt minták futtatása ezen a terven" style={{
-            padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
-            fontSize: 11, fontFamily: 'Syne', fontWeight: 700,
-            background: 'rgba(0,229,160,0.10)', border: `1px solid rgba(0,229,160,0.25)`,
-            color: C.accent, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
-          }}>
-            {recipeMatchRunning ? 'Keresés...' : 'Projekt minták futtatása'}
-          </button>
-        </div>
-      )}
-      {activeTool === 'select' && recipeCount > 0 && (
-        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-          <button onClick={onRunRecipeMatching} disabled={recipeMatchRunning} title="Mentett minták futtatása ezen az oldalon" style={{
-            padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
-            fontSize: 11, fontFamily: 'Syne', fontWeight: 700,
-            background: 'rgba(0,229,160,0.10)', border: `1px solid rgba(0,229,160,0.25)`,
-            color: C.accent, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
-          }}>
-            {recipeMatchRunning ? 'Keresés...' : 'Minták futtatása'}
-          </button>
-          {hasProjectRecipes && (
-            <button onClick={onRunProjectRecipes} disabled={recipeMatchRunning} title="Összes projekt minta futtatása" style={{
-              padding: '4px 10px', borderRadius: 6, cursor: recipeMatchRunning ? 'wait' : 'pointer',
-              fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
-              background: 'transparent', border: `1px solid ${C.border}`,
-              color: C.muted, opacity: recipeMatchRunning ? 0.5 : 1, transition: 'all 0.12s',
-            }}>
-              Projekt minták
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Projekt minták button — always visible when project has recipes (GUARDED by feature flag) */}
-      {PDF_SYMBOL_SEARCH_ENABLED && hasProjectRecipes && (
-        <button onClick={onOpenRecipeList} title="Projekt minták kezelése" style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
-          fontSize: 11, fontFamily: 'Syne', fontWeight: 700, marginLeft: 4,
-          background: recipeListOpen ? 'rgba(76,201,240,0.12)' : 'transparent',
-          border: `1px solid ${recipeListOpen ? 'rgba(76,201,240,0.3)' : C.border}`,
-          color: recipeListOpen ? C.blue : C.muted,
-          display: 'flex', alignItems: 'center', gap: 5,
-          transition: 'all 0.12s',
-        }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
-          </svg>
-          Minták
-        </button>
-      )}
-
-      {/* Last run badge — quick summary + opens history (GUARDED by feature flag) */}
-      {PDF_SYMBOL_SEARCH_ENABLED && lastRun && (
-        <button onClick={onOpenRunHistory} title="Futtatási előzmények" style={{
-          padding: '3px 8px', borderRadius: 6, cursor: 'pointer', marginLeft: 4,
-          fontSize: 10, fontFamily: 'DM Mono', fontWeight: 600,
-          background: runHistoryOpen ? 'rgba(0,229,160,0.12)' : 'rgba(255,255,255,0.04)',
-          border: `1px solid ${runHistoryOpen ? 'rgba(0,229,160,0.3)' : C.border}`,
-          color: runHistoryOpen ? C.accent : C.textSub,
-          display: 'flex', alignItems: 'center', gap: 4,
-          transition: 'all 0.12s',
-        }}>
-          <span style={{ color: C.accent, fontWeight: 700 }}>{lastRun.appliedMarkerCount}</span>
-          <span style={{ color: C.muted }}>marker</span>
-          <span style={{ color: C.muted }}>·</span>
-          <span>{lastRun.recipeCount} minta</span>
-          {lastRun.undoneAt && <span style={{ color: C.red, fontSize: 8 }}>↩</span>}
-        </button>
       )}
 
       <div style={{ flex: 1 }} />

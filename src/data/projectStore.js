@@ -92,7 +92,7 @@ export function updateProject(projectId, updates) {
 // ── Fallback project ────────────────────────────────────────────────────────
 // When a project is deleted, its plans are moved to this catch-all project
 // rather than being orphaned (projectId = undefined).
-export const FALLBACK_PROJECT_ID = 'PRJ-imported'
+const FALLBACK_PROJECT_ID = 'PRJ-imported'
 
 /**
  * Ensure the fallback "Importált tervek" project exists and return its ID.
