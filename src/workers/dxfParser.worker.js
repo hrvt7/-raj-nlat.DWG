@@ -7,15 +7,52 @@
 //   OUT: { type: 'progress', pct: number }        (periodic)
 //         { type: 'result',   data: ParsedDxf }   (success)
 //         { type: 'error',    message: string }    (failure)
+//
+// NOTE: This file cannot use ES imports (Web Worker context).
+// The INSUNITS_MAP below is a copy of the canonical map from utils/dxfUnits.js.
+// If you update dxfUnits.js, update this map too (consistency test will catch drift).
 
+// ── INSUNITS_MAP (canonical copy — must match src/utils/dxfUnits.js) ────────
 const INSUNITS_MAP = {
   0:  ['unknown',     null],
   1:  ['inches',      0.0254],
   2:  ['feet',        0.3048],
+  3:  ['miles',       1609.34],
   4:  ['mm',          0.001],
   5:  ['cm',          0.01],
   6:  ['m',           1.0],
+  7:  ['km',          1000.0],
+  8:  ['microinches', 2.54e-8],
+  9:  ['mils',        2.54e-5],
+  10: ['yards',       0.9144],
+  11: ['angstroms',   1e-10],
+  12: ['nanometers',  1e-9],
+  13: ['microns',     1e-6],
   14: ['decimeters',  0.1],
+  15: ['decameters',  10.0],
+  16: ['hectometers', 100.0],
+  17: ['gigameters',  1e9],
+  18: ['AU',          1.496e11],
+  19: ['light-years', 9.461e15],
+  20: ['parsecs',     3.086e16],
+}
+
+// ── Unit auto-detect (must match guessUnitsFromGeometry in dxfUnits.js) ──────
+function guessUnits(maxRawLength, bboxSpan) {
+  const ref = Math.max(maxRawLength, bboxSpan)
+  if (ref > 10000)  return { name: 'mm (guessed)', factor: 0.001, isGuessed: true }
+  if (ref >= 100)   return { name: 'cm (guessed)', factor: 0.01,  isGuessed: true }
+  return { name: 'm (guessed)', factor: 1.0, isGuessed: true }
+}
+
+// ── resolveUnits (must match resolveUnits in dxfUnits.js) ───────────────────
+function resolveUnits(insunitsCode, maxRawLength, bboxSpan) {
+  const entry = INSUNITS_MAP[insunitsCode]
+  if (entry && entry[1] !== null) {
+    return { insunits: insunitsCode, name: entry[0], factor: entry[1], isGuessed: false }
+  }
+  const g = guessUnits(maxRawLength || 0, bboxSpan || 0)
+  return { insunits: insunitsCode, name: g.name, factor: g.factor, isGuessed: true }
 }
 
 function parseLayerName(layer) {
@@ -62,42 +99,16 @@ function parseDxfText(text) {
     if (code === 9 && inHeader) { currentVar = val }  // DXF header var names use group code 9, not 2
     if (inHeader && currentVar === '$INSUNITS' && code === 70) { insunits = parseInt(val, 10); break }
   }
-  let [unitName, unitFactor] = INSUNITS_MAP[insunits] || ['unknown', null]
   self.postMessage({ type: 'progress', pct: 45 })
 
-  // ── Find BLOCKS and ENTITIES sections ─────────────────────────────────────
-  let blocksStart = -1, entityStart = -1, sectionName = '', inSection = false
+  // ── Find ENTITIES section ──────────────────────────────────────────────────
+  let entityStart = -1, sectionName = '', inSection = false
   for (let i = 0; i < tokens.length; i++) {
     const [code, val] = tokens[i]
     if (code === 0 && val === 'SECTION') { inSection = true; continue }
     if (inSection && code === 2) {
       sectionName = val; inSection = false
-      if (val === 'BLOCKS')   blocksStart = i + 1
       if (val === 'ENTITIES') { entityStart = i + 1; break }
-    }
-  }
-  self.postMessage({ type: 'progress', pct: 48 })
-
-  // ── Parse BLOCKS section for ATTDEF ─────────────────────────────────────
-  const blockAttdefs = {}
-  if (blocksStart >= 0) {
-    let curBlock = null
-    for (let i = blocksStart; i < tokens.length; i++) {
-      const [code, val] = tokens[i]
-      if (code === 0 && val === 'ENDSEC') break
-      if (code === 0 && val === 'BLOCK') { curBlock = null; continue }
-      if (code === 0 && val === 'ENDBLK') { curBlock = null; continue }
-      if (curBlock === null && code === 2) { curBlock = val; if (!blockAttdefs[curBlock]) blockAttdefs[curBlock] = []; continue }
-      if (code === 0 && val === 'ATTDEF') {
-        let adTag = '', adDefault = ''
-        for (let j = i + 1; j < tokens.length; j++) {
-          const [c2, v2] = tokens[j]
-          if (c2 === 0) break
-          if (c2 === 2) adTag = v2
-          if (c2 === 1) adDefault = v2
-        }
-        if (adTag && curBlock) blockAttdefs[curBlock].push({ tag: adTag, defaultValue: adDefault })
-      }
     }
   }
   self.postMessage({ type: 'progress', pct: 50 })
@@ -114,16 +125,9 @@ function parseDxfText(text) {
   const polylineGeom    = []
   const MAX_LINES = 3000, MAX_POLYS = 800
 
-  const textPositions = []
-  const MAX_TEXT_POS = 5000
-  const insertAttribs = {}
-  const _seenAttribs = {}
-
   let entityType = null, entityLayer = 'DEFAULT', pts = [], ptX = null, ptY = null
   let closed = false, lineStart = null, textVal = null
   let insName = null, insX = null, insY = null
-  let insHasAttribs = false
-  let attribTag = null, attribVal = null
 
   const flushPolyline = () => {
     if (entityType === 'LWPOLYLINE' && pts.length > 1) {
@@ -145,27 +149,13 @@ function parseDxfText(text) {
     }
   }
 
-  const flushAttrib = () => {
-    if (attribTag && attribVal && insName) {
-      const key = `${attribTag}||${attribVal}`
-      if (!_seenAttribs[insName]) _seenAttribs[insName] = new Set()
-      if (!_seenAttribs[insName].has(key)) {
-        _seenAttribs[insName].add(key)
-        if (!insertAttribs[insName]) insertAttribs[insName] = []
-        insertAttribs[insName].push({ tag: attribTag, value: attribVal })
-      }
-    }
-    attribTag = null; attribVal = null
-  }
-
   const flushInsert = () => {
     if (entityType === 'INSERT' && insName !== null && insX !== null) {
       const key = `${insName}||${entityLayer}`
       blockCounts[key] = (blockCounts[key]||0) + 1
       insertPositions.push({ name: insName, layer: entityLayer, x: insX, y: insY ?? 0 })
+      insName = null; insX = null; insY = null
     }
-    if (!insHasAttribs) { insName = null }
-    insX = null; insY = null
   }
 
   const entityTokens = tokens.slice(entityStart >= 0 ? entityStart : 0)
@@ -176,17 +166,11 @@ function parseDxfText(text) {
     if (code === 0 && val === 'ENDSEC') { flushPolyline(); flushInsert(); break }
 
     if (code === 0) {
-      if (entityType === 'ATTRIB') flushAttrib()
-      if (val === 'SEQEND') { insName = null; insHasAttribs = false; entityType = null; continue }
-      if (val === 'ATTRIB' && insHasAttribs && insName) {
-        entityType = 'ATTRIB'; attribTag = null; attribVal = null; continue
-      }
       flushPolyline()
       flushInsert()
       entityType = val; entityLayer = 'DEFAULT'; pts = []; ptX = null; ptY = null
       closed = false; lineStart = null; textVal = null
-      insName = null; insX = null; insY = null; insHasAttribs = false
-      attribTag = null; attribVal = null
+      insName = null; insX = null; insY = null
       continue
     }
 
@@ -195,16 +179,10 @@ function parseDxfText(text) {
       if (!layerInfo[val]) { const info = parseLayerName(val); if (info) layerInfo[val] = info }
     }
 
-    if (entityType === 'ATTRIB') {
-      if (code === 2) attribTag = val
-      if (code === 1) attribVal = val
-    }
-
     if (entityType === 'INSERT') {
       if (code === 2) insName = val
       if (code === 10) insX = parseFloat(val)
       if (code === 20) insY = parseFloat(val)
-      if (code === 66 && val === '1') insHasAttribs = true
     }
 
     if (entityType === 'LWPOLYLINE') {
@@ -229,21 +207,14 @@ function parseDxfText(text) {
       }
     }
 
-    if (entityType==='TEXT'||entityType==='MTEXT') {
-      if (code === 10) ptX = parseFloat(val)
-      if (code === 20) ptY = parseFloat(val)
-      if (code === 1) {
-        const trimmed = val.trim()
-        if (trimmed.length > 1) {
-          allText.push(trimmed)
-          if (textPositions.length < MAX_TEXT_POS && ptX !== null) {
-            textPositions.push({ text: trimmed, x: ptX, y: ptY ?? 0, layer: entityLayer })
-          }
-          const lu = entityLayer.toUpperCase()
-          if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
-            if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
-            titleBlock[entityLayer].push(trimmed)
-          }
+    if ((entityType==='TEXT'||entityType==='MTEXT') && code===1) {
+      const trimmed = val.trim()
+      if (trimmed.length > 1) {
+        allText.push(trimmed)
+        const lu = entityLayer.toUpperCase()
+        if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
+          if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
+          titleBlock[entityLayer].push(trimmed)
         }
       }
     }
@@ -257,29 +228,7 @@ function parseDxfText(text) {
   flushInsert()
   self.postMessage({ type: 'progress', pct: 96 })
 
-  // ── Auto-detect units from raw lengths ─────────────────────────────────────
-  if (!unitFactor) {
-    const maxRaw = Math.max(...Object.values(lengthByLayer), 0)
-    if      (maxRaw > 10000)  { unitName='mm (guessed)'; unitFactor=0.001 }
-    else if (maxRaw >= 100)   { unitName='cm (guessed)'; unitFactor=0.01 }
-    else                      { unitName='m (guessed)';  unitFactor=1.0 }
-  }
-  if (!unitFactor) unitFactor = 1.0   // last-resort safety
-
-  const blocks = Object.entries(blockCounts)
-    .map(([key, count]) => { const [name,layer]=key.split('||'); return {name,layer,count} })
-    .sort((a,b)=>b.count-a.count).slice(0,300)
-
-  const lengths = Object.entries(lengthByLayer)
-    .filter(([,v])=>v>0.01)
-    .map(([layer,v])=>({
-      layer,
-      length:     Math.round(v * unitFactor * 100000) / 100000,
-      length_raw: Math.round(v * 100000) / 100000,
-      info: layerInfo[layer]||null,
-    }))
-    .sort((a,b)=>b.length-a.length)
-
+  // ── Compute bounding box ──────────────────────────────────────────────────
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const ins of insertPositions) {
     if (ins.x < minX) minX = ins.x; if (ins.x > maxX) maxX = ins.x
@@ -296,15 +245,31 @@ function parseDxfText(text) {
     ? { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY }
     : null
 
+  // ── Resolve units via canonical pipeline (matches dxfUnits.js) ────────────
+  const maxRaw = Math.max(...Object.values(lengthByLayer), 0)
+  const span = hasBounds ? Math.max(maxX - minX, maxY - minY) : 0
+  const resolved = resolveUnits(insunits, maxRaw, span)
+
+  const blocks = Object.entries(blockCounts)
+    .map(([key, count]) => { const [name,layer]=key.split('||'); return {name,layer,count} })
+    .sort((a,b)=>b.count-a.count).slice(0,300)
+
+  const lengths = Object.entries(lengthByLayer)
+    .filter(([,v])=>v>0.01)
+    .map(([layer,v])=>({
+      layer,
+      length:     Math.round(v * resolved.factor * 100000) / 100000,
+      length_raw: Math.round(v * 100000) / 100000,
+      info: layerInfo[layer]||null,
+    }))
+    .sort((a,b)=>b.length-a.length)
+
   return {
     success: true, blocks, lengths,
     layers: [...allLayers].sort(),
-    units: { insunits, name: unitName, factor: unitFactor, auto_detected: true },
+    units: { insunits, name: resolved.name, factor: resolved.factor, auto_detected: resolved.isGuessed },
     title_block: titleBlock,
     all_text: allText,
-    insertAttribs,
-    blockAttdefs,
-    textPositions,
     inserts: insertPositions,
     lineGeom,
     polylineGeom,
@@ -316,7 +281,7 @@ function parseDxfText(text) {
       layers_with_lines: lengths.length,
       total_inserts: insertPositions.length,
     },
-    _source: 'browser',
+    _source: 'worker',
   }
 }
 

@@ -1,6 +1,8 @@
 // ─── Cable Agent Client ────────────────────────────────────────────────────────
 // Sends geometry + DXF screenshot to n8n Vision agent, gets cable estimate back.
 
+import { INSUNITS_MAP, resolveUnits } from './utils/dxfUnits.js'
+
 /**
  * Extracts full geometry from parsed DXF tokens including INSERT coordinates.
  * Call this INSTEAD OF / IN ADDITION TO parseDxfText() to get positional data.
@@ -17,11 +19,6 @@ export function extractGeometry(dxfText) {
   // ── HEADER ─────────────────────────────────────────────────────────────────
   let insunits = 0, extmin = null, extmax = null
   let inHeader = false, currentVar = null
-  const INSUNITS_MAP = {
-    0: ['unknown', null], 1: ['inches', 0.0254], 2: ['feet', 0.3048],
-    3: ['miles', 1609.34], 4: ['mm', 0.001], 5: ['cm', 0.01], 6: ['m', 1.0],
-    7: ['km', 1000.0], 10: ['yards', 0.9144], 14: ['decimeters', 0.1],
-  }
 
   for (let i = 0; i < tokens.length; i++) {
     const [code, val] = tokens[i]
@@ -38,7 +35,10 @@ export function extractGeometry(dxfText) {
     if (code === 0 && val === 'ENTITIES') break
   }
 
-  const [unitName, unitFactor] = INSUNITS_MAP[insunits] || ['unknown', null]
+  // Unit lookup uses canonical INSUNITS_MAP (imported from dxfUnits.js)
+  const unitEntry = INSUNITS_MAP[insunits] || ['unknown', null]
+  const rawUnitName = unitEntry[0]
+  const rawUnitFactor = unitEntry[1]
 
   // ── Find ENTITIES ──────────────────────────────────────────────────────────
   let entityStart = 0, inSection = false, sectionName = ''
@@ -116,20 +116,15 @@ export function extractGeometry(dxfText) {
     }
   }
 
-  // ── Auto detect unit factor ────────────────────────────────────────────────
-  let uf = unitFactor
-  if (!uf) {
-    const span = Math.max(extmax[0] - extmin[0], extmax[1] - extmin[1])
-    if (span > 10000) uf = 0.001       // mm
-    else if (span > 100) uf = 0.01     // cm
-    else uf = 1.0                       // m
-  }
+  // ── Resolve units via canonical pipeline (matches dxfUnits.js) ─────────────
+  const bboxSpan = Math.max(extmax[0] - extmin[0], extmax[1] - extmin[1])
+  const resolved = resolveUnits(insunits, 0, bboxSpan)
 
   // ── Classify device types ──────────────────────────────────────────────────
   const deviceTypes = classifyDevices(inserts)
 
   return {
-    scale: { unit: unitName, factor: uf, insunits },
+    scale: { unit: resolved.name, factor: resolved.factor, insunits },
     bounds: { minX: extmin[0], maxX: extmax[0], minY: extmin[1], maxY: extmax[1] },
     inserts,           // raw – all inserts with XY
     devices: deviceTypes.devices,   // classified: { type, name, layer, x, y }

@@ -10,7 +10,7 @@ import {
 } from '../data/planStore.js'
 import {
   loadProjects, saveProject, deleteProject, generateProjectId, getProject, updateProject,
-  ensureFallbackProject, FALLBACK_PROJECT_ID,
+  ensureFallbackProject,
 } from '../data/projectStore.js'
 import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
@@ -22,13 +22,8 @@ import {
 } from '../utils/planMetaInference.js'
 import { callAiMetaVision, mergeAiMeta, renderFirstPageImage } from '../utils/aiMetaVision.js'
 import { parseDxfFile } from '../dxfParser.js'
+import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { countQuotesForPlan } from '../utils/quoteOrphans.js'
-import { triggerAnalysis } from '../services/pdfAnalysis/analysisRunner.js'
-import { ANALYSIS_STATUS } from '../services/pdfAnalysis/analysisRunner.js'
-import { getCachedDetection } from '../services/pdfDetection/index.js'
-import { adaptCandidates } from '../services/pdfDetection/candidateAdapter.js'
-import { captureFromDetection } from '../data/customSymbolStore.js'
-import DetectionReviewPanel from '../components/DetectionReviewPanel.jsx'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -595,7 +590,7 @@ function MetaCopilotStrip({ plan, onMetaChange }) {
 }
 
 // ─── Plan card ────────────────────────────────────────────────────────────────
-function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId, onMetaChange, onOpenPdfReview }) {
+function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId, onMetaChange }) {
   const [hov, setHov] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const isOpening = openingId === plan.id
@@ -626,12 +621,11 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           </>
         })()}
         <div style={{ position: 'absolute', top: 7, left: 7 }}><Checkbox checked={selected} onChange={onSelect} /></div>
-        {(markerCount > 0 || hasScale || detected > 0 || plan.pdfAnalysisStatus === 'running') && (
+        {(markerCount > 0 || hasScale || detected > 0) && (
           <div style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {markerCount > 0 && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(0,229,160,0.2)', color: C.accent, backdropFilter: 'blur(4px)' }}>✓ {markerCount} elem</span>}
             {hasScale && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(76,201,240,0.2)', color: C.blue, backdropFilter: 'blur(4px)' }}>Kalibrálva</span>}
             {detected > 0 && !plan.detectionReviewed && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(255,209,102,0.2)', color: C.yellow, backdropFilter: 'blur(4px)' }}>⚡ {detected} det.</span>}
-            {plan.pdfAnalysisStatus === 'running' && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(76,201,240,0.2)', color: C.blue, backdropFilter: 'blur(4px)' }}>⏳ Elemzés…</span>}
           </div>
         )}
       </div>
@@ -644,59 +638,6 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           <span>{fmtSize(plan.fileSize)}</span><span>{fmtDate(plan.uploadedAt || plan.createdAt)}</span>
         </div>
         <MetaCopilotStrip plan={plan} onMetaChange={onMetaChange} />
-        {plan.fileType === 'pdf' && plan.pdfAnalysisStatus && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4,
-            padding: '3px 8px', borderRadius: 5, fontSize: 9, fontFamily: 'DM Mono',
-            ...(plan.pdfAnalysisStatus === 'done' ? {
-              background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.15)', color: C.accent,
-            } : plan.pdfAnalysisStatus === 'failed' ? {
-              background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.2)', color: '#ff5050',
-            } : {
-              background: 'rgba(76,201,240,0.06)', border: '1px solid rgba(76,201,240,0.15)', color: C.blue,
-            }),
-          }}>
-            {plan.pdfAnalysisStatus === 'running' && <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: C.blue, animation: 'pulse 1.5s infinite' }} />}
-            {plan.pdfAnalysisStatus === 'done' && '✓'}
-            {plan.pdfAnalysisStatus === 'failed' && '✗'}
-            <span>
-              {plan.pdfAnalysisStatus === 'pending' && 'PDF elemzés várakozik…'}
-              {plan.pdfAnalysisStatus === 'running' && 'PDF elemzés folyamatban…'}
-              {plan.pdfAnalysisStatus === 'done' && `PDF elemzés kész${plan.pdfAnalysisSummary?.symbolCount ? ` · ${plan.pdfAnalysisSummary.symbolCount} szimbólum` : ''}`}
-              {plan.pdfAnalysisStatus === 'failed' && 'PDF elemzés sikertelen'}
-            </span>
-          </div>
-        )}
-        {/* ── PDF Detection Summary + Review CTA ── */}
-        {plan.pdfDetectionSummary && plan.pdfDetectionSummary.totalCandidates > 0 && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4,
-            padding: '3px 8px', borderRadius: 5, fontSize: 9, fontFamily: 'DM Mono',
-            background: 'rgba(255,209,102,0.06)', border: '1px solid rgba(255,209,102,0.15)', color: '#FFD166',
-          }}>
-            <span style={{ fontSize: 10 }}>🔍</span>
-            <span>
-              {plan.pdfDetectionSummary.totalCandidates} detektálás
-              {plan.pdfDetectionSummary.highConfidence > 0 && (
-                <span style={{ color: C.accent }}> · {plan.pdfDetectionSummary.highConfidence} magas</span>
-              )}
-              {plan.pdfDetectionSummary.reviewNeeded > 0 && (
-                <span style={{ color: '#FFD166' }}> · {plan.pdfDetectionSummary.reviewNeeded} review</span>
-              )}
-            </span>
-            <button
-              onClick={(e) => { e.stopPropagation(); if (onOpenPdfReview) onOpenPdfReview(plan) }}
-              style={{
-                marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 8,
-                color: '#FFD166', background: 'rgba(255,209,102,0.12)',
-                border: '1px solid rgba(255,209,102,0.25)', borderRadius: 4,
-                padding: '1px 6px', cursor: 'pointer',
-              }}
-            >
-              Review →
-            </button>
-          </div>
-        )}
         {hasCalc && (
           <div style={{
             background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)',
@@ -867,63 +808,12 @@ function ProjectListView({ onOpenProject }) {
     }
   }
 
-  // Separate fallback project from user-created projects
-  const userProjects = projects.filter(p => p.id !== FALLBACK_PROJECT_ID)
-  const fallbackProject = projects.find(p => p.id === FALLBACK_PROJECT_ID)
-  const fallbackPlanCount = fallbackProject ? (projectStats[FALLBACK_PROJECT_ID]?.planCount || 0) : 0
-
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub, margin: 0 }}>Projektek — építkezésenként külön mappa és tervrajzok</p>
-        {userProjects.length > 0 && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0, marginLeft: 12 }}>{userProjects.length} projekt</span>}
+        {projects.length > 0 && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0, marginLeft: 12 }}>{projects.length} projekt</span>}
       </div>
-
-      {/* ── Unassigned plans panel (fallback bucket) ── */}
-      {fallbackProject && fallbackPlanCount > 0 && (
-        <div style={{
-          background: '#12121A', border: `1px solid ${C.border}`,
-          borderRadius: 10, padding: '14px 18px', marginBottom: 20,
-          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-        }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 8,
-            background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-              <span style={{ fontFamily: 'Syne', fontSize: 13, fontWeight: 700, color: C.text }}>Projekthez nem rendelt tervrajzok</span>
-              <span style={{
-                fontFamily: 'DM Mono', fontSize: 10, color: C.blue,
-                background: 'rgba(76,201,240,0.1)', border: '1px solid rgba(76,201,240,0.2)',
-                borderRadius: 20, padding: '1px 8px', whiteSpace: 'nowrap',
-              }}>{fallbackPlanCount} tervrajz</span>
-            </div>
-            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-              Törölt projektekből vagy közvetlen feltöltésből származó tervek
-            </span>
-          </div>
-          <button
-            onClick={() => onOpenProject(FALLBACK_PROJECT_ID)}
-            style={{
-              padding: '7px 16px', borderRadius: 6,
-              background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.25)',
-              color: C.blue, fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
-              cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.15)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(76,201,240,0.08)' }}
-          >
-            Megnyitás
-          </button>
-        </div>
-      )}
 
       {/* Create new project zone */}
       {!showCreate ? (
@@ -973,8 +863,8 @@ function ProjectListView({ onOpenProject }) {
         </div>
       )}
 
-      {/* Project grid — only user-created projects */}
-      {userProjects.length === 0 ? (
+      {/* Project grid */}
+      {projects.length === 0 ? (
         <EmptyState
           title="Még nincsenek projektek"
           desc="Hozd létre az első projektet a fenti mezővel, vagy töltsd be a mintaadatokat a demóhoz."
@@ -996,7 +886,7 @@ function ProjectListView({ onOpenProject }) {
         />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
-          {userProjects.map(p => (
+          {projects.map(p => (
             <ProjectCard
               key={p.id}
               project={p}
@@ -1112,9 +1002,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const [dragging, setDragging] = useState(false)
   const [legendDragging, setLegendDragging] = useState(false)
   const [uploadWarning, setUploadWarning] = useState(null)
-  const [pdfReviewPlan, setPdfReviewPlan] = useState(null) // plan being reviewed for PDF detections
-  const [pdfReviewCandidates, setPdfReviewCandidates] = useState(null) // adapted candidates for review panel
-  const [pdfDetectionMeta, setPdfDetectionMeta] = useState(null) // detection meta with routing info
   const planInputRef = useRef(null)
   const legendInputRef = useRef(null)
   const toast = useToast()
@@ -1180,11 +1067,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         // Thumbnail only for PDF — DXF/DWG get fallback icon
         if (ft === 'pdf') {
           generatePdfThumb(file, id).then(d => { if (d) setThumbnails(prev => ({ ...prev, [id]: d })) }).catch(() => {})
-          // ── PDF Analysis: fire-and-forget background analysis ──
-          triggerAnalysis(id, file, {
-            onStatusChange: () => reload(),
-            projectId,
-          })
         }
         // ── Layer 2: async text-based metadata enrichment (non-blocking) ──
         ;(async () => {
@@ -1194,7 +1076,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
               const buf = await file.arrayBuffer()
               textLines = await extractPdfText(buf)
             } else if (ft === 'dxf') {
-              const parseResult = await parseDxfFile(file, () => {})
+              const rawParseResult = await parseDxfFile(file, () => {})
+              const parseResult = normalizeDxfResult(rawParseResult, rawParseResult?._source || 'browser')
               const tbTexts = Object.values(parseResult.title_block || {}).flat()
               textLines = tbTexts.length > 0 ? tbTexts : (parseResult.all_text || [])
             }
@@ -1280,60 +1163,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
 
   // ── Compute workflow step from project state ──
   // 0=no plans, 1=has plans but no meta, 2=has meta but no calc, 3=has calc (ready for quote)
-  // ── Open PDF detection review for a plan ──
-  const handleOpenPdfReview = useCallback(async (plan) => {
-    if (!plan.pdfDetectionSummary || !plan.pdfDetectionSummary.totalCandidates) return
-    // Build cache key to retrieve cached detection candidates
-    // The cache key format is {fileHash}:{provider}:{version} but we look up by plan
-    // Try to get from the detection_candidates store via the analysis cache key on plan meta
-    const cacheKey = plan.pdfAnalysisCacheKey
-    if (!cacheKey) {
-      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
-      return
-    }
-    const cached = await getCachedDetection(cacheKey)
-    if (!cached || !cached.candidates || !cached.candidates.length) {
-      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
-      return
-    }
-    const adapted = adaptCandidates(cached.candidates, plan.id)
-    setPdfReviewPlan(plan)
-    setPdfReviewCandidates(adapted)
-    setPdfDetectionMeta(cached.meta || null)
-  }, [toast])
-
-  const handleClosePdfReview = useCallback(() => {
-    setPdfReviewPlan(null)
-    setPdfReviewCandidates(null)
-    setPdfDetectionMeta(null)
-  }, [])
-
-  const handlePdfReviewDone = useCallback(() => {
-    setPdfReviewPlan(null)
-    setPdfReviewCandidates(null)
-    setPdfDetectionMeta(null)
-    reload()
-  }, [reload])
-
-  // ── Custom symbol capture from PDF review ──
-  const handleCaptureSymbol = useCallback((detection) => {
-    // Prompt-less capture: use the detection's label/category directly
-    // The user already sees the detection, so we trust the context
-    try {
-      captureFromDetection({
-        projectId,
-        label: detection.label || 'Egyéni szimbólum',
-        category: detection.category || 'other',
-        color: detection.color,
-        detection,
-      })
-      toast?.(`"${detection.label || 'Szimbólum'}" mentve a projekt memóriába.`)
-    } catch (err) {
-      console.error('[Projektek] custom symbol capture failed:', err)
-      toast?.('Hiba a szimbólum mentésekor.')
-    }
-  }, [projectId, toast])
-
   const workflowStep = (() => {
     if (plans.length === 0) return 0
     const hasMeta = plans.some(p => p.inferredMeta?.metaConfidence > 0)
@@ -1430,7 +1259,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
                 key={plan.id} plan={plan} thumb={thumbnails[plan.id]}
                 selected={!!selected[plan.id]} onSelect={val => toggleSelect(plan.id, val)}
                 onOpen={handleOpenSaved} onDelete={handleDelete} openingId={openingId}
-                onMetaChange={handleMetaChange} onOpenPdfReview={handleOpenPdfReview}
+                onMetaChange={handleMetaChange}
               />
             ))}
           </div>
@@ -1443,20 +1272,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
           </div>
         )}
       </div>
-
-      {/* ── PDF Detection Review Panel (rule engine candidates) ── */}
-      {pdfReviewPlan && pdfReviewCandidates && (
-        <DetectionReviewPanel
-          plans={[pdfReviewPlan]}
-          pdfCandidates={pdfReviewCandidates}
-          onClose={handleClosePdfReview}
-          onDone={handlePdfReviewDone}
-          projectId={projectId}
-          onLocateDetection={null}
-          onCaptureSymbol={handleCaptureSymbol}
-          detectionMeta={pdfDetectionMeta}
-        />
-      )}
     </div>
   )
 }

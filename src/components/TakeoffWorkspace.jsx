@@ -42,6 +42,7 @@ import { computeCableAudit } from '../utils/cableAudit.js'
 import ManualCableModePanel from './ManualCableModePanel.jsx'
 import { loadReferencePanels, saveReferencePanels, toggleReferencePanelBlock, buildRecognizedPanelEntries } from '../utils/referencePanelStore.js'
 import { computePanelAssistedEstimate } from '../utils/panelAssistedEstimate.js'
+import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -916,7 +917,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           console.warn('DWG → DXF conversion failed:', convErr)
           setDwgStatus('failed')
           setDwgError(convErr.message)
-          setParsedDxf({ success: false, _dwgFailed: true })
+          setParsedDxf(normalizeDxfResult({ success: false, _dwgFailed: true }, 'browser'))
           return
         }
 
@@ -932,6 +933,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         result = await parseDxfFile(f, pct => setParseProgress(pct))
       }
 
+      // ── Normalize raw parser output through contract layer ──────────────
+      const parserSource = result?._source || 'browser'
+      result = normalizeDxfResult(result, parserSource)
       setParsedDxf(result)
 
       // Run recognition on all unique block types
@@ -949,7 +953,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       if (items.length) setRightTab('takeoff')
     } catch (err) {
       console.error('Parse error:', err)
-      setParsedDxf({ success: false, error: err.message || String(err) })
+      setParsedDxf(normalizeDxfResult({ success: false, error: err.message || String(err) }, 'browser'))
     } finally {
       setParsePending(false)
     }
