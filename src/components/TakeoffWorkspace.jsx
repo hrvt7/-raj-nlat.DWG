@@ -45,6 +45,7 @@ import { computePanelAssistedEstimate } from '../utils/panelAssistedEstimate.js'
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { buildBlockEvidence } from '../data/evidenceExtractor.js'
+import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId, READINESS_LABELS, STATUS_LABELS } from '../utils/reviewState.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -434,6 +435,73 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
           <option key={a.id} value={a.id}>{a.name}</option>
         ))}
       </select>
+    </div>
+  )
+}
+
+// ─── Review Summary Card ─────────────────────────────────────────────────────
+// Compact recognition quality overview shown above takeoff rows.
+function ReviewSummaryCard({ summary, readiness, cableConfidence, onAcceptAll, hasAutoLow }) {
+  if (!summary || summary.total === 0) return null
+
+  const activeItems = summary.total - summary.excluded
+  const trustedCount = summary.confirmed + summary.autoHigh
+  const trustedPct = activeItems > 0 ? Math.round((trustedCount / activeItems) * 100) : 0
+
+  const statusColor = readiness.status === 'ready' ? C.accent
+    : readiness.status === 'ready_with_warnings' ? C.yellow
+    : C.red
+
+  return (
+    <div style={{
+      padding: '10px 12px', borderRadius: 8, marginBottom: 10,
+      background: `${statusColor}08`,
+      border: `1px solid ${statusColor}30`,
+    }}>
+      {/* Title row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, fontWeight: 600, color: statusColor }}>
+          Felismerés: {trustedPct}% megbízható
+        </span>
+        {hasAutoLow && onAcceptAll && (
+          <button onClick={onAcceptAll} style={{
+            background: 'rgba(0,229,160,0.1)', border: `1px solid ${C.accent}40`, borderRadius: 5,
+            color: C.accent, fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
+            padding: '2px 7px', cursor: 'pointer',
+          }}>
+            Mind elfogadása ≥80%
+          </button>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {summary.confirmed > 0 && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.accent }}>
+            ✓ {summary.confirmed} megerősített ({summary.confirmedQty} db)
+          </span>
+        )}
+        {summary.autoHigh > 0 && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>
+            ● {summary.autoHigh} auto ({summary.autoHighQty} db)
+          </span>
+        )}
+        {summary.autoLow > 0 && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.yellow }}>
+            ⚠ {summary.autoLow} gyenge ({summary.autoLowQty} db)
+          </span>
+        )}
+        {summary.unresolved > 0 && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red }}>
+            ✗ {summary.unresolved} ismeretlen ({summary.unresolvedQty} db)
+          </span>
+        )}
+        {summary.excluded > 0 && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
+            − {summary.excluded} kizárt
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -1026,6 +1094,22 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
 
+  // ── Review state classification ──────────────────────────────────────────
+  // Classify ALL recognized items (including deleted) so the review summary
+  // shows complete picture. effectiveItems only has non-deleted ones.
+  const classifiedItems = useMemo(() => {
+    return classifyAllItems(recognizedItems, asmOverrides, deletedItems)
+  }, [recognizedItems, asmOverrides, deletedItems])
+
+  const reviewSummary = useMemo(() => {
+    return buildReviewSummary(classifiedItems)
+  }, [classifiedItems])
+
+  const quoteReadiness = useMemo(() => {
+    const cableConf = cableEstimate?.confidence ?? null
+    return computeQuoteReadiness(reviewSummary, cableConf)
+  }, [reviewSummary, cableEstimate])
+
   // ── DXF Import Audit (structured quality summary) ────────────────────────
   const dxfAudit = useMemo(() => {
     if (!parsedDxf) return null
@@ -1390,11 +1474,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           calcHourlyRate: hourlyRate,
           calcMarkup: markup,
         })
-        // Learn from save — record all confirmed items to recognition memory
+        // Learn from save — only train memory with reviewed/trusted items
+        // Gate: low-confidence auto-matches must NOT train memory to avoid
+        // false-trust feedback loop (0.62 partial match → 0.85 project memory)
         if (memProjectId) {
-          for (const item of effectiveItems) {
-            const finalAsmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
-            if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
+          for (const item of classifiedItems) {
+            if (item.reviewStatus === 'excluded') continue
+            const finalAsmId = getEffectiveAsmId(item, asmOverrides)
+            if (finalAsmId && shouldTrainMemory(item)) {
+              recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
+            }
           }
         }
 
@@ -1473,11 +1562,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       })
       saveQuote(quote)
 
-      // Learn from save — record all confirmed items to recognition memory
+      // Learn from save — only train memory with reviewed/trusted items
       if (memProjectId) {
-        for (const item of effectiveItems) {
-          const finalAsmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
-          if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
+        for (const item of classifiedItems) {
+          if (item.reviewStatus === 'excluded') continue
+          const finalAsmId = getEffectiveAsmId(item, asmOverrides)
+          if (finalAsmId && shouldTrainMemory(item)) {
+            recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
+          }
         }
       }
 
@@ -1871,6 +1963,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     onDismiss={() => setAuditDismissed(true)}
                   />
                 )}
+                {/* Review Summary — compact recognition quality overview */}
+                {recognizedItems.length > 0 && !isPdf && (
+                  <ReviewSummaryCard
+                    summary={reviewSummary}
+                    readiness={quoteReadiness}
+                    cableConfidence={cableEstimate?.confidence ?? null}
+                    onAcceptAll={acceptAllHighConf}
+                    hasAutoLow={reviewSummary.autoLow > 0}
+                  />
+                )}
+
                 {takeoffRows.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
                     Még nincs felvett elem. Használd a Számlálás eszközt a tervrajzon.
@@ -2227,6 +2330,25 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.text, fontWeight: 600 }}>{Math.round(fullCalc.bruttoTotal).toLocaleString('hu-HU')} Ft</span>
                       </div>
                     </div>
+
+                    {/* ── Quote readiness warnings ── */}
+                    {quoteReadiness.status !== 'ready' && recognizedItems.length > 0 && !isPdf && (
+                      <div style={{
+                        padding: '8px 10px', borderRadius: 7, marginBottom: 8,
+                        background: quoteReadiness.status === 'review_required' ? 'rgba(255,107,107,0.08)' : 'rgba(255,209,102,0.08)',
+                        border: `1px solid ${quoteReadiness.status === 'review_required' ? 'rgba(255,107,107,0.25)' : 'rgba(255,209,102,0.25)'}`,
+                      }}>
+                        <div style={{ fontFamily: 'DM Mono', fontSize: 10, fontWeight: 600, marginBottom: 3,
+                          color: quoteReadiness.status === 'review_required' ? C.red : C.yellow }}>
+                          {READINESS_LABELS[quoteReadiness.status]}
+                        </div>
+                        {quoteReadiness.reasons.map((r, i) => (
+                          <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, lineHeight: 1.4 }}>
+                            • {r}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* ── Action: create quote ── */}
                     <button
