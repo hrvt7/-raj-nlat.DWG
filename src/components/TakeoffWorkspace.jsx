@@ -1540,6 +1540,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Save (per-plan or quote) ──────────────────────────────────────────────
   const handleSave = async () => {
+    setSaveError(null) // clear previous error immediately on new click
     if (!takeoffRows.length) {
       setSaveError('Nincs felvett elem — jelölj ki elemeket a tervrajzon!')
       return
@@ -1548,7 +1549,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       setSaveError('Árkalkuláció nem elérhető — ellenőrizd az assemblyket!')
       return
     }
-    setSaving(true); setSaveError(null)
+    setSaving(true)
     try {
       // ── Per-plan save (Felmérés flow): merge-before-save to avoid partial overwrite ──
       // Read current store state first, then overlay only workspace-owned fields.
@@ -2462,6 +2463,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
                     {/* ── Action: create quote ── */}
                     <button
+                      type="button"
                       onClick={handleSave}
                       disabled={saving || saveGating.disabled}
                       title={saveGating.reason || undefined}
@@ -2477,6 +2479,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     >
                       {getSaveLabel(workflowStatus, planId, saving)}
                     </button>
+
+                    {/* ── Save error — must be visible on calc tab where the button lives ── */}
+                    {saveError && (
+                      <div style={{
+                        background: C.redDim, border: `1px solid ${C.red}`, borderRadius: 8,
+                        padding: '10px 14px', color: C.red, fontFamily: 'DM Mono', fontSize: 12,
+                        marginBottom: 8,
+                      }}>
+                        {saveError}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
