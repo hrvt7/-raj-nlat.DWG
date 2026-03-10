@@ -312,3 +312,79 @@ describe('wall preselection scenarios', () => {
     expect(dxfResult.next['ASM-001']).toEqual({ concrete: 5 })
   })
 })
+
+// ── Row-context activeTarget model ──────────────────────────────────────────
+// These tests verify the pure-function behavior underlying the row-context
+// activeTarget = { asmId, variantId, wallType } model.
+// Variant is stored separately (variantOverrides), not in wallSplits.
+// The activeTarget.wallType is what gets passed to reconcile/initialize.
+
+describe('row-context activeTarget scenarios', () => {
+  it('S12: full row-context — chip click activates asmId + wallType', () => {
+    // User clicks "GK" chip on ASM-001 row → activeTarget = { asmId: 'ASM-001', variantId: null, wallType: 'drywall' }
+    // Then places markers → only ASM-001 markers created, drywall wall type used
+    const counts = { 'ASM-001': 3 }
+    const { next } = reconcileMarkerSplits({}, counts, 'drywall')
+    expect(next['ASM-001']).toEqual({ drywall: 3 })
+    // ASM-002 not affected — no markers placed for it
+    expect(next['ASM-002']).toBeUndefined()
+  })
+
+  it('S13: switching row-context between assemblies isolates wall types', () => {
+    // Step 1: user activates ASM-001 / GK chip → places 2 markers
+    const state1Result = reconcileMarkerSplits({}, { 'ASM-001': 2 }, 'drywall')
+    const state1 = state1Result.next
+
+    // Step 2: user clicks ASM-002 / Ytong chip → places 3 markers for ASM-002
+    // (PdfViewerPanel now switches activeCategory to ASM-002)
+    const state2Result = reconcileMarkerSplits(state1, { 'ASM-001': 2, 'ASM-002': 3 }, 'ytong')
+    const state2 = state2Result.next
+
+    // ASM-001 stays in drywall, ASM-002 gets ytong
+    expect(state2['ASM-001']).toEqual({ drywall: 2 })
+    expect(state2['ASM-002']).toEqual({ ytong: 3 })
+  })
+
+  it('S14: variant change does not affect wallSplits (orthogonal state)', () => {
+    // wallSplits only tracks wall-type distribution, not variant
+    // Changing variant from standard to IP44 should not touch splits
+    const splits = { 'ASM-001': { brick: 2, drywall: 1 } }
+    // Simulate: variant changes from null to 'dugalj-ip44'
+    // wallSplits remain identical — variant is in variantOverrides[asmId]
+    const counts = { 'ASM-001': 3 }
+    const { next, changed } = reconcileMarkerSplits(splits, counts, 'brick')
+    expect(changed).toBe(false)
+    expect(next['ASM-001']).toEqual({ brick: 2, drywall: 1 })
+  })
+
+  it('S15: activeTarget.wallType extracted from full context works identically', () => {
+    // Verify that extracting wallType from activeTarget = { asmId, variantId, wallType }
+    // and passing it to reconcile gives same result as passing raw string
+    const activeTarget = { asmId: 'ASM-001', variantId: 'dugalj-ip44', wallType: 'concrete' }
+    const directResult = reconcileMarkerSplits({}, { 'ASM-001': 4 }, 'concrete')
+    const extractedResult = reconcileMarkerSplits({}, { 'ASM-001': 4 }, activeTarget.wallType)
+    expect(directResult.next).toEqual(extractedResult.next)
+    expect(extractedResult.next['ASM-001']).toEqual({ concrete: 4 })
+  })
+
+  it('S16: DXF init uses activeTarget.wallType, not bare string', () => {
+    // Simulates: activeTargetRef.current.wallType used by useEffect
+    const activeTarget = { asmId: null, variantId: null, wallType: 'ytong' }
+    const rows = [
+      { asmId: 'ASM-010', qty: 3 },
+      { asmId: 'ASM-011', qty: 2 },
+    ]
+    const { next } = initializeRecognitionSplits({}, rows, activeTarget.wallType)
+    expect(next['ASM-010']).toEqual({ ytong: 3 })
+    expect(next['ASM-011']).toEqual({ ytong: 2 })
+  })
+
+  it('S17: row reset clears and re-initializes with current activeTarget', () => {
+    // File reset clears wallSplits → {}
+    // Re-parse with new activeTarget.wallType = 'concrete'
+    const activeTarget = { asmId: 'ASM-010', variantId: null, wallType: 'concrete' }
+    const rows = [{ asmId: 'ASM-010', qty: 5 }]
+    const { next } = initializeRecognitionSplits({}, rows, activeTarget.wallType)
+    expect(next['ASM-010']).toEqual({ concrete: 5 })
+  })
+})

@@ -634,7 +634,7 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, activeWallType, onSetActiveWallType }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, activeTarget, onActivateTarget }) {
   const [hovered, setHovered] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
@@ -737,7 +737,10 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
         {WALL_OPTS.map(w => {
           const n = effectiveSplits[w.key] || 0
           const hasCount = n > 0
-          const isTarget = activeWallType === w.key
+          // Full row-context match: this chip is the active target only if
+          // both the assembly AND the wall type match the active target
+          const isRowActive = activeTarget?.asmId === asmId
+          const isTarget = isRowActive && activeTarget?.wallType === w.key
           return (
             <div key={w.key} style={{
               display: 'flex', alignItems: 'center', gap: 1,
@@ -749,8 +752,12 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
               transition: 'all 0.12s',
             }}>
               <span
-                onClick={(e) => { e.stopPropagation(); onSetActiveWallType(w.key) }}
-                title={`Aktív faltípus: ${w.label}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // Set FULL row-context: assembly + variant + wall type
+                  onActivateTarget({ asmId, variantId, wallType: w.key })
+                }}
+                title={`Aktív cél: ${w.label} — ${asmId}`}
                 style={{
                   fontFamily: 'DM Mono', fontSize: 10, minWidth: 26, userSelect: 'none',
                   cursor: 'pointer',
@@ -775,7 +782,14 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
           )
         })}
         {variants.length > 0 && (
-          <select value={variantId || ''} onChange={e => onVariantChange(asmId, e.target.value || null)}
+          <select value={variantId || ''} onChange={e => {
+            const newVariantId = e.target.value || null
+            onVariantChange(asmId, newVariantId)
+            // If this row is the active target, update variant in target too
+            if (activeTarget?.asmId === asmId) {
+              onActivateTarget({ ...activeTarget, variantId: newVariantId })
+            }
+          }}
             style={{ background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 4, color: C.textSub, fontSize: 10, padding: '1px 4px', fontFamily: 'DM Mono', cursor: 'pointer' }}>
             <option value="">Standard</option>
             {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -805,11 +819,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // wallSplits[asmId] = { drywall: N, ytong: N, brick: N, concrete: N }
   // Sum of values = total qty for that assembly; individual values = qty per wall material
   const [wallSplits, setWallSplits] = useState({})
-  // Active wall type for preselection — new items default to this instead of 'brick'
-  const [activeWallType, setActiveWallType] = useState('brick')
+  // Active counting target — full row-context: { asmId, variantId, wallType }
+  // Clicking a wall chip in a TakeoffRow sets the full context.
+  // asmId=null means "no specific assembly targeted yet" (defaults to first/none).
+  const [activeTarget, setActiveTarget] = useState({ asmId: null, variantId: null, wallType: 'brick' })
   // Ref mirror for use in effects/callbacks to avoid stale closures
-  const activeWallTypeRef = useRef('brick')
-  useEffect(() => { activeWallTypeRef.current = activeWallType }, [activeWallType])
+  const activeTargetRef = useRef({ asmId: null, variantId: null, wallType: 'brick' })
+  useEffect(() => { activeTargetRef.current = activeTarget }, [activeTarget])
 
   // ── Project context ───────────────────────────────────────────────────────
   const [context, setContext] = useState(settings?.context_defaults || { access: 'empty', project_type: 'renovation', height: 'normal' })
@@ -1030,7 +1046,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setDeletedItems(new Set())
     setVariantOverrides({})
     setWallSplits({})
-    setActiveWallType('brick')
+    setActiveTarget({ asmId: null, variantId: null, wallType: 'brick' })
     setCableEstimate(null)
     setManualCableMode(false)
     setReferencePanels([])
@@ -1285,7 +1301,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   useEffect(() => {
     if (!recognitionTakeoffRows.length) return
     setWallSplits(prev => {
-      const { next, changed } = initializeRecognitionSplits(prev, recognitionTakeoffRows, activeWallTypeRef.current)
+      const { next, changed } = initializeRecognitionSplits(prev, recognitionTakeoffRows, activeTargetRef.current.wallType)
       return changed ? next : prev
     })
   }, [recognitionTakeoffRows])
@@ -1964,12 +1980,21 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   assemblies={assemblies}
                   focusTarget={focusTarget}
                   onDirtyChange={onDirtyChange}
+                  activeAssemblyId={activeTarget.asmId}
+                  onActiveAssemblyChange={(newAsmId) => {
+                    // PdfViewerPanel changed assembly — sync into activeTarget
+                    setActiveTarget(prev => ({
+                      ...prev,
+                      asmId: newAsmId,
+                      variantId: variantOverrides[newAsmId] || null,
+                    }))
+                  }}
                   onMarkersChange={(markers) => {
                     setPdfMarkers(markers)
                     // Materialize wallSplits at creation time — preselection baked into state
                     const asmCounts = countMarkerAssemblies(markers)
                     setWallSplits(prev => {
-                      const { next, changed } = reconcileMarkerSplits(prev, asmCounts, activeWallType)
+                      const { next, changed } = reconcileMarkerSplits(prev, asmCounts, activeTarget.wallType)
                       return changed ? next : prev
                     })
                   }}
@@ -2115,8 +2140,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         assemblies={assemblies}
                         memoryTier={memItem?.rule || null}
                         signalType={memItem?.signalType || null}
-                        activeWallType={activeWallType}
-                        onSetActiveWallType={setActiveWallType}
+                        activeTarget={activeTarget}
+                        onActivateTarget={setActiveTarget}
                         isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
