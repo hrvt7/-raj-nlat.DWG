@@ -464,6 +464,10 @@ export function saveQuotes(quotes) {
   save(LS_KEYS.QUOTES, quotes)
 }
 
+// Maximum number of quotes retained in localStorage.
+// Oldest quotes (by insertion order) are pruned automatically on save.
+export const MAX_QUOTES = 100
+
 export function saveQuote(quote) {
   const quotes = loadQuotes()
   const idx = quotes.findIndex(q => q.id === quote.id)
@@ -471,6 +475,10 @@ export function saveQuote(quote) {
     quotes[idx] = quote
   } else {
     quotes.unshift(quote)
+  }
+  // Prune oldest quotes beyond cap to prevent unbounded localStorage growth
+  if (quotes.length > MAX_QUOTES) {
+    quotes.length = MAX_QUOTES
   }
   saveQuotes(quotes)
   return quote
