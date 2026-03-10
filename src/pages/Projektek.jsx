@@ -24,6 +24,7 @@ import { callAiMetaVision, mergeAiMeta, renderFirstPageImage } from '../utils/ai
 import { parseDxfFile } from '../dxfParser.js'
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { countQuotesForPlan } from '../utils/quoteOrphans.js'
+import { clearProjectMemory } from '../data/recognitionMemory.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 
@@ -802,6 +803,7 @@ function ProjectListView({ onOpenProject }) {
         updatePlanMeta(plan.id, { projectId: fallbackId })
       }
       deleteProject(projectId)
+      clearProjectMemory(projectId)
       reload()
     } catch (err) {
       console.error('[Projektek] delete failed:', err)

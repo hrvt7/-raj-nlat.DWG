@@ -43,6 +43,7 @@ import ManualCableModePanel from './ManualCableModePanel.jsx'
 import { loadReferencePanels, saveReferencePanels, toggleReferencePanelBlock, buildRecognizedPanelEntries } from '../utils/referencePanelStore.js'
 import { computePanelAssistedEstimate } from '../utils/panelAssistedEstimate.js'
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
+import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -444,7 +445,7 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier }) {
   const [hovered, setHovered] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
@@ -507,8 +508,18 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
       {/* ── Top row: color dot / name / total qty / total price ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
           {asm.name}
+          {memoryTier && (
+            <span style={{
+              fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
+              padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+              background: memoryTier === 'account' ? 'rgba(76,201,240,0.12)' : 'rgba(0,229,160,0.12)',
+              color: memoryTier === 'account' ? '#4CC9F0' : C.accent,
+            }}>
+              {memoryTier === 'account' ? 'Fiók memória' : memoryTier === 'project' ? 'Projekt memória' : 'Globális javaslat'}
+            </span>
+          )}
         </div>
         <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, flexShrink: 0 }}>
           {totalQty} db
@@ -630,6 +641,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       units: { ...parsedDxf.units, name: unitOverride + ' (override)', factor: newFactor, auto_detected: false },
     }
   }, [parsedDxf, unitOverride])
+
+  // ── Project ID for recognition memory ────────────────────────────────────
+  const memProjectId = useMemo(() => {
+    if (!planId) return null
+    const meta = getPlanMeta(planId)
+    return meta?.projectId || null
+  }, [planId])
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
@@ -945,7 +963,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         blockMap[b.name] += b.count
       }
       const items = Object.entries(blockMap).map(([blockName, qty]) => {
-        const rec = recognizeBlock(blockName)
+        let rec = recognizeBlock(blockName)
+        // Memory cascade: if recognizeBlock has no good match, check learned memory
+        if ((!rec.asmId || rec.confidence < 0.80) && memProjectId) {
+          const mem = lookupMemory(blockName, memProjectId)
+          if (mem) {
+            rec = { asmId: mem.asmId, confidence: mem.confidence, matchType: 'memory', rule: mem.tier }
+          }
+        }
         return { blockName, qty, ...rec }
       }).sort((a, b) => b.confidence - a.confidence || b.qty - a.qty)
 
@@ -1258,6 +1283,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         // Explicitly confirm the auto-matched assembly so manual overrides won't revert it
         newOverrides[item.blockName] = item.asmId
         changed = true
+        // Learn from explicit user click — record to recognition memory
+        if (memProjectId) {
+          recordConfirmation(item.blockName, item.asmId, memProjectId, 'accept_all')
+        }
       }
     }
     if (changed) setAsmOverrides(newOverrides)
@@ -1333,6 +1362,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           calcHourlyRate: hourlyRate,
           calcMarkup: markup,
         })
+        // Learn from save — record all confirmed items to recognition memory
+        if (memProjectId) {
+          for (const item of effectiveItems) {
+            const finalAsmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
+            if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan')
+          }
+        }
+
         // Show save-success strip instead of immediately navigating back
         if (onQuoteFromPlan) {
           setSaveSuccess(true)
@@ -1407,6 +1444,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         },
       })
       saveQuote(quote)
+
+      // Learn from save — record all confirmed items to recognition memory
+      if (memProjectId) {
+        for (const item of effectiveItems) {
+          const finalAsmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
+          if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan')
+        }
+      }
+
       onSaved?.(quote)
     } catch (err) {
       setSaveError(err.message)
@@ -1803,7 +1849,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   </div>
                 ) : (
                   <>
-                    {takeoffRows.map(row => (
+                    {takeoffRows.map(row => {
+                      // Check if any items contributing to this row came from memory
+                      const memItem = effectiveItems.find(i =>
+                        i.matchType === 'memory' &&
+                        ((asmOverrides[i.blockName] !== undefined ? asmOverrides[i.blockName] : i.asmId) === row.asmId)
+                      )
+                      return (
                       <TakeoffRow
                         key={row.asmId}
                         asmId={row.asmId}
@@ -1811,6 +1863,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         variantId={row.variantId}
                         wallSplits={row.wallSplits}
                         assemblies={assemblies}
+                        memoryTier={memItem?.rule || null}
                         isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
@@ -1838,7 +1891,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                           setQtyOverrides(prev => { const next = { ...prev }; delete next[asmId]; return next })
                         }}
                       />
-                    ))}
+                    )})}
 
                     {/* Cable summary in takeoff */}
                     {cableEstimate && (
