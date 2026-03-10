@@ -1228,13 +1228,11 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
 
   return (
     <div>
-      {/* Back + header */}
-      <div style={{ marginBottom: 20 }}>
-        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: C.muted, fontFamily: 'DM Mono', fontSize: 12, cursor: 'pointer', padding: '4px 0', marginBottom: 8 }}>
+      {/* Back link */}
+      <div style={{ marginBottom: 16 }}>
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: C.muted, fontFamily: 'DM Mono', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}>
           <BackIcon size={14} color={C.muted} /> Vissza a projektekhez
         </button>
-        <h1 style={{ fontFamily: 'Syne', fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>{project.name}</h1>
-        <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz</p>
       </div>
 
 
