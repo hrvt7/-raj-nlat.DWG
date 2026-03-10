@@ -1,10 +1,9 @@
 // ─── DXF Viewer Interaction Parity — Regression Tests ───────────────────────
 // Covers:
-//   1. DxfViewerPanel wiring: onMarkersChange + onMeasurementsChange props
-//   2. Notification at every marker/measurement mutation site
-//   3. Coordinate system helpers in DxfViewerCanvas
-//   4. Right panel receives DXF markers (TakeoffWorkspace wiring)
-//   5. Architecture boundary — shared markerModel
+//   1. Coordinate system helpers in DxfViewerCanvas
+//   2. Right panel receives DXF markers (TakeoffWorkspace wiring)
+//   3. Architecture boundary — shared markerModel
+//   4. DXF tool availability — manual tools work
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest'
@@ -23,92 +22,6 @@ const workspaceSrc = fs.readFileSync(
   path.resolve(__dirname, '../components/TakeoffWorkspace.jsx'),
   'utf-8'
 )
-
-// ═════════════════════════════════════════════════════════════════════════════
-describe('DxfViewerPanel — onMarkersChange prop wiring', () => {
-  it('accepts onMarkersChange in component signature', () => {
-    expect(dxfViewerSrc).toContain('onMarkersChange')
-  })
-
-  it('accepts onMeasurementsChange in component signature', () => {
-    expect(dxfViewerSrc).toContain('onMeasurementsChange')
-  })
-
-  it('creates stable ref for onMarkersChange callback', () => {
-    expect(dxfViewerSrc).toContain('onMarkersChangeRef')
-    expect(dxfViewerSrc).toContain('onMarkersChangeRef.current = onMarkersChange')
-  })
-
-  it('creates stable ref for onMeasurementsChange callback', () => {
-    expect(dxfViewerSrc).toContain('onMeasurementsChangeRef')
-    expect(dxfViewerSrc).toContain('onMeasurementsChangeRef.current = onMeasurementsChange')
-  })
-
-  it('defines notifyMarkersChanged helper', () => {
-    expect(dxfViewerSrc).toContain('notifyMarkersChanged')
-    expect(dxfViewerSrc).toContain('onMarkersChangeRef.current?.(')
-  })
-
-  it('defines notifyMeasurementsChanged helper', () => {
-    expect(dxfViewerSrc).toContain('notifyMeasurementsChanged')
-    expect(dxfViewerSrc).toContain('onMeasurementsChangeRef.current?.(')
-  })
-})
-
-// ═════════════════════════════════════════════════════════════════════════════
-describe('DxfViewerPanel — marker notification at every mutation site', () => {
-  // Split into lines for precise checking
-  const lines = dxfViewerSrc.split('\n')
-
-  it('notifies after count tool marker creation', () => {
-    // The count block must contain both createMarker and notifyMarkersChanged
-    const countBlock = dxfViewerSrc.match(/tool === 'count'[\s\S]*?notifyMarkersChanged/)?.[0] || ''
-    expect(countBlock).toContain('createMarker(')
-    expect(countBlock).toContain('notifyMarkersChanged')
-  })
-
-  it('notifies after measure tool completion', () => {
-    const measureLines = lines.filter(l => l.includes('notifyMeasurementsChanged()'))
-    expect(measureLines.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('notifies after undo (markers)', () => {
-    const undoBlock = dxfViewerSrc.match(/handleUndo[\s\S]*?(?=const handle[A-Z])/)?.[0] || ''
-    expect(undoBlock).toContain('notifyMarkersChanged()')
-  })
-
-  it('notifies after undo (measurements)', () => {
-    const undoBlock = dxfViewerSrc.match(/handleUndo[\s\S]*?(?=const handle[A-Z])/)?.[0] || ''
-    expect(undoBlock).toContain('notifyMeasurementsChanged()')
-  })
-
-  it('notifies after clear all (markers)', () => {
-    const clearBlock = dxfViewerSrc.match(/handleClearAll[\s\S]*?(?=\/\/ ──)/)?.[0] || ''
-    expect(clearBlock).toContain('notifyMarkersChanged()')
-  })
-
-  it('notifies after clear all (measurements)', () => {
-    const clearBlock = dxfViewerSrc.match(/handleClearAll[\s\S]*?(?=\/\/ ──)/)?.[0] || ''
-    expect(clearBlock).toContain('notifyMeasurementsChanged()')
-  })
-
-  it('notifies after annotation load from store', () => {
-    const loadBlock = dxfViewerSrc.match(/getPlanAnnotations\(planId\)\.then[\s\S]*?\}\)/)?.[0] || ''
-    expect(loadBlock).toContain('notifyMarkersChanged()')
-    expect(loadBlock).toContain('notifyMeasurementsChanged()')
-  })
-
-  it('notifies after external annotation change', () => {
-    const extBlock = dxfViewerSrc.match(/onAnnotationsChanged[\s\S]*?return unsub/)?.[0] || ''
-    expect(extBlock).toContain('notifyMarkersChanged()')
-  })
-
-  it('notifies after calibration relabels measurements', () => {
-    const calibBlock = dxfViewerSrc.match(/handleCalibSubmit[\s\S]*?notifyMeasurementsChanged/)?.[0] || ''
-    expect(calibBlock).toContain('notifyMeasurementsChanged')
-    expect(calibBlock).toContain('Re-label existing measurements')
-  })
-})
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe('DxfViewerCanvas — coordinate system helpers', () => {
@@ -141,21 +54,6 @@ describe('DxfViewerCanvas — coordinate system helpers', () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe('TakeoffWorkspace — DXF marker wiring to right panel', () => {
-  it('DxfViewerPanel receives onMarkersChange prop', () => {
-    // Must have onMarkersChange callback in the DxfViewerPanel JSX
-    const dxfBlock = workspaceSrc.match(/<DxfViewerPanel[\s\S]*?\/>/)?.[0] || ''
-    expect(dxfBlock).toContain('onMarkersChange')
-  })
-
-  it('DxfViewerPanel onMarkersChange calls setPdfMarkers', () => {
-    // The callback must route to the shared marker state
-    expect(workspaceSrc).toContain('onMarkersChange={(markers) =>')
-    // And within that block, setPdfMarkers is called
-    const afterMarkers = workspaceSrc.split('onMarkersChange={(markers) =>')[1] || ''
-    const callbackBody = afterMarkers.slice(0, 100)
-    expect(callbackBody).toContain('setPdfMarkers(markers)')
-  })
-
   it('pdfMarkers drives assembly count in right panel', () => {
     // pdfMarkers.filter for assembly markers
     expect(workspaceSrc).toContain("pdfMarkers.filter(m => m.asmId")

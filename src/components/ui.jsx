@@ -19,6 +19,7 @@ export const C = {
   text:      '#E8E8EC',
   textSub:   '#9CA3AF',
   textMuted: '#6B7280',
+  muted:     '#6B7280',
   sidebar:   '#0D0D0F',
   sidebarW:  220,
 }

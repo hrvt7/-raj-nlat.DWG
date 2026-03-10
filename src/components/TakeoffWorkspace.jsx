@@ -649,6 +649,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return meta?.projectId || null
   }, [planId])
 
+  // ── File type flags (derived early — needed by cableAudit + render) ──────
+  const isPdf = file?.name?.toLowerCase().endsWith('.pdf') ?? false
+
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
@@ -994,9 +997,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       )
   }, [recognizedItems, deletedItems, itemQtyOverrides])
 
-  const highConf = effectiveItems.filter(i => i.confidence >= 0.8)
-  const midConf  = effectiveItems.filter(i => i.confidence >= 0.5 && i.confidence < 0.8)
-  const lowConf  = effectiveItems.filter(i => i.confidence < 0.5)
   const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
 
   // ── DXF Import Audit (structured quality summary) ────────────────────────
@@ -1118,9 +1118,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   useEffect(() => {
     if (!takeoffRows.length) {
       // No data — clear DXF-origin estimates only (preserve PDF sources)
-      if (cableEstimate?._source !== CABLE_SOURCE.PDF_TAKEOFF && cableEstimate?._source !== CABLE_SOURCE.PDF_MARKERS) {
-        setCableEstimate(null)
-      }
+      setCableEstimate(prev => {
+        if (prev?._source !== CABLE_SOURCE.PDF_TAKEOFF && prev?._source !== CABLE_SOURCE.PDF_MARKERS) return null
+        return prev
+      })
       return
     }
 
@@ -1128,7 +1129,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     const layerResult = detectDxfCableLengths(effectiveParsedDxf)
     if (layerResult) {
       const normalized = normalizeCableEstimate(layerResult, CABLE_SOURCE.DXF_LAYERS)
-      if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
+      setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
       return
     }
 
@@ -1147,7 +1148,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         if (mstResult && mstResult.cable_total_m > 0) {
           mstResult.method = `MST becslés (${devices.length} eszközpozíció alapján)`
           const normalized = normalizeCableEstimate(mstResult, CABLE_SOURCE.DXF_MST)
-          if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
+          setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
           return
         }
       } catch (_e) { /* fallthrough to device-count */ }
@@ -1170,7 +1171,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       method: 'Becslés eszközszám alapján (nincs pozícióadat)',
       confidence: 0.55,
     }, CABLE_SOURCE.DEVICE_COUNT)
-    if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
+    setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
   }, [takeoffRows, effectiveParsedDxf, recognizedItems, asmOverrides])
 
   // ── Panel-assisted cable estimate (manual cable mode) ───────────────────
@@ -1185,7 +1186,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     )
     if (panelEst) {
       const normalized = normalizeCableEstimate(panelEst, CABLE_SOURCE.PANEL_ASSISTED)
-      if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
+      setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
     }
   }, [referencePanels, effectiveParsedDxf, recognizedItems, asmOverrides])
 
@@ -1512,7 +1513,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // isDxf = native DXF file, OR DWG that was successfully converted to DXF
   const isDxf = file.name.toLowerCase().endsWith('.dxf') || dwgStatus === 'done'
-  const isPdf = file.name.toLowerCase().endsWith('.pdf')
+  // isPdf is derived early (line ~652) — no redeclaration needed here
 
   // ── Render: main workspace ────────────────────────────────────────────────
   return (

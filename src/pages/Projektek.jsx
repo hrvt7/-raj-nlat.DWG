@@ -127,8 +127,8 @@ let _pcIdCounter = 0
 
 // ─── Projektkártya illusztráció (document scanner motívum) ───────────────────
 function ProjectCardIllustration({ size = 48 }) {
-  const idRef = useRef(() => ++_pcIdCounter)
-  const uid = idRef.current()
+  const idRef = useRef(++_pcIdCounter)
+  const uid = idRef.current
   ensurePcGlobalStyle()
 
   const gridId = `pc-grid-${uid}`
@@ -1137,7 +1137,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
       if (!blob) { setOpeningId(null); return }
       const ft = plan.fileType || getFileType(plan.name)
       const file = new File([blob], plan.name || FALLBACK_NAMES[ft] || 'terv.pdf', { type: MIME_TYPES[ft] || 'application/octet-stream' })
-      onOpenFile(file, plan)
+      if (onOpenFile) onOpenFile(file, plan)
+      setOpeningId(null)
     } catch { setOpeningId(null) }
   }, [onOpenFile])
 
