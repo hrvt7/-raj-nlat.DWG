@@ -1233,9 +1233,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── DXF Import Audit (structured quality summary) ────────────────────────
   const dxfAudit = useMemo(() => {
-    if (!parsedDxf) return null
+    if (!parsedDxf || isPdf) return null
     return computeDxfAudit(parsedDxf, recognizedItems)
-  }, [parsedDxf, recognizedItems])
+  }, [parsedDxf, recognizedItems, isPdf])
 
   // ── Cable Audit (structured cable confidence/transparency) ─────────────────
   const cableAudit = useMemo(() => {
