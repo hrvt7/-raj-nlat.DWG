@@ -6,8 +6,9 @@
 export const CABLE_SOURCE = {
   PDF_MARKERS:  'pdf_markers',   // P0 — manual marker placement on PDF (highest)
   DXF_MARKERS:  'dxf_markers',   // P0 — manual marker placement on DXF (highest, same tier)
-  DXF_LAYERS:   'dxf_layers',    // P1 — measured cable geometry from DXF layers
-  PDF_TAKEOFF:  'pdf_takeoff',   // P2 — PDF API + MST estimation
+  DXF_LAYERS:      'dxf_layers',    // P1 — measured cable geometry from DXF layers
+  PANEL_ASSISTED:  'panel_assisted', // P1.5 — nearest-panel distance estimate (manual cable mode)
+  PDF_TAKEOFF:     'pdf_takeoff',    // P2 — PDF API + MST estimation
   DXF_MST:      'dxf_mst',       // P3 — MST from device positions
   DEVICE_COUNT: 'device_count',  // P4 — qty × average (lowest)
 }
@@ -18,6 +19,7 @@ const PRIORITY = [
   CABLE_SOURCE.PDF_MARKERS,
   CABLE_SOURCE.DXF_MARKERS,
   CABLE_SOURCE.DXF_LAYERS,
+  CABLE_SOURCE.PANEL_ASSISTED,
   CABLE_SOURCE.PDF_TAKEOFF,
   CABLE_SOURCE.DXF_MST,
   CABLE_SOURCE.DEVICE_COUNT,
@@ -27,8 +29,9 @@ const PRIORITY = [
 const P90_MULTIPLIER = {
   [CABLE_SOURCE.PDF_MARKERS]:  1.2,
   [CABLE_SOURCE.DXF_MARKERS]:  1.2,
-  [CABLE_SOURCE.DXF_LAYERS]:   1.15,
-  [CABLE_SOURCE.PDF_TAKEOFF]:  1.35,
+  [CABLE_SOURCE.DXF_LAYERS]:    1.15,
+  [CABLE_SOURCE.PANEL_ASSISTED]: 1.25,
+  [CABLE_SOURCE.PDF_TAKEOFF]:   1.35,
   [CABLE_SOURCE.DXF_MST]:      1.35,
   [CABLE_SOURCE.DEVICE_COUNT]: 1.5,
 }

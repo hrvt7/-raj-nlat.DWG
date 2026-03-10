@@ -39,6 +39,9 @@ import DxfAuditCard from './DxfAuditCard.jsx'
 import { computeDxfAudit } from '../utils/dxfAudit.js'
 import CableConfidenceCard, { CableModeBadge } from './CableConfidenceCard.jsx'
 import { computeCableAudit } from '../utils/cableAudit.js'
+import ManualCableModePanel from './ManualCableModePanel.jsx'
+import { loadReferencePanels, saveReferencePanels, toggleReferencePanelBlock, buildRecognizedPanelEntries } from '../utils/referencePanelStore.js'
+import { computePanelAssistedEstimate } from '../utils/panelAssistedEstimate.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -593,6 +596,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Cable estimate (auto) ─────────────────────────────────────────────────
   const [cableEstimate, setCableEstimate] = useState(null)
 
+  // ── Manual cable mode + reference panels ─────────────────────────────────
+  const [manualCableMode, setManualCableMode] = useState(false)
+  const [referencePanels, setReferencePanels] = useState([])
+
   // ── PDF manual markers (assembly-based counting from PdfViewer) ─────────
   const [pdfMarkers, setPdfMarkers] = useState([])
   const prevMarkerCountRef = useRef(0)
@@ -692,6 +699,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         if (ann.deletedItems) setDeletedItems(new Set(ann.deletedItems))
         setRightTab('takeoff')
       }
+      // Restore reference panels (manual cable mode)
+      if (ann?.referencePanels?.length > 0) {
+        setReferencePanels(ann.referencePanels)
+      }
     })()
   }, [planId, file]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -778,6 +789,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setVariantOverrides({})
     setWallSplits({})
     setCableEstimate(null)
+    setManualCableMode(false)
+    setReferencePanels([])
     setPdfMarkers([])
     setDwgStatus(null)
     setDwgError(null)
@@ -966,8 +979,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Cable Audit (structured cable confidence/transparency) ─────────────────
   const cableAudit = useMemo(() => {
     if (!parsedDxf || isPdf) return null
-    return computeCableAudit(parsedDxf, recognizedItems, cableEstimate)
-  }, [parsedDxf, recognizedItems, cableEstimate, isPdf])
+    return computeCableAudit(parsedDxf, recognizedItems, cableEstimate, referencePanels)
+  }, [parsedDxf, recognizedItems, cableEstimate, isPdf, referencePanels])
 
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
   // From DXF/PDF auto-recognition pipeline
@@ -1131,6 +1144,28 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
   }, [takeoffRows, effectiveParsedDxf, recognizedItems, asmOverrides])
 
+  // ── Panel-assisted cable estimate (manual cable mode) ───────────────────
+  // When user selects reference panels, compute nearest-panel estimate and
+  // let shouldOverwrite decide if it replaces current estimate.
+  useEffect(() => {
+    if (!referencePanels.length || !effectiveParsedDxf?.inserts?.length) return
+    const scaleFactor = effectiveParsedDxf?.units?.factor ?? 0.001
+    const panelEst = computePanelAssistedEstimate(
+      effectiveParsedDxf.inserts, recognizedItems, asmOverrides,
+      referencePanels, scaleFactor
+    )
+    if (panelEst) {
+      const normalized = normalizeCableEstimate(panelEst, CABLE_SOURCE.PANEL_ASSISTED)
+      if (shouldOverwrite(cableEstimate, normalized)) setCableEstimate(normalized)
+    }
+  }, [referencePanels, effectiveParsedDxf, recognizedItems, asmOverrides])
+
+  // ── Persist reference panels when they change ──────────────────────────
+  useEffect(() => {
+    if (!planId) return
+    saveReferencePanels(planId, referencePanels)
+  }, [referencePanels, planId])
+
   // ── Derived: pricing ──────────────────────────────────────────────────────
   const pricing = useMemo(() => {
     if (!takeoffRows.length) return null
@@ -1248,6 +1283,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           wallSplits,
           variantOverrides,
           deletedItems: [...deletedItems],
+          referencePanels,
         })
         // Persist pricing summary + snapshot for quote generation on plan metadata
         // Resolve plan-level system type from filename inference (fallback: 'general')
@@ -1586,7 +1622,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               asmOverrides={asmOverrides}
               recognizedItems={recognizedItems}
               highlightBlock={highlightBlock}
-              onBlockClick={name => setHighlightBlock(prev => prev === name ? null : name)}
+              onBlockClick={name => {
+                if (manualCableMode) {
+                  // In manual cable mode: toggle block as reference panel
+                  const updated = toggleReferencePanelBlock(
+                    referencePanels, name, effectiveParsedDxf?.inserts || [], 'manual_panel'
+                  )
+                  setReferencePanels(updated)
+                } else {
+                  setHighlightBlock(prev => prev === name ? null : name)
+                }
+              }}
               canvasRef={canvasRef}
             />
           )}
@@ -1817,15 +1863,38 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 6 }}>
                   Kábelbecslés
                 </div>
+                {/* Manual Cable Mode Panel — shown when mode is active */}
+                {manualCableMode && !isPdf && (
+                  <ManualCableModePanel
+                    referencePanels={referencePanels}
+                    recognizedPanelBlocks={recognizedItems
+                      .filter(i => i.asmId === 'ASM-018')
+                      .map(i => ({ blockName: i.blockName, qty: i.qty }))
+                    }
+                    cableEstimate={cableEstimate}
+                    cableAudit={cableAudit}
+                    onAddRecognizedPanel={(blockName) => {
+                      const updated = toggleReferencePanelBlock(
+                        referencePanels, blockName,
+                        effectiveParsedDxf?.inserts || [], 'recognized_panel'
+                      )
+                      setReferencePanels(updated)
+                    }}
+                    onRemovePanel={(blockName) => {
+                      setReferencePanels(prev => prev.filter(p => p.blockName !== blockName))
+                    }}
+                    onExit={() => setManualCableMode(false)}
+                  />
+                )}
+
                 {/* Cable Confidence Card — shows cable mode transparency */}
                 {cableAudit && !isPdf && (
                   <CableConfidenceCard
                     cableAudit={cableAudit}
                     onTabSwitch={setRightTab}
                     onManualCable={() => {
-                      // Placeholder: navigate to cable tab manual section
-                      // Full manual cable routing will be built in a future sprint
-                      console.log('[TakeoffPro] Manual cable mode requested — feature placeholder')
+                      setManualCableMode(true)
+                      setRightTab('cable')
                     }}
                   />
                 )}
@@ -1877,12 +1946,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         background: cableEstimate._source === 'dxf_layers' ? C.accentDim
                           : cableEstimate._source === 'pdf_markers' ? C.accentDim
                           : cableEstimate._source === 'dxf_markers' ? C.accentDim
+                          : cableEstimate._source === 'panel_assisted' ? 'rgba(167,139,250,0.12)'
                           : cableEstimate._source === 'dxf_mst' ? 'rgba(76,201,240,0.12)'
                           : cableEstimate._source === 'pdf_takeoff' ? 'rgba(255,209,102,0.15)'
                           : 'rgba(255,255,255,0.05)',
                         color: cableEstimate._source === 'dxf_layers' ? C.accent
                           : cableEstimate._source === 'pdf_markers' ? C.accent
                           : cableEstimate._source === 'dxf_markers' ? C.accent
+                          : cableEstimate._source === 'panel_assisted' ? '#A78BFA'
                           : cableEstimate._source === 'dxf_mst' ? C.blue
                           : cableEstimate._source === 'pdf_takeoff' ? C.yellow
                           : C.muted,
@@ -1891,6 +1962,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         {cableEstimate._source === 'dxf_layers' ? 'mért'
                           : cableEstimate._source === 'pdf_markers' ? 'jelölt'
                           : cableEstimate._source === 'dxf_markers' ? 'jelölt'
+                          : cableEstimate._source === 'panel_assisted' ? 'elosztó'
                           : cableEstimate._source === 'dxf_mst' ? 'MST'
                           : cableEstimate._source === 'pdf_takeoff' ? 'PDF'
                           : 'becslés'}

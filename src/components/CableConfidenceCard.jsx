@@ -14,12 +14,14 @@ const C = {
   yellow: '#FFD166', yellowDim: 'rgba(255,209,102,0.15)',
   red: '#FF6B6B', redDim: 'rgba(255,107,107,0.12)',
   blue: '#4CC9F0', blueDim: 'rgba(76,201,240,0.08)',
+  purple: '#A78BFA', purpleDim: 'rgba(167,139,250,0.1)',
   text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
 }
 
 // ── Mode → visual mapping ───────────────────────────────────────────────────
 const MODE_STYLE = {
   [CABLE_AUDIT_MODE.DIRECT_GEOMETRY]:  { bg: C.accentDim, border: 'rgba(0,229,160,0.25)', color: C.accent },
+  [CABLE_AUDIT_MODE.PANEL_ASSISTED]:   { bg: C.purpleDim, border: 'rgba(167,139,250,0.25)', color: C.purple },
   [CABLE_AUDIT_MODE.MST_ESTIMATE]:     { bg: C.blueDim, border: 'rgba(76,201,240,0.25)', color: C.blue },
   [CABLE_AUDIT_MODE.AVERAGE_FALLBACK]: { bg: C.yellowDim, border: 'rgba(255,209,102,0.25)', color: C.yellow },
   [CABLE_AUDIT_MODE.UNAVAILABLE]:      { bg: C.redDim, border: 'rgba(255,107,107,0.25)', color: C.red },

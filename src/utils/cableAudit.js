@@ -12,6 +12,7 @@
 // ── Cable mode constants ─────────────────────────────────────────────────────
 export const CABLE_AUDIT_MODE = {
   DIRECT_GEOMETRY:  'DIRECT_GEOMETRY',
+  PANEL_ASSISTED:   'PANEL_ASSISTED',
   MST_ESTIMATE:     'MST_ESTIMATE',
   AVERAGE_FALLBACK: 'AVERAGE_FALLBACK',
   UNAVAILABLE:      'UNAVAILABLE',
@@ -36,6 +37,12 @@ const MODE_META = {
     emoji: '📏',
     explanation: 'Kábelhossz közvetlenül rajzi geometriából számolva.',
     confidenceLabel: 'magas',
+  },
+  [CABLE_AUDIT_MODE.PANEL_ASSISTED]: {
+    label: 'Elosztó-alapú becslés',
+    emoji: '🔧',
+    explanation: 'Kábelhossz referenciaelosztó–eszköz távolságból becsülve. Pontosabb, mint az átlagos becslés, de nem nyomvonal-alapú.',
+    confidenceLabel: 'közepes',
   },
   [CABLE_AUDIT_MODE.MST_ESTIMATE]: {
     label: 'Pozícióalapú becslés',
@@ -72,7 +79,7 @@ const MODE_META = {
  * @param {object|null} cableEstimate - Current cable estimate from state (optional, for source awareness)
  * @returns {object} Cable audit object
  */
-export function computeCableAudit(parsedDxf, recognizedItems = [], cableEstimate = null) {
+export function computeCableAudit(parsedDxf, recognizedItems = [], cableEstimate = null, referencePanels = []) {
   // Guard: no data
   if (!parsedDxf || !parsedDxf.success) {
     return buildResult(CABLE_AUDIT_MODE.UNAVAILABLE, {
@@ -110,15 +117,23 @@ export function computeCableAudit(parsedDxf, recognizedItems = [], cableEstimate
   const effectiveHasPanels = hasPanelLikeBlocks || hasRecognizedPanels
   const effectivePanelCount = Math.max(panelCount, recognizedPanelCount)
 
+  // ── Reference panel data (manual cable mode) ────────────────────────────
+  const userReferencePanels = referencePanels || []
+  const hasUserReferencePanels = userReferencePanels.length > 0
+  const panelAssistedAvailable = hasUserReferencePanels && inserts.length >= 1
+
   // ── Availability flags ───────────────────────────────────────────────────
   const geometryLengthAvailable = hasCableLikeLayers && totalCableLengthM > 0
   const mstEstimateAvailable = inserts.length >= 2
   const averageFallbackAvailable = totalBlocks > 0
 
   // ── Classify cable mode ──────────────────────────────────────────────────
+  // If estimate is panel_assisted (from manual cable mode), honor that source
   let cableMode
   if (geometryLengthAvailable) {
     cableMode = CABLE_AUDIT_MODE.DIRECT_GEOMETRY
+  } else if (panelAssistedAvailable || cableEstimate?._source === 'panel_assisted') {
+    cableMode = CABLE_AUDIT_MODE.PANEL_ASSISTED
   } else if (mstEstimateAvailable) {
     cableMode = CABLE_AUDIT_MODE.MST_ESTIMATE
   } else if (averageFallbackAvailable) {
@@ -159,9 +174,12 @@ export function computeCableAudit(parsedDxf, recognizedItems = [], cableEstimate
   }
 
   // ── Escalate to MANUAL_REQUIRED if confidence is too low ─────────────────
-  const manualCableRecommended = cableConfidence < 0.35 ||
+  // Never escalate if panel-assisted mode is active (user is already in manual cable mode)
+  const manualCableRecommended = cableMode !== CABLE_AUDIT_MODE.PANEL_ASSISTED && (
+    cableConfidence < 0.35 ||
     cableMode === CABLE_AUDIT_MODE.UNAVAILABLE ||
     (cableMode === CABLE_AUDIT_MODE.AVERAGE_FALLBACK && !effectiveHasPanels)
+  )
 
   if (manualCableRecommended && cableMode !== CABLE_AUDIT_MODE.UNAVAILABLE) {
     cableMode = CABLE_AUDIT_MODE.MANUAL_REQUIRED
@@ -185,6 +203,7 @@ export function computeCableAudit(parsedDxf, recognizedItems = [], cableEstimate
     cableWarnings,
     manualCableRecommended,
     geometryLengthAvailable,
+    panelAssistedAvailable,
     mstEstimateAvailable,
     averageFallbackAvailable,
     guidance,
@@ -205,6 +224,12 @@ function computeConfidence(mode, ctx) {
       let c = 0.9
       if (!ctx.effectiveHasPanels) c -= 0.1  // no reference point → less certain
       if (ctx.cableLayerCount >= 3) c += 0.05 // more layers → more reliable
+      return clamp(c, 0, 1)
+    }
+    case CABLE_AUDIT_MODE.PANEL_ASSISTED: {
+      let c = 0.60
+      if (ctx.inserts.length < 5) c -= 0.05    // few devices → less reliable
+      if (ctx.inserts.length >= 20) c += 0.05   // many devices → better coverage
       return clamp(c, 0, 1)
     }
     case CABLE_AUDIT_MODE.MST_ESTIMATE: {
@@ -244,6 +269,21 @@ function buildCableGuidance(mode, ctx) {
         label: 'Kábel ellenőrzése',
         tab: 'cable',
         description: 'Ellenőrizd a mért kábelhosszakat a Kábel fülön',
+      })
+      break
+
+    case CABLE_AUDIT_MODE.PANEL_ASSISTED:
+      g.push({
+        action: 'review_estimate',
+        label: 'Becslés ellenőrzése',
+        tab: 'cable',
+        description: 'Ellenőrizd az elosztó-alapú kábelbecslést',
+      })
+      g.push({
+        action: 'add_panel',
+        label: 'További elosztó hozzáadása',
+        tab: 'cable',
+        description: 'Több elosztó megjelölésével pontosabb az eredmény',
       })
       break
 
@@ -313,6 +353,7 @@ function buildCableGuidance(mode, ctx) {
 function mapModeToSource(mode) {
   switch (mode) {
     case CABLE_AUDIT_MODE.DIRECT_GEOMETRY:  return 'dxf_layers'
+    case CABLE_AUDIT_MODE.PANEL_ASSISTED:   return 'panel_assisted'
     case CABLE_AUDIT_MODE.MST_ESTIMATE:     return 'dxf_mst'
     case CABLE_AUDIT_MODE.AVERAGE_FALLBACK: return 'device_count'
     default: return 'none'
@@ -332,6 +373,7 @@ function buildResult(cableMode, overrides = {}) {
     cableWarnings: [],
     manualCableRecommended: cableMode === CABLE_AUDIT_MODE.UNAVAILABLE || cableMode === CABLE_AUDIT_MODE.MANUAL_REQUIRED,
     geometryLengthAvailable: false,
+    panelAssistedAvailable: false,
     mstEstimateAvailable: false,
     averageFallbackAvailable: false,
     guidance: [],
