@@ -46,6 +46,7 @@ import { buildBlockEvidence } from '../data/evidenceExtractor.js'
 import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId, isSyntheticItem, READINESS_LABELS, STATUS_LABELS } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
+import { reconcileMarkerSplits, initializeRecognitionSplits, countMarkerAssemblies } from '../utils/wallSplitUtils.js'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -633,7 +634,7 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, activeWallType = 'brick' }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType }) {
   const [hovered, setHovered] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
@@ -641,8 +642,9 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
   // Category color from ASM_COLORS
   const dotColor = ASM_COLORS[asmId] || C.muted
 
-  // If no splits set yet, treat all qty as active wall type
-  const effectiveSplits = wallSplits || { [activeWallType]: qty }
+  // If no splits set yet, treat all qty as brick (stable default — preselection
+  // happens at creation time, not at display time)
+  const effectiveSplits = wallSplits || { brick: qty }
   const totalQty = Object.values(effectiveSplits).reduce((s, n) => s + n, 0)
 
   // Total price = Σ(splitQty × unitCostByWall[wallKey])
@@ -653,15 +655,15 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 
   const handleDelta = (wallKey, delta) => {
     // On first interaction, initialize full splits from current qty
-    const base = wallSplits || { [activeWallType]: qty }
+    const base = wallSplits || { brick: qty }
     const current = base[wallKey] ?? 0
     const newVal = Math.max(0, current + delta)
     const updated = { ...base, [wallKey]: newVal }
 
     // If adding to a non-default wall type and base was just initialized,
-    // reduce default wall type to keep total = qty (move items between wall types, don't add new)
-    if (!wallSplits && wallKey !== activeWallType && delta > 0) {
-      updated[activeWallType] = Math.max(0, (updated[activeWallType] || 0) - delta)
+    // reduce brick to keep total = qty (move items between wall types, don't add new)
+    if (!wallSplits && wallKey !== 'brick' && delta > 0) {
+      updated.brick = Math.max(0, (updated.brick || 0) - delta)
     }
     onSplitChange(asmId, updated)
   }
@@ -793,6 +795,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [wallSplits, setWallSplits] = useState({})
   // Active wall type for preselection — new items default to this instead of 'brick'
   const [activeWallType, setActiveWallType] = useState('brick')
+  // Ref mirror for use in effects/callbacks to avoid stale closures
+  const activeWallTypeRef = useRef('brick')
+  useEffect(() => { activeWallTypeRef.current = activeWallType }, [activeWallType])
 
   // ── Project context ───────────────────────────────────────────────────────
   const [context, setContext] = useState(settings?.context_defaults || { access: 'empty', project_type: 'renovation', height: 'normal' })
@@ -1264,7 +1269,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return Object.values(rowMap)
   }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
 
+  // Materialize wallSplits for newly recognized DXF items (preselection at creation time)
+  useEffect(() => {
+    if (!recognitionTakeoffRows.length) return
+    setWallSplits(prev => {
+      const { next, changed } = initializeRecognitionSplits(prev, recognitionTakeoffRows, activeWallTypeRef.current)
+      return changed ? next : prev
+    })
+  }, [recognitionTakeoffRows])
+
   // From PDF manual markers (assembly-based counting)
+  // wallSplits are materialized by onMarkersChange handler → just read from state
   const markerTakeoffRows = useMemo(() => {
     if (!pdfMarkers.length) return []
     const rowMap = {}
@@ -1275,46 +1290,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       if (!rowMap[asmId]) rowMap[asmId] = { asmId, qty: 0, variantId: variantOverrides[asmId] || null, _fromMarkers: true }
       rowMap[asmId].qty += 1
     }
-    // Reconcile wallSplits: if splits exist, adjust to match actual marker count
+    // wallSplits already persisted by onMarkersChange — read from state
     for (const row of Object.values(rowMap)) {
-      const splits = wallSplits[row.asmId]
-      if (splits) {
-        const splitTotal = Object.values(splits).reduce((s, n) => s + n, 0)
-        const diff = row.qty - splitTotal
-        if (diff > 0) {
-          // New markers added — put extra in active wall type (preselected)
-          row.wallSplits = { ...splits, [activeWallType]: (splits[activeWallType] || 0) + diff }
-        } else if (diff < 0) {
-          // Markers removed — reduce from 'brick' first, then others
-          const adjusted = { ...splits }
-          let toRemove = Math.abs(diff)
-          // Remove from brick first
-          if (adjusted.brick && adjusted.brick > 0) {
-            const take = Math.min(adjusted.brick, toRemove)
-            adjusted.brick -= take
-            toRemove -= take
-          }
-          // Remove from others if still needed
-          if (toRemove > 0) {
-            for (const k of Object.keys(adjusted)) {
-              if (toRemove <= 0) break
-              if (adjusted[k] > 0) {
-                const take = Math.min(adjusted[k], toRemove)
-                adjusted[k] -= take
-                toRemove -= take
-              }
-            }
-          }
-          row.wallSplits = adjusted
-        } else {
-          row.wallSplits = splits
-        }
-      } else {
-        row.wallSplits = null
-      }
+      row.wallSplits = wallSplits[row.asmId] || { brick: row.qty }
     }
     return Object.values(rowMap)
-  }, [pdfMarkers, variantOverrides, wallSplits, activeWallType])
+  }, [pdfMarkers, variantOverrides, wallSplits])
 
   // Merged takeoff rows: recognition + manual markers (no duplicates)
   const takeoffRows = useMemo(() => {
@@ -1973,6 +1954,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   onDirtyChange={onDirtyChange}
                   onMarkersChange={(markers) => {
                     setPdfMarkers(markers)
+                    // Materialize wallSplits at creation time — preselection baked into state
+                    const asmCounts = countMarkerAssemblies(markers)
+                    setWallSplits(prev => {
+                      const { next, changed } = reconcileMarkerSplits(prev, asmCounts, activeWallType)
+                      return changed ? next : prev
+                    })
                   }}
                   onCableData={(data) => {
                     if (data) {
@@ -2138,7 +2125,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         variantId={row.variantId}
                         wallSplits={row.wallSplits}
                         assemblies={assemblies}
-                        activeWallType={activeWallType}
                         memoryTier={memItem?.rule || null}
                         signalType={memItem?.signalType || null}
                         isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
