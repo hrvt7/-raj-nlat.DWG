@@ -240,8 +240,8 @@ export function getSaveGating(workflowStatus) {
 
     case 'unresolved_blocks':
       return {
-        disabled: false,
-        reason: 'Néhány blokk nincs hozzárendelve — a mentés csak a felismert tételeket tartalmazza',
+        disabled: true,
+        reason: 'Rendelj hozzá minden ismeretlen blokkot a mentés előtt',
       }
 
     case 'review_warnings':
@@ -263,6 +263,7 @@ export function getSaveGating(workflowStatus) {
  */
 export function getSaveLabel(workflowStatus, planId, saving) {
   if (saving) return '...'
+  if (workflowStatus?.stage === 'unresolved_blocks') return 'Felülvizsgálat szükséges'
   return planId ? 'Kalkuláció mentése' : 'Ajánlat létrehozása →'
 }
 
@@ -276,7 +277,7 @@ export function getSaveColor(workflowStatus) {
   if (!workflowStatus) return '#00E5A0'
   switch (workflowStatus.stage) {
     case 'unresolved_blocks':
-      return '#FFD166' // yellow — saveable but with warnings
+      return '#71717A' // muted gray
     case 'review_warnings':
       return '#FFD166' // yellow — proceed with caution
     case 'ready':

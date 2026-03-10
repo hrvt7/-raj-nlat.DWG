@@ -59,7 +59,7 @@ function formatDist(m) {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange, activeAssemblyId, onActiveAssemblyChange }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -88,17 +88,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   // ── Tools ──
   const [activeTool, setActiveTool] = useState(null)
   // activeCategory can be an assembly ID (ASM-xxx) or a special key (panel, junction, other)
-  // Optionally controlled from parent via activeAssemblyId prop
-  const [internalCategory, setInternalCategory] = useState('ASM-001')
-  const activeCategory = activeAssemblyId ?? internalCategory
-  const handleCategoryChange = useCallback((newCat) => {
-    setInternalCategory(newCat)
-    if (onActiveAssemblyChange) onActiveAssemblyChange(newCat)
-  }, [onActiveAssemblyChange])
-  // Sync: when parent pushes a new activeAssemblyId, update internal state
-  useEffect(() => {
-    if (activeAssemblyId != null) setInternalCategory(activeAssemblyId)
-  }, [activeAssemblyId])
+  const [activeCategory, setActiveCategory] = useState('ASM-001')
 
   // ── Page rotation ──
   const [rotation, setRotation] = useState(0) // 0, 90, 180, 270
@@ -830,7 +820,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       {/* Toolbar */}
       <PdfToolbar
         activeTool={activeTool} onToolChange={t => { setActiveTool(t); activeStartRef.current = null }}
-        activeCategory={activeCategory} onCategoryChange={handleCategoryChange}
+        activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
         onZoomIn={() => { viewRef.current.zoom *= 1.2; drawOverlay() }}

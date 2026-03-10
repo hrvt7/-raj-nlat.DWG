@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react'
 import { C, fmt, Card, Button, QuoteStatusBadge, Badge, EmptyState, Input, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { checkQuotePlanStatus } from '../utils/quoteOrphans.js'
 import { isDemoSeeded, seedDemoData } from '../data/demoSeed.js'
-import { generateQuoteId } from '../data/store.js'
 // saveQuotes handled by parent via onQuotesChange
 
 const STATUS_TABS = [
@@ -18,66 +17,7 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [confirmState, setConfirmState] = useState(null)
-  const [selectedIds, setSelectedIds] = useState(new Set())
   const toast = useToast()
-
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filtered.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(filtered.map(q => q.id)))
-    }
-  }
-
-  const mergeQuotes = () => {
-    const toMerge = quotes.filter(q => selectedIds.has(q.id))
-    if (toMerge.length < 2) return
-    // Combine items from all selected quotes
-    const allItems = []
-    for (const q of toMerge) {
-      const items = q.items || q.calcPricingLines || []
-      for (const item of items) {
-        allItems.push({ ...item, _sourceQuote: q.project_name || q.id })
-      }
-    }
-    // Sum totals
-    const grandTotal = toMerge.reduce((s, q) => s + (q.summary?.grandTotal || q.gross || 0), 0)
-    const totalHours = toMerge.reduce((s, q) => s + (q.summary?.totalWorkHours || q.totalHours || 0), 0)
-    const totalMaterials = toMerge.reduce((s, q) => s + (q.totalMaterials || 0), 0)
-    const totalLabor = toMerge.reduce((s, q) => s + (q.totalLabor || 0), 0)
-    const now = new Date().toISOString()
-    const merged = {
-      id: generateQuoteId(),
-      projectName: `Összevont: ${toMerge.map(q => q.project_name || 'Névtelen').join(' + ')}`,
-      project_name: `Összevont: ${toMerge.map(q => q.project_name || 'Névtelen').join(' + ')}`,
-      name: `Összevont ajánlat`,
-      clientName: toMerge[0].client_name || '',
-      client_name: toMerge[0].client_name || '',
-      createdAt: now, created_at: now, status: 'draft',
-      outputMode: toMerge[0].outputMode || 'combined',
-      groupBy: 'none',
-      vatPercent: toMerge[0].vatPercent || 27,
-      gross: Math.round(grandTotal),
-      totalMaterials: Math.round(totalMaterials),
-      totalLabor: Math.round(totalLabor),
-      totalHours,
-      summary: { grandTotal: Math.round(grandTotal), totalWorkHours: totalHours },
-      pricingData: toMerge[0].pricingData || {},
-      items: allItems,
-      mergedFrom: toMerge.map(q => q.id),
-      source: 'merge',
-    }
-    onQuotesChange([merged, ...quotes])
-    setSelectedIds(new Set())
-    toast.show(`${toMerge.length} ajánlat összevonva`, 'success')
-  }
 
   const filtered = quotes.filter(q => {
     const matchTab = activeTab === 'all' || q.status === activeTab
@@ -160,33 +100,6 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
         </div>
       </div>
 
-      {/* Multi-select action bar */}
-      {selectedIds.size >= 2 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
-          background: 'rgba(0,229,160,0.06)', border: `1px solid rgba(0,229,160,0.2)`,
-          borderRadius: 10, marginBottom: 12,
-        }}>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent }}>
-            {selectedIds.size} ajánlat kijelölve
-          </span>
-          <button onClick={mergeQuotes} style={{
-            padding: '6px 16px', borderRadius: 7, border: 'none', cursor: 'pointer',
-            background: C.accent, color: '#09090B',
-            fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-          }}>
-            Összevonás →
-          </button>
-          <button onClick={() => setSelectedIds(new Set())} style={{
-            padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
-            background: 'transparent', border: `1px solid ${C.border}`, color: C.muted,
-            fontFamily: 'DM Mono', fontSize: 11,
-          }}>
-            Mégse
-          </button>
-        </div>
-      )}
-
       {/* Table */}
       {filtered.length === 0 ? (
         <EmptyState
@@ -213,17 +126,6 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
               <tr style={{ background: C.bgCard }}>
-                <th style={{
-                  padding: '10px 8px 10px 16px', textAlign: 'center', width: 36,
-                  borderBottom: `1px solid ${C.border}`,
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                    onChange={toggleSelectAll}
-                    style={{ cursor: 'pointer', accentColor: C.accent }}
-                  />
-                </th>
                 {['Azonosító', 'Projekt neve', 'Megrendelő', 'Összeg (nettó)', 'Munkaóra', 'Dátum', 'Státusz', ''].map(h => (
                   <th key={h} style={{
                     padding: '10px 16px', textAlign: 'left', fontSize: 10,
@@ -237,21 +139,10 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
             <tbody>
               {filtered.map((q, i) => (
                 <tr key={q.id}
-                  style={{
-                    borderBottom: `1px solid ${C.border}`, transition: 'background 0.1s',
-                    background: selectedIds.has(q.id) ? 'rgba(0,229,160,0.04)' : 'transparent',
-                  }}
-                  onMouseEnter={e => { if (!selectedIds.has(q.id)) e.currentTarget.style.background = C.bgHover }}
-                  onMouseLeave={e => { e.currentTarget.style.background = selectedIds.has(q.id) ? 'rgba(0,229,160,0.04)' : 'transparent' }}
+                  style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.1s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.bgHover}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                  <td style={{ padding: '12px 8px 12px 16px', textAlign: 'center', width: 36 }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(q.id)}
-                      onChange={() => toggleSelect(q.id)}
-                      style={{ cursor: 'pointer', accentColor: C.accent }}
-                    />
-                  </td>
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textMuted }}>{q.id}</span>
                     {q.bundleId && (

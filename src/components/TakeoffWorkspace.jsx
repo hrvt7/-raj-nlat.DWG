@@ -46,7 +46,6 @@ import { buildBlockEvidence } from '../data/evidenceExtractor.js'
 import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId, isSyntheticItem, READINESS_LABELS, STATUS_LABELS } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
-import { reconcileMarkerSplits, initializeRecognitionSplits, countMarkerAssemblies } from '../utils/wallSplitUtils.js'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -634,7 +633,7 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, activeTarget, onActivateTarget }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType }) {
   const [hovered, setHovered] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
@@ -642,8 +641,7 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
   // Category color from ASM_COLORS
   const dotColor = ASM_COLORS[asmId] || C.muted
 
-  // If no splits set yet, treat all qty as brick (stable default — preselection
-  // happens at creation time, not at display time)
+  // If no splits set yet, treat all qty as brick
   const effectiveSplits = wallSplits || { brick: qty }
   const totalQty = Object.values(effectiveSplits).reduce((s, n) => s + n, 0)
 
@@ -732,64 +730,38 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
         </div>
       </div>
 
-      {/* ── Per-wall-type split counters + active target selector ── */}
+      {/* ── Per-wall-type split counters ── */}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
         {WALL_OPTS.map(w => {
           const n = effectiveSplits[w.key] || 0
-          const hasCount = n > 0
-          // Full row-context match: this chip is the active target only if
-          // both the assembly AND the wall type match the active target
-          const isRowActive = activeTarget?.asmId === asmId
-          const isTarget = isRowActive && activeTarget?.wallType === w.key
+          const active = n > 0
           return (
             <div key={w.key} style={{
               display: 'flex', alignItems: 'center', gap: 1,
               padding: '2px 5px', borderRadius: 6,
-              background: isTarget ? w.color + '22' : (hasCount ? w.color + '15' : 'transparent'),
-              border: `1px solid ${isTarget ? w.color : (hasCount ? w.color + '55' : C.border)}`,
-              outline: isTarget ? `2px solid ${w.color}` : 'none',
-              outlineOffset: -1,
+              background: active ? w.color + '15' : 'transparent',
+              border: `1px solid ${active ? w.color + '55' : C.border}`,
               transition: 'all 0.12s',
             }}>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation()
-                  // Set FULL row-context: assembly + variant + wall type
-                  onActivateTarget({ asmId, variantId, wallType: w.key })
-                }}
-                title={`Aktív cél: ${w.label} — ${asmId}`}
-                style={{
-                  fontFamily: 'DM Mono', fontSize: 10, minWidth: 26, userSelect: 'none',
-                  cursor: 'pointer',
-                  color: isTarget ? w.color : (hasCount ? w.color : C.muted),
-                  fontWeight: isTarget ? 700 : 400,
-                }}
-              >
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: active ? w.color : C.muted, minWidth: 26, userSelect: 'none' }}>
                 {w.label}
               </span>
               <button
                 onClick={() => handleDelta(w.key, -1)}
-                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: hasCount ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >−</button>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: hasCount ? w.color : C.muted, minWidth: 16, textAlign: 'center', userSelect: 'none' }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: active ? w.color : C.muted, minWidth: 16, textAlign: 'center', userSelect: 'none' }}>
                 {n}
               </span>
               <button
                 onClick={() => handleDelta(w.key, +1)}
-                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: hasCount ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >+</button>
             </div>
           )
         })}
         {variants.length > 0 && (
-          <select value={variantId || ''} onChange={e => {
-            const newVariantId = e.target.value || null
-            onVariantChange(asmId, newVariantId)
-            // If this row is the active target, update variant in target too
-            if (activeTarget?.asmId === asmId) {
-              onActivateTarget({ ...activeTarget, variantId: newVariantId })
-            }
-          }}
+          <select value={variantId || ''} onChange={e => onVariantChange(asmId, e.target.value || null)}
             style={{ background: C.bg, border: `1px solid ${C.borderLight}`, borderRadius: 4, color: C.textSub, fontSize: 10, padding: '1px 4px', fontFamily: 'DM Mono', cursor: 'pointer' }}>
             <option value="">Standard</option>
             {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -819,13 +791,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // wallSplits[asmId] = { drywall: N, ytong: N, brick: N, concrete: N }
   // Sum of values = total qty for that assembly; individual values = qty per wall material
   const [wallSplits, setWallSplits] = useState({})
-  // Active counting target — full row-context: { asmId, variantId, wallType }
-  // Clicking a wall chip in a TakeoffRow sets the full context.
-  // asmId=null means "no specific assembly targeted yet" (defaults to first/none).
-  const [activeTarget, setActiveTarget] = useState({ asmId: null, variantId: null, wallType: 'brick' })
-  // Ref mirror for use in effects/callbacks to avoid stale closures
-  const activeTargetRef = useRef({ asmId: null, variantId: null, wallType: 'brick' })
-  useEffect(() => { activeTargetRef.current = activeTarget }, [activeTarget])
 
   // ── Project context ───────────────────────────────────────────────────────
   const [context, setContext] = useState(settings?.context_defaults || { access: 'empty', project_type: 'renovation', height: 'normal' })
@@ -1046,7 +1011,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setDeletedItems(new Set())
     setVariantOverrides({})
     setWallSplits({})
-    setActiveTarget({ asmId: null, variantId: null, wallType: 'brick' })
     setCableEstimate(null)
     setManualCableMode(false)
     setReferencePanels([])
@@ -1297,17 +1261,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return Object.values(rowMap)
   }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
 
-  // Materialize wallSplits for newly recognized DXF items (preselection at creation time)
-  useEffect(() => {
-    if (!recognitionTakeoffRows.length) return
-    setWallSplits(prev => {
-      const { next, changed } = initializeRecognitionSplits(prev, recognitionTakeoffRows, activeTargetRef.current.wallType)
-      return changed ? next : prev
-    })
-  }, [recognitionTakeoffRows])
-
   // From PDF manual markers (assembly-based counting)
-  // wallSplits are materialized by onMarkersChange handler → just read from state
   const markerTakeoffRows = useMemo(() => {
     if (!pdfMarkers.length) return []
     const rowMap = {}
@@ -1318,9 +1272,43 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       if (!rowMap[asmId]) rowMap[asmId] = { asmId, qty: 0, variantId: variantOverrides[asmId] || null, _fromMarkers: true }
       rowMap[asmId].qty += 1
     }
-    // wallSplits already persisted by onMarkersChange — read from state
+    // Reconcile wallSplits: if splits exist, adjust to match actual marker count
     for (const row of Object.values(rowMap)) {
-      row.wallSplits = wallSplits[row.asmId] || { brick: row.qty }
+      const splits = wallSplits[row.asmId]
+      if (splits) {
+        const splitTotal = Object.values(splits).reduce((s, n) => s + n, 0)
+        const diff = row.qty - splitTotal
+        if (diff > 0) {
+          // New markers added — put extra in 'brick' (default)
+          row.wallSplits = { ...splits, brick: (splits.brick || 0) + diff }
+        } else if (diff < 0) {
+          // Markers removed — reduce from 'brick' first, then others
+          const adjusted = { ...splits }
+          let toRemove = Math.abs(diff)
+          // Remove from brick first
+          if (adjusted.brick && adjusted.brick > 0) {
+            const take = Math.min(adjusted.brick, toRemove)
+            adjusted.brick -= take
+            toRemove -= take
+          }
+          // Remove from others if still needed
+          if (toRemove > 0) {
+            for (const k of Object.keys(adjusted)) {
+              if (toRemove <= 0) break
+              if (adjusted[k] > 0) {
+                const take = Math.min(adjusted[k], toRemove)
+                adjusted[k] -= take
+                toRemove -= take
+              }
+            }
+          }
+          row.wallSplits = adjusted
+        } else {
+          row.wallSplits = splits
+        }
+      } else {
+        row.wallSplits = null
+      }
     }
     return Object.values(rowMap)
   }, [pdfMarkers, variantOverrides, wallSplits])
@@ -1980,23 +1968,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   assemblies={assemblies}
                   focusTarget={focusTarget}
                   onDirtyChange={onDirtyChange}
-                  activeAssemblyId={activeTarget.asmId}
-                  onActiveAssemblyChange={(newAsmId) => {
-                    // PdfViewerPanel changed assembly — sync into activeTarget
-                    setActiveTarget(prev => ({
-                      ...prev,
-                      asmId: newAsmId,
-                      variantId: variantOverrides[newAsmId] || null,
-                    }))
-                  }}
                   onMarkersChange={(markers) => {
                     setPdfMarkers(markers)
-                    // Materialize wallSplits at creation time — preselection baked into state
-                    const asmCounts = countMarkerAssemblies(markers)
-                    setWallSplits(prev => {
-                      const { next, changed } = reconcileMarkerSplits(prev, asmCounts, activeTarget.wallType)
-                      return changed ? next : prev
-                    })
                   }}
                   onCableData={(data) => {
                     if (data) {
@@ -2140,8 +2113,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         assemblies={assemblies}
                         memoryTier={memItem?.rule || null}
                         signalType={memItem?.signalType || null}
-                        activeTarget={activeTarget}
-                        onActivateTarget={setActiveTarget}
                         isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
@@ -2498,7 +2469,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         width: '100%', padding: '13px 16px', borderRadius: 8,
                         cursor: (saving || saveGating.disabled) ? 'not-allowed' : 'pointer',
                         background: getSaveColor(workflowStatus), border: 'none',
-                        color: C.bg,
+                        color: workflowStatus?.stage === 'unresolved_blocks' ? C.textSub : C.bg,
                         fontSize: 14, fontFamily: 'Syne', fontWeight: 700, marginBottom: 8,
                         opacity: (saving || saveGating.disabled) ? 0.5 : 1,
                         transition: 'all 0.2s ease',
