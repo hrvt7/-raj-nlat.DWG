@@ -1226,6 +1226,15 @@ function SaaSShell() {
               <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: isMobile ? 16 : 19, letterSpacing: '-0.01em', color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {settings?.company?.name || ''}
               </div>
+            ) : page === 'projektek' && activeProjectId ? (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, overflow: 'hidden' }}>
+                <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: isMobile ? 14 : 16, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {getProject(activeProjectId)?.name || ''}
+                </span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {getPlansByProject(activeProjectId).length} tervrajz
+                </span>
+              </div>
             ) : (
               <div style={{ color: C.text, fontWeight: 600, fontSize: isMobile ? 14 : 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {viewingQuote ? viewingQuote.projectName : getPageTitle()}
