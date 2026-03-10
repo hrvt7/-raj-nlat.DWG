@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { C, ConfirmDialog, WorkflowStepper, EmptyState, Button, useToast } from '../components/ui.jsx'
+import { C, ConfirmDialog, EmptyState, Button, useToast } from '../components/ui.jsx'
 import { isDemoSeeded, seedDemoData } from '../data/demoSeed.js'
 import {
   loadPlans, getPlanFile, savePlan, deletePlan,
@@ -1165,16 +1165,59 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const selectedPlans = plans.filter(p => selectedIds.includes(p.id))
   const selectedCount = selectedPlans.length
 
-  // ── Compute workflow step from project state ──
-  // 0=no plans, 1=has plans but no meta, 2=has meta but no calc, 3=has calc (ready for quote)
-  const workflowStep = (() => {
-    if (plans.length === 0) return 0
-    const hasMeta = plans.some(p => p.inferredMeta?.metaConfidence > 0)
-    const hasCalc = plans.some(p => (p.markerCount || 0) > 0 || (p.parseResult?.blocks?.length || 0) > 0)
-    if (hasCalc) return 3
-    if (hasMeta || templates.length > 0) return 2
-    return 1
-  })()
+  // ── Open PDF detection review for a plan ──
+  const handleOpenPdfReview = useCallback(async (plan) => {
+    if (!plan.pdfDetectionSummary || !plan.pdfDetectionSummary.totalCandidates) return
+    // Build cache key to retrieve cached detection candidates
+    // The cache key format is {fileHash}:{provider}:{version} but we look up by plan
+    // Try to get from the detection_candidates store via the analysis cache key on plan meta
+    const cacheKey = plan.pdfAnalysisCacheKey
+    if (!cacheKey) {
+      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
+      return
+    }
+    const cached = await getCachedDetection(cacheKey)
+    if (!cached || !cached.candidates || !cached.candidates.length) {
+      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
+      return
+    }
+    const adapted = adaptCandidates(cached.candidates, plan.id)
+    setPdfReviewPlan(plan)
+    setPdfReviewCandidates(adapted)
+    setPdfDetectionMeta(cached.meta || null)
+  }, [toast])
+
+  const handleClosePdfReview = useCallback(() => {
+    setPdfReviewPlan(null)
+    setPdfReviewCandidates(null)
+    setPdfDetectionMeta(null)
+  }, [])
+
+  const handlePdfReviewDone = useCallback(() => {
+    setPdfReviewPlan(null)
+    setPdfReviewCandidates(null)
+    setPdfDetectionMeta(null)
+    reload()
+  }, [reload])
+
+  // ── Custom symbol capture from PDF review ──
+  const handleCaptureSymbol = useCallback((detection) => {
+    // Prompt-less capture: use the detection's label/category directly
+    // The user already sees the detection, so we trust the context
+    try {
+      captureFromDetection({
+        projectId,
+        label: detection.label || 'Egyéni szimbólum',
+        category: detection.category || 'other',
+        color: detection.color,
+        detection,
+      })
+      toast?.(`"${detection.label || 'Szimbólum'}" mentve a projekt memóriába.`)
+    } catch (err) {
+      console.error('[Projektek] custom symbol capture failed:', err)
+      toast?.('Hiba a szimbólum mentésekor.')
+    }
+  }, [projectId, toast])
 
   if (!project) return (
     <div style={{ padding: 40, textAlign: 'center' }}>
@@ -1194,8 +1237,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
         <p style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>{plans.length} tervrajz</p>
       </div>
 
-      {/* ── Workflow stepper ── */}
-      <WorkflowStepper currentStep={workflowStep} />
 
 
       {/* ── Selection toolbar ── */}
