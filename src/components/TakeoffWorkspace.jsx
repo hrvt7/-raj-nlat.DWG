@@ -37,6 +37,8 @@ import { normalizeMarkers } from '../utils/markerModel.js'
 import ConfidenceBadge from './ConfidenceBadge.jsx'
 import DxfAuditCard from './DxfAuditCard.jsx'
 import { computeDxfAudit } from '../utils/dxfAudit.js'
+import CableConfidenceCard, { CableModeBadge } from './CableConfidenceCard.jsx'
+import { computeCableAudit } from '../utils/cableAudit.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -961,6 +963,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return computeDxfAudit(parsedDxf, recognizedItems)
   }, [parsedDxf, recognizedItems])
 
+  // ── Cable Audit (structured cable confidence/transparency) ─────────────────
+  const cableAudit = useMemo(() => {
+    if (!parsedDxf || isPdf) return null
+    return computeCableAudit(parsedDxf, recognizedItems, cableEstimate)
+  }, [parsedDxf, recognizedItems, cableEstimate, isPdf])
+
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
   // From DXF/PDF auto-recognition pipeline
   const recognitionTakeoffRows = useMemo(() => {
@@ -1786,8 +1794,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     {cableEstimate && (
                       <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 8, background: 'rgba(76,201,240,0.06)', border: `1px solid rgba(76,201,240,0.2)` }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.blue }}>
-                            Kábel (auto) — ~{Math.round(cableEstimate.cable_total_m)} m
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.blue }}>
+                              Kábel — ~{Math.round(cableEstimate.cable_total_m)} m
+                            </span>
+                            <CableModeBadge cableAudit={cableAudit} />
                           </div>
                           <button onClick={() => setRightTab('cable')} style={{ background: 'none', border: 'none', color: C.blue, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono' }}>
                             részletek →
@@ -1806,6 +1817,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 6 }}>
                   Kábelbecslés
                 </div>
+                {/* Cable Confidence Card — shows cable mode transparency */}
+                {cableAudit && !isPdf && (
+                  <CableConfidenceCard
+                    cableAudit={cableAudit}
+                    onTabSwitch={setRightTab}
+                    onManualCable={() => {
+                      // Placeholder: navigate to cable tab manual section
+                      // Full manual cable routing will be built in a future sprint
+                      console.log('[TakeoffPro] Manual cable mode requested — feature placeholder')
+                    }}
+                  />
+                )}
                 <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 16 }}>
                   {isPdf
                     ? 'Jelöld be az elosztót és az eszközöket a tervrajzon, majd kalibráld a léptéket — a kábelhossz a kijelölt pozíciókból számolódik. Ha nincs jelölés, eszközszám × átlagos kábelhossz alapján becsül.'
