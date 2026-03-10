@@ -35,7 +35,6 @@ import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
 import { normalizeMarkers } from '../utils/markerModel.js'
 import ConfidenceBadge from './ConfidenceBadge.jsx'
-import DxfAuditCard from './DxfAuditCard.jsx'
 import { computeDxfAudit } from '../utils/dxfAudit.js'
 import CableConfidenceCard, { CableModeBadge } from './CableConfidenceCard.jsx'
 import { computeCableAudit } from '../utils/cableAudit.js'
@@ -47,6 +46,7 @@ import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { buildBlockEvidence } from '../data/evidenceExtractor.js'
 import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId, isSyntheticItem, READINESS_LABELS, STATUS_LABELS } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
+import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -440,69 +440,189 @@ function RecognitionRow({ item, asmOverrides, assemblies, onAccept, onOverride, 
   )
 }
 
-// ─── Review Summary Card ─────────────────────────────────────────────────────
-// Compact recognition quality overview shown above takeoff rows.
-function ReviewSummaryCard({ summary, readiness, cableConfidence, onAcceptAll, hasAutoLow }) {
-  if (!summary || summary.total === 0) return null
+// ─── Workflow Status Card ─────────────────────────────────────────────────────
+// Unified status card replacing DxfAuditCard + ReviewSummaryCard stacking.
+// One status line, one CTA, collapsible detail. Reduces visual noise.
+function WorkflowStatusCard({ workflowStatus, reviewSummary, dxfAudit, cableAudit, onAcceptAll, onTabSwitch, onAction, isPdf }) {
+  const [expanded, setExpanded] = useState(false)
 
-  const activeItems = summary.total - summary.excluded
-  const trustedCount = summary.confirmed + summary.autoHigh
+  if (!workflowStatus || workflowStatus.stage === 'empty') return null
+
+  const { statusLine, statusColor: colorKey, cta, detail } = workflowStatus
+  const color = C[colorKey] || C.muted
+  const stats = detail?.stats || {}
+  const reasons = detail?.reasons || []
+
+  // Show review stats row only when there are recognized items
+  const hasStats = stats.total > 0
+  const activeItems = hasStats ? stats.total - (stats.excluded || 0) : 0
+  const trustedCount = (stats.confirmed || 0) + (stats.autoHigh || 0)
   const trustedPct = activeItems > 0 ? Math.round((trustedCount / activeItems) * 100) : 0
 
-  const statusColor = readiness.status === 'ready' ? C.accent
-    : readiness.status === 'ready_with_warnings' ? C.yellow
-    : C.red
+  const handleCta = () => {
+    if (!cta) return
+    switch (cta.action) {
+      case 'accept_all':  onAcceptAll?.(); break
+      case 'check_cable': onTabSwitch?.('cable'); break
+      case 'save':        onAction?.('save'); break
+      case 'review_blocks': onTabSwitch?.('takeoff'); break
+      case 'retry':       onAction?.('retry'); break
+      case 'reexport':    break // informational only
+      default: break
+    }
+  }
 
   return (
     <div style={{
-      padding: '10px 12px', borderRadius: 8, marginBottom: 10,
-      background: `${statusColor}08`,
-      border: `1px solid ${statusColor}30`,
+      padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+      background: `${color}0A`,
+      border: `1px solid ${color}30`,
+      transition: 'all 0.2s ease',
     }}>
-      {/* Title row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontFamily: 'DM Mono', fontSize: 11, fontWeight: 600, color: statusColor }}>
-          Felismerés: {trustedPct}% megbízható
-        </span>
-        {hasAutoLow && onAcceptAll && (
-          <button onClick={onAcceptAll} style={{
-            background: 'rgba(0,229,160,0.1)', border: `1px solid ${C.accent}40`, borderRadius: 5,
-            color: C.accent, fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
-            padding: '2px 7px', cursor: 'pointer',
+      {/* Header: status + CTA */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+          <span style={{
+            fontFamily: 'DM Mono', fontSize: 11, fontWeight: 600, color,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
-            Mind elfogadása ≥80%
-          </button>
-        )}
+            {statusLine}
+          </span>
+          {/* Compact trusted % badge when review data exists */}
+          {hasStats && !isPdf && workflowStatus.stage !== 'parse_failed' && (
+            <span style={{
+              fontFamily: 'DM Mono', fontSize: 9, padding: '1px 6px', borderRadius: 6,
+              background: 'rgba(255,255,255,0.05)', color: trustedPct >= 80 ? C.accent : C.textSub,
+              flexShrink: 0,
+            }}>
+              {trustedPct}%
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          {cta && cta.action !== 'save' && (
+            <button onClick={handleCta} style={{
+              background: `${color}15`, border: `1px solid ${color}35`, borderRadius: 6,
+              color, fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
+              padding: '3px 10px', cursor: 'pointer', transition: 'all 0.15s',
+              whiteSpace: 'nowrap',
+            }}>
+              {cta.label}
+            </button>
+          )}
+          {/* Detail toggle */}
+          {(reasons.length > 0 || hasStats || (dxfAudit && !isPdf)) && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              style={{
+                background: 'none', border: 'none', color: C.muted, cursor: 'pointer',
+                fontFamily: 'DM Mono', fontSize: 11, padding: '2px 4px',
+              }}
+            >
+              {expanded ? '▲' : '▼'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Stats row */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {summary.confirmed > 0 && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.accent }}>
-            ✓ {summary.confirmed} megerősített ({summary.confirmedQty} db)
-          </span>
-        )}
-        {summary.autoHigh > 0 && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>
-            ● {summary.autoHigh} auto ({summary.autoHighQty} db)
-          </span>
-        )}
-        {summary.autoLow > 0 && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.yellow }}>
-            ⚠ {summary.autoLow} gyenge ({summary.autoLowQty} db)
-          </span>
-        )}
-        {summary.unresolved > 0 && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red }}>
-            ✗ {summary.unresolved} ismeretlen ({summary.unresolvedQty} db)
-          </span>
-        )}
-        {summary.excluded > 0 && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
-            − {summary.excluded} kizárt
-          </span>
-        )}
-      </div>
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          {/* Review stats mini-row */}
+          {hasStats && !isPdf && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: reasons.length > 0 ? 8 : 0 }}>
+              {stats.confirmed > 0 && (
+                <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.accent }}>
+                  ✓ {stats.confirmed} ({stats.confirmedQty} db)
+                </span>
+              )}
+              {stats.autoHigh > 0 && (
+                <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>
+                  ● {stats.autoHigh} auto ({stats.autoHighQty} db)
+                </span>
+              )}
+              {stats.autoLow > 0 && (
+                <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.yellow }}>
+                  ⚠ {stats.autoLow} ({stats.autoLowQty} db)
+                </span>
+              )}
+              {stats.unresolved > 0 && (
+                <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.red }}>
+                  ✗ {stats.unresolved} ({stats.unresolvedQty} db)
+                </span>
+              )}
+              {stats.excluded > 0 && (
+                <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
+                  − {stats.excluded} kizárt
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Warning reasons */}
+          {reasons.length > 0 && (
+            <div style={{ marginBottom: (dxfAudit && !isPdf) ? 8 : 0 }}>
+              {reasons.map((r, i) => (
+                <div key={i} style={{
+                  fontFamily: 'DM Mono', fontSize: 10, color: C.muted,
+                  padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 5,
+                }}>
+                  <span style={{ color: C.yellow, flexShrink: 0 }}>•</span>
+                  <span>{r}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Inline DXF audit detail (replaces standalone DxfAuditCard) */}
+          {dxfAudit && !isPdf && dxfAudit.status !== 'PARSE_LIMITED' && (
+            <div style={{
+              padding: '8px 10px', borderRadius: 7, marginTop: 4,
+              background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+            }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, marginBottom: 6 }}>
+                Rajz részletek
+              </div>
+              {/* Score bars */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                {[
+                  { key: 'blocks', label: 'Blokk' },
+                  { key: 'recognition', label: 'Felism.' },
+                  { key: 'cable', label: 'Kábel' },
+                  { key: 'units', label: 'Egys.' },
+                ].map(({ key, label }) => (
+                  <div key={key} style={{ flex: 1 }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 8, color: C.muted, marginBottom: 2 }}>{label}</div>
+                    <div style={{
+                      height: 3, borderRadius: 1.5, background: 'rgba(255,255,255,0.06)', overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        height: '100%', borderRadius: 1.5,
+                        width: `${(dxfAudit.scores?.[key] || 0) * 100}%`,
+                        background: (dxfAudit.scores?.[key] || 0) >= 0.7 ? C.accent
+                          : (dxfAudit.scores?.[key] || 0) >= 0.3 ? C.yellow
+                          : (dxfAudit.scores?.[key] || 0) > 0 ? C.red : C.muted,
+                        transition: 'width 0.4s ease',
+                      }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Worked/missing compact */}
+              {(dxfAudit.worked?.length > 0 || dxfAudit.missing?.length > 0) && (
+                <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, lineHeight: 1.5 }}>
+                  {(dxfAudit.worked || []).slice(0, 3).map((w, i) => (
+                    <div key={`w${i}`}><span style={{ color: C.accent }}>+</span> {w}</div>
+                  ))}
+                  {(dxfAudit.missing || []).slice(0, 3).map((m, i) => (
+                    <div key={`m${i}`}><span style={{ color: C.yellow }}>!</span> {m}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -739,7 +859,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
-  const [auditDismissed, setAuditDismissed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
@@ -1125,6 +1244,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
   // From DXF/PDF auto-recognition pipeline
+  // (workflowStatus is computed below takeoffRows because it needs takeoffRowCount)
   const recognitionTakeoffRows = useMemo(() => {
     const rowMap = {}
     for (const item of effectiveItems) {
@@ -1220,6 +1340,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     }
     return Object.values(rowMap)
   }, [recognitionTakeoffRows, markerTakeoffRows])
+
+  // ── Unified workflow status (single source for status/CTA/badges) ───────
+  const workflowStatus = useMemo(() => {
+    return computeWorkflowStatus({
+      dxfAudit, reviewSummary, quoteReadiness, cableAudit,
+      takeoffRowCount: takeoffRows.length,
+      isPdf, hasFile: !!parsedDxf || isPdf,
+    })
+  }, [dxfAudit, reviewSummary, quoteReadiness, cableAudit, takeoffRows.length, isPdf, parsedDxf])
+
+  const saveGating = useMemo(() => getSaveGating(workflowStatus), [workflowStatus])
 
   // ── Auto-compute cable estimate for DXF (3-tier cascade) ────────────────
   // P1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
@@ -1900,10 +2031,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.bgCard, flexShrink: 0 }}>
             {[
-              { id: 'takeoff',   label: 'Felmérés',    badge: takeoffRows.length },
-              { id: 'cable',     label: 'Kábel' },
+              { id: 'takeoff',   label: 'Felmérés',    badge: takeoffRows.length, warn: workflowStatus?.badges?.takeoff },
+              { id: 'cable',     label: 'Kábel',       warn: workflowStatus?.badges?.cable },
               { id: 'context',   label: 'Beállítás' },
-              { id: 'calc',      label: 'Kalkuláció' },
+              { id: 'calc',      label: 'Kalkuláció',  warn: workflowStatus?.badges?.calc },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1914,6 +2045,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   color: rightTab === tab.id ? C.accent : C.muted,
                   fontFamily: 'Syne', fontWeight: 700, fontSize: 11, display: 'flex',
                   alignItems: 'center', justifyContent: 'center', gap: 4, transition: 'color 0.15s',
+                  position: 'relative',
                 }}
               >
                 {tab.label}
@@ -1921,6 +2053,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   <span style={{ background: rightTab === tab.id ? C.accentDim : 'rgba(255,255,255,0.05)', borderRadius: 10, padding: '1px 5px', fontSize: 10 }}>
                     {tab.badge}
                   </span>
+                )}
+                {/* Warning dot */}
+                {tab.warn && rightTab !== tab.id && (
+                  <span style={{
+                    position: 'absolute', top: 5, right: 8,
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: tab.warn === 'error' ? C.red
+                      : tab.warn === 'blocked' ? C.red
+                      : C.yellow,
+                  }} />
                 )}
               </button>
             ))}
@@ -1932,22 +2074,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {/* ── TAKEOFF TAB ─────────────────────────────────────────────── */}
             {rightTab === 'takeoff' && (
               <div>
-                {/* DXF Audit Card — shows import quality summary */}
-                {dxfAudit && !auditDismissed && !isPdf && (
-                  <DxfAuditCard
-                    audit={dxfAudit}
-                    onTabSwitch={setRightTab}
-                    onDismiss={() => setAuditDismissed(true)}
-                  />
-                )}
-                {/* Review Summary — compact recognition quality overview */}
-                {recognizedItems.length > 0 && !isPdf && (
-                  <ReviewSummaryCard
-                    summary={reviewSummary}
-                    readiness={quoteReadiness}
-                    cableConfidence={cableEstimate?.confidence ?? null}
+                {/* Unified Workflow Status Card — replaces DxfAuditCard + ReviewSummaryCard */}
+                {workflowStatus && workflowStatus.stage !== 'empty' && !isPdf && (
+                  <WorkflowStatusCard
+                    workflowStatus={workflowStatus}
+                    reviewSummary={reviewSummary}
+                    dxfAudit={dxfAudit}
+                    cableAudit={cableAudit}
                     onAcceptAll={acceptAllHighConf}
-                    hasAutoLow={reviewSummary.autoLow > 0}
+                    onTabSwitch={setRightTab}
+                    onAction={(action) => {
+                      if (action === 'save') handleSave()
+                    }}
+                    isPdf={isPdf}
                   />
                 )}
 
@@ -2308,37 +2447,34 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       </div>
                     </div>
 
-                    {/* ── Quote readiness warnings ── */}
-                    {quoteReadiness.status !== 'ready' && recognizedItems.length > 0 && !isPdf && (
+                    {/* ── Quote readiness — gated save button ── */}
+                    {saveGating.reason && (
                       <div style={{
-                        padding: '8px 10px', borderRadius: 7, marginBottom: 8,
-                        background: quoteReadiness.status === 'review_required' ? 'rgba(255,107,107,0.08)' : 'rgba(255,209,102,0.08)',
-                        border: `1px solid ${quoteReadiness.status === 'review_required' ? 'rgba(255,107,107,0.25)' : 'rgba(255,209,102,0.25)'}`,
+                        padding: '6px 10px', borderRadius: 7, marginBottom: 8,
+                        background: 'rgba(255,107,107,0.08)',
+                        border: '1px solid rgba(255,107,107,0.25)',
+                        fontFamily: 'DM Mono', fontSize: 10, color: C.red,
                       }}>
-                        <div style={{ fontFamily: 'DM Mono', fontSize: 10, fontWeight: 600, marginBottom: 3,
-                          color: quoteReadiness.status === 'review_required' ? C.red : C.yellow }}>
-                          {READINESS_LABELS[quoteReadiness.status]}
-                        </div>
-                        {quoteReadiness.reasons.map((r, i) => (
-                          <div key={i} style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, lineHeight: 1.4 }}>
-                            • {r}
-                          </div>
-                        ))}
+                        {saveGating.reason}
                       </div>
                     )}
 
                     {/* ── Action: create quote ── */}
                     <button
                       onClick={handleSave}
-                      disabled={saving}
+                      disabled={saving || saveGating.disabled}
+                      title={saveGating.reason || undefined}
                       style={{
-                        width: '100%', padding: '13px 16px', borderRadius: 8, cursor: 'pointer',
-                        background: C.accent, border: 'none', color: C.bg,
+                        width: '100%', padding: '13px 16px', borderRadius: 8,
+                        cursor: (saving || saveGating.disabled) ? 'not-allowed' : 'pointer',
+                        background: getSaveColor(workflowStatus), border: 'none',
+                        color: workflowStatus?.stage === 'unresolved_blocks' ? C.textSub : C.bg,
                         fontSize: 14, fontFamily: 'Syne', fontWeight: 700, marginBottom: 8,
-                        opacity: saving ? 0.5 : 1,
+                        opacity: (saving || saveGating.disabled) ? 0.5 : 1,
+                        transition: 'all 0.2s ease',
                       }}
                     >
-                      {saving ? '...' : planId ? 'Kalkuláció mentése' : 'Ajánlat létrehozása →'}
+                      {getSaveLabel(workflowStatus, planId, saving)}
                     </button>
                   </>
                 )}
