@@ -30,7 +30,6 @@ import { createQuote } from '../utils/createQuote.js'
 import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
 import { WALL_FACTORS, calcProductivityFactor } from '../data/workItemsDb.js'
-import { addUserOverride, ASSEMBLY_TYPES } from '../data/symbolDictionary.js'
 import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
 import { normalizeMarkers } from '../utils/markerModel.js'
@@ -47,7 +46,6 @@ import { buildBlockEvidence } from '../data/evidenceExtractor.js'
 import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId, isSyntheticItem, READINESS_LABELS, STATUS_LABELS } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
-import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -1010,7 +1008,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setAsmOverrides({})
     setQtyOverrides({})
     setItemQtyOverrides({})
-    setAuditDismissed(false)
     setDeletedItems(new Set())
     setVariantOverrides({})
     setWallSplits({})
@@ -1022,6 +1019,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setDwgError(null)
     setViewerFile(null)
     setUnitOverride(null)
+    // Reset UI/save state to prevent stale data from previous file
+    setHighlightBlock(null)
+    setSaveError(null)
+    setSaveSuccess(false)
 
     const ext = f.name.toLowerCase().split('.').pop()
 
