@@ -982,7 +982,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     } finally {
       setParsePending(false)
     }
-  }, [fileToBase64])
+  }, [fileToBase64, memProjectId])
 
   // ── Effective items (filtered + overridden) ──────────────────────────────
   const effectiveItems = useMemo(() => {

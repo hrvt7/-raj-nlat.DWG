@@ -761,6 +761,7 @@ function ProjectListView({ onOpenProject }) {
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
   const inputRef = useRef(null)
+  const toast = useToast()
 
   const reload = useCallback(() => {
     const prjs = loadProjects()
