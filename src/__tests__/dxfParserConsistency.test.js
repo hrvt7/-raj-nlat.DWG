@@ -38,6 +38,15 @@ function buildDxf({
     add(2, ins.name)
     add(10, ins.x ?? 0)
     add(20, ins.y ?? 0)
+    // ATTRIB entities follow INSERT (terminated by SEQEND)
+    if (ins.attribs && ins.attribs.length > 0) {
+      for (const attr of ins.attribs) {
+        add(0, 'ATTRIB')
+        add(2, attr.tag)
+        add(1, attr.value)
+      }
+      add(0, 'SEQEND')
+    }
   }
 
   for (const line of lines) {
@@ -62,6 +71,8 @@ function buildDxf({
   for (const t of texts) {
     add(0, t.type || 'TEXT')
     add(8, t.layer || 'DEFAULT')
+    if (t.x != null) add(10, t.x)
+    if (t.y != null) add(20, t.y)
     add(1, t.text)
   }
 
@@ -477,6 +488,134 @@ describe('Fixture 3 — Multi-layer cable DXF (INSUNITS=4, cable/tray layers)', 
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Fixture 4: ATTRIB + positioned text DXF — verifies v2 evidence extraction inputs
+// Tests that insertPositions[].attribs and textEntities are populated correctly.
+// ═══════════════════════════════════════════════════════════════════════════════
+const FIXTURE_ATTRIBS = buildDxf({
+  insunits: 4, // mm
+  inserts: [
+    {
+      name: 'KAP_DUGALJ_01',
+      layer: 'E_SOCKET',
+      x: 1000, y: 2000,
+      attribs: [{ tag: 'TYPE', value: 'SOCKET_2P' }, { tag: 'BRAND', value: 'Legrand' }],
+    },
+    {
+      name: 'KAP_DUGALJ_01',
+      layer: 'E_SOCKET',
+      x: 3000, y: 4000,
+      attribs: [{ tag: 'TYPE', value: 'SOCKET_2P' }],
+    },
+    {
+      name: 'LAMP_SPOT_01',
+      layer: 'E_LIGHT',
+      x: 500, y: 600,
+      // no attribs
+    },
+  ],
+  texts: [
+    { layer: 'E_SOCKET', type: 'TEXT', text: 'DUGALJ', x: 1050, y: 2050 },
+    { layer: 'E_LIGHT',  type: 'TEXT', text: 'SPOT LED', x: 520, y: 620 },
+    { layer: 'TITLE',    type: 'MTEXT', text: 'Tervező: Teszt', x: 0, y: 0 },
+  ],
+})
+
+describe('Fixture 4 — ATTRIB + positioned text (v2 evidence inputs)', () => {
+  const raw = parseDxfText(FIXTURE_ATTRIBS)
+  const norm = normalizeDxfResult(raw, raw._source || 'browser')
+
+  it('raw parser returns success', () => {
+    expect(raw.success).toBe(true)
+  })
+
+  // ── insertPositions[].attribs content-level checks ──────────────────────
+  it('insertPositions carry attribs on inserts that have them', () => {
+    const kapInserts = norm.insertPositions.filter(ip => ip.name === 'KAP_DUGALJ_01')
+    expect(kapInserts).toHaveLength(2)
+
+    // First insert has 2 attribs
+    const first = kapInserts.find(ip => ip.x === 1000)
+    expect(first).toBeDefined()
+    expect(first.attribs).toBeDefined()
+    expect(first.attribs).not.toBeNull()
+    expect(first.attribs.length).toBe(2)
+    expect(first.attribs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tag: 'TYPE', value: 'SOCKET_2P' }),
+        expect.objectContaining({ tag: 'BRAND', value: 'Legrand' }),
+      ])
+    )
+
+    // Second insert has 1 attrib
+    const second = kapInserts.find(ip => ip.x === 3000)
+    expect(second).toBeDefined()
+    expect(second.attribs).toBeDefined()
+    expect(second.attribs.length).toBe(1)
+    expect(second.attribs[0].tag).toBe('TYPE')
+    expect(second.attribs[0].value).toBe('SOCKET_2P')
+  })
+
+  it('insertPositions have null attribs on inserts without ATTRIBs', () => {
+    const lampInserts = norm.insertPositions.filter(ip => ip.name === 'LAMP_SPOT_01')
+    expect(lampInserts).toHaveLength(1)
+    expect(lampInserts[0].attribs).toBeNull()
+  })
+
+  it('all insertPositions have the attribs field (null or array)', () => {
+    for (const ip of norm.insertPositions) {
+      expect(ip).toHaveProperty('attribs')
+      if (ip.attribs !== null) {
+        expect(Array.isArray(ip.attribs)).toBe(true)
+      }
+    }
+  })
+
+  // ── textEntities content-level checks ───────────────────────────────────
+  it('textEntities array is populated with positioned text', () => {
+    expect(norm.textEntities).toBeDefined()
+    expect(Array.isArray(norm.textEntities)).toBe(true)
+    expect(norm.textEntities.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('textEntities have correct shape: {text, x, y, layer}', () => {
+    for (const te of norm.textEntities) {
+      expect(te).toHaveProperty('text')
+      expect(te).toHaveProperty('x')
+      expect(te).toHaveProperty('y')
+      expect(te).toHaveProperty('layer')
+      expect(typeof te.text).toBe('string')
+      expect(typeof te.x).toBe('number')
+      expect(typeof te.y).toBe('number')
+      expect(typeof te.layer).toBe('string')
+    }
+  })
+
+  it('textEntities contain expected text content at correct positions', () => {
+    const dugaljText = norm.textEntities.find(te => te.text === 'DUGALJ')
+    expect(dugaljText).toBeDefined()
+    expect(dugaljText.x).toBeCloseTo(1050)
+    expect(dugaljText.y).toBeCloseTo(2050)
+    expect(dugaljText.layer).toBe('E_SOCKET')
+
+    const spotText = norm.textEntities.find(te => te.text === 'SPOT LED')
+    expect(spotText).toBeDefined()
+    expect(spotText.x).toBeCloseTo(520)
+    expect(spotText.y).toBeCloseTo(620)
+    expect(spotText.layer).toBe('E_LIGHT')
+  })
+
+  // ── Shape parity: textEntities present in all fixtures ──────────────────
+  it('textEntities field exists in all fixtures (empty array if no text)', () => {
+    // Also check fixture 2 (no text entities)
+    const raw2 = parseDxfText(FIXTURE_GUESSED)
+    const norm2 = normalizeDxfResult(raw2, 'browser')
+    expect(norm2).toHaveProperty('textEntities')
+    expect(Array.isArray(norm2.textEntities)).toBe(true)
+  })
+})
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Test Suite: normalizeDxfResult contract shape
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -485,6 +624,7 @@ describe('normalizeDxfResult — contract shape compliance', () => {
     'success', 'units', 'blocks', 'insertPositions', 'lengths',
     'layerInfo', 'layers', 'allText', 'titleBlock', 'geomBounds',
     'lineGeom', 'polylineGeom', 'summary', 'warnings', 'caps',
+    'textEntities',  // v2: positioned text entities
     '_source', '_normalizedAt',
     // Legacy aliases
     'inserts', 'all_text', 'title_block',

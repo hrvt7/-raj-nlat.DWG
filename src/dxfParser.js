@@ -93,10 +93,17 @@ export function parseDxfText(text) {
   const polylineGeom    = []           // [{layer, points}] — capped at 800
   const MAX_LINES = 3000, MAX_POLYS = 800
 
+  // ── Text entity spatial capture ──────────────────────────────────────────
+  const textEntities = []              // [{text, x, y, layer}] — text with positions
+  const MAX_TEXT_ENTS = 2000
+  let textX = null, textY = null
+
   let entityType = null, entityLayer = 'DEFAULT', pts = [], ptX = null, ptY = null
   let closed = false, lineStart = null, textVal = null
-  // INSERT position tracking
+  // INSERT position tracking + ATTRIB collection
   let insName = null, insX = null, insY = null
+  let insAttribs = []                  // [{tag, value}] for current INSERT's ATTRIBs
+  let attribTag = null                 // current ATTRIB tag name being collected
 
   const flushPolyline = () => {
     if (entityType === 'LWPOLYLINE' && pts.length > 1) {
@@ -117,11 +124,14 @@ export function parseDxfText(text) {
   }
 
   const flushInsert = () => {
-    if (entityType === 'INSERT' && insName !== null && insX !== null) {
+    if (insName !== null && insX !== null) {
       const key = `${insName}||${entityLayer}`
       blockCounts[key] = (blockCounts[key]||0) + 1
-      insertPositions.push({ name: insName, layer: entityLayer, x: insX, y: insY ?? 0 })
-      insName = null; insX = null; insY = null
+      insertPositions.push({
+        name: insName, layer: entityLayer, x: insX, y: insY ?? 0,
+        attribs: insAttribs.length ? [...insAttribs] : null,
+      })
+      insName = null; insX = null; insY = null; insAttribs = []
     }
   }
 
@@ -130,11 +140,21 @@ export function parseDxfText(text) {
     if (code === 0 && val === 'ENDSEC') { flushPolyline(); flushInsert(); break }
 
     if (code === 0) {
+      // ATTRIB entities follow INSERT — collect tag/value pairs
+      if (val === 'ATTRIB') {
+        entityType = 'ATTRIB'; attribTag = null; continue
+      }
+      // SEQEND terminates ATTRIB sequence — flush the INSERT with its attribs
+      if (val === 'SEQEND') {
+        flushInsert(); entityType = null; continue
+      }
       flushPolyline()
       flushInsert()
       entityType = val; entityLayer = 'DEFAULT'; pts = []; ptX = null; ptY = null
       closed = false; lineStart = null; textVal = null
       insName = null; insX = null; insY = null
+      insAttribs = []; attribTag = null
+      textX = null; textY = null
       continue
     }
 
@@ -147,6 +167,15 @@ export function parseDxfText(text) {
       if (code === 2) insName = val
       if (code === 10) insX = parseFloat(val)
       if (code === 20) insY = parseFloat(val)
+    }
+
+    // Collect ATTRIB tag/value pairs for the current INSERT
+    if (entityType === 'ATTRIB') {
+      if (code === 2) attribTag = val
+      if (code === 1 && attribTag) {
+        insAttribs.push({ tag: attribTag, value: val })
+        attribTag = null
+      }
     }
 
     if (entityType === 'LWPOLYLINE') {
@@ -172,14 +201,22 @@ export function parseDxfText(text) {
       }
     }
 
-    if ((entityType==='TEXT'||entityType==='MTEXT') && code===1) {
-      const trimmed = val.trim()
-      if (trimmed.length > 1) {
-        allText.push(trimmed)
-        const lu = entityLayer.toUpperCase()
-        if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
-          if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
-          titleBlock[entityLayer].push(trimmed)
+    if (entityType === 'TEXT' || entityType === 'MTEXT') {
+      if (code === 10) textX = parseFloat(val)
+      if (code === 20) textY = parseFloat(val)
+      if (code === 1) {
+        const trimmed = val.trim()
+        if (trimmed.length > 1) {
+          allText.push(trimmed)
+          // Capture text position for evidence extraction
+          if (textX !== null && textEntities.length < MAX_TEXT_ENTS) {
+            textEntities.push({ text: trimmed, x: textX, y: textY ?? 0, layer: entityLayer })
+          }
+          const lu = entityLayer.toUpperCase()
+          if (['TITLE','CIM','FEJLEC','BORDER','KERET'].some(k=>lu.includes(k))) {
+            if (!titleBlock[entityLayer]) titleBlock[entityLayer] = []
+            titleBlock[entityLayer].push(trimmed)
+          }
         }
       }
     }
@@ -233,10 +270,11 @@ export function parseDxfText(text) {
     title_block: titleBlock,
     all_text: allText,                   // all TEXT/MTEXT for metadata inference
     // ── Geometry for SVG viewer overlay ───────────────────────────────────
-    inserts: insertPositions,          // [{name, layer, x, y}]
+    inserts: insertPositions,          // [{name, layer, x, y, attribs}]
     lineGeom,                          // [{layer, x1, y1, x2, y2}]
     polylineGeom,                      // [{layer, points: [[x,y],...], closed}]
     geomBounds,                        // {minX, maxX, minY, maxY, width, height}
+    textEntities,                      // [{text, x, y, layer}] — text with positions
     summary: {
       total_block_types: new Set(blocks.map(b=>b.name)).size,
       total_blocks: blocks.reduce((s,b)=>s+b.count,0),

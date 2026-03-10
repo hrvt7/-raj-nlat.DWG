@@ -26,7 +26,8 @@ import { resolveUnits } from './dxfUnits.js'
 //     auto_detected:  boolean      — legacy compat (= isGuessed)
 //   }
 //   blocks:           [{ name, layer, count }]
-//   insertPositions:  [{ name, layer, x, y }]
+//   insertPositions:  [{ name, layer, x, y, attribs: [{tag, value}]|null }]
+//   textEntities:     [{ text, x, y, layer }]   — text with spatial positions
 //   lengths:          [{ layer, length, length_raw, info }]
 //   layerInfo:        { [layer]: { type, cable_type?, cores?, ... } }
 //   layers:           string[]
@@ -104,6 +105,7 @@ function normalizeBrowserLike(raw, source) {
   const lineGeom = raw.lineGeom || []
   const polylineGeom = raw.polylineGeom || []
   const geomBounds = raw.geomBounds || null
+  const textEntities = raw.textEntities || []
   const summary = raw.summary || {}
   const rawUnits = raw.units || {}
 
@@ -169,6 +171,7 @@ function normalizeBrowserLike(raw, source) {
     geomBounds,
     lineGeom,
     polylineGeom,
+    textEntities,
     summary: {
       total_block_types: summary.total_block_types ?? new Set(blocks.map(b => b.name)).size,
       total_blocks: summary.total_blocks ?? blocks.reduce((s, b) => s + b.count, 0),
@@ -306,6 +309,7 @@ function normalizeCableAgent(raw, source) {
     geomBounds,
     lineGeom,
     polylineGeom,
+    textEntities: [],              // cableAgent doesn't extract text entities
     summary: {
       total_block_types: new Set(blocks.map(b => b.name)).size,
       total_blocks: blocks.reduce((s, b) => s + b.count, 0),
@@ -339,6 +343,7 @@ function emptyContract(source) {
     geomBounds: null,
     lineGeom: [],
     polylineGeom: [],
+    textEntities: [],
     summary: { total_block_types: 0, total_blocks: 0, total_layers: 0, layers_with_lines: 0, total_inserts: 0 },
     warnings: [],
     caps: null,

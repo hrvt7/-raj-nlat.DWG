@@ -44,6 +44,7 @@ import { loadReferencePanels, saveReferencePanels, toggleReferencePanelBlock, bu
 import { computePanelAssistedEstimate } from '../utils/panelAssistedEstimate.js'
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
+import { buildBlockEvidence } from '../data/evidenceExtractor.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -445,7 +446,7 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType }) {
   const [hovered, setHovered] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
@@ -520,6 +521,19 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
               {memoryTier === 'account' ? 'Fiók memória' : memoryTier === 'project' ? 'Projekt memória' : 'Globális javaslat'}
             </span>
           )}
+          {signalType && signalType !== 'block_name' && (
+            <span style={{
+              fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
+              padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+              background: 'rgba(255,209,102,0.12)',
+              color: '#FFD166',
+            }}>
+              {signalType === 'layer_name' ? 'Réteg' :
+               signalType === 'attribute_signature' ? 'Attribútum' :
+               signalType === 'nearby_text' ? 'Szöveg' :
+               signalType === 'hybrid' ? 'Több jel' : null}
+            </span>
+          )}
         </div>
         <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, flexShrink: 0 }}>
           {totalQty} db
@@ -576,6 +590,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── File & parse state ────────────────────────────────────────────────────
   const [file, setFile] = useState(null)
   const [parsedDxf, setParsedDxf] = useState(null)
+  const [evidenceMap, setEvidenceMap] = useState(null)  // Map<blockName, Evidence> for multi-signal memory
   const [parseProgress, setParseProgress] = useState(0)
   const [parsePending, setParsePending] = useState(false)
 
@@ -802,6 +817,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const handleFile = useCallback(async (f) => {
     setFile(f)
     setParsedDxf(null)
+    setEvidenceMap(null)
     setRecognizedItems([])
     setAsmOverrides({})
     setQtyOverrides({})
@@ -939,6 +955,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           setDwgStatus('failed')
           setDwgError(convErr.message)
           setParsedDxf(normalizeDxfResult({ success: false, _dwgFailed: true }, 'browser'))
+          setEvidenceMap(null)
           return
         }
 
@@ -959,6 +976,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       result = normalizeDxfResult(result, parserSource)
       setParsedDxf(result)
 
+      // ── Build evidence from NORMALIZED contract (parser-path independent) ──
+      const evMap = buildBlockEvidence(result)
+      setEvidenceMap(evMap)
+
       // Run recognition on all unique block types
       const blockMap = {}
       for (const b of (result.blocks || [])) {
@@ -969,9 +990,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         let rec = recognizeBlock(blockName)
         // Memory cascade: if recognizeBlock has no good match, check learned memory
         if ((!rec.asmId || rec.confidence < 0.80) && memProjectId) {
-          const mem = lookupMemory(blockName, memProjectId)
+          const evidence = evMap.get(blockName) || null
+          const mem = lookupMemory(blockName, memProjectId, evidence)
           if (mem) {
-            rec = { asmId: mem.asmId, confidence: mem.confidence, matchType: 'memory', rule: mem.tier }
+            rec = {
+              asmId: mem.asmId, confidence: mem.confidence,
+              matchType: 'memory', rule: mem.tier,
+              signalType: mem.signalType || 'block_name',
+            }
           }
         }
         return { blockName, qty, ...rec }
@@ -982,6 +1008,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     } catch (err) {
       console.error('Parse error:', err)
       setParsedDxf(normalizeDxfResult({ success: false, error: err.message || String(err) }, 'browser'))
+      setEvidenceMap(null)
     } finally {
       setParsePending(false)
     }
@@ -1286,7 +1313,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         changed = true
         // Learn from explicit user click — record to recognition memory
         if (memProjectId) {
-          recordConfirmation(item.blockName, item.asmId, memProjectId, 'accept_all')
+          recordConfirmation(item.blockName, item.asmId, memProjectId, 'accept_all', evidenceMap?.get(item.blockName))
         }
       }
     }
@@ -1367,7 +1394,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         if (memProjectId) {
           for (const item of effectiveItems) {
             const finalAsmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
-            if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan')
+            if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
           }
         }
 
@@ -1450,7 +1477,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       if (memProjectId) {
         for (const item of effectiveItems) {
           const finalAsmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
-          if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan')
+          if (finalAsmId) recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
         }
       }
 
@@ -1724,7 +1751,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       background: C.accentDim, border: `1px solid ${C.accent}40`,
                       color: C.accent, fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
                     }}>🔄 Próbáld újra</button>
-                    <button onClick={() => { setFile(null); setParsedDxf(null) }} style={{
+                    <button onClick={() => { setFile(null); setParsedDxf(null); setEvidenceMap(null) }} style={{
                       padding: '9px 18px', borderRadius: 8, cursor: 'pointer',
                       background: 'transparent', border: `1px solid ${C.border}`,
                       color: C.textSub, fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
@@ -1865,6 +1892,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         wallSplits={row.wallSplits}
                         assemblies={assemblies}
                         memoryTier={memItem?.rule || null}
+                        signalType={memItem?.signalType || null}
                         isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
