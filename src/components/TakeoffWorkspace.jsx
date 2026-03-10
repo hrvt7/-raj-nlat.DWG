@@ -1013,6 +1013,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setDeletedItems(new Set())
     setVariantOverrides({})
     setWallSplits({})
+    setActiveWallType('brick')
     setCableEstimate(null)
     setManualCableMode(false)
     setReferencePanels([])
