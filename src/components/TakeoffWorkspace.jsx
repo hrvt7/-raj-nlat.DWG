@@ -634,7 +634,7 @@ const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType }) {
+function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, activeWallType, onSetActiveWallType }) {
   const [hovered, setHovered] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
@@ -732,32 +732,44 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
         </div>
       </div>
 
-      {/* ── Per-wall-type split counters ── */}
+      {/* ── Per-wall-type split counters + active target selector ── */}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
         {WALL_OPTS.map(w => {
           const n = effectiveSplits[w.key] || 0
-          const active = n > 0
+          const hasCount = n > 0
+          const isTarget = activeWallType === w.key
           return (
             <div key={w.key} style={{
               display: 'flex', alignItems: 'center', gap: 1,
               padding: '2px 5px', borderRadius: 6,
-              background: active ? w.color + '15' : 'transparent',
-              border: `1px solid ${active ? w.color + '55' : C.border}`,
+              background: isTarget ? w.color + '22' : (hasCount ? w.color + '15' : 'transparent'),
+              border: `1px solid ${isTarget ? w.color : (hasCount ? w.color + '55' : C.border)}`,
+              outline: isTarget ? `2px solid ${w.color}` : 'none',
+              outlineOffset: -1,
               transition: 'all 0.12s',
             }}>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: active ? w.color : C.muted, minWidth: 26, userSelect: 'none' }}>
+              <span
+                onClick={(e) => { e.stopPropagation(); onSetActiveWallType(w.key) }}
+                title={`Aktív faltípus: ${w.label}`}
+                style={{
+                  fontFamily: 'DM Mono', fontSize: 10, minWidth: 26, userSelect: 'none',
+                  cursor: 'pointer',
+                  color: isTarget ? w.color : (hasCount ? w.color : C.muted),
+                  fontWeight: isTarget ? 700 : 400,
+                }}
+              >
                 {w.label}
               </span>
               <button
                 onClick={() => handleDelta(w.key, -1)}
-                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: hasCount ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >−</button>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: active ? w.color : C.muted, minWidth: 16, textAlign: 'center', userSelect: 'none' }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: hasCount ? w.color : C.muted, minWidth: 16, textAlign: 'center', userSelect: 'none' }}>
                 {n}
               </span>
               <button
                 onClick={() => handleDelta(w.key, +1)}
-                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: hasCount ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >+</button>
             </div>
           )
@@ -2065,30 +2077,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             {/* ── TAKEOFF TAB ─────────────────────────────────────────────── */}
             {rightTab === 'takeoff' && (
               <div>
-                {/* ── Wall type preselection bar ── */}
-                <div style={{
-                  display: 'flex', gap: 4, marginBottom: 10, padding: '6px 0',
-                  borderBottom: `1px solid ${C.border}`,
-                }}>
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, alignSelf: 'center', marginRight: 4 }}>Fal:</span>
-                  {WALL_OPTS.map(w => (
-                    <button
-                      key={w.key}
-                      onClick={() => setActiveWallType(w.key)}
-                      style={{
-                        padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                        background: activeWallType === w.key ? w.color + '22' : 'transparent',
-                        color: activeWallType === w.key ? w.color : C.muted,
-                        fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
-                        outline: activeWallType === w.key ? `2px solid ${w.color}` : `1px solid ${C.border}`,
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {w.label}
-                    </button>
-                  ))}
-                </div>
-
                 {/* Unified Workflow Status Card — replaces DxfAuditCard + ReviewSummaryCard */}
                 {workflowStatus && workflowStatus.stage !== 'empty' && !isPdf && (
                   <WorkflowStatusCard
@@ -2127,6 +2115,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         assemblies={assemblies}
                         memoryTier={memItem?.rule || null}
                         signalType={memItem?.signalType || null}
+                        activeWallType={activeWallType}
+                        onSetActiveWallType={setActiveWallType}
                         isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}

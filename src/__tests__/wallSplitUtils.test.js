@@ -264,4 +264,51 @@ describe('wall preselection scenarios', () => {
     expect(changed).toBe(false)
     expect(next['ASM-010']).toEqual({ drywall: 2, brick: 2 })  // untouched
   })
+
+  it('S8: row-based wall selection — switching active wall type between rows', () => {
+    // User clicks "GK" chip in ASM-001 row → activeWallType = 'drywall'
+    // Then places 2 markers for ASM-001 → goes into drywall
+    const counts1 = { 'ASM-001': 2 }
+    const { next: state1 } = reconcileMarkerSplits({}, counts1, 'drywall')
+    expect(state1['ASM-001']).toEqual({ drywall: 2 })
+
+    // User clicks "Ytong" chip in ASM-002 row → activeWallType = 'ytong'
+    // Then places 3 markers for ASM-002 → goes into ytong
+    const counts2 = { 'ASM-001': 2, 'ASM-002': 3 }
+    const { next: state2 } = reconcileMarkerSplits(state1, counts2, 'ytong')
+    expect(state2['ASM-001']).toEqual({ drywall: 2 })  // untouched
+    expect(state2['ASM-002']).toEqual({ ytong: 3 })     // new
+  })
+
+  it('S9: variant + wall type form combined preselection context', () => {
+    // Variant is stored separately (variantOverrides[asmId]) — not in wallSplits.
+    // Wall splits only track wall-type distribution per assembly.
+    // Verify that wall splits work independently of variant changes.
+    const counts = { 'ASM-001': 4 }
+    const { next } = reconcileMarkerSplits({}, counts, 'concrete')
+    expect(next['ASM-001']).toEqual({ concrete: 4 })
+    // Variant would be in variantOverrides['ASM-001'] = 'dugalj-ip44' (separate state)
+    // Wall splits don't care about variant — they track wall material distribution only
+  })
+
+  it('S10: +/- editing preserves existing splits regardless of active wall type', () => {
+    // Simulate: user had 3 items in brick, manually moved 1 to drywall via +/-
+    const afterManualEdit = { 'ASM-001': { brick: 2, drywall: 1 } }
+    // Active wall type is now 'ytong' (user clicked ytong chip)
+    // But the existing splits for ASM-001 should not be affected
+    const { next, changed } = reconcileMarkerSplits(afterManualEdit, { 'ASM-001': 3 }, 'ytong')
+    // count = 3, splitTotal = 3, diff = 0 → no change
+    expect(changed).toBe(false)
+    expect(next['ASM-001']).toEqual({ brick: 2, drywall: 1 })  // untouched
+  })
+
+  it('S11: PDF and DXF produce same default wall type when preselected', () => {
+    // PDF path: reconcileMarkerSplits with activeWallType = 'concrete'
+    const pdfResult = reconcileMarkerSplits({}, { 'ASM-001': 5 }, 'concrete')
+    // DXF path: initializeRecognitionSplits with activeWallType = 'concrete'
+    const dxfResult = initializeRecognitionSplits({}, [{ asmId: 'ASM-001', qty: 5 }], 'concrete')
+    // Both should produce identical splits
+    expect(pdfResult.next['ASM-001']).toEqual({ concrete: 5 })
+    expect(dxfResult.next['ASM-001']).toEqual({ concrete: 5 })
+  })
 })
