@@ -45,7 +45,8 @@ import { computePanelAssistedEstimate } from '../utils/panelAssistedEstimate.js'
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { buildBlockEvidence } from '../data/evidenceExtractor.js'
-import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId, READINESS_LABELS, STATUS_LABELS } from '../utils/reviewState.js'
+import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId, isSyntheticItem, READINESS_LABELS, STATUS_LABELS } from '../utils/reviewState.js'
+import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { ApiErrorBanner } from '../hooks/useApiCall.jsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -1445,19 +1446,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
           hours: line.hours || 0, materialCost: line.materialCost || 0,
         }))
-        const snapshotAssembly = takeoffRows.map(row => {
-          const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
-          const rowP = computePricing({
-            takeoffRows: [row], assemblies, workItems, materials, context, markup, hourlyRate,
-            cableEstimate: null, difficultyMode,
-          })
-          return {
-            id: row.asmId, name: asm?.name || row.asmId, category: asm?.category || '',
-            qty: row.qty, wallSplits: row.wallSplits || null,
-            totalPrice: Math.round(rowP.total), totalMaterials: Math.round(rowP.materialCost),
-            totalLabor: Math.round(rowP.laborCost), totalHours: rowP.laborHours,
-          }
-        })
+        const snapshotAssembly = buildAssemblySummary(
+          takeoffRows, pricing, assemblies, workItems, materials,
+          context, markup, hourlyRate, difficultyMode, computePricing,
+        )
         updatePlanMeta(planId, {
           calcTotal: Math.round(pricing.total),
           calcItemCount: takeoffRows.reduce((s, r) => s + r.qty, 0),
@@ -1517,25 +1509,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         materialCost: line.materialCost || 0,
       }))
 
-      const assemblySummary = takeoffRows.map(row => {
-        const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
-        const rowPricing = computePricing({
-          takeoffRows: [row],
-          assemblies, workItems, materials, context, markup, hourlyRate,
-          cableEstimate: null, difficultyMode,
-        })
-        return {
-          id:            row.asmId,
-          name:          asm?.name || row.asmId,
-          category:      asm?.category || '',
-          qty:           row.qty,
-          wallSplits:    row.wallSplits || null,
-          totalPrice:    Math.round(rowPricing.total),
-          totalMaterials: Math.round(rowPricing.materialCost),
-          totalLabor:    Math.round(rowPricing.laborCost),
-          totalHours:    rowPricing.laborHours,
-        }
-      })
+      const assemblySummary = buildAssemblySummary(
+        takeoffRows, pricing, assemblies, workItems, materials,
+        context, markup, hourlyRate, difficultyMode, computePricing,
+      )
 
       const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
       // ── Resolve output mode: prefer estimation panel override, then project default ──

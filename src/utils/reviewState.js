@@ -47,6 +47,12 @@ export function classifyItem(item, asmOverrides = {}, deletedItems = new Set()) 
   const deleted = deletedItems instanceof Set ? deletedItems : new Set(deletedItems)
   if (deleted.has(item.blockName)) return 'excluded'
 
+  // Synthetic/prefill items from MergePlansView → confirmed
+  // These were explicitly assigned by the user in the merge UI.
+  if (isSyntheticItem(item)) {
+    return item.asmId ? 'confirmed' : 'unresolved'
+  }
+
   // User explicitly overrode the assembly → confirmed
   if (asmOverrides[item.blockName] !== undefined) {
     // Override to null means user intentionally unset → unresolved
@@ -179,6 +185,9 @@ export function computeQuoteReadiness(summary, cableConfidence = null) {
  */
 export function shouldTrainMemory(item) {
   if (!item || !item.reviewStatus) return false
+  // Synthetic/prefill items have no real block identity — never train memory
+  // on fake PREFILL_* block names, they would pollute the recognition store.
+  if (isSyntheticItem(item)) return false
   return item.reviewStatus === 'confirmed' || item.reviewStatus === 'auto_high'
 }
 
@@ -193,6 +202,20 @@ export function getEffectiveAsmId(item, asmOverrides = {}) {
   if (!item) return null
   if (asmOverrides[item.blockName] !== undefined) return asmOverrides[item.blockName]
   return item.asmId || null
+}
+
+/**
+ * Detect whether a recognized item is synthetic (from MergePlansView prefill).
+ * Synthetic items have fake PREFILL_* block names — they were explicitly
+ * assigned by the user in the merge UI, so they are trusted (confirmed),
+ * but they must NOT train recognition memory (no real block identity).
+ *
+ * @param {object} item — recognized item { blockName, ... }
+ * @returns {boolean}
+ */
+export function isSyntheticItem(item) {
+  if (!item || !item.blockName) return false
+  return item.blockName.startsWith('PREFILL_')
 }
 
 /**

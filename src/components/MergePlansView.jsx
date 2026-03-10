@@ -4,6 +4,7 @@ import { COUNT_CATEGORIES } from './DxfViewer/DxfToolbar.jsx'
 import { getPlanAnnotations, getPlanThumbnail } from '../data/planStore.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, loadSettings } from '../data/store.js'
 import { computePricing } from '../utils/pricing.js'
+import { normalizeMergeCableEstimate } from '../utils/pricingContract.js'
 import { ASSEMBLY_TYPES, addUserOverride, getAssemblyTypeLabel } from '../data/symbolDictionary.js'
 import { mergeParseResults, getAggregatedRows, deduplicateUnknowns } from '../utils/mergeParseResults.js'
 import { downloadCSV } from '../utils/csvExport.js'
@@ -287,9 +288,7 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf, onSaveBundle, act
       .filter(r => r.asmId && r.qty > 0)
 
     const cableTotal  = cableData ? cableData.totalWithWaste : 0
-    const cableEst    = cableTotal > 0
-      ? { cable_total_m: cableTotal, cable_by_type: { socket_m: cableTotal } }
-      : null
+    const cableEst    = normalizeMergeCableEstimate(cableTotal)
 
     if (takeoffRows.length === 0 && !cableEst) {
       return { materialCost: 0, laborCost: 0, laborHours: 0, subtotal: 0, markup: 0, total: 0, lines: [], vatPct, totalCable: cableTotal }
@@ -1119,9 +1118,7 @@ function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId,
       .filter(r => r.asmId && r.qty > 0)
 
     // Build a synthetic cable estimate from the summed cable metres across plans
-    const cableEst = totalCableM > 0
-      ? { cable_total_m: totalCableM, cable_by_type: { socket_m: totalCableM } }
-      : null
+    const cableEst = normalizeMergeCableEstimate(totalCableM)
 
     if (takeoffRows.length === 0 && !cableEst) {
       return { materialCost: 0, laborCost: 0, laborHours: 0, subtotal: 0, markup: 0, total: 0, lines: [], vatPct }
