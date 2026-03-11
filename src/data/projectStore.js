@@ -1,21 +1,27 @@
 // ─── Project Store ────────────────────────────────────────────────────────────
 // Stores project metadata for organizing plans + legends per construction site.
 // Each project = { id, name, description, legendPlanId, createdAt, defaultQuoteOutputMode? }
-// Stored in localStorage for quick sync access.
+// Stored in localStorage with versioned envelope (same as quote + plan stores).
+
+import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 
 const LS_KEY = 'takeoffpro_projects_meta'
+
+/** Current schema version for project store. */
+export const PROJECTS_SCHEMA_VERSION = 1
 
 function loadMeta() {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return []
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    return unwrapVersioned(parsed, PROJECTS_SCHEMA_VERSION, [])
   } catch (err) { console.warn('[projectStore] load failed:', err); return [] }
 }
 
 function saveMeta(projects) {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(projects))
+    localStorage.setItem(LS_KEY, JSON.stringify(wrapVersioned(projects, PROJECTS_SCHEMA_VERSION)))
   } catch (err) {
     console.error('[projectStore] save failed:', err)
     window.dispatchEvent(new CustomEvent('takeoffpro:storage-error', { detail: { error: err.message } }))

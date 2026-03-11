@@ -901,8 +901,9 @@ describe('Demo Seed — data shape & idempotency', () => {
     expect(result.seeded).toBe(true)
     expect(result.projectId).toBe(getDemoProjectId())
 
-    // Verify project
-    const projects = JSON.parse(store['takeoffpro_projects_meta'] || '[]')
+    // Verify project (may be versioned envelope or raw array)
+    const projectsRaw = JSON.parse(store['takeoffpro_projects_meta'] || '[]')
+    const projects = Array.isArray(projectsRaw) ? projectsRaw : (projectsRaw?.data || [])
     expect(projects.length).toBeGreaterThanOrEqual(1)
     const demoProj = projects.find(p => p.id.startsWith('DEMO-'))
     expect(demoProj).toBeTruthy()

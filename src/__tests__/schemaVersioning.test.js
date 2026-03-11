@@ -9,6 +9,10 @@
  * 5. Newly saved plan meta carries schema version envelope
  * 6. Corrupt or unknown-version data returns safe fallback
  * 7. saveQuote round-trips through envelope correctly
+ * 8. Legacy project data (raw array) still loads via loadProjects
+ * 9. Newly saved projects carry schema version envelope
+ * 10. Corrupt/future project data fails safely
+ * 11. Project save/load round-trip preserves data
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -27,6 +31,7 @@ vi.stubGlobal('localStorage', localStorageMock)
 import { unwrapVersioned, wrapVersioned } from '../data/schemaVersion.js'
 import { loadQuotes, saveQuotes, saveQuote, QUOTES_SCHEMA_VERSION } from '../data/store.js'
 import { PLANS_META_SCHEMA_VERSION } from '../data/planStore.js'
+import { loadProjects, saveProject, getProject, deleteProject, updateProject, PROJECTS_SCHEMA_VERSION } from '../data/projectStore.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function makeQuote(id) {
@@ -269,5 +274,157 @@ describe('quotes — legacy-to-versioned round-trip', () => {
     expect(result[0].id).toBe('QT-C')
     expect(result[1].id).toBe('QT-A')
     expect(result[2].id).toBe('QT-B')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. Project store — legacy data backward compatibility
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('projects — legacy data backward compatibility', () => {
+  it('loadProjects returns legacy raw array from localStorage', () => {
+    const legacy = [
+      { id: 'PRJ-OLD-1', name: 'Legacy Project A' },
+      { id: 'PRJ-OLD-2', name: 'Legacy Project B' },
+    ]
+    store['takeoffpro_projects_meta'] = JSON.stringify(legacy)
+
+    const result = loadProjects()
+    expect(result).toHaveLength(2)
+    expect(result[0].id).toBe('PRJ-OLD-1')
+    expect(result[1].id).toBe('PRJ-OLD-2')
+  })
+
+  it('loadProjects returns empty array when key is absent', () => {
+    expect(loadProjects()).toEqual([])
+  })
+
+  it('loadProjects returns empty array for corrupt JSON', () => {
+    store['takeoffpro_projects_meta'] = 'not{json'
+    expect(loadProjects()).toEqual([])
+  })
+
+  it('getProject finds project in legacy raw array', () => {
+    store['takeoffpro_projects_meta'] = JSON.stringify([
+      { id: 'PRJ-A', name: 'Alpha' },
+      { id: 'PRJ-B', name: 'Beta' },
+    ])
+    expect(getProject('PRJ-B')).toEqual({ id: 'PRJ-B', name: 'Beta' })
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 8. Project store — versioned envelope on save
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('projects — versioned envelope on save', () => {
+  it('saveProject wraps data in versioned envelope', () => {
+    saveProject({ id: 'PRJ-V1', name: 'Versioned Project' })
+
+    const raw = JSON.parse(store['takeoffpro_projects_meta'])
+    expect(raw._v).toBe(PROJECTS_SCHEMA_VERSION)
+    expect(Array.isArray(raw.data)).toBe(true)
+    expect(raw.data[0].id).toBe('PRJ-V1')
+  })
+
+  it('PROJECTS_SCHEMA_VERSION is exported and equals 1', () => {
+    expect(PROJECTS_SCHEMA_VERSION).toBe(1)
+  })
+
+  it('updateProject preserves versioned envelope', () => {
+    saveProject({ id: 'PRJ-UPD', name: 'Original' })
+    updateProject('PRJ-UPD', { name: 'Updated' })
+
+    const raw = JSON.parse(store['takeoffpro_projects_meta'])
+    expect(raw._v).toBe(PROJECTS_SCHEMA_VERSION)
+    expect(raw.data[0].name).toBe('Updated')
+  })
+
+  it('deleteProject preserves versioned envelope', () => {
+    saveProject({ id: 'PRJ-DEL', name: 'To Delete' })
+    saveProject({ id: 'PRJ-KEEP', name: 'To Keep' })
+    deleteProject('PRJ-DEL')
+
+    const raw = JSON.parse(store['takeoffpro_projects_meta'])
+    expect(raw._v).toBe(PROJECTS_SCHEMA_VERSION)
+    expect(raw.data).toHaveLength(1)
+    expect(raw.data[0].id).toBe('PRJ-KEEP')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 9. Project store — safe failure on corrupt/future data
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('projects — safe failure on corrupt/future data', () => {
+  it('returns empty for future schema version', () => {
+    store['takeoffpro_projects_meta'] = JSON.stringify({ _v: 99, data: [{ id: 'future' }] })
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = loadProjects()
+    expect(result).toEqual([])
+    expect(consoleWarn).toHaveBeenCalled()
+    consoleWarn.mockRestore()
+  })
+
+  it('returns empty for non-array non-envelope object', () => {
+    store['takeoffpro_projects_meta'] = JSON.stringify({ random: 'object' })
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = loadProjects()
+    expect(result).toEqual([])
+    consoleWarn.mockRestore()
+  })
+
+  it('getProject returns null for corrupt data', () => {
+    store['takeoffpro_projects_meta'] = JSON.stringify({ _v: 99, data: [{ id: 'PRJ-X' }] })
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(getProject('PRJ-X')).toBeNull()
+    consoleWarn.mockRestore()
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 10. Project store — legacy-to-versioned round-trip
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('projects — legacy-to-versioned round-trip', () => {
+  it('legacy data is upgraded to versioned on next save', () => {
+    // Simulate legacy data written by old code
+    const legacy = [
+      { id: 'PRJ-OLD-1', name: 'Old Project A' },
+      { id: 'PRJ-OLD-2', name: 'Old Project B' },
+    ]
+    store['takeoffpro_projects_meta'] = JSON.stringify(legacy)
+
+    // Load (gets legacy array)
+    const loaded = loadProjects()
+    expect(loaded).toHaveLength(2)
+
+    // Save a new project — triggers wrap
+    saveProject({ id: 'PRJ-NEW', name: 'New Project' })
+
+    // Verify stored format is now versioned
+    const raw = JSON.parse(store['takeoffpro_projects_meta'])
+    expect(raw._v).toBe(PROJECTS_SCHEMA_VERSION)
+    expect(raw.data).toHaveLength(3)
+    expect(raw.data[0].id).toBe('PRJ-NEW')
+
+    // Load again — should unwrap correctly
+    const reloaded = loadProjects()
+    expect(reloaded).toHaveLength(3)
+    expect(reloaded[0].id).toBe('PRJ-NEW')
+    expect(reloaded[1].id).toBe('PRJ-OLD-1')
+  })
+
+  it('saveProject update on legacy data upgrades to versioned', () => {
+    store['takeoffpro_projects_meta'] = JSON.stringify([
+      { id: 'PRJ-LEG', name: 'Legacy' },
+    ])
+
+    // Update existing — should read legacy, write versioned
+    updateProject('PRJ-LEG', { name: 'Upgraded' })
+
+    const raw = JSON.parse(store['takeoffpro_projects_meta'])
+    expect(raw._v).toBe(PROJECTS_SCHEMA_VERSION)
+    expect(raw.data[0].name).toBe('Upgraded')
   })
 })

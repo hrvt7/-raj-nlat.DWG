@@ -3,7 +3,7 @@
 // All demo items use 'DEMO-' prefix for easy identification and removal.
 // No file blobs are created — only metadata in localStorage.
 
-import { saveProject, loadProjects } from './projectStore.js'
+import { saveProject, loadProjects, PROJECTS_SCHEMA_VERSION } from './projectStore.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 import { QUOTES_SCHEMA_VERSION } from './store.js'
 import { PLANS_META_SCHEMA_VERSION } from './planStore.js'
@@ -194,13 +194,13 @@ export function clearDemoData() {
   let removedPlans = 0
   let removedQuotes = 0
 
-  // Projects
+  // Projects (versioned envelope)
   const LS_PROJ = 'takeoffpro_projects_meta'
   try {
-    const projects = JSON.parse(localStorage.getItem(LS_PROJ) || '[]')
+    const projects = lsReadArray(LS_PROJ, PROJECTS_SCHEMA_VERSION)
     const filtered = projects.filter(p => !p.id?.startsWith(DEMO_PREFIX))
     removedProjects = projects.length - filtered.length
-    localStorage.setItem(LS_PROJ, JSON.stringify(filtered))
+    localStorage.setItem(LS_PROJ, JSON.stringify(wrapVersioned(filtered, PROJECTS_SCHEMA_VERSION)))
   } catch (err) { console.warn('[demoSeed] project cleanup failed:', err) }
 
   // Plans
