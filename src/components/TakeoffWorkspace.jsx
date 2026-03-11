@@ -771,6 +771,88 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
   )
 }
 
+// ─── Unknown Block Resolution Panel ──────────────────────────────────────────
+// Shows blocks that recognizeBlock + memory could not match. The user picks an
+// assembly for each; the override is recorded immediately to recognition memory
+// so the same block is auto-matched on future encounters.
+function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete }) {
+  if (!unknownItems || unknownItems.length === 0) return null
+
+  // Build assembly options: only top-level assemblies (not variants), sorted by label
+  const asmOptions = assemblies
+    .filter(a => !a.variantOf)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'))
+
+  return (
+    <div style={{
+      marginBottom: 14, padding: '10px 14px', borderRadius: 10,
+      background: 'rgba(255,107,107,0.04)',
+      border: `1px solid rgba(255,107,107,0.18)`,
+    }}>
+      <div style={{
+        fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.red,
+        marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <span>⚠</span>
+        {unknownItems.length} ismeretlen blokk — rendelj hozzá tételt
+      </div>
+      {unknownItems.map(item => (
+        <div key={item.blockName} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '5px 0', borderTop: `1px solid ${C.border}`,
+        }}>
+          <div style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: C.muted, flexShrink: 0,
+          }} />
+          <div style={{
+            flex: 1, minWidth: 0,
+            fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+            title={item.blockName}
+          >
+            {item.blockName}
+          </div>
+          <span style={{
+            fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0,
+          }}>
+            {item.qty} db
+          </span>
+          <select
+            value=""
+            onChange={e => {
+              if (e.target.value) onAssign(item.blockName, e.target.value)
+            }}
+            style={{
+              background: C.bg, border: `1px solid ${C.borderLight}`,
+              borderRadius: 6, color: C.textSub, fontSize: 10,
+              fontFamily: 'DM Mono', padding: '3px 6px', cursor: 'pointer',
+              maxWidth: 140, flexShrink: 0,
+            }}
+          >
+            <option value="">Hozzárendelés…</option>
+            {asmOptions.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => onDelete(item.blockName)}
+            title="Kihagyás"
+            style={{
+              width: 20, height: 20, borderRadius: '50%',
+              background: 'transparent', border: `1px solid ${C.border}`,
+              color: C.muted, fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', lineHeight: 1, padding: 0, flexShrink: 0,
+            }}
+          >✕</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Main TakeoffWorkspace ────────────────────────────────────────────────────
 export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId, focusTarget, onDirtyChange, onQuoteFromPlan }) {
   // ── File & parse state ────────────────────────────────────────────────────
@@ -1197,7 +1279,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const items = Object.entries(blockMap).map(([blockName, qty]) => {
         let rec = recognizeBlock(blockName)
         // Memory cascade: if recognizeBlock has no good match, check learned memory
-        if ((!rec.asmId || rec.confidence < 0.80) && memProjectId) {
+        // Allow lookup even without memProjectId — lookupMemory handles null projectId
+        // by skipping project-tier but still checking account-tier memory.
+        if (!rec.asmId || rec.confidence < 0.80) {
           const evidence = evMap.get(blockName) || null
           const mem = lookupMemory(blockName, memProjectId, evidence)
           if (mem) {
@@ -1233,6 +1317,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   }, [recognizedItems, deletedItems, itemQtyOverrides])
 
   const totalItems = effectiveItems.reduce((s, i) => s + i.qty, 0)
+
+  // ── Unknown items: blocks with no asmId AND no override ────────────────
+  const unknownItems = useMemo(() => {
+    return effectiveItems.filter(i => {
+      const resolvedAsmId = asmOverrides[i.blockName] !== undefined ? asmOverrides[i.blockName] : i.asmId
+      return !resolvedAsmId
+    })
+  }, [effectiveItems, asmOverrides])
 
   // ── Review state classification ──────────────────────────────────────────
   // Classify ALL recognized items (including deleted) so the review summary
@@ -1562,6 +1654,25 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     if (changed) setAsmOverrides(newOverrides)
     setRightTab('takeoff')
   }
+
+  // ── Assign unknown block to assembly (immediate memory learn) ─────────
+  const handleAssignUnknown = useCallback((blockName, asmId) => {
+    // 1. Store override → block now resolves to asmId in takeoff rows
+    setAsmOverrides(prev => ({ ...prev, [blockName]: asmId }))
+    // 2. Learn immediately — record as user_override so future encounters auto-match
+    if (memProjectId) {
+      recordConfirmation(blockName, asmId, memProjectId, 'user_override', evidenceMap?.get(blockName))
+    }
+  }, [memProjectId, evidenceMap])
+
+  // ── Delete (exclude) unknown block ─────────────────────────────────────
+  const handleDeleteUnknown = useCallback((blockName) => {
+    setDeletedItems(prev => {
+      const next = new Set(prev)
+      next.add(blockName)
+      return next
+    })
+  }, [])
 
   // ── Save (per-plan or quote) ──────────────────────────────────────────────
   const handleSave = async () => {
@@ -2128,7 +2239,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   />
                 )}
 
-                {takeoffRows.length === 0 ? (
+                {/* Unknown block resolution panel — lets user assign unknown blocks */}
+                {!isPdf && unknownItems.length > 0 && (
+                  <UnknownBlockPanel
+                    unknownItems={unknownItems}
+                    assemblies={assemblies}
+                    onAssign={handleAssignUnknown}
+                    onDelete={handleDeleteUnknown}
+                  />
+                )}
+
+                {takeoffRows.length === 0 && unknownItems.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: 32, color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>
                     Még nincs felvett elem. Használd a Számlálás eszközt a tervrajzon.
                   </div>
