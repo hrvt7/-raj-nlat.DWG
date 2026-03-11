@@ -29,11 +29,21 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
   const [savedBundles, setSavedBundles] = useState([])
   const [activeBundleId, setActiveBundleId] = useState(null)
   const [bundleSaveMsg, setBundleSaveMsg] = useState(null)
+  const [bundleError, setBundleError] = useState(null)
+
+  /** Show a transient bundle error strip (auto-clears after 4 s). */
+  const flashBundleError = useCallback((msg, err) => {
+    console.warn('[MergePlans]', msg, err)
+    setBundleError(msg)
+    setTimeout(() => setBundleError(null), 4000)
+  }, [])
 
   // Load saved bundles on mount
   useEffect(() => {
-    listBundles().then(setSavedBundles).catch(() => {})
-  }, [])
+    listBundles().then(setSavedBundles).catch(err => {
+      flashBundleError('Csomagok betöltése sikertelen', err)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save bundle handler — called by each tab with its current state
   const handleSaveBundle = useCallback(async ({ mergeType, planIds, assignments, unknownMappings, name }) => {
@@ -64,20 +74,29 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
 
   // Load bundle handler — restores tab + selection + assignments
   const handleLoadBundle = useCallback(async (bundleId) => {
-    const bundle = await getBundle(bundleId)
-    if (!bundle) return null
-    setActiveBundleId(bundle.id)
-    setActiveTab(bundle.mergeType)
-    return bundle
-  }, [])
+    try {
+      const bundle = await getBundle(bundleId)
+      if (!bundle) return null
+      setActiveBundleId(bundle.id)
+      setActiveTab(bundle.mergeType)
+      return bundle
+    } catch (err) {
+      flashBundleError('Csomag betöltése sikertelen', err)
+      return null
+    }
+  }, [flashBundleError])
 
   // Delete bundle handler
   const handleDeleteBundle = useCallback(async (bundleId) => {
-    await deleteBundle(bundleId)
-    if (activeBundleId === bundleId) setActiveBundleId(null)
-    const refreshed = await listBundles()
-    setSavedBundles(refreshed)
-  }, [activeBundleId])
+    try {
+      await deleteBundle(bundleId)
+      if (activeBundleId === bundleId) setActiveBundleId(null)
+      const refreshed = await listBundles()
+      setSavedBundles(refreshed)
+    } catch (err) {
+      flashBundleError('Csomag törlése sikertelen', err)
+    }
+  }, [activeBundleId, flashBundleError])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -120,6 +139,12 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
             color: bundleSaveMsg.startsWith('✓') ? '#10b981' : '#ef4444',
           }}>{bundleSaveMsg}</span>
         )}
+
+        {bundleError && (
+          <span data-testid="merge-bundle-error" style={{
+            fontFamily: 'DM Mono', fontSize: 11, color: '#ef4444',
+          }}>✗ {bundleError}</span>
+        )}
       </div>
 
       {/* Tab bar */}
@@ -139,13 +164,13 @@ export default function MergePlansView({ plans, onClose, onCreateQuote }) {
 
       {activeTab === 'manual' ? (
         <ManualMergeTab plans={plans} onCreateQuote={onCreateQuote} onSwitchToDxf={() => setActiveTab('dxf')}
-          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} />
+          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} onBundleError={flashBundleError} />
       ) : activeTab === 'dxf' ? (
         <DxfAnalysisTab plans={plans} onCreateQuote={onCreateQuote}
-          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} />
+          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} onBundleError={flashBundleError} />
       ) : (
         <PdfRecognitionTab plans={plans} onCreateQuote={onCreateQuote}
-          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} />
+          onSaveBundle={handleSaveBundle} activeBundleId={activeBundleId} onLoadBundle={handleLoadBundle} onBundleError={flashBundleError} />
       )}
     </div>
   )
@@ -168,7 +193,7 @@ function TabButton({ active, onClick, children }) {
 // Manual Merge Tab (existing functionality, unchanged)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf, onSaveBundle, activeBundleId, onLoadBundle }) {
+function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf, onSaveBundle, activeBundleId, onLoadBundle, onBundleError }) {
   const [selected, setSelected] = useState({})
   const [annotations, setAnnotations] = useState({})
   const [thumbnails, setThumbnails] = useState({})
@@ -191,8 +216,8 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf, onSaveBundle, act
       for (const pid of bundle.planIds) sel[pid] = true
       setSelected(sel)
       setAssignments(bundle.assignments || {})
-    }).catch(() => {})
-  }, [activeBundleId])
+    }).catch(err => { onBundleError?.('Csomag visszaállítása sikertelen', err) })
+  }, [activeBundleId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     Promise.all(plans.map(async p => {
@@ -498,7 +523,7 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf, onSaveBundle, act
 // DXF Analysis Tab — Auto block recognition aggregated across plans
 // ═══════════════════════════════════════════════════════════════════════════
 
-function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, onLoadBundle }) {
+function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, onLoadBundle, onBundleError }) {
   const [selected, setSelected] = useState({})
   const [assignments, setAssignments] = useState({}) // assemblyType → assemblyId
   const [showUnknowns, setShowUnknowns] = useState(false)
@@ -521,8 +546,8 @@ function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, on
       setSelected(sel)
       setAssignments(bundle.assignments || {})
       if (bundle.unknownMappings) setUnknownAssignments(bundle.unknownMappings)
-    }).catch(() => {})
-  }, [activeBundleId])
+    }).catch(err => { onBundleError?.('Csomag visszaállítása sikertelen', err) })
+  }, [activeBundleId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Only show plans that have been parsed (have parseResult with blocks)
   const parsedPlans = useMemo(() =>
@@ -1003,7 +1028,7 @@ function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, on
 // PDF Recognition Tab — Vision AI results aggregated across PDF plans
 // ═══════════════════════════════════════════════════════════════════════════
 
-function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, onLoadBundle }) {
+function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, onLoadBundle, onBundleError }) {
   const [selected, setSelected] = useState({})
   const [assignments, setAssignments] = useState({}) // _pdfType → assemblyId override
   const bundleLoadedRef = useRef(false)
@@ -1021,8 +1046,8 @@ function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId,
       for (const pid of bundle.planIds) sel[pid] = true
       setSelected(sel)
       setAssignments(bundle.assignments || {})
-    }).catch(() => {})
-  }, [activeBundleId])
+    }).catch(err => { onBundleError?.('Csomag visszaállítása sikertelen', err) })
+  }, [activeBundleId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Plans with successful Vision AI recognition
   const recognizedPlans = useMemo(() =>
