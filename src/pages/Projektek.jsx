@@ -1165,7 +1165,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
           <input data-testid="plan-upload-input" ref={planInputRef} type="file" accept=".pdf,.dxf,.dwg" multiple style={{ display: 'none' }} onChange={e => { handlePlanFiles(e.target.files); e.target.value = '' }} />
         </div>
         {uploadWarning && (
-          <div style={{
+          <div data-testid="upload-warning" style={{
             background: 'rgba(255,107,107,0.10)', border: `1px solid rgba(255,107,107,0.25)`,
             borderRadius: 8, padding: '8px 12px', marginBottom: 12, marginTop: -8,
             fontFamily: 'DM Mono', fontSize: 11, color: '#FF6B6B',
