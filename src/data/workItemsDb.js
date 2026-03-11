@@ -1850,20 +1850,141 @@ export function calcProductivityFactor(contextDefaults) {
 
 // ─── Assembly component formula evaluátor ──────────────────────────────────
 // qty_formula: string like "COUNT * 0.3 + 2", "METER * 0.1"
-// Variables: COUNT (device/takeoff count), METER (cable meters or 0)
-// Returns evaluated qty or fallback to component.qty
+// Variables: COUNT (device/takeoff count), METER (cable meters or 0), FLOOR
+// Returns evaluated qty or null on invalid/unsupported syntax
+//
+// Safe deterministic parser — NO eval / Function / dynamic code execution.
+// Supports: decimal numbers, variables (COUNT METER FLOOR), +, -, *, /,
+// parentheses, unary minus.  Rejects everything else.
+
+const FORMULA_VARS = { COUNT: true, METER: true, FLOOR: true }
+
+/** Tokenize a formula string into typed tokens. Returns null on illegal chars. */
+function tokenizeFormula(str) {
+  const tokens = []
+  let i = 0
+  while (i < str.length) {
+    const ch = str[i]
+    // Skip whitespace
+    if (ch === ' ' || ch === '\t') { i++; continue }
+    // Number literal (including decimals like .5 or 3.14)
+    if ((ch >= '0' && ch <= '9') || (ch === '.' && i + 1 < str.length && str[i + 1] >= '0' && str[i + 1] <= '9')) {
+      let num = ''
+      while (i < str.length && ((str[i] >= '0' && str[i] <= '9') || str[i] === '.')) {
+        num += str[i++]
+      }
+      if (num.split('.').length > 2) return null // e.g. "1.2.3"
+      tokens.push({ type: 'num', value: parseFloat(num) })
+      continue
+    }
+    // Variable (uppercase alpha identifier)
+    if (ch >= 'A' && ch <= 'Z') {
+      let name = ''
+      while (i < str.length && str[i] >= 'A' && str[i] <= 'Z') {
+        name += str[i++]
+      }
+      if (!FORMULA_VARS[name]) return null // unknown variable → reject
+      tokens.push({ type: 'var', name })
+      continue
+    }
+    // Operators + parens
+    if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
+      tokens.push({ type: 'op', value: ch }); i++; continue
+    }
+    if (ch === '(') { tokens.push({ type: 'lparen' }); i++; continue }
+    if (ch === ')') { tokens.push({ type: 'rparen' }); i++; continue }
+    // Any other character → reject formula
+    return null
+  }
+  return tokens
+}
+
+/**
+ * Recursive-descent evaluator.
+ * Grammar:
+ *   expr   → term (('+' | '-') term)*
+ *   term   → factor (('*' | '/') factor)*
+ *   factor → NUMBER | VARIABLE | '(' expr ')' | '-' factor
+ */
+function evalTokens(tokens, varValues) {
+  let pos = 0
+
+  function peek() { return pos < tokens.length ? tokens[pos] : null }
+  function advance() { return tokens[pos++] }
+
+  function parseFactor() {
+    const t = peek()
+    if (!t) return null
+    // Unary minus
+    if (t.type === 'op' && t.value === '-') {
+      advance()
+      const v = parseFactor()
+      return v !== null ? -v : null
+    }
+    // Unary plus (no-op)
+    if (t.type === 'op' && t.value === '+') {
+      advance()
+      return parseFactor()
+    }
+    // Number
+    if (t.type === 'num') { advance(); return t.value }
+    // Variable
+    if (t.type === 'var') { advance(); return varValues[t.name] }
+    // Parenthesized expression
+    if (t.type === 'lparen') {
+      advance() // consume '('
+      const v = parseExpr()
+      if (v === null) return null
+      const closing = peek()
+      if (!closing || closing.type !== 'rparen') return null // missing ')'
+      advance() // consume ')'
+      return v
+    }
+    return null // unexpected token
+  }
+
+  function parseTerm() {
+    let left = parseFactor()
+    if (left === null) return null
+    while (true) {
+      const t = peek()
+      if (!t || t.type !== 'op' || (t.value !== '*' && t.value !== '/')) break
+      advance()
+      const right = parseFactor()
+      if (right === null) return null
+      if (t.value === '*') left = left * right
+      else { if (right === 0) return null; left = left / right }
+    }
+    return left
+  }
+
+  function parseExpr() {
+    let left = parseTerm()
+    if (left === null) return null
+    while (true) {
+      const t = peek()
+      if (!t || t.type !== 'op' || (t.value !== '+' && t.value !== '-')) break
+      advance()
+      const right = parseTerm()
+      if (right === null) return null
+      left = t.value === '+' ? left + right : left - right
+    }
+    return left
+  }
+
+  const result = parseExpr()
+  // Must have consumed all tokens — leftover tokens = syntax error
+  if (pos !== tokens.length) return null
+  return result
+}
+
 export function evalQtyFormula(formula, vars = {}) {
   if (!formula || typeof formula !== 'string') return null
   try {
     const { COUNT = 1, METER = 0, FLOOR = 1 } = vars
-    // Safe eval: only allow numbers, operators, parens, and our variables
-    const safe = formula
-      .replace(/COUNT/g, String(COUNT))
-      .replace(/METER/g, String(METER))
-      .replace(/FLOOR/g, String(FLOOR))
-      .replace(/[^0-9.+\-*/()\s]/g, '')
-    // eslint-disable-next-line no-new-func
-    const result = Function('"use strict"; return (' + safe + ')')()
+    const tokens = tokenizeFormula(formula.trim())
+    if (!tokens || tokens.length === 0) return null
+    const result = evalTokens(tokens, { COUNT, METER, FLOOR })
     return typeof result === 'number' && isFinite(result) ? result : null
   } catch {
     return null
