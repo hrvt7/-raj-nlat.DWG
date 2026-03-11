@@ -597,6 +597,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
 
   return (
     <div
+      data-testid="plan-card"
       onMouseOver={e => { setHov(true); e.currentTarget.style.borderColor = '#00E5A040'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,229,160,0.08)' }}
       onMouseOut={e => { setHov(false); e.currentTarget.style.borderColor = selected ? 'rgba(0,229,160,0.3)' : C.border; e.currentTarget.style.boxShadow = 'none' }}
       style={{ background: C.bgCard, border: `1px solid ${selected ? 'rgba(0,229,160,0.3)' : C.border}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.2s, box-shadow 0.2s' }}
@@ -683,6 +684,7 @@ function ProjectCard({ project, planCount, templateCount, onOpen, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   return (
     <div
+      data-testid="project-card"
       onClick={() => onOpen(project.id)}
       onMouseOver={() => setHov(true)}
       onMouseOut={() => setHov(false)}

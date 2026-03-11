@@ -87,6 +87,7 @@ export default function Sidebar({ active, onNavigate, activeTrade, mobileOpen, o
     return (
       <button
         key={item.key}
+        data-testid={`sidebar-nav-${item.navKey || item.key}`}
         onClick={() => !locked && handleNav(item.navTarget || item.key, item.tradeId)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center',

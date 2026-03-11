@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "lint": "eslint src/ --ext .js,.jsx",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
@@ -20,6 +21,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@vitejs/plugin-react": "^4.0.0",
     "eslint": "^8.57.1",
     "eslint-plugin-react-hooks": "^4.6.2",
