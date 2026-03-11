@@ -1772,7 +1772,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Render: main workspace ────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div data-testid="workspace-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <style>{`@keyframes slideProgress { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }`}</style>
 
       {/* ── Sticky pricing bar ─────────────────────────────────────────────── */}
@@ -1810,7 +1810,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         {/* Pricing summary or save-success strip */}
         {saveSuccess && planId ? (
           <>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div data-testid="workspace-save-success" style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.accent, display: 'flex', alignItems: 'center', gap: 6 }}>
               ✓ Kalkuláció mentve · {Math.round(fullCalc?.grandTotal || pricing?.total || 0).toLocaleString('hu-HU')} Ft
             </div>
             <button
@@ -2501,6 +2501,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     {/* ── Action: create quote ── */}
                     <button
                       type="button"
+                      data-testid="workspace-save-btn"
                       onClick={handleSave}
                       disabled={saving || saveGating.disabled}
                       title={saveGating.reason || undefined}
