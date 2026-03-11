@@ -1140,6 +1140,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
 
         {/* Plan upload drop zone */}
         <div
+          data-testid="plan-drop-zone"
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={e => { e.preventDefault(); setDragging(false); handlePlanFiles(e.dataTransfer.files) }}
