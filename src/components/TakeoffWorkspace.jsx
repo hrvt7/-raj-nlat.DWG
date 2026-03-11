@@ -859,7 +859,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
-  const [dataLoadError, setDataLoadError] = useState(null) // surfaced data-load failure
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
   // ── Mobile responsive state ───────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
@@ -988,19 +987,23 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const canvasRef = useRef(null)
-  const assemblies = useMemo(() => {
-    try { return loadAssemblies() }
-    catch (err) { setDataLoadError(`Szerelvénytár betöltése sikertelen: ${err.message}`); return [] }
+  const _asmLoad = useMemo(() => {
+    try { return { data: loadAssemblies(), error: null } }
+    catch (err) { return { data: [], error: `Szerelvénytár betöltése sikertelen: ${err.message}` } }
   }, [])
-  const workItems = useMemo(() => {
-    try { return loadWorkItems() }
-    catch (err) { setDataLoadError(`Munkatételek betöltése sikertelen: ${err.message}`); return [] }
+  const _wiLoad = useMemo(() => {
+    try { return { data: loadWorkItems(), error: null } }
+    catch (err) { return { data: [], error: `Munkatételek betöltése sikertelen: ${err.message}` } }
   }, [])
-  const materials = useMemo(() => {
-    if (materialsProp) return materialsProp
-    try { return loadMaterials() }
-    catch (err) { setDataLoadError(`Anyaglista betöltése sikertelen: ${err.message}`); return [] }
+  const _matLoad = useMemo(() => {
+    if (materialsProp) return { data: materialsProp, error: null }
+    try { return { data: loadMaterials(), error: null } }
+    catch (err) { return { data: [], error: `Anyaglista betöltése sikertelen: ${err.message}` } }
   }, [materialsProp])
+  const assemblies = _asmLoad.data
+  const workItems = _wiLoad.data
+  const materials = _matLoad.data
+  const dataLoadError = _asmLoad.error || _wiLoad.error || _matLoad.error
 
   // ── Helper: File → base64 string ──────────────────────────────────────────
   const fileToBase64 = useCallback((file) => new Promise((resolve, reject) => {
