@@ -1946,7 +1946,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           {/* No DXF viewer fallback — PDF viewer or failed DWG conversion */}
           {!isDxf && (
             dwgStatus === 'failed' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 32 }}>
+              <div data-testid="dwg-conversion-error" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 32 }}>
                 <>
                   <div style={{ fontSize: 40 }}>⚠️</div>
                   <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.yellow, textAlign: 'center' }}>
