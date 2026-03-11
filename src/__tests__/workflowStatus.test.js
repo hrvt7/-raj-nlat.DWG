@@ -174,6 +174,102 @@ describe('computeWorkflowStatus', () => {
       expect(result.cta.action).toBe('check_cable')
     })
 
+    it('surfaces cable warnings in detail.reasons when cable is weak', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['Kábelbecslés bizonytalanabb (35%)'] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.35,
+          manualCableRecommended: false,
+          cableWarnings: ['Nincs kábelvonal a rajzban', 'Elosztó nem azonosítható'],
+        }),
+        takeoffRowCount: 8,
+      })
+      expect(result.stage).toBe('review_warnings')
+      // Original quoteReadiness reason + top 2 cable warnings
+      expect(result.detail.reasons).toHaveLength(3)
+      expect(result.detail.reasons[0]).toContain('Kábelbecslés')
+      expect(result.detail.reasons[1]).toContain('Nincs kábelvonal')
+      expect(result.detail.reasons[2]).toContain('Elosztó nem azonosítható')
+    })
+
+    it('limits cable warnings to 2 in reasons', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['Kábelbecslés bizonytalanabb (30%)'] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.3,
+          cableWarnings: ['Warning A', 'Warning B', 'Warning C', 'Warning D'],
+        }),
+        takeoffRowCount: 8,
+      })
+      // 1 quoteReadiness reason + 2 cable warnings (capped)
+      expect(result.detail.reasons).toHaveLength(3)
+    })
+
+    it('uses activate_manual_cable CTA when manualCableRecommended and weak cable', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['Kábelbecslés bizonytalanabb (20%)'] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.2,
+          manualCableRecommended: true,
+          cableWarnings: ['Elosztó nem azonosítható'],
+        }),
+        takeoffRowCount: 8,
+      })
+      expect(result.stage).toBe('review_warnings')
+      expect(result.cta.action).toBe('activate_manual_cable')
+      expect(result.cta.label).toContain('Elosztó')
+    })
+
+    it('keeps check_cable CTA when weak cable but manualCableRecommended is false', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['Kábelbecslés bizonytalanabb (40%)'] },
+        cableAudit: makeCableAudit({ cableConfidence: 0.4, manualCableRecommended: false }),
+        takeoffRowCount: 8,
+      })
+      expect(result.cta.action).toBe('check_cable')
+    })
+
+    it('does not add cable warnings when cable is strong', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoLow: 2, total: 7,
+          confirmedQty: 10, autoLowQty: 4,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['2 tétel gyenge felismeréssel (4 db)'] },
+        cableAudit: makeCableAudit({ cableConfidence: 0.9, cableWarnings: ['Should not appear'] }),
+        takeoffRowCount: 7,
+      })
+      // Only the quoteReadiness reason, no cable warnings (cable is strong)
+      expect(result.detail.reasons).toHaveLength(1)
+      expect(result.detail.reasons[0]).toContain('tétel gyenge')
+    })
+
     it('falls back to save CTA when warnings are minor', () => {
       const result = computeWorkflowStatus({
         hasFile: true,
@@ -209,6 +305,45 @@ describe('computeWorkflowStatus', () => {
       expect(result.cta.action).toBe('save')
       expect(result.badges.takeoff).toBeNull()
       expect(result.badges.calc).toBeNull()
+    })
+
+    it('surfaces cable warnings in ready stage when cable badge is active', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 8, autoHigh: 2, total: 10,
+          confirmedQty: 16, autoHighQty: 4,
+        }),
+        quoteReadiness: { status: 'ready', reasons: [] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.5,
+          cableWarnings: ['Nincs kábelvonal a rajzban'],
+        }),
+        takeoffRowCount: 10,
+      })
+      expect(result.stage).toBe('ready')
+      expect(result.cta.action).toBe('save')
+      expect(result.badges.cable).toBe('warning')
+      // Cable warning appears in detail.reasons even in ready stage
+      expect(result.detail.reasons).toHaveLength(1)
+      expect(result.detail.reasons[0]).toContain('Nincs kábelvonal')
+    })
+
+    it('no cable reasons in ready stage when cable is strong', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 8, autoHigh: 2, total: 10,
+          confirmedQty: 16, autoHighQty: 4,
+        }),
+        quoteReadiness: { status: 'ready', reasons: [] },
+        cableAudit: makeCableAudit({ cableConfidence: 0.9, cableWarnings: [] }),
+        takeoffRowCount: 10,
+      })
+      expect(result.stage).toBe('ready')
+      expect(result.detail.reasons).toHaveLength(0)
     })
 
     it('ready for PDF with rows', () => {

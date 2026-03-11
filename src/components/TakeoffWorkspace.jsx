@@ -461,6 +461,7 @@ function WorkflowStatusCard({ workflowStatus, reviewSummary, dxfAudit, cableAudi
     switch (cta.action) {
       case 'accept_all':  onAcceptAll?.(); break
       case 'check_cable': onTabSwitch?.('cable'); break
+      case 'activate_manual_cable': onAction?.('activate_manual_cable'); break
       case 'save':        onAction?.('save'); break
       case 'review_blocks': onTabSwitch?.('takeoff'); break
       case 'retry':       onAction?.('retry'); break
@@ -2235,6 +2236,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     onTabSwitch={setRightTab}
                     onAction={(action) => {
                       if (action === 'save') handleSave()
+                      if (action === 'activate_manual_cable') {
+                        setManualCableMode(true)
+                        setRightTab('cable')
+                      }
                     }}
                     isPdf={isPdf}
                   />

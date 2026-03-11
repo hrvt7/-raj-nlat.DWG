@@ -143,10 +143,16 @@ export function computeWorkflowStatus({
     const weakCable = cableAudit?.cableConfidence != null &&
       cableAudit.cableConfidence < CABLE_CONFIDENCE_STRONG
 
+    // Surface top cable warnings in detail.reasons so WorkflowStatusCard
+    // explains WHY cable is uncertain (not just "Kábelbecslés bizonytalanabb").
+    const enrichedReasons = [...reasons, ...getCableReasons(cableAudit, weakCable)]
+
     // Determine the most impactful CTA
     let cta
     if (hasAutoLow) {
       cta = { label: 'Mind elfogadása ≥80%', action: 'accept_all' }
+    } else if (weakCable && cableAudit?.manualCableRecommended) {
+      cta = { label: 'Elosztó megjelölése →', action: 'activate_manual_cable' }
     } else if (weakCable) {
       cta = { label: 'Kábel ellenőrzése', action: 'check_cable' }
     } else {
@@ -158,7 +164,7 @@ export function computeWorkflowStatus({
       statusColor: 'yellow',
       cta,
       detail: {
-        reasons,
+        reasons: enrichedReasons,
         stats: buildReviewStats(reviewSummary),
       },
       badges: {
@@ -174,17 +180,21 @@ export function computeWorkflowStatus({
     ? reviewSummary.total - (reviewSummary.excluded || 0)
     : takeoffRowCount
 
+  // Even in ready stage, surface cable warnings if badge is active
+  const cableBadge = getCableBadge(cableAudit)
+  const readyReasons = cableBadge ? getCableReasons(cableAudit, true) : []
+
   return buildStatus('ready', {
     statusLine: `${activeItems} tétel — árajánlat kész`,
     statusColor: 'accent',
     cta: { label: 'Mentés →', action: 'save' },
     detail: {
-      reasons: [],
+      reasons: readyReasons,
       stats: buildReviewStats(reviewSummary),
     },
     badges: {
       takeoff: null,
-      cable: getCableBadge(cableAudit),
+      cable: cableBadge,
       calc: null,
     },
   })
@@ -210,6 +220,21 @@ function buildReviewStats(summary) {
     excluded: summary.excluded || 0,
     total: summary.total || 0,
   }
+}
+
+/**
+ * Extract top cable warnings from cableAudit for display in detail.reasons.
+ * Returns at most 2 warnings to avoid overwhelming the status card.
+ *
+ * @param {object|null} cableAudit
+ * @param {boolean} weakCable — whether cable confidence is below threshold
+ * @returns {string[]}
+ */
+function getCableReasons(cableAudit, weakCable) {
+  if (!cableAudit || !weakCable) return []
+  const warnings = cableAudit.cableWarnings
+  if (!Array.isArray(warnings) || warnings.length === 0) return []
+  return warnings.slice(0, 2)
 }
 
 /**
