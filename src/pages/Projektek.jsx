@@ -1162,7 +1162,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
             />
           )}
           {uploading && <div style={{ marginTop: 6, color: C.accent, fontSize: 11, fontFamily: 'DM Mono' }}>Feltöltés…</div>}
-          <input ref={planInputRef} type="file" accept=".pdf,.dxf,.dwg" multiple style={{ display: 'none' }} onChange={e => { handlePlanFiles(e.target.files); e.target.value = '' }} />
+          <input data-testid="plan-upload-input" ref={planInputRef} type="file" accept=".pdf,.dxf,.dwg" multiple style={{ display: 'none' }} onChange={e => { handlePlanFiles(e.target.files); e.target.value = '' }} />
         </div>
         {uploadWarning && (
           <div style={{
