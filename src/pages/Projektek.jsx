@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { C, ConfirmDialog, EmptyState, Button, useToast } from '../components/ui.jsx'
@@ -15,7 +15,6 @@ import {
 import {
   loadTemplates, getTemplatesByProject, deleteTemplatesByProject,
 } from '../data/legendStore.js'
-import { listDetectionRuns } from '../data/detectionRunStore.js'
 import {
   inferPlanMeta, inferMetaFromText, mergeMeta, extractPdfText,
   SYSTEM_TYPES, SYSTEM_TYPE_LABELS, DOC_TYPES, DOC_TYPE_LABELS,
@@ -83,12 +82,6 @@ function CheckIcon({ size = 11, color = '#000' }) {
 }
 function TrashIcon({ size = 13, color = C.muted }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-}
-function BookIcon({ size = 14, color = C.yellow }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-}
-function ScanIcon({ size = 14, color = C.blue }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
 }
 function CalcIcon({ size = 14, color = C.accent }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="12" y1="10" x2="14" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="14" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="12" y1="18" x2="16" y2="18"/></svg>
@@ -906,95 +899,9 @@ function ProjectListView({ onOpenProject }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ── DETECTION HISTORY MINI ──────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const STATUS_LABEL = { running: 'Fut…', completed: 'Kész', applied: 'Alkalmazva', failed: 'Hiba' }
-const STATUS_COLOR = { running: C.yellow, completed: C.accent, applied: C.accent, failed: '#FF6B6B' }
-
-function DetectionHistoryMini({ projectId, onReopen }) {
-  const [runs, setRuns] = useState([])
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open || !projectId) return
-    listDetectionRuns(projectId).then(setRuns)
-  }, [open, projectId])
-
-  if (!projectId) return null
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6,
-          padding: '6px 12px', fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
-          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-        }}
-      >
-        Korábbi detekciók
-        <span style={{ fontSize: 9, color: C.muted }}>{open ? '▲' : '▼'}</span>
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 100,
-          background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8,
-          padding: 8, minWidth: 320, maxHeight: 300, overflowY: 'auto',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-        }}>
-          {runs.length === 0 ? (
-            <div style={{ padding: 12, textAlign: 'center', fontFamily: 'DM Mono', fontSize: 11, color: C.muted }}>
-              Nincs korábbi detekció
-            </div>
-          ) : runs.map(run => {
-            const total = run.results?.length || 0
-            const accepted = run.results?.filter(r => r.accepted !== false).length || 0
-            const dateStr = run.startedAt ? new Date(run.startedAt).toLocaleString('hu-HU', {
-              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-            }) : '?'
-            return (
-              <button
-                key={run.id}
-                onClick={() => { setOpen(false); onReopen(run) }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                  padding: '8px 10px', background: 'transparent', border: 'none',
-                  borderRadius: 6, cursor: 'pointer', textAlign: 'left',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = C.bg}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>
-                    {dateStr}
-                    <span style={{
-                      marginLeft: 8, fontSize: 9, padding: '1px 5px', borderRadius: 3,
-                      background: (STATUS_COLOR[run.status] || C.muted) + '20',
-                      color: STATUS_COLOR[run.status] || C.muted,
-                    }}>
-                      {STATUS_LABEL[run.status] || run.status}
-                    </span>
-                  </div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 2 }}>
-                    {total} detekció · {accepted} elfogadva · {run.planIds?.length || 0} terv
-                  </div>
-                </div>
-                <span style={{ fontSize: 14, color: C.textSub }}>→</span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // ── PROJECT DETAIL VIEW ───────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
-function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDetectPanel, onMergePanel, onReopenDetection, legendPanelOpen }) {
+function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMergePanel, legendPanelOpen }) {
   const [project, setProject] = useState(null)
   const [plans, setPlans] = useState([])
   const [thumbnails, setThumbnails] = useState({})
@@ -1003,10 +910,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
   const [openingId, setOpeningId] = useState(null)
   const [selected, setSelected] = useState({})
   const [dragging, setDragging] = useState(false)
-  const [legendDragging, setLegendDragging] = useState(false)
   const [uploadWarning, setUploadWarning] = useState(null)
   const planInputRef = useRef(null)
-  const legendInputRef = useRef(null)
   const toast = useToast()
 
   const reload = useCallback(async () => {
@@ -1108,27 +1013,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onDet
       toast.show('A feltöltés sikertelen', 'error')
     }
   }, [projectId, reload, toast])
-
-  // Upload legend PDF
-  const handleLegendFile = useCallback(async (files) => {
-    const file = Array.from(files).find(f => f.name.toLowerCase().endsWith('.pdf'))
-    if (!file) return
-    try {
-      const id = generatePlanId()
-      const plan = {
-        id, name: `[Jelmagyarázat] ${file.name}`, fileName: file.name, fileType: 'pdf', fileSize: file.size,
-        projectId, uploadedAt: new Date().toISOString(), createdAt: new Date().toISOString(),
-      }
-      await savePlan(plan, file)
-      updateProject(projectId, { legendPlanId: id })
-      reload()
-      // Open legend panel for auto-extract
-      if (onLegendPanel) onLegendPanel({ projectId, legendPlanId: id })
-    } catch (err) {
-      console.error('[Projektek] legend upload failed:', err)
-      toast.show('Jelmagyarázat feltöltése sikertelen', 'error')
-    }
-  }, [projectId, reload, onLegendPanel, toast])
 
   const handleOpenSaved = useCallback(async (plan) => {
     setOpeningId(plan.id)
@@ -1345,9 +1229,7 @@ export default function FelmeresPage({ onOpenFile, onLegendPanel, onDetectPanel,
         onBack={handleBack}
         onOpenFile={onOpenFile}
         onLegendPanel={onLegendPanel}
-        onDetectPanel={onDetectPanel}
         onMergePanel={onMergePanel}
-        onReopenDetection={onReopenDetection}
         legendPanelOpen={legendPanelOpen}
       />
     )
