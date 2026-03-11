@@ -22,7 +22,7 @@ function parseLayerName(layer) {
 }
 
 // ── Worker-based parse (for large files) ───────────────────────────────────
-function parseDxfTextInWorker(text, onProgress) {
+export function parseDxfTextInWorker(text, onProgress) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       new URL('./workers/dxfParser.worker.js', import.meta.url),

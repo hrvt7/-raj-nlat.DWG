@@ -23,7 +23,7 @@ function lazyRetry(importFn) {
 }
 const DxfViewerPanel = lazyRetry(() => import('./DxfViewer/index.jsx'))
 const PdfViewerPanel = lazyRetry(() => import('./PdfViewer/index.jsx'))
-import { parseDxfFile, parseDxfText } from '../dxfParser.js'
+import { parseDxfFile, parseDxfText, parseDxfTextInWorker } from '../dxfParser.js'
 import { runPdfTakeoff, estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, loadSettings } from '../data/store.js'
 import { createQuote } from '../utils/createQuote.js'
@@ -1166,7 +1166,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         // Create synthetic DXF file for the viewer and parse for recognition
         const syntheticFile = new File([dxfText], f.name.replace(/\.dwg$/i, '.dxf'), { type: 'text/plain' })
         setViewerFile(syntheticFile)
-        result = parseDxfText(dxfText)
+        // Parse converted DXF in a Web Worker to avoid freezing the UI on large files
+        try {
+          result = await parseDxfTextInWorker(dxfText, pct => setParseProgress(pct))
+        } catch (workerErr) {
+          console.warn('DWG→DXF worker parse failed, falling back to main thread:', workerErr.message)
+          result = parseDxfText(dxfText)
+        }
 
       } else {
         // ── Native DXF parse ───────────────────────────────────────────────
