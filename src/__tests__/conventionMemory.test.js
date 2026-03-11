@@ -21,8 +21,6 @@ import {
   normalizeTextSignature,
   lookupMemory,
   recordConfirmation,
-  maybePromoteToAccount,
-  detectConflict,
 } from '../data/recognitionMemory.js'
 
 
@@ -241,15 +239,6 @@ describe('recordConfirmation v2 with evidence', () => {
 })
 
 describe('lookupMemory v2 with evidence', () => {
-  const evidence = {
-    signals: {
-      block_name: 'KAP_DUGALJ',
-      layer_name: 'SOCKET',
-      attribute_signature: 'TYPE=SOCKET_P',
-      nearby_text: 'DUGALJ',
-    },
-  }
-
   it('backward compat: lookup without evidence returns block_name match', () => {
     recordConfirmation('KAP_DUGALJ_01', 'ASM-001', 'proj-1', 'user_override')
 

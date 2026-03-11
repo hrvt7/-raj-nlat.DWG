@@ -25,7 +25,7 @@ const localStorageMock = {
 vi.stubGlobal('localStorage', localStorageMock)
 
 import { guardedWrite } from '../data/lsConcurrency.js'
-import { loadQuotes, saveQuote, saveQuotes, MAX_QUOTES, QUOTES_SCHEMA_VERSION } from '../data/store.js'
+import { loadQuotes, saveQuote, saveQuotes, QUOTES_SCHEMA_VERSION } from '../data/store.js'
 import { unwrapVersioned, wrapVersioned } from '../data/schemaVersion.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

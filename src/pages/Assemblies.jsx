@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { C, fmt, Card, Button, Badge, Input, SectionHeader, EmptyState, ConfirmDialog, useToast } from '../components/ui.jsx'
-import { WORK_ITEM_CATEGORIES, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId, getAssemblyCompleteness, getAssemblyComponents } from '../data/workItemsDb.js'
-import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount, trackAsmUsage } from '../data/store.js'
-import { getAssemblyCategoriesForTrade, SHARED_CATEGORIES } from '../data/trades.js'
+import { C, fmt, Card, Button, Badge, Input, EmptyState, ConfirmDialog, useToast } from '../components/ui.jsx'
+import { WORK_ITEM_CATEGORIES, generateAssemblyId, getAssemblyCompleteness } from '../data/workItemsDb.js'
+import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount } from '../data/store.js'
+import { getAssemblyCategoriesForTrade } from '../data/trades.js'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { CATALOG_GRID_STYLE, catalogCardShell, CARD_HEADER_STYLE, CARD_TITLE_STYLE, CARD_DESC_STYLE, CARD_DIVIDER_STYLE, CARD_STAT_LABEL, CARD_CODE_STYLE } from '../components/catalogCardStyles.js'
 

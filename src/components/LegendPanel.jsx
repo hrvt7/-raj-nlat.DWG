@@ -4,7 +4,7 @@ import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { saveTemplate, loadTemplates, getTemplateImage, deleteTemplate, generateTemplateId, saveTemplateBatch, getTemplatesByProject } from '../data/legendStore.js'
 import { getPlanFile, savePlan, generatePlanId } from '../data/planStore.js'
 import { updateProject } from '../data/projectStore.js'
-import { extractLegendSymbols, CATEGORIES as LEGEND_CATEGORIES } from '../utils/legendExtractor.js'
+import { extractLegendSymbols } from '../utils/legendExtractor.js'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc
 

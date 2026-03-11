@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, supabaseConfigured, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -19,11 +19,11 @@ const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx
 import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
-import { Button, Badge, Input, Select, StatCard, Table, QuoteStatusBadge, fmt, fmtM, ToastProvider } from './components/ui.jsx'
+import { QuoteStatusBadge, fmt, ToastProvider } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
-import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, SYSTEM_GROUP_LABELS, groupItemsBySystem, groupItemsByFloor, resolveItemSystemType } from './data/quoteDefaults.js'
+import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, groupItemsBySystem, groupItemsByFloor } from './data/quoteDefaults.js'
 import { quoteDisplayTotals } from './utils/quoteDisplayTotals.js'
 import { generateBOMRows } from './utils/bomExport.js'
 import { createQuote } from './utils/createQuote.js'
@@ -182,7 +182,6 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const newMarkupAmount = Math.round(newSubtotal * (Number(editMarkup) / 100))
   const net = newSubtotal + newMarkupAmount
   const vat = Math.round(net * vatPct / 100)
-  const gross = net + vat
 
   // ── Save handler: build updated quote, persist ─────────────────────────────
   const handleMetaSave = () => {
@@ -240,7 +239,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const laborItems = (quote.items || []).filter(i => i.type === 'labor')
 
   // ── Display values per outputMode (internal data untouched) ──────────────
-  const { displayNet, displayVat, displayGross } = quoteDisplayTotals({
+  const { displayNet, displayGross } = quoteDisplayTotals({
     outputMode, totalLabor: newTotalLabor, totalMaterials,
     markupPct: Number(editMarkup) / 100, vatPct,
   })

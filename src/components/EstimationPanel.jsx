@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { COUNT_CATEGORIES, CABLE_TRAY_COLOR } from './DxfViewer/DxfToolbar.jsx'
 import { loadAssemblies, loadMaterials, loadWorkItems, loadSettings, trackAsmUsage } from '../data/store.js'
-import { getAssemblyComponents, calcProductivityFactor, getComponentQty } from '../data/workItemsDb.js'
+import { calcProductivityFactor, getComponentQty } from '../data/workItemsDb.js'
 import { saveCategoryAssemblyDefault } from '../data/categoryAssemblyMap.js'
 
 const C = {

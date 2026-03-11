@@ -11,9 +11,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   classifyItem, classifyAllItems, buildReviewSummary,
-  computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId,
+  computeQuoteReadiness, shouldTrainMemory,
   isSyntheticItem,
-  CONFIDENCE_HIGH, CONFIDENCE_CONFIRMED, CABLE_CONFIDENCE_STRONG,
 } from '../utils/reviewState.js'
 import {
   buildCableSummaryEntry, buildAssemblySummary,

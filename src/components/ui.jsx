@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
+import React, { useState, useCallback, useRef, createContext, useContext } from 'react'
 
 // ─── TakeoffPro Design System ─────────────────────────────────────────────────
 

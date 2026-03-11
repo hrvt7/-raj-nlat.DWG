@@ -20,13 +20,6 @@ const PROJECT_PREFIX = 'takeoffpro_recmem_proj_'
 const ACCOUNT_PREFIX = 'takeoffpro_recmem_account_'
 const CONFLICT_KEY   = 'takeoffpro_recmem_conflicts'
 
-// ── Confidence values per tier ───────────────────────────────────────────────
-const CONFIDENCE = {
-  project: 0.85,
-  account: 0.90,
-  global:  0.50,  // Phase 2 — suggestion only
-}
-
 // ── Promotion thresholds ─────────────────────────────────────────────────────
 const PROMO_PROJECT_COUNT = 2   // 2+ distinct projects → promote to account
 

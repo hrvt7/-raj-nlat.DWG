@@ -2,7 +2,7 @@
 // localStorage-alapú beállítás kezelés
 // Minden céges adat itt tárolódik
 
-import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId } from './workItemsDb.js'
+import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT } from './workItemsDb.js'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 

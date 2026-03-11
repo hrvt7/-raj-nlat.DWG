@@ -21,7 +21,6 @@ import {
   normalizeSignature,
   lookupMemory,
   recordConfirmation,
-  maybePromoteToAccount,
   detectConflict,
   getAllConflicts,
   clearProjectMemory,

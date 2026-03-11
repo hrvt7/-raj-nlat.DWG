@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { C, fmt, Button, Badge, Input, ConfirmDialog, useToast } from '../components/ui.jsx'
+import { C, fmt, Button, Input, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { CATALOG_GRID_STYLE, catalogCardShell, CARD_HEADER_STYLE, CARD_TITLE_STYLE, CARD_DIVIDER_STYLE, CARD_STAT_LABEL, CARD_STAT_ACCENT, CARD_STAT_YELLOW, CARD_STAT_UNIT, CARD_CODE_STYLE, categoryChipStyle, deleteButtonStyle } from '../components/catalogCardStyles.js'
 import { saveMaterials, DEFAULT_MATERIALS } from '../data/store.js'

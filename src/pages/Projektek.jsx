@@ -9,7 +9,7 @@ import {
   updatePlanMeta,
 } from '../data/planStore.js'
 import {
-  loadProjects, saveProject, deleteProject, generateProjectId, getProject, updateProject,
+  loadProjects, saveProject, deleteProject, generateProjectId, getProject,
   ensureFallbackProject,
 } from '../data/projectStore.js'
 import {

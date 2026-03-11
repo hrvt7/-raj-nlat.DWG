@@ -13,7 +13,7 @@ const fmtDate = iso => {
   } catch { return new Date().toLocaleDateString('hu-HU') }
 }
 
-import { groupItemsBySystem, groupItemsByFloor, SYSTEM_GROUP_LABELS, OUTPUT_MODE_NOTES } from '../data/quoteDefaults.js'
+import { groupItemsBySystem, groupItemsByFloor, OUTPUT_MODE_NOTES } from '../data/quoteDefaults.js'
 import { quoteDisplayTotals } from './quoteDisplayTotals.js'
 
 const WALL_LABELS = { drywall: 'GK', ytong: 'Ytong', brick: 'Tégla', concrete: 'Beton' }
