@@ -33,7 +33,7 @@ export default function ManualCableModePanel({
   const hasEstimate = cableEstimate && cableEstimate._source === 'panel_assisted'
 
   return (
-    <div style={{
+    <div data-testid="manual-cable-panel" style={{
       background: C.purpleDim,
       border: `1px solid rgba(167,139,250,0.25)`,
       borderRadius: 10,

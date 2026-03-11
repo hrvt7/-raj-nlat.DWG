@@ -480,7 +480,7 @@ function WorkflowStatusCard({ workflowStatus, reviewSummary, dxfAudit, cableAudi
       {/* Header: status + CTA */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-          <span style={{
+          <span data-testid="workflow-status-line" style={{
             fontFamily: 'DM Mono', fontSize: 11, fontWeight: 600, color,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
@@ -499,7 +499,7 @@ function WorkflowStatusCard({ workflowStatus, reviewSummary, dxfAudit, cableAudi
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {cta && cta.action !== 'save' && (
-            <button onClick={handleCta} style={{
+            <button onClick={handleCta} data-testid="workflow-cta-btn" data-action={cta.action} style={{
               background: `${color}15`, border: `1px solid ${color}35`, borderRadius: 6,
               color, fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
               padding: '3px 10px', cursor: 'pointer', transition: 'all 0.15s',
@@ -2178,6 +2178,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             ].map(tab => (
               <button
                 key={tab.id}
+                data-testid={`tab-${tab.id}`}
                 onClick={() => setRightTab(tab.id)}
                 style={{
                   flex: 1, padding: '10px 4px', border: 'none', cursor: 'pointer',
