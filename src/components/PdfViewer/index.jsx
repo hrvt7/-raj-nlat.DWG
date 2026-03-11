@@ -870,7 +870,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
         {/* Error */}
         {error && (
-          <div style={{
+          <div data-testid="pdf-viewer-error" style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', background: 'rgba(9,9,11,0.9)', zIndex: 5,
           }}>
