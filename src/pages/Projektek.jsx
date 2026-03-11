@@ -1051,60 +1051,6 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
   const selectedPlans = plans.filter(p => selectedIds.includes(p.id))
   const selectedCount = selectedPlans.length
 
-  // ── Open PDF detection review for a plan ──
-  const handleOpenPdfReview = useCallback(async (plan) => {
-    if (!plan.pdfDetectionSummary || !plan.pdfDetectionSummary.totalCandidates) return
-    // Build cache key to retrieve cached detection candidates
-    // The cache key format is {fileHash}:{provider}:{version} but we look up by plan
-    // Try to get from the detection_candidates store via the analysis cache key on plan meta
-    const cacheKey = plan.pdfAnalysisCacheKey
-    if (!cacheKey) {
-      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
-      return
-    }
-    const cached = await getCachedDetection(cacheKey)
-    if (!cached || !cached.candidates || !cached.candidates.length) {
-      toast?.('Nincs elérhető detekciós eredmény ehhez a tervhez.')
-      return
-    }
-    const adapted = adaptCandidates(cached.candidates, plan.id)
-    setPdfReviewPlan(plan)
-    setPdfReviewCandidates(adapted)
-    setPdfDetectionMeta(cached.meta || null)
-  }, [toast])
-
-  const handleClosePdfReview = useCallback(() => {
-    setPdfReviewPlan(null)
-    setPdfReviewCandidates(null)
-    setPdfDetectionMeta(null)
-  }, [])
-
-  const handlePdfReviewDone = useCallback(() => {
-    setPdfReviewPlan(null)
-    setPdfReviewCandidates(null)
-    setPdfDetectionMeta(null)
-    reload()
-  }, [reload])
-
-  // ── Custom symbol capture from PDF review ──
-  const handleCaptureSymbol = useCallback((detection) => {
-    // Prompt-less capture: use the detection's label/category directly
-    // The user already sees the detection, so we trust the context
-    try {
-      captureFromDetection({
-        projectId,
-        label: detection.label || 'Egyéni szimbólum',
-        category: detection.category || 'other',
-        color: detection.color,
-        detection,
-      })
-      toast?.(`"${detection.label || 'Szimbólum'}" mentve a projekt memóriába.`)
-    } catch (err) {
-      console.error('[Projektek] custom symbol capture failed:', err)
-      toast?.('Hiba a szimbólum mentésekor.')
-    }
-  }, [projectId, toast])
-
   if (!project) return (
     <div style={{ padding: 40, textAlign: 'center' }}>
       <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.muted, marginBottom: 12 }}>A projekt nem található vagy törölve lett.</p>
