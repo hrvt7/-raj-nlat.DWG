@@ -5,6 +5,7 @@
 // Plan annotations (markers, measurements, scale) persist per plan
 
 import localforage from 'localforage'
+import { guardedWrite } from './lsConcurrency.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -75,14 +76,15 @@ export function generatePlanId() {
  * @param {File|Blob} fileBlob - The raw DXF/DWG file
  */
 export async function savePlan(plan, fileBlob) {
-  const meta = loadPlansMeta()
-  const existing = meta.findIndex(p => p.id === plan.id)
-  if (existing >= 0) {
-    meta[existing] = { ...meta[existing], ...plan }
-  } else {
-    meta.unshift(plan)
-  }
-  savePlansMeta(meta)
+  guardedWrite(LS_KEY, [], (meta) => {
+    const existing = meta.findIndex(p => p.id === plan.id)
+    if (existing >= 0) {
+      meta[existing] = { ...meta[existing], ...plan }
+    } else {
+      meta.unshift(plan)
+    }
+    return meta
+  }, savePlansMeta)
 
   // Store file blob in IndexedDB
   if (fileBlob) {
@@ -121,8 +123,7 @@ export async function getPlanFile(planId) {
  * @param {string} planId
  */
 export async function deletePlan(planId) {
-  const meta = loadPlansMeta().filter(p => p.id !== planId)
-  savePlansMeta(meta)
+  guardedWrite(LS_KEY, [], (meta) => meta.filter(p => p.id !== planId), savePlansMeta)
   await planFileStore.removeItem(planId)
 }
 
@@ -196,15 +197,18 @@ function _notifyAnnotListeners(planId, annotations) {
  */
 export async function savePlanAnnotations(planId, annotations, opts) {
   await planAnnotStore.setItem(planId, annotations)
-  // Update plan meta to reflect counts
-  const meta = loadPlansMeta()
-  const idx = meta.findIndex(p => p.id === planId)
-  if (idx >= 0) {
-    meta[idx].markerCount = annotations.markers?.length || 0
-    meta[idx].measureCount = annotations.measurements?.length || 0
-    meta[idx].hasScale = !!annotations.scale?.calibrated
-    savePlansMeta(meta)
-  }
+  // Update plan meta to reflect counts (guarded against cross-tab races)
+  guardedWrite(LS_KEY, [], (meta) => {
+    const idx = meta.findIndex(p => p.id === planId)
+    if (idx >= 0) {
+      meta[idx] = { ...meta[idx],
+        markerCount: annotations.markers?.length || 0,
+        measureCount: annotations.measurements?.length || 0,
+        hasScale: !!annotations.scale?.calibrated,
+      }
+    }
+    return meta
+  }, savePlansMeta)
   // Notify listeners (unless silent — used by viewer unmount to avoid infinite loops)
   if (!opts?.silent) {
     _notifyAnnotListeners(planId, annotations)
@@ -233,12 +237,13 @@ export async function getPlanAnnotations(planId) {
  * @param {Object} updates - partial plan object
  */
 export function updatePlanMeta(planId, updates) {
-  const meta = loadPlansMeta()
-  const idx = meta.findIndex(p => p.id === planId)
-  if (idx >= 0) {
-    meta[idx] = { ...meta[idx], ...updates }
-    savePlansMeta(meta)
-  }
+  guardedWrite(LS_KEY, [], (meta) => {
+    const idx = meta.findIndex(p => p.id === planId)
+    if (idx >= 0) {
+      meta[idx] = { ...meta[idx], ...updates }
+    }
+    return meta
+  }, savePlansMeta)
 }
 
 // ─── SHA-256 File Hashing ────────────────────────────────────────────────────

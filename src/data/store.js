@@ -3,6 +3,7 @@
 // Minden céges adat itt tárolódik
 
 import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId } from './workItemsDb.js'
+import { guardedWrite } from './lsConcurrency.js'
 
 const LS_KEYS = {
   SETTINGS:   'takeoffpro_settings',
@@ -469,18 +470,19 @@ export function saveQuotes(quotes) {
 export const MAX_QUOTES = 100
 
 export function saveQuote(quote) {
-  const quotes = loadQuotes()
-  const idx = quotes.findIndex(q => q.id === quote.id)
-  if (idx >= 0) {
-    quotes[idx] = quote
-  } else {
-    quotes.unshift(quote)
-  }
-  // Prune oldest quotes beyond cap to prevent unbounded localStorage growth
-  if (quotes.length > MAX_QUOTES) {
-    quotes.length = MAX_QUOTES
-  }
-  saveQuotes(quotes)
+  guardedWrite(LS_KEYS.QUOTES, [], (quotes) => {
+    const idx = quotes.findIndex(q => q.id === quote.id)
+    if (idx >= 0) {
+      quotes[idx] = quote
+    } else {
+      quotes.unshift(quote)
+    }
+    // Prune oldest quotes beyond cap to prevent unbounded localStorage growth
+    if (quotes.length > MAX_QUOTES) {
+      quotes.length = MAX_QUOTES
+    }
+    return quotes
+  }, (data) => save(LS_KEYS.QUOTES, data))
   return quote
 }
 
