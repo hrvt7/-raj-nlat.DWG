@@ -908,8 +908,9 @@ describe('Demo Seed — data shape & idempotency', () => {
     expect(demoProj).toBeTruthy()
     expect(demoProj.name).toContain('DEMO')
 
-    // Verify plans
-    const plans = JSON.parse(store['takeoffpro_plans_meta'] || '[]')
+    // Verify plans (may be versioned envelope or raw array)
+    const plansRaw = JSON.parse(store['takeoffpro_plans_meta'] || '[]')
+    const plans = Array.isArray(plansRaw) ? plansRaw : (plansRaw?.data || [])
     const demoPlans = plans.filter(p => p.id.startsWith('DEMO-'))
     expect(demoPlans.length).toBeGreaterThanOrEqual(2)
     for (const p of demoPlans) {
@@ -917,8 +918,9 @@ describe('Demo Seed — data shape & idempotency', () => {
       expect(p.name).toContain('DEMO')
     }
 
-    // Verify quotes
-    const quotes = JSON.parse(store['takeoffpro_quotes'] || '[]')
+    // Verify quotes (may be versioned envelope or raw array)
+    const quotesRaw = JSON.parse(store['takeoffpro_quotes'] || '[]')
+    const quotes = Array.isArray(quotesRaw) ? quotesRaw : (quotesRaw?.data || [])
     const demoQuotes = quotes.filter(q => q.id.startsWith('DEMO-'))
     expect(demoQuotes.length).toBeGreaterThanOrEqual(1)
     for (const q of demoQuotes) {

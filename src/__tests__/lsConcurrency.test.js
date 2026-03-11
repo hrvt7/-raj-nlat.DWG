@@ -25,7 +25,8 @@ const localStorageMock = {
 vi.stubGlobal('localStorage', localStorageMock)
 
 import { guardedWrite } from '../data/lsConcurrency.js'
-import { loadQuotes, saveQuote, saveQuotes, MAX_QUOTES } from '../data/store.js'
+import { loadQuotes, saveQuote, saveQuotes, MAX_QUOTES, QUOTES_SCHEMA_VERSION } from '../data/store.js'
+import { unwrapVersioned, wrapVersioned } from '../data/schemaVersion.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function makeQuote(id) {
@@ -176,9 +177,10 @@ describe('saveQuote — conflict recovery', () => {
         if (vReads === 1) return store[vKey] ?? '0' // v1 read
         if (vReads === 2) {
           // Simulate: another tab saved a quote between our read and re-check
-          const current = JSON.parse(store['takeoffpro_quotes'] || '[]')
+          const raw = JSON.parse(store['takeoffpro_quotes'] || 'null')
+          const current = unwrapVersioned(raw, QUOTES_SCHEMA_VERSION, [])
           current.unshift({ id: 'QT-OTHER-TAB', status: 'draft', items: [] })
-          store['takeoffpro_quotes'] = JSON.stringify(current)
+          store['takeoffpro_quotes'] = JSON.stringify(wrapVersioned(current, QUOTES_SCHEMA_VERSION))
           store[vKey] = String((parseInt(store[vKey] || '0', 10)) + 1)
           return store[vKey] // conflict!
         }

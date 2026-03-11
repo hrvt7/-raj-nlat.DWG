@@ -4,8 +4,22 @@
 // No file blobs are created — only metadata in localStorage.
 
 import { saveProject, loadProjects } from './projectStore.js'
+import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
+import { QUOTES_SCHEMA_VERSION } from './store.js'
+import { PLANS_META_SCHEMA_VERSION } from './planStore.js'
 
 const DEMO_PREFIX = 'DEMO-'
+
+/**
+ * Read a localStorage key that may be a versioned envelope or a legacy raw array.
+ * Returns a plain array regardless of stored format.
+ */
+function lsReadArray(key, schemaVersion) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(key))
+    return unwrapVersioned(raw, schemaVersion, [])
+  } catch { return [] }
+}
 const DEMO_PROJECT_ID = 'DEMO-PRJ-001'
 
 // ── Seed data definitions ────────────────────────────────────────────────────
@@ -130,8 +144,7 @@ export function isDemoSeeded() {
  */
 export function hasDemoData() {
   const projects = loadProjects()
-  let quotes = []
-  try { quotes = JSON.parse(localStorage.getItem('takeoffpro_quotes') || '[]') } catch {}
+  const quotes = lsReadArray('takeoffpro_quotes', QUOTES_SCHEMA_VERSION)
   return projects.some(p => p.id?.startsWith(DEMO_PREFIX)) ||
          quotes.some(q => q.id?.startsWith(DEMO_PREFIX))
 }
@@ -153,9 +166,8 @@ export function seedDemoData() {
   const plans = createDemoPlans()
   const LS_KEY = 'takeoffpro_plans_meta'
   try {
-    const existing = JSON.parse(localStorage.getItem(LS_KEY) || '[]')
-    const merged = [...plans, ...existing]
-    localStorage.setItem(LS_KEY, JSON.stringify(merged))
+    const existing = lsReadArray(LS_KEY, PLANS_META_SCHEMA_VERSION)
+    localStorage.setItem(LS_KEY, JSON.stringify(wrapVersioned([...plans, ...existing], PLANS_META_SCHEMA_VERSION)))
   } catch (err) {
     console.warn('[demoSeed] plan save failed:', err)
   }
@@ -164,8 +176,8 @@ export function seedDemoData() {
   const demoQuotes = createDemoQuotes()
   const LS_QUOTES = 'takeoffpro_quotes'
   try {
-    const existing = JSON.parse(localStorage.getItem(LS_QUOTES) || '[]')
-    localStorage.setItem(LS_QUOTES, JSON.stringify([...demoQuotes, ...existing]))
+    const existing = lsReadArray(LS_QUOTES, QUOTES_SCHEMA_VERSION)
+    localStorage.setItem(LS_QUOTES, JSON.stringify(wrapVersioned([...demoQuotes, ...existing], QUOTES_SCHEMA_VERSION)))
   } catch (err) {
     console.warn('[demoSeed] quote save failed:', err)
   }
@@ -194,19 +206,19 @@ export function clearDemoData() {
   // Plans
   const LS_PLANS = 'takeoffpro_plans_meta'
   try {
-    const plans = JSON.parse(localStorage.getItem(LS_PLANS) || '[]')
+    const plans = lsReadArray(LS_PLANS, PLANS_META_SCHEMA_VERSION)
     const filtered = plans.filter(p => !p.id?.startsWith(DEMO_PREFIX))
     removedPlans = plans.length - filtered.length
-    localStorage.setItem(LS_PLANS, JSON.stringify(filtered))
+    localStorage.setItem(LS_PLANS, JSON.stringify(wrapVersioned(filtered, PLANS_META_SCHEMA_VERSION)))
   } catch (err) { console.warn('[demoSeed] plan cleanup failed:', err) }
 
   // Quotes
   const LS_QUOTES = 'takeoffpro_quotes'
   try {
-    const quotes = JSON.parse(localStorage.getItem(LS_QUOTES) || '[]')
+    const quotes = lsReadArray(LS_QUOTES, QUOTES_SCHEMA_VERSION)
     const filteredQ = quotes.filter(q => !q.id?.startsWith(DEMO_PREFIX))
     removedQuotes = quotes.length - filteredQ.length
-    localStorage.setItem(LS_QUOTES, JSON.stringify(filteredQ))
+    localStorage.setItem(LS_QUOTES, JSON.stringify(wrapVersioned(filteredQ, QUOTES_SCHEMA_VERSION)))
   } catch (err) { console.warn('[demoSeed] quote cleanup failed:', err) }
 
   return { removedProjects, removedPlans, removedQuotes }

@@ -4,6 +4,7 @@
 
 import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT, ASSEMBLY_VARIANT_GROUPS, generateAssemblyId } from './workItemsDb.js'
 import { guardedWrite } from './lsConcurrency.js'
+import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 
 const LS_KEYS = {
   SETTINGS:   'takeoffpro_settings',
@@ -458,11 +459,17 @@ export function saveMaterials(materials) {
   save(LS_KEYS.MATERIALS, materials)
 }
 
+// ─── Quotes schema versioning ─────────────────────────────────────────────────
+// v1 = current shape (array of quote objects), stored in versioned envelope.
+// Legacy (v0) = raw array without envelope — still accepted on load.
+export const QUOTES_SCHEMA_VERSION = 1
+
 export function loadQuotes() {
-  return load(LS_KEYS.QUOTES, [])
+  const raw = load(LS_KEYS.QUOTES, null)
+  return unwrapVersioned(raw, QUOTES_SCHEMA_VERSION, [])
 }
 export function saveQuotes(quotes) {
-  save(LS_KEYS.QUOTES, quotes)
+  save(LS_KEYS.QUOTES, wrapVersioned(quotes, QUOTES_SCHEMA_VERSION))
 }
 
 // Maximum number of quotes retained in localStorage.
@@ -470,7 +477,8 @@ export function saveQuotes(quotes) {
 export const MAX_QUOTES = 100
 
 export function saveQuote(quote) {
-  guardedWrite(LS_KEYS.QUOTES, [], (quotes) => {
+  guardedWrite(LS_KEYS.QUOTES, null, (raw) => {
+    const quotes = unwrapVersioned(raw, QUOTES_SCHEMA_VERSION, [])
     const idx = quotes.findIndex(q => q.id === quote.id)
     if (idx >= 0) {
       quotes[idx] = quote
@@ -481,7 +489,7 @@ export function saveQuote(quote) {
     if (quotes.length > MAX_QUOTES) {
       quotes.length = MAX_QUOTES
     }
-    return quotes
+    return wrapVersioned(quotes, QUOTES_SCHEMA_VERSION)
   }, (data) => save(LS_KEYS.QUOTES, data))
   return quote
 }

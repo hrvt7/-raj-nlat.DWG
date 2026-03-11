@@ -6,6 +6,7 @@
 
 import localforage from 'localforage'
 import { guardedWrite } from './lsConcurrency.js'
+import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -34,6 +35,11 @@ const parseCacheStore = localforage.createInstance({
 
 const LS_KEY = 'takeoffpro_plans_meta'
 
+// ─── Plan metadata schema versioning ─────────────────────────────────────────
+// v1 = current shape (array of plan meta objects), stored in versioned envelope.
+// Legacy (v0) = raw array without envelope — still accepted on load.
+export const PLANS_META_SCHEMA_VERSION = 1
+
 // ── Floor / Discipline constants ────────────────────────────────────────────
 export const FLOOR_OPTIONS = ['Pince', 'Fsz', '1. emelet', '2. emelet', 'Tető', 'Egyéb']
 export const DISCIPLINE_OPTIONS = ['Világítás', 'Erősáram', 'Kábeltálca', 'Tűzjelző', 'Gyengeáram']
@@ -44,7 +50,8 @@ function loadPlansMeta() {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (raw === null) return []
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    return unwrapVersioned(parsed, PLANS_META_SCHEMA_VERSION, [])
   } catch (err) {
     console.warn(`[TakeoffPro] planStore load failed:`, err.message)
     return []
@@ -53,7 +60,7 @@ function loadPlansMeta() {
 
 function savePlansMeta(plans) {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(plans))
+    localStorage.setItem(LS_KEY, JSON.stringify(wrapVersioned(plans, PLANS_META_SCHEMA_VERSION)))
   } catch (err) {
     console.error(`[TakeoffPro] planStore save FAILED:`, err.message)
     if (typeof window !== 'undefined') {
@@ -62,6 +69,17 @@ function savePlansMeta(plans) {
       }))
     }
   }
+}
+
+/**
+ * guardedWrite wrapper that handles envelope unwrap/wrap transparently.
+ * The mutator receives the plain array; savePlansMeta wraps it on write.
+ */
+function planMetaGuardedWrite(mutator) {
+  guardedWrite(LS_KEY, null, (raw) => {
+    const meta = unwrapVersioned(raw, PLANS_META_SCHEMA_VERSION, [])
+    return mutator(meta)
+  }, savePlansMeta)
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -76,7 +94,7 @@ export function generatePlanId() {
  * @param {File|Blob} fileBlob - The raw DXF/DWG file
  */
 export async function savePlan(plan, fileBlob) {
-  guardedWrite(LS_KEY, [], (meta) => {
+  planMetaGuardedWrite((meta) => {
     const existing = meta.findIndex(p => p.id === plan.id)
     if (existing >= 0) {
       meta[existing] = { ...meta[existing], ...plan }
@@ -84,7 +102,7 @@ export async function savePlan(plan, fileBlob) {
       meta.unshift(plan)
     }
     return meta
-  }, savePlansMeta)
+  })
 
   // Store file blob in IndexedDB
   if (fileBlob) {
@@ -123,7 +141,7 @@ export async function getPlanFile(planId) {
  * @param {string} planId
  */
 export async function deletePlan(planId) {
-  guardedWrite(LS_KEY, [], (meta) => meta.filter(p => p.id !== planId), savePlansMeta)
+  planMetaGuardedWrite((meta) => meta.filter(p => p.id !== planId))
   await planFileStore.removeItem(planId)
 }
 
@@ -198,7 +216,7 @@ function _notifyAnnotListeners(planId, annotations) {
 export async function savePlanAnnotations(planId, annotations, opts) {
   await planAnnotStore.setItem(planId, annotations)
   // Update plan meta to reflect counts (guarded against cross-tab races)
-  guardedWrite(LS_KEY, [], (meta) => {
+  planMetaGuardedWrite((meta) => {
     const idx = meta.findIndex(p => p.id === planId)
     if (idx >= 0) {
       meta[idx] = { ...meta[idx],
@@ -208,7 +226,7 @@ export async function savePlanAnnotations(planId, annotations, opts) {
       }
     }
     return meta
-  }, savePlansMeta)
+  })
   // Notify listeners (unless silent — used by viewer unmount to avoid infinite loops)
   if (!opts?.silent) {
     _notifyAnnotListeners(planId, annotations)
@@ -237,13 +255,13 @@ export async function getPlanAnnotations(planId) {
  * @param {Object} updates - partial plan object
  */
 export function updatePlanMeta(planId, updates) {
-  guardedWrite(LS_KEY, [], (meta) => {
+  planMetaGuardedWrite((meta) => {
     const idx = meta.findIndex(p => p.id === planId)
     if (idx >= 0) {
       meta[idx] = { ...meta[idx], ...updates }
     }
     return meta
-  }, savePlansMeta)
+  })
 }
 
 // ─── SHA-256 File Hashing ────────────────────────────────────────────────────
