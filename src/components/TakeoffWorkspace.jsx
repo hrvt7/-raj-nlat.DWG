@@ -784,7 +784,7 @@ function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete }) {
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hu'))
 
   return (
-    <div style={{
+    <div data-testid="unknown-block-panel" style={{
       marginBottom: 14, padding: '10px 14px', borderRadius: 10,
       background: 'rgba(255,107,107,0.04)',
       border: `1px solid rgba(255,107,107,0.18)`,
@@ -797,7 +797,7 @@ function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete }) {
         {unknownItems.length} ismeretlen blokk — rendelj hozzá tételt
       </div>
       {unknownItems.map(item => (
-        <div key={item.blockName} style={{
+        <div key={item.blockName} data-testid="unknown-block-row" style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '5px 0', borderTop: `1px solid ${C.border}`,
         }}>
@@ -820,6 +820,7 @@ function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete }) {
             {item.qty} db
           </span>
           <select
+            data-testid="unknown-block-select"
             value=""
             onChange={e => {
               if (e.target.value) onAssign(item.blockName, e.target.value)
