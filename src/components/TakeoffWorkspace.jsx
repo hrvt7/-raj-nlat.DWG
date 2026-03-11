@@ -1496,17 +1496,20 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       bySystem[sys].laborHours += line.hours || 0
       bySystem[sys].lines.push(line)
     }
-    // Group by assembly for summary
+    // Group by assembly for summary (dedup: only compute once per unique asmId;
+    // last-row-wins semantics preserved — map[asmId] was overwritten anyway)
+    const lastByAsm = {}
+    for (const row of takeoffRows) lastByAsm[row.asmId] = row
     const byAssembly = {}
-    for (const row of takeoffRows) {
+    for (const [asmId, row] of Object.entries(lastByAsm)) {
       const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
       if (!asm) continue
       const rowP = computePricing({
         takeoffRows: [row], assemblies, workItems, materials, context, markup: 0, hourlyRate,
         cableEstimate: null, difficultyMode,
       })
-      byAssembly[row.asmId] = {
-        name: asm.name || row.asmId,
+      byAssembly[asmId] = {
+        name: asm.name || asmId,
         category: asm.category || '',
         qty: row.qty,
         materialCost: rowP.materialCost,
@@ -1524,16 +1527,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Per-assembly unit cost ────────────────────────────────────────────────
   // Compute unit cost for each assembly × each wall type (for per-split pricing display in TakeoffRow)
+  // Dedup: only compute once per unique asmId (last-row-wins preserves current semantics)
   const unitCostByAsmByWall = useMemo(() => {
     const map = {}
-    for (const row of takeoffRows) {
-      map[row.asmId] = {}
+    const lastRowByAsm = {}
+    for (const row of takeoffRows) lastRowByAsm[row.asmId] = row
+    for (const [asmId, row] of Object.entries(lastRowByAsm)) {
+      map[asmId] = {}
       for (const wallKey of Object.keys(WALL_FACTORS)) {
         const single = computePricing({
           takeoffRows: [{ asmId: row.asmId, qty: 1, variantId: row.variantId, wallSplits: null, wallType: wallKey }],
           assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate: null, difficultyMode,
         })
-        map[row.asmId][wallKey] = single.total
+        map[asmId][wallKey] = single.total
       }
     }
     return map
