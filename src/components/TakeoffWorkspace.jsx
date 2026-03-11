@@ -859,6 +859,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
+  const [dataLoadError, setDataLoadError] = useState(null) // surfaced data-load failure
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
   // ── Mobile responsive state ───────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
@@ -987,9 +988,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const canvasRef = useRef(null)
-  const assemblies = useMemo(() => { try { return loadAssemblies() } catch { return [] } }, [])
-  const workItems = useMemo(() => { try { return loadWorkItems() } catch { return [] } }, [])
-  const materials = useMemo(() => materialsProp || loadMaterials(), [materialsProp])
+  const assemblies = useMemo(() => {
+    try { return loadAssemblies() }
+    catch (err) { setDataLoadError(`Szerelvénytár betöltése sikertelen: ${err.message}`); return [] }
+  }, [])
+  const workItems = useMemo(() => {
+    try { return loadWorkItems() }
+    catch (err) { setDataLoadError(`Munkatételek betöltése sikertelen: ${err.message}`); return [] }
+  }, [])
+  const materials = useMemo(() => {
+    if (materialsProp) return materialsProp
+    try { return loadMaterials() }
+    catch (err) { setDataLoadError(`Anyaglista betöltése sikertelen: ${err.message}`); return [] }
+  }, [materialsProp])
 
   // ── Helper: File → base64 string ──────────────────────────────────────────
   const fileToBase64 = useCallback((file) => new Promise((resolve, reject) => {
@@ -2072,6 +2083,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
           {/* Tab content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+
+            {/* ── Data-load failure banner (visible on ALL tabs) ── */}
+            {dataLoadError && (
+              <div style={{
+                background: C.redDim, border: `1px solid ${C.red}`, borderRadius: 8,
+                padding: '10px 14px', color: C.red, fontFamily: 'DM Mono', fontSize: 12,
+                marginBottom: 12,
+              }}>
+                ⚠ {dataLoadError}
+              </div>
+            )}
 
             {/* ── TAKEOFF TAB ─────────────────────────────────────────────── */}
             {rightTab === 'takeoff' && (
