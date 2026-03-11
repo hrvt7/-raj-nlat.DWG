@@ -651,7 +651,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           <button onClick={e => { e.stopPropagation(); onOpen(plan) }} disabled={isOpening} style={{ flex: 1, padding: '6px 0', borderRadius: 5, background: isOpening ? 'transparent' : `${C.accent}12`, border: `1px solid ${isOpening ? C.border : `${C.accent}30`}`, color: isOpening ? C.muted : C.accent, fontSize: 11, fontFamily: 'Syne', fontWeight: 600, cursor: isOpening ? 'wait' : 'pointer', transition: 'all 0.15s' }}>
             {isOpening ? 'Töltés…' : hasCalc ? 'Szerkesztés' : 'Megnyitás'}
           </button>
-          <button onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+          <button data-testid="plan-delete-btn" onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
             style={{ padding: '6px 10px', borderRadius: 5, background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)'; e.currentTarget.style.color = '#FF6B6B' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted }}>

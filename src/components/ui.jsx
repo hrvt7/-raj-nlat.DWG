@@ -230,7 +230,7 @@ export function ConfirmDialog({ message, detail, onConfirm, onCancel, confirmLab
             padding: '7px 16px', borderRadius: 7, fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
             background: 'transparent', border: `1px solid ${C.border}`, color: C.textSub, cursor: 'pointer',
           }}>{cancelLabel}</button>
-          <button onClick={onConfirm} style={{
+          <button data-testid="confirm-dialog-confirm" onClick={onConfirm} style={{
             padding: '7px 16px', borderRadius: 7, fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
             background: C.redDim, border: '1px solid rgba(255,107,107,0.3)', color: C.red, cursor: 'pointer',
           }}>{confirmLabel}</button>
