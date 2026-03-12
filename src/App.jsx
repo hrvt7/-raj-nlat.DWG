@@ -330,11 +330,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           box-shadow: 0 4px 24px rgba(0,229,160,0.13), 0 1px 6px rgba(0,0,0,0.25);
         }
       `}</style>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
         {/* Gross — accent hero card */}
         <div className="kpi-card kpi-card-hero" style={{
           background: `linear-gradient(135deg, ${C.accent}18, ${C.blue}0a)`,
-          border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '18px 20px', gridColumn: 'span 1',
+          border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '18px 20px',
         }}>
           <span style={labelStyle}>{outputMode === 'labor_only' ? 'Bruttó munkadíj összeg' : 'Bruttó végösszeg'}</span>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, color: C.accent, lineHeight: 1, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -399,7 +399,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       )}
 
       {/* ── Controls card grid (5 cards) ──────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
 
         {/* Card 1 — PDF Export */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
