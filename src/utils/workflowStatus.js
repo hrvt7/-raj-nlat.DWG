@@ -17,8 +17,14 @@
 //   - statusLine:  short Hungarian string for the header
 //   - statusColor: design token color key
 //   - cta:         { label, action } — the single most important next step
-//   - detail:      { reasons[], stats{} } — collapsible extra info
+//   - detail:      { reasons[], structuredReasons[], stats{} } — collapsible extra info
 //   - badges:      { takeoff, cable, calc } — warning dots for tab bar
+//
+// Structured reasons severity:
+//   'blocker'  — hard save-gating issue (must fix before save)
+//   'action'   — clear fix available (e.g., accept-all for auto_low)
+//   'warning'  — should check but won't block save (weak cable)
+//   'info'     — contextual guidance (hints, cable detail)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { CABLE_CONFIDENCE_STRONG } from './reviewState.js'
@@ -53,19 +59,21 @@ export function computeWorkflowStatus({
       statusLine: 'Tölts fel egy DXF vagy PDF tervrajzot',
       statusColor: 'muted',
       cta: null,
-      detail: { reasons: [], stats: {} },
+      detail: { reasons: [], structuredReasons: [], stats: {} },
       badges: { takeoff: null, cable: null, calc: null },
     })
   }
 
   // ── Stage 1: parse failed ────────────────────────────────────────────
   if (dxfAudit && dxfAudit.status === 'PARSE_LIMITED') {
+    const parseReasons = dxfAudit.missing || []
     return buildStatus('parse_failed', {
       statusLine: 'A fájl beolvasása sikertelen',
       statusColor: 'red',
       cta: { label: 'Próbáld újra', action: 'retry' },
       detail: {
-        reasons: dxfAudit.missing || [],
+        reasons: parseReasons,
+        structuredReasons: tagReasons(parseReasons, 'blocker', 'parse'),
         stats: {},
       },
       badges: { takeoff: 'error', cable: null, calc: null },
@@ -83,10 +91,14 @@ export function computeWorkflowStatus({
 
     // EXPLODED_RISK: guide user to PDF fallback instead of dead-end reexport CTA
     if (isExploded) {
-      const explodedReasons = [
-        ...(dxfAudit?.missing || []),
-        'Blokk-alapú felmérés nem lehetséges — a rajz nem tartalmaz felismerhető blokkokat',
-        'Alternatíva: kérd a tervezőt, hogy NE robbantva exportálja a DXF-et',
+      const auditMissing = dxfAudit?.missing || []
+      const explodedBlocker = 'Blokk-alapú felmérés nem lehetséges — a rajz nem tartalmaz felismerhető blokkokat'
+      const explodedHint = 'Alternatíva: kérd a tervezőt, hogy NE robbantva exportálja a DXF-et'
+      const explodedReasons = [...auditMissing, explodedBlocker, explodedHint]
+      const explodedStructured = [
+        ...tagReasons(auditMissing, 'blocker', 'parse'),
+        tagReason(explodedBlocker, 'blocker', 'parse'),
+        tagReason(explodedHint, 'info', 'guidance'),
       ]
       return buildStatus('parse_failed', {
         statusLine: 'Robbantott rajz — váltás PDF felmérésre ajánlott',
@@ -94,18 +106,21 @@ export function computeWorkflowStatus({
         cta: { label: 'Váltás PDF felmérésre →', action: 'switch_to_pdf' },
         detail: {
           reasons: explodedReasons,
+          structuredReasons: explodedStructured,
           stats: dxfAudit?.stats || {},
         },
         badges: { takeoff: 'error', cable: null, calc: null },
       })
     }
 
+    const noBlockReasons = dxfAudit?.missing || []
     return buildStatus('parse_failed', {
       statusLine: 'Nem találtunk tételt a rajzban',
       statusColor: 'red',
       cta: { label: 'Ellenőrizd a fájlt', action: 'retry' },
       detail: {
-        reasons: dxfAudit?.missing || [],
+        reasons: noBlockReasons,
+        structuredReasons: tagReasons(noBlockReasons, 'blocker', 'parse'),
         stats: dxfAudit?.stats || {},
       },
       badges: { takeoff: 'error', cable: null, calc: null },
@@ -119,7 +134,7 @@ export function computeWorkflowStatus({
         statusLine: 'Jelölj ki elemeket a tervrajzon',
         statusColor: 'muted',
         cta: null,
-        detail: { reasons: [], stats: {} },
+        detail: { reasons: [], structuredReasons: [], stats: {} },
         badges: { takeoff: null, cable: null, calc: null },
       })
     }
@@ -127,7 +142,7 @@ export function computeWorkflowStatus({
       statusLine: `${takeoffRowCount} tétel — árajánlat kész`,
       statusColor: 'accent',
       cta: { label: 'Mentés →', action: 'save' },
-      detail: { reasons: [], stats: {} },
+      detail: { reasons: [], structuredReasons: [], stats: {} },
       badges: { takeoff: null, cable: null, calc: null },
     })
   }
@@ -140,9 +155,14 @@ export function computeWorkflowStatus({
 
     // Enrich for MANUAL_HEAVY DXF — most blocks need manual assignment
     const isManualHeavy = dxfAudit?.status === 'MANUAL_HEAVY'
+    const manualHeavyHint = 'A rajz legtöbb blokkja ismeretlen — a legnagyobb darabszámúak vannak elöl'
     const enrichedReasons = isManualHeavy
-      ? [...reasons, 'A rajz legtöbb blokkja ismeretlen — a legnagyobb darabszámúak vannak elöl']
+      ? [...reasons, manualHeavyHint]
       : reasons
+    const structuredReasons = [
+      ...tagReasons(reasons, 'blocker', 'recognition'),
+      ...(isManualHeavy ? [tagReason(manualHeavyHint, 'info', 'guidance')] : []),
+    ]
 
     return buildStatus('unresolved_blocks', {
       statusLine: isManualHeavy
@@ -152,6 +172,7 @@ export function computeWorkflowStatus({
       cta: { label: 'Blokkok hozzárendelése', action: 'review_blocks' },
       detail: {
         reasons: enrichedReasons,
+        structuredReasons,
         stats: buildReviewStats(reviewSummary),
       },
       badges: {
@@ -173,7 +194,17 @@ export function computeWorkflowStatus({
 
     // Surface top cable warnings in detail.reasons so WorkflowStatusCard
     // explains WHY cable is uncertain (not just "Kábelbecslés bizonytalanabb").
-    const enrichedReasons = [...reasons, ...getCableReasons(cableAudit, weakCable)]
+    const cableWarnings = getCableReasons(cableAudit, weakCable)
+    const enrichedReasons = [...reasons, ...cableWarnings]
+
+    // Build structured reasons with severity tags:
+    //   auto_low reasons → 'action' (user can accept-all)
+    //   cable confidence summary → 'warning' (should check)
+    //   cable detail warnings → 'info' (contextual detail)
+    const structuredReasons = [
+      ...tagReasons(reasons, hasAutoLow ? 'action' : 'warning', hasAutoLow ? 'recognition' : 'cable'),
+      ...getCableStructuredReasons(cableAudit, weakCable),
+    ]
 
     // Determine the most impactful CTA
     let cta
@@ -193,6 +224,7 @@ export function computeWorkflowStatus({
       cta,
       detail: {
         reasons: enrichedReasons,
+        structuredReasons,
         stats: buildReviewStats(reviewSummary),
       },
       badges: {
@@ -211,6 +243,7 @@ export function computeWorkflowStatus({
   // Even in ready stage, surface cable warnings if badge is active
   const cableBadge = getCableBadge(cableAudit, cableReviewed)
   const readyReasons = cableBadge ? getCableReasons(cableAudit, true) : []
+  const readyStructured = cableBadge ? getCableStructuredReasons(cableAudit, true) : []
 
   return buildStatus('ready', {
     statusLine: `${activeItems} tétel — árajánlat kész`,
@@ -218,6 +251,7 @@ export function computeWorkflowStatus({
     cta: { label: 'Mentés →', action: 'save' },
     detail: {
       reasons: readyReasons,
+      structuredReasons: readyStructured,
       stats: buildReviewStats(reviewSummary),
     },
     badges: {
@@ -230,8 +264,54 @@ export function computeWorkflowStatus({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Valid structured reason severity levels.
+ * @type {readonly ['blocker','action','warning','info']}
+ */
+export const REASON_SEVERITIES = Object.freeze(['blocker', 'action', 'warning', 'info'])
+
 function buildStatus(stage, fields) {
   return { stage, ...fields }
+}
+
+/**
+ * Wrap a single reason string into a structured reason object.
+ *
+ * @param {string} text — reason text
+ * @param {'blocker'|'action'|'warning'|'info'} severity
+ * @param {string} category — 'parse'|'recognition'|'cable'|'guidance'
+ * @returns {{ text: string, severity: string, category: string }}
+ */
+function tagReason(text, severity, category) {
+  return { text, severity, category }
+}
+
+/**
+ * Wrap an array of reason strings into structured reason objects.
+ *
+ * @param {string[]} reasons
+ * @param {'blocker'|'action'|'warning'|'info'} severity
+ * @param {string} category
+ * @returns {Array<{ text: string, severity: string, category: string }>}
+ */
+function tagReasons(reasons, severity, category) {
+  return reasons.map(r => tagReason(r, severity, category))
+}
+
+/**
+ * Build structured cable reasons from cableAudit.
+ * Cable detail warnings are tagged as 'info' (contextual detail).
+ * Returns at most 2 items to avoid overwhelming the status card.
+ *
+ * @param {object|null} cableAudit
+ * @param {boolean} weakCable
+ * @returns {Array<{ text: string, severity: string, category: string }>}
+ */
+function getCableStructuredReasons(cableAudit, weakCable) {
+  if (!cableAudit || !weakCable) return []
+  const warnings = cableAudit.cableWarnings
+  if (!Array.isArray(warnings) || warnings.length === 0) return []
+  return warnings.slice(0, 2).map(w => tagReason(w, 'info', 'cable'))
 }
 
 function buildReviewStats(summary) {

@@ -559,18 +559,28 @@ function WorkflowStatusCard({ workflowStatus, reviewSummary, dxfAudit, cableAudi
             </div>
           )}
 
-          {/* Warning reasons */}
+          {/* Warning reasons — structured severity rendering when available */}
           {reasons.length > 0 && (
             <div style={{ marginBottom: (dxfAudit && !isPdf) ? 8 : 0 }}>
-              {reasons.map((r, i) => (
-                <div key={i} style={{
-                  fontFamily: 'DM Mono', fontSize: 10, color: C.muted,
-                  padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 5,
-                }}>
-                  <span style={{ color: C.yellow, flexShrink: 0 }}>•</span>
-                  <span>{r}</span>
-                </div>
-              ))}
+              {(detail?.structuredReasons?.length > 0 ? detail.structuredReasons : reasons.map(r => ({ text: r, severity: 'warning' }))).map((sr, i) => {
+                const isObj = typeof sr === 'object' && sr !== null
+                const text = isObj ? sr.text : sr
+                const severity = isObj ? sr.severity : 'warning'
+                const icon = severity === 'blocker' ? '✗' : severity === 'action' ? '⚠' : severity === 'info' ? 'ℹ' : '•'
+                const iconColor = severity === 'blocker' ? C.red : severity === 'action' ? C.yellow : severity === 'info' ? C.muted : C.yellow
+                const textColor = severity === 'blocker' ? C.red : severity === 'info' ? C.muted : C.muted
+                const fontWeight = severity === 'blocker' || severity === 'action' ? 600 : 400
+                return (
+                  <div key={i} data-severity={severity} style={{
+                    fontFamily: 'DM Mono', fontSize: 10, color: textColor,
+                    padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 5,
+                    fontWeight,
+                  }}>
+                    <span style={{ color: iconColor, flexShrink: 0 }}>{icon}</span>
+                    <span>{text}</span>
+                  </div>
+                )
+              })}
             </div>
           )}
 
