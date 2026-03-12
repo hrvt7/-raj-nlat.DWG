@@ -529,51 +529,49 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       </div>
 
       {/* ── Action bar (4 action buttons) ────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-        <button onClick={handlePdf} disabled={pdfGenerating} style={{
-          padding: '10px', borderRadius: 9, cursor: pdfGenerating ? 'wait' : 'pointer',
-          background: pdfGenerating ? C.accentDim : C.accent,
-          border: 'none', color: '#09090B',
+      {(() => {
+        const actionBase = {
+          padding: '10px', borderRadius: 9, border: 'none',
           fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          opacity: pdfGenerating ? 0.7 : 1, transition: 'all 0.15s',
-        }}>
-          {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
-        </button>
-        <button onClick={handlePrint} style={{
-          padding: '10px', borderRadius: 9, cursor: 'pointer',
-          background: C.bg, border: `1px solid ${C.border}`, color: C.textSub,
-          fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'all 0.15s',
-        }}>
-          PDF nyomtatása
-        </button>
-        <button onClick={handleEmail} style={{
-          padding: '10px', borderRadius: 9, cursor: 'pointer',
-          background: C.bg, border: `1px solid ${C.border}`, color: C.textSub,
-          fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'all 0.15s',
-        }}>
-          Email küldése
-        </button>
-        <button
-          onClick={async () => { const { exportBOM } = await import('./utils/bomExport.js'); exportBOM(quote) }}
-          disabled={!hasBom}
-          style={{
-            padding: '10px', borderRadius: 9,
-            cursor: hasBom ? 'pointer' : 'not-allowed',
-            background: C.bg, border: `1px solid ${C.border}`,
-            color: hasBom ? C.textSub : C.muted,
-            fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s',
-          }}
-        >
-          {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
-        </button>
-      </div>
+          transition: 'all 0.15s', color: '#09090B',
+        }
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+            <button onClick={handlePdf} disabled={pdfGenerating} style={{
+              ...actionBase,
+              background: pdfGenerating ? C.accentDim : C.accent,
+              cursor: pdfGenerating ? 'wait' : 'pointer',
+              opacity: pdfGenerating ? 0.7 : 1,
+            }}>
+              {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
+            </button>
+            <button onClick={handlePrint} style={{
+              ...actionBase, background: C.red, cursor: 'pointer',
+            }}>
+              PDF nyomtatása
+            </button>
+            <button onClick={handleEmail} style={{
+              ...actionBase, background: C.blue, cursor: 'pointer',
+            }}>
+              Email küldése
+            </button>
+            <button
+              onClick={async () => { const { exportBOM } = await import('./utils/bomExport.js'); exportBOM(quote) }}
+              disabled={!hasBom}
+              style={{
+                ...actionBase,
+                background: hasBom ? C.yellow : C.bgHover,
+                cursor: hasBom ? 'pointer' : 'not-allowed',
+                color: hasBom ? '#09090B' : C.muted,
+                opacity: hasBom ? 1 : 0.5,
+              }}
+            >
+              {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
+            </button>
+          </div>
+        )
+      })()}
 
       {/* ── Main body: left (items) + right (sidebar) ────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 260px', gap: 20, alignItems: 'start' }}>
