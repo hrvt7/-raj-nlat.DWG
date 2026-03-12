@@ -277,6 +277,28 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     window.location.href = url
   }
 
+  const handlePrint = async () => {
+    const { buildQuoteHtml } = await import('./utils/generatePdf.js')
+    const liveQuote = {
+      ...quote,
+      outputMode,
+      groupBy,
+      projectName: editName, project_name: editName, name: editName,
+      clientName: editClient, client_name: editClient,
+      clientAddress: editClientAddr, clientTaxNumber: editClientTax, clientEmail: editClientEmail, projectAddress: editProjectAddr,
+      gross: net, totalLabor: newTotalLabor,
+      pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
+      inclusions: editInclusions,
+      exclusions: editExclusions,
+      validityText: editValidity,
+      paymentTermsText: editPaymentTerms,
+    }
+    const html = buildQuoteHtml(liveQuote, settings, pdfLevel, outputMode, groupBy)
+    if (typeof window !== 'undefined') window.__lastPrintHtml = html
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close(); w.focus(); w.print() }
+  }
+
   // Separate items by type for the grouped table
   const matItems   = (quote.items || []).filter(i => i.type === 'material' || i.type === 'cable')
   const laborItems = (quote.items || []).filter(i => i.type === 'labor')
@@ -432,7 +454,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           }}>
             {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
           </button>
-          <button onClick={handleEmail} style={{
+          <button onClick={handlePrint} style={{
             width: '100%', padding: '8px', borderRadius: 9, cursor: 'pointer',
             background: 'transparent',
             border: `1px solid ${C.border}`,
@@ -441,7 +463,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             transition: 'all 0.15s',
           }}>
-            ✉ Email küldése
+            🖨 PDF nyomtatása
           </button>
         </div>
 
@@ -515,6 +537,16 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               </button>
             ))}
           </div>
+          <button onClick={handleEmail} style={{
+            width: '100%', padding: '10px', borderRadius: 9, cursor: 'pointer',
+            background: C.blue,
+            border: 'none', color: '#09090B',
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            transition: 'all 0.15s', marginTop: 'auto',
+          }}>
+            ✉ Email küldése
+          </button>
         </div>
 
         {/* Card 5 — Státusz */}
