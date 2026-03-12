@@ -237,8 +237,8 @@ describe('buildQuoteHtml — detail levels', () => {
   })
 })
 
-// ─── Markup (Árrés) transparency in PDF ───────────────────────────────────────
-describe('buildQuoteHtml — markup (Árrés) transparency', () => {
+// ─── Markup absorbed into Munkadíj — client-clean PDF ────────────────────────
+describe('buildQuoteHtml — markup absorbed into Munkadíj (no standalone Árrés)', () => {
   const quoteWithMarkup = {
     ...baseQuote,
     totalMaterials: 450000,
@@ -246,51 +246,51 @@ describe('buildQuoteHtml — markup (Árrés) transparency', () => {
     pricingData: { hourlyRate: 9000, markup_pct: 0.15 },
   }
 
-  it('shows Árrés KPI card when markup > 0', () => {
+  it('does NOT show standalone Árrés in KPI cards or financial summary', () => {
     const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
-    expect(html).toContain('Árrés (15%)')
-    // Markup = (450000 + 320000) * 0.15 = 115500
-    expect(html).toContain('115\u00a0500')  // fmtHU uses non-breaking space
-  })
-
-  it('shows Árrés row in financial summary when markup > 0', () => {
-    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
-    // Should appear as a financial table row
-    expect(html).toMatch(/fin-label[^>]*>Árrés \(15%\)/)
-  })
-
-  it('financial summary adds up: materials + labor + markup = net', () => {
-    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
-    // materials = 450000, labor = 320000, markup = 115500, net = 885500
-    // All should appear in the HTML
-    expect(html).toContain('450\u00a0000')  // materials
-    expect(html).toContain('320\u00a0000')  // labor
-    expect(html).toContain('115\u00a0500')  // markup
-    expect(html).toContain('885\u00a0500')  // net total
-  })
-
-  it('omits Árrés KPI card when markup = 0', () => {
-    const html = buildQuoteHtml(baseQuote, baseSettings)  // baseQuote has markup_pct: 0
-    expect(html).not.toContain('Árrés')
-  })
-
-  it('omits Árrés row from financial summary when markup = 0', () => {
-    const html = buildQuoteHtml(baseQuote, baseSettings)
     expect(html).not.toMatch(/Árrés/)
   })
 
-  it('labor_only mode shows Árrés applied to labor only', () => {
-    const html = buildQuoteHtml(quoteWithMarkup, baseSettings, 'summary', 'labor_only')
-    // labor_only: markup = 320000 * 0.15 = 48000
-    expect(html).toContain('Árrés (15%)')
-    expect(html).toContain('48\u00a0000')
+  it('Munkadíj KPI card value includes markup (labor + markup)', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
+    // labor = 320000, markup = (450000+320000)*0.15 = 115500, laborCard = 435500
+    expect(html).toContain('435\u00a0500')
   })
 
-  it('old quotes without pricingData degrade safely (no Árrés shown)', () => {
+  it('financial summary Munkadíj row includes markup', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
+    // Munkadíj row should show 435500 (labor + markup), not raw 320000
+    expect(html).toMatch(/fin-label[^>]*>Munkadíj/)
+    expect(html).toContain('435\u00a0500')
+  })
+
+  it('financial summary reconciles: materials + munkadíj = net', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
+    // materials=450000, munkadíj(incl markup)=435500, net=885500
+    expect(html).toContain('450\u00a0000')  // materials
+    expect(html).toContain('435\u00a0500')  // munkadíj (labor+markup)
+    expect(html).toContain('885\u00a0500')  // net total
+  })
+
+  it('zero markup: Munkadíj shows raw labor, no Árrés anywhere', () => {
+    const html = buildQuoteHtml(baseQuote, baseSettings)  // markup_pct: 0
+    expect(html).not.toMatch(/Árrés/)
+    // labor = 320000 shown as munkadíj
+    expect(html).toContain('320\u00a0000')
+  })
+
+  it('labor_only mode: markup applied to labor only, absorbed into Munkadíj', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings, 'summary', 'labor_only')
+    // labor_only: markup = 320000 * 0.15 = 48000, laborCard = 368000
+    expect(html).not.toMatch(/Árrés/)
+    expect(html).toContain('368\u00a0000')
+  })
+
+  it('old quotes without pricingData degrade safely', () => {
     const oldQuote = { ...baseQuote, pricingData: undefined }
     const html = buildQuoteHtml(oldQuote, baseSettings)
     expect(html).toContain('<!DOCTYPE html>')
-    expect(html).not.toContain('Árrés')
+    expect(html).not.toMatch(/Árrés/)
   })
 })
 

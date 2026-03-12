@@ -59,11 +59,11 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
     ? `<img src="${logoSrc}" style="max-height:56px;max-width:180px;object-fit:contain;display:block;" />`
     : `<span class="company-name-text">${escHtml(company.name || 'TakeoffPro')}</span>`
 
-  // ── KPI cards (filtered by outputMode) ────────────────────────────────────
+  // ── KPI cards (filtered by outputMode, markup absorbed into Munkadíj) ─────
+  const laborCardVal = rawLabor + markupAmount   // labor + markup — client-clean
   const kpiCardDefs = [
     outputMode !== 'labor_only' && { label: 'Anyagköltség (nettó)', value: fmtHU(rawMaterials) + ' Ft', accent: false },
-    { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)', value: fmtHU(rawLabor) + ' Ft', accent: false },
-    markupAmount > 0 && { label: `Árrés (${markupPctDisplay}%)`, value: fmtHU(markupAmount) + ' Ft', accent: false },
+    { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)', value: fmtHU(laborCardVal) + ' Ft', accent: false },
     { label: 'Munkaóra',             value: (quote.totalHours || 0).toFixed(1)             + ' ó',  accent: false },
     { label: outputMode === 'labor_only' ? 'Bruttó munkadíj összeg' : 'Bruttó végösszeg', value: fmtHU(dGross) + ' Ft', accent: true },
   ].filter(Boolean)
@@ -73,12 +73,11 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
       <div class="kpi-value">${k.value}</div>
     </div>`).join('')
 
-  // ── Financial summary table (filtered by outputMode) ─────────────────────
+  // ── Financial summary table (filtered by outputMode, markup absorbed) ─────
   const isLO = outputMode === 'labor_only'
   const finRows = [
     !isLO && ['Anyagköltség', fmtHU(rawMaterials) + ' Ft'],
-    [isLO ? 'Szerelési munkadíj' : 'Munkadíj', fmtHU(rawLabor) + ' Ft'],
-    markupAmount > 0 && [`Árrés (${markupPctDisplay}%)`, fmtHU(markupAmount) + ' Ft'],
+    [isLO ? 'Szerelési munkadíj' : 'Munkadíj', fmtHU(laborCardVal) + ' Ft'],
     [isLO ? 'Nettó munkadíj összesen' : 'Nettó összköltség', fmtHU(dNet) + ' Ft'],
     [`ÁFA (${vatPct}%)`, fmtHU(dVat) + ' Ft'],
   ].filter(Boolean)
