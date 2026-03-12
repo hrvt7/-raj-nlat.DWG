@@ -468,6 +468,21 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               {bomRows.length} aggregált tétel
             </div>
           )}
+          <button
+            onClick={async () => { const { exportBOM } = await import('./utils/bomExport.js'); exportBOM(quote) }}
+            disabled={!hasBom}
+            style={{
+              width: '100%', padding: '10px', borderRadius: 9,
+              cursor: hasBom ? 'pointer' : 'not-allowed',
+              background: hasBom ? C.yellow : C.bgHover,
+              border: 'none', color: hasBom ? '#09090B' : C.muted,
+              fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s', marginTop: 'auto',
+            }}
+          >
+            {hasBom ? 'Anyagjegyzék letöltése' : 'Nincs anyagtétel'}
+          </button>
         </div>
 
         {/* Card 3 — Ajánlat mód (outputMode) */}
@@ -539,7 +554,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         </div>
       </div>
 
-      {/* ── Action bar (5 action buttons, same grid as upper cards) ──── */}
+      {/* ── Action bar (4 action buttons) ────────────────────────────── */}
       {(() => {
         const actionBase = {
           padding: '10px', borderRadius: 9, border: 'none',
@@ -548,7 +563,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           transition: 'all 0.15s', color: '#09090B',
         }
         return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
             <button onClick={handlePdf} disabled={pdfGenerating} style={{
               ...actionBase,
               background: pdfGenerating ? C.accentDim : C.accent,
@@ -566,19 +581,6 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               ...actionBase, background: C.blue, cursor: 'pointer',
             }}>
               Email küldése
-            </button>
-            <button
-              onClick={async () => { const { exportBOM } = await import('./utils/bomExport.js'); exportBOM(quote) }}
-              disabled={!hasBom}
-              style={{
-                ...actionBase,
-                background: hasBom ? C.yellow : C.bgHover,
-                cursor: hasBom ? 'pointer' : 'not-allowed',
-                color: hasBom ? '#09090B' : C.muted,
-                opacity: hasBom ? 1 : 0.5,
-              }}
-            >
-              {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
             </button>
             <button onClick={handlePreview} style={{
               ...actionBase, background: '#B07CFF', cursor: 'pointer',

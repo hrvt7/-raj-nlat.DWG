@@ -1,11 +1,11 @@
 // ─── Playwright E2E: QuoteView action button bar ─────────────────────────────
 // Verifies:
-//   1. All 5 action buttons render in correct order
-//   2. Action buttons are NOT inside the config cards
+//   1. All 4 action-bar buttons + BOM card button render correctly
+//   2. Action buttons are NOT inside the config cards (except BOM)
 //   3. PDF nyomtatása fires handlePrint (captures __lastPrintHtml)
 //   4. Email küldése fires mailto from action bar
 //   5. PDF előnézet fires handlePreview with real quote content
-//   6. Action row uses 5-column grid matching upper card rows
+//   6. Anyagjegyzék letöltése is inside the BOM card
 
 import { test, expect } from '@playwright/test'
 
@@ -79,21 +79,31 @@ async function seedAndOpen(page) {
   await expect(page.locator('text=Adatok')).toBeVisible({ timeout: 5_000 })
 }
 
-// ─── Test: All 5 action buttons render in correct order ──────────────────────
-test('All five action buttons are visible in correct order', async ({ page }) => {
+// ─── Test: All 4 action-bar buttons + BOM button render ──────────────────────
+test('Action bar and BOM card buttons are visible', async ({ page }) => {
   await seedAndOpen(page)
 
   const pdfDownload = page.locator('button', { hasText: 'PDF letöltése' })
   const pdfPrint    = page.locator('button', { hasText: 'PDF nyomtatása' })
   const email       = page.locator('button', { hasText: 'Email küldése' })
-  const csv         = page.locator('button', { hasText: 'CSV letöltése' })
   const preview     = page.locator('button', { hasText: 'PDF előnézet' })
+  const bomBtn      = page.locator('button', { hasText: 'Anyagjegyzék letöltése' })
 
   await expect(pdfDownload).toBeVisible({ timeout: 3_000 })
   await expect(pdfPrint).toBeVisible({ timeout: 3_000 })
   await expect(email).toBeVisible({ timeout: 3_000 })
-  await expect(csv).toBeVisible({ timeout: 3_000 })
   await expect(preview).toBeVisible({ timeout: 3_000 })
+  await expect(bomBtn).toBeVisible({ timeout: 3_000 })
+})
+
+// ─── Test: Anyagjegyzék letöltése is inside the BOM card ─────────────────────
+test('Anyagjegyzék card contains Anyagjegyzék letöltése button', async ({ page }) => {
+  await seedAndOpen(page)
+
+  const bomCard = page.locator('div', { hasText: /^Anyagjegyzék \(BOM\)$/ }).locator('..')
+  const bomBtn = bomCard.locator('button', { hasText: 'Anyagjegyzék letöltése' })
+
+  await expect(bomBtn).toBeVisible({ timeout: 3_000 })
 })
 
 // ─── Test: Config cards no longer contain action buttons ─────────────────────
