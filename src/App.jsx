@@ -249,8 +249,13 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     }
     try {
       const { generatePdf } = await import('./utils/generatePdf.js')
-      generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy)
-    } finally { setTimeout(() => setPdfGenerating(false), 1200) }
+      await generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy)
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+      alert('PDF generálás sikertelen. Kérjük próbáld újra.')
+    } finally {
+      setPdfGenerating(false)
+    }
   }
 
   // Separate items by type for the grouped table

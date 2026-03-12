@@ -1,5 +1,5 @@
 // ─── TakeoffPro PDF Generator ─────────────────────────────────────────────────
-// Uses HTML + window.print() for pixel-perfect A4 output (no external deps).
+// Generates real downloadable PDF files using html2canvas + jsPDF.
 // Supports 3 detail levels: compact | summary | detailed
 
 const fmtHU = n => {
@@ -529,16 +529,118 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
   return html
 }
 
+// ─── Filename sanitizer ──────────────────────────────────────────────────────
+export function sanitizeFilename(name) {
+  return String(name)
+    .replace(/[<>:"/\\|?*]/g, '')   // Remove filesystem-unsafe chars
+    .trim()                          // Trim whitespace
+    .replace(/\s+/g, '_')           // Spaces → underscores
+    || 'ajanlat'
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
+// Generates a real downloadable PDF file using html2canvas + jsPDF.
 // outputMode: 'combined' | 'labor_only' | 'split_material_labor'
-export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
+export async function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
   const html = buildQuoteHtml(quote, settings, detailLevel, outputMode, groupBy)
 
-  // ── Open + print ──────────────────────────────────────────────────────────
-  const win = window.open('', '_blank', 'width=900,height=1100')
-  if (!win) { alert('Engedélyezd a felugró ablakokat a PDF generáláshoz.'); return }
-  win.document.write(html)
-  win.document.close()
-  // Small delay to let Google Fonts load before triggering print dialog
-  setTimeout(() => { win.focus(); win.print() }, 900)
+  // Expose HTML for E2E tests (zero-cost property assignment)
+  if (typeof window !== 'undefined') window.__lastPdfHtml = html
+
+  // ── Parse HTML and create hidden render container ──────────────────────────
+  const parser = new DOMParser()
+  const parsed = parser.parseFromString(html, 'text/html')
+
+  const container = document.createElement('div')
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:#fff;'
+
+  // Inject Google Font link for Inter (Syne/DM Mono already loaded by main app)
+  const addedLinks = []
+  parsed.querySelectorAll('link[href*="fonts.googleapis"]').forEach(link => {
+    const href = link.getAttribute('href')
+    if (href && !document.querySelector(`link[href="${href}"]`)) {
+      const clone = link.cloneNode(true)
+      document.head.appendChild(clone)
+      addedLinks.push(clone)
+    }
+  })
+
+  // Copy <style> blocks and body content into container
+  parsed.querySelectorAll('style').forEach(s => container.appendChild(s.cloneNode(true)))
+  Array.from(parsed.body.children).forEach(child => container.appendChild(child.cloneNode(true)))
+
+  document.body.appendChild(container)
+
+  try {
+    // Wait for fonts + rendering
+    await document.fonts.ready
+    await new Promise(r => setTimeout(r, 500))
+
+    // Dynamic import (code-split — keeps main bundle small)
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ])
+
+    // Capture content at 2× resolution
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    })
+
+    // ── Build A4 PDF with pagination ──────────────────────────────────────
+    const A4_W = 210  // mm
+    const A4_H = 297  // mm
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+    const imgData = canvas.toDataURL('image/jpeg', 0.95)
+    const imgWidth = A4_W
+    const imgHeight = (canvas.height * A4_W) / canvas.width
+
+    let heightLeft = imgHeight
+    let position = 0
+
+    // First page
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+    heightLeft -= A4_H
+
+    // Additional pages
+    while (heightLeft > 0) {
+      position -= A4_H
+      pdf.addPage()
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+      heightLeft -= A4_H
+    }
+
+    // ── Build filename ────────────────────────────────────────────────────
+    const projectName = sanitizeFilename(quote.projectName || quote.project_name || 'ajanlat')
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const filename = `${projectName}_${dateStr}.pdf`
+
+    // ── Save: try File System Access API (Chrome save-as dialog) ─────────
+    if (window.showSaveFilePicker) {
+      try {
+        const blob = pdf.output('blob')
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: 'PDF fájl', accept: { 'application/pdf': ['.pdf'] } }],
+        })
+        const writable = await handle.createWritable()
+        await writable.write(blob)
+        await writable.close()
+        return
+      } catch (e) {
+        if (e.name === 'AbortError') return  // User cancelled save dialog
+        // Fall through to standard download
+      }
+    }
+
+    // ── Fallback: trigger standard browser download ──────────────────────
+    pdf.save(filename)
+  } finally {
+    // Clean up hidden container and injected font links
+    document.body.removeChild(container)
+    addedLinks.forEach(l => l.remove())
+  }
 }

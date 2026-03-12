@@ -2,7 +2,7 @@
 // Verifies the professional quote PDF output structure, parties block,
 // project scope, client fields, and graceful degradation.
 import { describe, it, expect, vi } from 'vitest'
-import { buildQuoteHtml } from '../utils/generatePdf.js'
+import { buildQuoteHtml, sanitizeFilename, generatePdf } from '../utils/generatePdf.js'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 const baseSettings = {
@@ -291,6 +291,46 @@ describe('buildQuoteHtml — markup absorbed into Munkadíj (no standalone Árr�
     const html = buildQuoteHtml(oldQuote, baseSettings)
     expect(html).toContain('<!DOCTYPE html>')
     expect(html).not.toMatch(/Árrés/)
+  })
+})
+
+// ─── PDF export behavior ──────────────────────────────────────────────────────
+describe('sanitizeFilename', () => {
+  it('replaces spaces with underscores', () => {
+    expect(sanitizeFilename('Teszt Lakás Villamos')).toBe('Teszt_Lakás_Villamos')
+  })
+
+  it('removes filesystem-unsafe characters', () => {
+    expect(sanitizeFilename('quote<>"file|name?.pdf')).toBe('quotefilename.pdf')
+  })
+
+  it('returns "ajanlat" for empty/whitespace input', () => {
+    expect(sanitizeFilename('')).toBe('ajanlat')
+    expect(sanitizeFilename('   ')).toBe('ajanlat')
+  })
+
+  it('handles null/undefined safely (String coercion)', () => {
+    expect(sanitizeFilename(null)).toBe('null')
+    expect(sanitizeFilename(undefined)).toBe('undefined')
+  })
+
+  it('preserves Hungarian characters', () => {
+    expect(sanitizeFilename('Árajánlat_összesítő')).toBe('Árajánlat_összesítő')
+  })
+})
+
+describe('generatePdf — export behavior', () => {
+  it('is an async function (returns a promise)', () => {
+    expect(typeof generatePdf).toBe('function')
+    // The constructor name check confirms it's async
+    expect(generatePdf.constructor.name).toBe('AsyncFunction')
+  })
+
+  it('buildQuoteHtml still produces valid HTML (content unchanged)', () => {
+    const html = buildQuoteHtml(baseQuote, baseSettings)
+    expect(html).toContain('<!DOCTYPE html>')
+    expect(html).toContain('Árajánlat')
+    expect(html).toContain('Teszt Lakás Villamos')
   })
 })
 

@@ -143,22 +143,11 @@ test('PDF export HTML contains new client/project field values', async ({ page }
   await taxInput.fill('87654321-1-04')
   await projInput.fill('1052 Budapest, Váci utca 12.')
 
-  // Intercept window.open to capture the HTML written to it
+  // Reset the E2E hook and suppress file-save dialogs
   await page.evaluate(() => {
-    window.__capturedPdfHtml = null
-    window.__origOpen = window.open
-    window.open = function() {
-      const fakeWin = {
-        document: {
-          write(html) { window.__capturedPdfHtml = html },
-          close() {},
-        },
-        focus() {},
-        print() {},
-        close() {},
-      }
-      return fakeWin
-    }
+    window.__lastPdfHtml = null
+    // Suppress showSaveFilePicker to avoid native save dialog in test
+    delete window.showSaveFilePicker
   })
 
   // Click the PDF button — find the button with PDF-related text
@@ -166,11 +155,11 @@ test('PDF export HTML contains new client/project field values', async ({ page }
   await expect(pdfBtn).toBeVisible({ timeout: 3_000 })
   await pdfBtn.click()
 
-  // Wait for the async import + HTML generation
-  await page.waitForFunction(() => window.__capturedPdfHtml !== null, { timeout: 10_000 })
+  // Wait for the HTML to be captured (set before html2canvas runs)
+  await page.waitForFunction(() => window.__lastPdfHtml !== null, { timeout: 15_000 })
 
   // Extract the captured HTML
-  const pdfHtml = await page.evaluate(() => window.__capturedPdfHtml)
+  const pdfHtml = await page.evaluate(() => window.__lastPdfHtml)
 
   // Verify the parties block contains the new field values
   expect(pdfHtml).toContain('Vállalkozó')
@@ -182,9 +171,6 @@ test('PDF export HTML contains new client/project field values', async ({ page }
 
   // Verify the client name appears in the signature line
   expect(pdfHtml).toMatch(/sig-line[^>]*>Teszt Kliens Kft\./)
-
-  // Restore
-  await page.evaluate(() => { window.open = window.__origOpen })
 })
 
 // ─── Test 30: Dirty check activates on new field changes ────────────────────
