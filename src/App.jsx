@@ -273,6 +273,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       companyEmail: settings?.company?.email || '',
       companyPhone: settings?.company?.phone || '',
     })
+    if (typeof window !== 'undefined') window.__lastMailtoUrl = url
     window.location.href = url
   }
 
