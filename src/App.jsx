@@ -27,6 +27,7 @@ import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LAB
 import { quoteDisplayTotals } from './utils/quoteDisplayTotals.js'
 import { generateBOMRows } from './utils/bomExport.js'
 import { createQuote } from './utils/createQuote.js'
+import { seedDemoData } from './data/demoSeed.js'
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 const C = {
@@ -1164,6 +1165,19 @@ function SaaSShell() {
     }
   }
 
+  // ── "Try demo" handler — seeds demo data and opens first demo quote ──────
+  const handleTryDemo = () => {
+    const { seeded } = seedDemoData()
+    const freshQuotes = loadQuotes()
+    setQuotes(freshQuotes)
+    // Find the first DEMO quote and navigate directly into QuoteView
+    const demoQuote = freshQuotes.find(q => q.id?.startsWith('DEMO-'))
+    if (demoQuote) {
+      setViewingQuote(demoQuote)
+      setPage('quotes')
+    }
+  }
+
   const handleStatusChange = (quoteId, newStatus) => {
     // Use functional state update to avoid race condition with stale quotes
     setQuotes(prev => {
@@ -1348,7 +1362,8 @@ function SaaSShell() {
                 <Dashboard quotes={quotes} settings={settings}
                   onNavigate={p => { setViewingQuote(null); setPage(p) }}
                   onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }}
-                  onRefresh={() => setQuotes(loadQuotes())} />
+                  onRefresh={() => setQuotes(loadQuotes())}
+                  onTryDemo={handleTryDemo} />
               ) : page === 'quotes' ? (
                 <Quotes quotes={quotes} onQuotesChange={handleQuotesChange}
                   onNavigate={p => setPage(p)}

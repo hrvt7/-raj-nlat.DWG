@@ -89,12 +89,37 @@ function createDemoQuotes() {
   const year = new Date().getFullYear()
   return [
     {
+      // ── Identity (both alias forms for QuoteView + Dashboard compat) ─────
       id: `DEMO-QT-${year}-001`,
-      project_name: 'DEMO – Szombathely, Kossuth u. 12.',
-      client_name: 'DEMO Kft.',
-      status: 'sent',
+      projectName:     'DEMO – Szombathely, Kossuth u. 12.',
+      project_name:    'DEMO – Szombathely, Kossuth u. 12.',
+      name:            'DEMO – Szombathely, Kossuth u. 12.',
+      clientName:      'Kovács és Társa Kft.',
+      client_name:     'Kovács és Társa Kft.',
+      clientAddress:   '9700 Szombathely, Fő tér 5.',
+      clientTaxNumber: '12345678-2-18',
+      projectAddress:  '9700 Szombathely, Kossuth u. 12.',
+
+      // ── Timestamps & status ─────────────────────────────────────────────
+      createdAt:  new Date(Date.now() - 3 * 86400000).toISOString(),
       created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
-      files_count: 2,
+      status: 'sent',
+
+      // ── Output & display ────────────────────────────────────────────────
+      outputMode: 'combined',
+      groupBy: 'none',
+      vatPercent: 27,
+      inclusions: '',
+      exclusions: '',
+      validityText: '',
+      paymentTermsText: '',
+      notes: 'Bemutató ajánlat – a mennyiségek és árak illusztrációs célúak.',
+
+      // ── Financial (QuoteView-compatible) ────────────────────────────────
+      gross: 2850000,
+      totalMaterials: 1420000,
+      totalLabor: 774000,
+      totalHours: 86,
       summary: {
         grandTotal: 2850000,
         totalWorkHours: 86,
@@ -104,16 +129,69 @@ function createDemoQuotes() {
         markupTotal: 330150,
         totalItems: 46,
       },
-      items: [],
-      notes: 'Bemutató ajánlat – a mennyiségek és árak illusztrációs célúak.',
+      pricingData: {
+        hourlyRate: 9000,
+        markup_pct: 0,
+      },
+
+      // ── Assemblies (QuoteView table) ────────────────────────────────────
+      assemblySummary: [
+        { id: 'DEMO-ASM-001', name: 'LED panel 60×60', qty: 18, totalPrice: 720000, materialCost: 396000, laborCost: 324000 },
+        { id: 'DEMO-ASM-002', name: 'Fali lámpatest', qty: 6, totalPrice: 210000, materialCost: 126000, laborCost: 84000 },
+        { id: 'DEMO-ASM-003', name: 'Egypólusú kapcsoló', qty: 4, totalPrice: 48000, materialCost: 20000, laborCost: 28000 },
+        { id: 'DEMO-ASM-004', name: 'Kétpólusú kapcsoló', qty: 2, totalPrice: 30000, materialCost: 12000, laborCost: 18000 },
+        { id: 'DEMO-ASM-005', name: 'Dugalj 2P+F', qty: 12, totalPrice: 360000, materialCost: 180000, laborCost: 180000 },
+        { id: 'DEMO-ASM-006', name: 'Dugalj IP44', qty: 3, totalPrice: 105000, materialCost: 57000, laborCost: 48000 },
+        { id: 'DEMO-ASM-007', name: 'Elosztó 24 modul', qty: 1, totalPrice: 285000, materialCost: 185000, laborCost: 100000 },
+      ],
+
+      // ── Items (line-level) ──────────────────────────────────────────────
+      items: [
+        { name: 'LED panel 60×60 40W 4000K', type: 'material', qty: 18, unitPrice: 22000, unit: 'db', hours: 0 },
+        { name: 'Fali lámpatest E27', type: 'material', qty: 6, unitPrice: 21000, unit: 'db', hours: 0 },
+        { name: 'Kapcsoló 1G Schneider', type: 'material', qty: 4, unitPrice: 5000, unit: 'db', hours: 0 },
+        { name: 'Kapcsoló 2G Schneider', type: 'material', qty: 2, unitPrice: 6000, unit: 'db', hours: 0 },
+        { name: 'Dugalj 2P+F Schneider', type: 'material', qty: 12, unitPrice: 15000, unit: 'db', hours: 0 },
+        { name: 'Dugalj IP44 Legrand', type: 'material', qty: 3, unitPrice: 19000, unit: 'db', hours: 0 },
+        { name: 'Elosztó szekrény 24M', type: 'material', qty: 1, unitPrice: 185000, unit: 'db', hours: 0 },
+        { name: 'Szerelés – világítás', type: 'labor', qty: 1, unitPrice: 0, unit: 'tétel', hours: 48 },
+        { name: 'Szerelés – erősáram', type: 'labor', qty: 1, unitPrice: 0, unit: 'tétel', hours: 38 },
+      ],
+
+      files_count: 2,
     },
     {
+      // ── Identity ────────────────────────────────────────────────────────
       id: `DEMO-QT-${year}-002`,
-      project_name: 'DEMO – Szombathely, Kossuth u. 12.',
-      client_name: 'DEMO Kft.',
-      status: 'won',
+      projectName:     'DEMO – Szombathely, Kossuth u. 12.',
+      project_name:    'DEMO – Szombathely, Kossuth u. 12.',
+      name:            'DEMO – Szombathely, Kossuth u. 12.',
+      clientName:      'Kovács és Társa Kft.',
+      client_name:     'Kovács és Társa Kft.',
+      clientAddress:   '9700 Szombathely, Fő tér 5.',
+      clientTaxNumber: '12345678-2-18',
+      projectAddress:  '9700 Szombathely, Kossuth u. 12.',
+
+      // ── Timestamps & status ─────────────────────────────────────────────
+      createdAt:  new Date(Date.now() - 14 * 86400000).toISOString(),
       created_at: new Date(Date.now() - 14 * 86400000).toISOString(),
-      files_count: 1,
+      status: 'won',
+
+      // ── Output & display ────────────────────────────────────────────────
+      outputMode: 'combined',
+      groupBy: 'none',
+      vatPercent: 27,
+      inclusions: '',
+      exclusions: '',
+      validityText: '',
+      paymentTermsText: '',
+      notes: 'Bemutató ajánlat – 1. emelet világítás',
+
+      // ── Financial ───────────────────────────────────────────────────────
+      gross: 1240000,
+      totalMaterials: 620000,
+      totalLabor: 342000,
+      totalHours: 38,
       summary: {
         grandTotal: 1240000,
         totalWorkHours: 38,
@@ -123,8 +201,27 @@ function createDemoQuotes() {
         markupTotal: 145350,
         totalItems: 22,
       },
-      items: [],
-      notes: 'Bemutató ajánlat – 1. emelet világítás',
+      pricingData: {
+        hourlyRate: 9000,
+        markup_pct: 0,
+      },
+
+      // ── Assemblies ──────────────────────────────────────────────────────
+      assemblySummary: [
+        { id: 'DEMO-ASM-011', name: 'LED panel 60×60', qty: 12, totalPrice: 480000, materialCost: 264000, laborCost: 216000 },
+        { id: 'DEMO-ASM-012', name: 'Fali lámpatest', qty: 4, totalPrice: 140000, materialCost: 84000, laborCost: 56000 },
+        { id: 'DEMO-ASM-013', name: 'Egypólusú kapcsoló', qty: 6, totalPrice: 72000, materialCost: 30000, laborCost: 42000 },
+      ],
+
+      // ── Items ───────────────────────────────────────────────────────────
+      items: [
+        { name: 'LED panel 60×60 40W 4000K', type: 'material', qty: 12, unitPrice: 22000, unit: 'db', hours: 0 },
+        { name: 'Fali lámpatest E27', type: 'material', qty: 4, unitPrice: 21000, unit: 'db', hours: 0 },
+        { name: 'Kapcsoló 1G Schneider', type: 'material', qty: 6, unitPrice: 5000, unit: 'db', hours: 0 },
+        { name: 'Szerelés – 1. emelet világítás', type: 'labor', qty: 1, unitPrice: 0, unit: 'tétel', hours: 38 },
+      ],
+
+      files_count: 1,
     },
   ]
 }

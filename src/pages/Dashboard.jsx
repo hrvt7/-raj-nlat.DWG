@@ -3,7 +3,7 @@ import { C, fmt, StatCard, Card, QuoteStatusBadge, Button, EmptyState, useToast 
 import { loadWorkItems, loadMaterials, loadAssemblies } from '../data/store.js'
 import { isDemoSeeded, seedDemoData, hasDemoData, clearDemoData } from '../data/demoSeed.js'
 
-export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, onRefresh }) {
+export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, onRefresh, onTryDemo }) {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   const [demoLoaded, setDemoLoaded] = useState(false)
   const toast = useToast()
@@ -41,6 +41,35 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
   return (
     <div>
 
+      {/* ── Welcome Hero — first-time users only ──────────────────────────── */}
+      {quotes.length === 0 && !isDemoSeeded() && onTryDemo && (
+        <div data-testid="welcome-hero" style={{
+          background: `linear-gradient(135deg, rgba(0,229,160,0.06) 0%, rgba(76,201,240,0.04) 100%)`,
+          border: `1px solid ${C.accentBorder || 'rgba(0,229,160,0.2)'}`,
+          borderRadius: 14, padding: isMobile ? '28px 20px' : '36px 32px',
+          marginBottom: 22, textAlign: 'center',
+        }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: isMobile ? 20 : 26, color: C.text, marginBottom: 8 }}>
+            Üdvözlünk a TakeoffPro-ban!
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, lineHeight: 1.7, maxWidth: 440, margin: '0 auto 20px' }}>
+            Nézd meg a bemutató ajánlatot — tervrajz-alapú kalkuláció, PDF export, árazás — 2 perc alatt.
+          </div>
+          <button
+            data-testid="welcome-try-demo"
+            onClick={onTryDemo}
+            style={{
+              background: C.accent, color: '#09090B', border: 'none', borderRadius: 8,
+              padding: '12px 32px', fontFamily: 'Syne', fontWeight: 700, fontSize: 14,
+              cursor: 'pointer', transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            Kipróbálom a demót →
+          </button>
+        </div>
+      )}
 
       {/* Stats row – quotes */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }}>
@@ -120,7 +149,10 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
               action={
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                   <Button onClick={() => onNavigate('felmeres')}>Új projekt</Button>
-                  {!isDemoSeeded() && (
+                  {!isDemoSeeded() && onTryDemo && (
+                    <Button variant="ghost" onClick={onTryDemo}>Demó ajánlat →</Button>
+                  )}
+                  {!isDemoSeeded() && !onTryDemo && (
                     <Button variant="ghost" onClick={() => {
                       const { seeded } = seedDemoData()
                       if (seeded) {
