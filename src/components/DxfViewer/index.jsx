@@ -154,6 +154,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         // Manual-first dedup: manual markers always win over detection markers at same spot.
         const merged = deduplicateMarkersManualFirst([...localMarkers, ...externalDetections])
         savePlanAnnotations(planId, {
+          ...stored,  // preserve cableReviewed, referencePanels, etc.
           markers: merged,
           measurements: measuresRef.current,
           scale: scaleRef.current,
