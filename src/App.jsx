@@ -316,6 +316,17 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         <QuoteStatusBadge status={quote.status} />
       </div>
 
+      {/* ── OutputMode customer-facing note ─────────────────────────────── */}
+      {OUTPUT_MODE_NOTES[outputMode] && (
+        <div style={{
+          background: `${C.blue}0a`, border: `1px solid ${C.blue}25`,
+          borderRadius: 10, padding: '12px 16px',
+          fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.55,
+        }}>
+          {OUTPUT_MODE_NOTES[outputMode]}
+        </div>
+      )}
+
       {/* ── Hero KPI strip ───────────────────────────────────────────────── */}
       <style>{`
         .kpi-card {
@@ -386,17 +397,6 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>{fmt(Number(editRate))} Ft/ó óradíj</div>
         </div>
       </div>
-
-      {/* ── OutputMode customer-facing note ─────────────────────────────── */}
-      {OUTPUT_MODE_NOTES[outputMode] && (
-        <div style={{
-          background: `${C.blue}0a`, border: `1px solid ${C.blue}25`,
-          borderRadius: 10, padding: '12px 16px',
-          fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.55,
-        }}>
-          {OUTPUT_MODE_NOTES[outputMode]}
-        </div>
-      )}
 
       {/* ── Controls card grid (5 cards) ──────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
