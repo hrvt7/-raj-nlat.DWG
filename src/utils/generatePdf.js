@@ -22,9 +22,9 @@ function escHtml(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-// ─── Main entry point ─────────────────────────────────────────────────────────
-// outputMode: 'combined' | 'labor_only' | 'split_material_labor'
-export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
+// ─── HTML builder (exported for testing) ─────────────────────────────────────
+// Returns the full HTML string without opening a window or triggering print.
+export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
   const vatPct    = Number(settings?.labor?.vat_percent) || 27
   const markupPct = Number(quote.pricingData?.markup_pct) || 0
 
@@ -223,6 +223,33 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     company.bank_account ? 'Bankszámla: ' + company.bank_account : '',
   ].filter(Boolean).map(d => `<div class="co-detail">${escHtml(d)}</div>`).join('')
 
+  // ── Parties block: Vállalkozó (contractor) vs Megrendelő (client) ────────
+  const contractorLines = [
+    company.name,
+    company.address,
+    company.tax_number ? 'Adószám: ' + company.tax_number : '',
+    company.phone,
+    company.email,
+    company.bank_account ? 'Bankszámlaszám: ' + company.bank_account : '',
+  ].filter(Boolean)
+
+  const clientAddr = (quote.clientAddress || '').trim()
+  const clientTax  = (quote.clientTaxNumber || '').trim()
+  const clientLines = [
+    quote.clientName || '',
+    clientAddr,
+    clientTax ? 'Adószám: ' + clientTax : '',
+  ].filter(Boolean)
+
+  // ── Project scope metadata ────────────────────────────────────────────────
+  const projectAddr = (quote.projectAddress || '').trim()
+  const asmCount = assemblyRows.length
+  const itemCount = allItems.length
+  const scopeParts = []
+  if (asmCount > 0) scopeParts.push(`${asmCount} munkacsoport`)
+  if (itemCount > 0) scopeParts.push(`${itemCount} tétel`)
+  if (quote.totalHours > 0) scopeParts.push(`${(quote.totalHours).toFixed(1)} munkaóra`)
+
   // ─── Full HTML document ────────────────────────────────────────────────────
   const html = `<!DOCTYPE html>
 <html lang="hu">
@@ -257,11 +284,22 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     .doc-id { font-family: 'DM Mono', monospace; font-size: 13pt; font-weight: 500; color: #00E5A0; margin-top: 3px; }
     .doc-date { font-family: 'DM Mono', monospace; font-size: 7.5pt; color: rgba(255,255,255,0.45); margin-top: 5px; }
 
-    /* ── INFO ROW ─────────────────────────────────────────────────────── */
-    .info-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; padding-bottom: 14px; border-bottom: 1.5px solid #E5E7EB; margin-bottom: 14px; }
-    .info-cell label { font-family: 'DM Mono', monospace; font-size: 6.5pt; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.09em; display: block; margin-bottom: 3px; }
-    .info-cell .iv { font-size: 10pt; font-weight: 600; color: #111827; }
-    .info-cell .is { font-family: 'DM Mono', monospace; font-size: 7.5pt; color: #6B7280; margin-top: 2px; }
+    /* ── PARTIES BLOCK (Vállalkozó / Megrendelő) ─────────────────────── */
+    .parties-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .party-box { border: 1px solid #E5E7EB; border-radius: 8px; padding: 14px 16px; }
+    .party-box-contractor { background: #F9FAFB; }
+    .party-box-client { background: #FEFCE8; border-color: #FDE68A; }
+    .party-title { font-family: 'DM Mono', monospace; font-size: 6.5pt; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.10em; margin-bottom: 8px; display: block; }
+    .party-box-client .party-title { color: #92400E; }
+    .party-name { font-family: 'Inter', sans-serif; font-size: 10.5pt; font-weight: 700; color: #111827; margin-bottom: 4px; }
+    .party-line { font-family: 'DM Mono', monospace; font-size: 7.5pt; color: #4B5563; margin-top: 2px; line-height: 1.6; }
+    .party-empty { font-family: 'DM Mono', monospace; font-size: 8pt; color: #D1D5DB; font-style: italic; }
+
+    /* ── PROJECT SCOPE ROW ─────────────────────────────────────────────── */
+    .scope-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; padding-bottom: 14px; border-bottom: 1.5px solid #E5E7EB; margin-bottom: 14px; }
+    .scope-cell label { font-family: 'DM Mono', monospace; font-size: 6.5pt; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.09em; display: block; margin-bottom: 3px; }
+    .scope-cell .iv { font-size: 10pt; font-weight: 600; color: #111827; }
+    .scope-cell .is { font-family: 'DM Mono', monospace; font-size: 7.5pt; color: #6B7280; margin-top: 2px; }
 
     /* ── KPI CARDS ────────────────────────────────────────────────────── */
     .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -371,25 +409,47 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
 
   <div class="page-wrap">
 
-    <!-- ── INFO ROW ──────────────────────────────────────────────────── -->
-    <div class="info-row">
-      <div class="info-cell">
+    <!-- ── PARTIES (Vállalkozó / Megrendelő) ─────────────────────────── -->
+    <div class="parties-row">
+      <div class="party-box party-box-contractor">
+        <span class="party-title">Vállalkozó</span>
+        ${contractorLines.length > 0
+          ? `<div class="party-name">${escHtml(contractorLines[0])}</div>` + contractorLines.slice(1).map(l => `<div class="party-line">${escHtml(l)}</div>`).join('')
+          : '<div class="party-empty">—</div>'
+        }
+      </div>
+      <div class="party-box party-box-client">
+        <span class="party-title">Megrendelő</span>
+        ${clientLines.length > 0
+          ? `<div class="party-name">${escHtml(clientLines[0])}</div>` + clientLines.slice(1).map(l => `<div class="party-line">${escHtml(l)}</div>`).join('')
+          : '<div class="party-empty">—</div>'
+        }
+      </div>
+    </div>
+
+    <!-- ── PROJECT SCOPE ROW ─────────────────────────────────────────── -->
+    <div class="scope-row">
+      <div class="scope-cell">
         <label>Projekt neve</label>
         <div class="iv">${escHtml(quote.projectName || '—')}</div>
       </div>
-      <div class="info-cell">
-        <label>Megrendelő</label>
-        <div class="iv">${escHtml(quote.clientName || '—')}</div>
+      <div class="scope-cell">
+        <label>${projectAddr ? 'Projekt helyszíne' : 'Kiállítás dátuma'}</label>
+        <div class="iv">${projectAddr ? escHtml(projectAddr) : fmtDate(createdAt)}</div>
+        ${projectAddr ? '' : `<div class="is">Érvényes ${validity} napig</div>`}
       </div>
-      <div class="info-cell">
-        <label>Kiállítás dátuma</label>
-        <div class="iv">${fmtDate(createdAt)}</div>
-        <div class="is">Érvényes ${validity} napig</div>
+      <div class="scope-cell">
+        <label>${projectAddr ? 'Kiállítás dátuma' : 'Érvényes'}</label>
+        <div class="iv">${projectAddr ? fmtDate(createdAt) : validUntil.toLocaleDateString('hu-HU')}</div>
+        ${projectAddr ? `<div class="is">Érvényes ${validity} napig</div>` : '<div class="is">-ig</div>'}
       </div>
-      <div class="info-cell">
-        <label>Érvényes</label>
-        <div class="iv">${validUntil.toLocaleDateString('hu-HU')}</div>
-        <div class="is">-ig</div>
+      <div class="scope-cell">
+        <label>${projectAddr ? 'Érvényesség' : 'Terjedelem'}</label>
+        <div class="iv">${projectAddr ? validUntil.toLocaleDateString('hu-HU') : (scopeParts.length > 0 ? scopeParts[0] : '—')}</div>
+        ${projectAddr
+          ? '<div class="is">-ig</div>'
+          : (scopeParts.length > 1 ? `<div class="is">${scopeParts.slice(1).join(', ')}</div>` : '')
+        }
       </div>
     </div>
 
@@ -437,7 +497,7 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
     <div class="sig-section">
       <div class="sig-block">
         <label>Megrendelő aláírása és dátum</label>
-        <div class="sig-line">Megrendelő</div>
+        <div class="sig-line">${escHtml(quote.clientName || 'Megrendelő')}</div>
       </div>
       <div class="sig-block">
         <label>Vállalkozó aláírása és dátum</label>
@@ -455,6 +515,14 @@ export function generatePdf(quote, settings, detailLevel = 'summary', outputMode
 
 </body>
 </html>`
+
+  return html
+}
+
+// ─── Main entry point ─────────────────────────────────────────────────────────
+// outputMode: 'combined' | 'labor_only' | 'split_material_labor'
+export function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
+  const html = buildQuoteHtml(quote, settings, detailLevel, outputMode, groupBy)
 
   // ── Open + print ──────────────────────────────────────────────────────────
   const win = window.open('', '_blank', 'width=900,height=1100')

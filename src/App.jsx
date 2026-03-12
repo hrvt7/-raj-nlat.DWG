@@ -136,6 +136,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   // ── Editable meta state ────────────────────────────────────────────────────
   const [editName, setEditName] = useState(quote.projectName || '')
   const [editClient, setEditClient] = useState(quote.clientName || '')
+  const [editClientAddr, setEditClientAddr] = useState(quote.clientAddress || '')
+  const [editClientTax, setEditClientTax] = useState(quote.clientTaxNumber || '')
+  const [editProjectAddr, setEditProjectAddr] = useState(quote.projectAddress || '')
   const [editRate, setEditRate] = useState(Number(quote.pricingData?.hourlyRate) || 9000)
   const [editMarkup, setEditMarkup] = useState(((quote.pricingData?.markup_pct) || 0) * 100)
   const [editInclusions, setEditInclusions] = useState(quote.inclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.inclusions ?? '')
@@ -149,6 +152,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     if (quote.id !== prevQuoteRef.current) {
       setEditName(quote.projectName || '')
       setEditClient(quote.clientName || '')
+      setEditClientAddr(quote.clientAddress || '')
+      setEditClientTax(quote.clientTaxNumber || '')
+      setEditProjectAddr(quote.projectAddress || '')
       setEditRate(Number(quote.pricingData?.hourlyRate) || 9000)
       setEditMarkup(((quote.pricingData?.markup_pct) || 0) * 100)
       setOutputMode(quote.outputMode || 'combined')
@@ -164,6 +170,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   // ── Dirty check (normalized numeric comparison) ────────────────────────────
   const isDirty = editName !== (quote.projectName || '')
     || editClient !== (quote.clientName || '')
+    || editClientAddr !== (quote.clientAddress || '')
+    || editClientTax !== (quote.clientTaxNumber || '')
+    || editProjectAddr !== (quote.projectAddress || '')
     || Number(editRate) !== (Number(quote.pricingData?.hourlyRate) || 9000)
     || Math.abs(Number(editMarkup) - ((quote.pricingData?.markup_pct || 0) * 100)) > 0.001
     || outputMode !== (quote.outputMode || 'combined')
@@ -195,6 +204,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       name: editName,
       clientName: editClient,
       client_name: editClient,
+      clientAddress: editClientAddr,
+      clientTaxNumber: editClientTax,
+      projectAddress: editProjectAddr,
       gross: net,
       totalLabor: newTotalLabor,
       summary: { ...quote.summary, grandTotal: net },
@@ -221,6 +233,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       groupBy,
       projectName: editName, project_name: editName, name: editName,
       clientName: editClient, client_name: editClient,
+      clientAddress: editClientAddr, clientTaxNumber: editClientTax, projectAddress: editProjectAddr,
       gross: net, totalLabor: newTotalLabor,
       pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
       inclusions: editInclusions,
@@ -722,7 +735,20 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               <span style={labelStyle}>Megrendelő</span>
               <input value={editClient} onChange={e => setEditClient(e.target.value)}
                 placeholder="Ügyfél neve…"
-                style={{ ...monoVal, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', outline: 'none', boxSizing: 'border-box' }} />
+                style={{ ...monoVal, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px', outline: 'none', boxSizing: 'border-box', marginBottom: 4 }} />
+              <input value={editClientAddr} onChange={e => setEditClientAddr(e.target.value)}
+                placeholder="Ügyfél címe…"
+                style={{ ...monoVal, fontSize: 11, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 8px', outline: 'none', boxSizing: 'border-box', marginBottom: 4 }} />
+              <input value={editClientTax} onChange={e => setEditClientTax(e.target.value)}
+                placeholder="Adószám…"
+                style={{ ...monoVal, fontSize: 11, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 8px', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            {/* Projekt helyszíne */}
+            <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${C.border}30` }}>
+              <span style={labelStyle}>Projekt helyszíne</span>
+              <input value={editProjectAddr} onChange={e => setEditProjectAddr(e.target.value)}
+                placeholder="Helyszín címe…"
+                style={{ ...monoVal, fontSize: 11, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 8px', outline: 'none', boxSizing: 'border-box' }} />
             </div>
             {/* Óradíj */}
             <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${C.border}30` }}>
