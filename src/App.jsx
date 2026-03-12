@@ -193,6 +193,10 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const net = newSubtotal + newMarkupAmount
   const vat = Math.round(net * vatPct / 100)
 
+  // ── Per-component gross (net + ÁFA) for KPI cards ─────────────────────────
+  const grossMaterials = totalMaterials + Math.round(totalMaterials * vatPct / 100)
+  const grossLabor = newTotalLabor + Math.round(newTotalLabor * vatPct / 100)
+
   // ── Save handler: build updated quote, persist ─────────────────────────────
   const handleMetaSave = () => {
     if (!isDirty || !onSaveQuote) return
@@ -316,22 +320,22 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         {/* Materials — hidden in labor_only */}
         {outputMode !== 'labor_only' && (
           <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
-            <span style={labelStyle}>Anyagköltség (nettó)</span>
+            <span style={labelStyle}>Anyagköltség (bruttó)</span>
             <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.text, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span>{fmt(Math.round(quote.totalMaterials || 0))}</span>
+              <span>{fmt(grossMaterials)}</span>
               <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>Ft</span>
             </div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>nettó anyag összesen</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>Nettó {fmt(totalMaterials)} + ÁFA {vatPct}%</div>
           </div>
         )}
         {/* Labor */}
         <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
-          <span style={labelStyle}>{outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)'}</span>
+          <span style={labelStyle}>{outputMode === 'labor_only' ? 'Szerelési munkadíj (bruttó)' : 'Munkadíj (bruttó)'}</span>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.blue, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 5 }}>
-            <span>{fmt(newTotalLabor)}</span>
+            <span>{fmt(grossLabor)}</span>
             <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>Ft</span>
           </div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>nettó munkadíj összesen</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>Nettó {fmt(newTotalLabor)} + ÁFA {vatPct}%</div>
         </div>
         {/* Hours */}
         <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
