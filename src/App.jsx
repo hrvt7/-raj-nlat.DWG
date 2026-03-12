@@ -330,7 +330,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           box-shadow: 0 4px 24px rgba(0,229,160,0.13), 0 1px 6px rgba(0,0,0,0.25);
         }
       `}</style>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
         {/* Gross — accent hero card */}
         <div className="kpi-card kpi-card-hero" style={{
           background: `linear-gradient(135deg, ${C.accent}18, ${C.blue}0a)`,
