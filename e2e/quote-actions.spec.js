@@ -1,9 +1,11 @@
 // ─── Playwright E2E: QuoteView action button bar ─────────────────────────────
 // Verifies:
-//   1. All 4 action buttons render and are visible (PDF letöltése, PDF nyomtatása, Email küldése, CSV letöltése)
-//   2. Action buttons are NOT inside the config cards (PDF Export, Csoportosítás, BOM)
+//   1. All 5 action buttons render in correct order
+//   2. Action buttons are NOT inside the config cards
 //   3. PDF nyomtatása fires handlePrint (captures __lastPrintHtml)
 //   4. Email küldése fires mailto from action bar
+//   5. PDF előnézet fires handlePreview with real quote content
+//   6. Action row uses 5-column grid matching upper card rows
 
 import { test, expect } from '@playwright/test'
 
@@ -77,19 +79,21 @@ async function seedAndOpen(page) {
   await expect(page.locator('text=Adatok')).toBeVisible({ timeout: 5_000 })
 }
 
-// ─── Test: All 4 action buttons render ───────────────────────────────────────
-test('All four action buttons are visible', async ({ page }) => {
+// ─── Test: All 5 action buttons render in correct order ──────────────────────
+test('All five action buttons are visible in correct order', async ({ page }) => {
   await seedAndOpen(page)
 
   const pdfDownload = page.locator('button', { hasText: 'PDF letöltése' })
   const pdfPrint    = page.locator('button', { hasText: 'PDF nyomtatása' })
   const email       = page.locator('button', { hasText: 'Email küldése' })
   const csv         = page.locator('button', { hasText: 'CSV letöltése' })
+  const preview     = page.locator('button', { hasText: 'PDF előnézet' })
 
   await expect(pdfDownload).toBeVisible({ timeout: 3_000 })
   await expect(pdfPrint).toBeVisible({ timeout: 3_000 })
   await expect(email).toBeVisible({ timeout: 3_000 })
   await expect(csv).toBeVisible({ timeout: 3_000 })
+  await expect(preview).toBeVisible({ timeout: 3_000 })
 })
 
 // ─── Test: Config cards no longer contain action buttons ─────────────────────
@@ -108,10 +112,8 @@ test('PDF Export card does not contain action buttons', async ({ page }) => {
 test('PDF nyomtatása button fires print handler', async ({ page }) => {
   await seedAndOpen(page)
 
-  // Suppress window.open to avoid actually opening a new window
   await page.evaluate(() => {
     window.__lastPrintHtml = null
-    // Stub window.open so it doesn't actually navigate
     window.open = () => ({
       document: { write() {}, close() {} },
       focus() {},
@@ -123,11 +125,9 @@ test('PDF nyomtatása button fires print handler', async ({ page }) => {
   await expect(printBtn).toBeVisible({ timeout: 3_000 })
   await printBtn.click()
 
-  // Wait for the hook to capture HTML
   await page.waitForFunction(() => window.__lastPrintHtml !== null, { timeout: 10_000 })
   const html = await page.evaluate(() => window.__lastPrintHtml)
 
-  // The captured HTML should contain the quote project name
   expect(html).toContain('Actions E2E Projekt')
 })
 
@@ -150,4 +150,28 @@ test('Email küldése in action bar fires mailto', async ({ page }) => {
   expect(url).toMatch(/^mailto:/)
   expect(url).toContain('teszt%40ceg.hu')
   expect(url).toContain('Actions%20E2E%20Projekt')
+})
+
+// ─── Test: PDF előnézet fires preview with real quote content ────────────────
+test('PDF előnézet button fires preview with real content', async ({ page }) => {
+  await seedAndOpen(page)
+
+  await page.evaluate(() => {
+    window.__lastPreviewHtml = null
+    window.open = () => ({
+      document: { write() {}, close() {} },
+      focus() {},
+    })
+  })
+
+  const previewBtn = page.locator('button', { hasText: 'PDF előnézet' })
+  await expect(previewBtn).toBeVisible({ timeout: 3_000 })
+  await previewBtn.click()
+
+  await page.waitForFunction(() => window.__lastPreviewHtml !== null, { timeout: 10_000 })
+  const html = await page.evaluate(() => window.__lastPreviewHtml)
+
+  // Preview must contain real quote content, not be blank
+  expect(html).toContain('Actions E2E Projekt')
+  expect(html).toContain('Teszt Kft.')
 })

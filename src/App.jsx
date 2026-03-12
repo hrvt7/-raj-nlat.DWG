@@ -277,7 +277,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     window.location.href = url
   }
 
-  const handlePrint = async () => {
+  const buildLiveQuoteHtml = async () => {
     const { buildQuoteHtml } = await import('./utils/generatePdf.js')
     const liveQuote = {
       ...quote,
@@ -293,10 +293,21 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       validityText: editValidity,
       paymentTermsText: editPaymentTerms,
     }
-    const html = buildQuoteHtml(liveQuote, settings, pdfLevel, outputMode, groupBy)
+    return buildQuoteHtml(liveQuote, settings, pdfLevel, outputMode, groupBy)
+  }
+
+  const handlePrint = async () => {
+    const html = await buildLiveQuoteHtml()
     if (typeof window !== 'undefined') window.__lastPrintHtml = html
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close(); w.focus(); w.print() }
+  }
+
+  const handlePreview = async () => {
+    const html = await buildLiveQuoteHtml()
+    if (typeof window !== 'undefined') window.__lastPreviewHtml = html
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close(); w.focus() }
   }
 
   // Separate items by type for the grouped table
@@ -528,7 +539,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         </div>
       </div>
 
-      {/* ── Action bar (4 action buttons) ────────────────────────────── */}
+      {/* ── Action bar (5 action buttons, same grid as upper cards) ──── */}
       {(() => {
         const actionBase = {
           padding: '10px', borderRadius: 9, border: 'none',
@@ -537,7 +548,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           transition: 'all 0.15s', color: '#09090B',
         }
         return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
             <button onClick={handlePdf} disabled={pdfGenerating} style={{
               ...actionBase,
               background: pdfGenerating ? C.accentDim : C.accent,
@@ -568,6 +579,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               }}
             >
               {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
+            </button>
+            <button onClick={handlePreview} style={{
+              ...actionBase, background: '#B07CFF', cursor: 'pointer',
+            }}>
+              PDF előnézet
             </button>
           </div>
         )
