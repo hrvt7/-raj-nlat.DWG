@@ -466,6 +466,7 @@ function WorkflowStatusCard({ workflowStatus, reviewSummary, dxfAudit, cableAudi
       case 'save':        onAction?.('save'); break
       case 'review_blocks': onTabSwitch?.('takeoff'); break
       case 'retry':       onAction?.('retry'); break
+      case 'switch_to_pdf': onAction?.('switch_to_pdf'); break
       case 'reexport':    break // informational only
       default: break
     }
@@ -1145,6 +1146,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const canvasRef = useRef(null)
+  const pdfInputRef = useRef(null) // PDF-only file picker for exploded DXF recovery
   const _asmLoad = useMemo(() => {
     try { return { data: loadAssemblies(), error: null } }
     catch (err) { return { data: [], error: `Szerelvénytár betöltése sikertelen: ${err.message}` } }
@@ -2331,6 +2333,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         setManualCableMode(true)
                         setRightTab('cable')
                       }
+                      if (action === 'switch_to_pdf') {
+                        // Exploded DXF recovery: open PDF-only file picker
+                        pdfInputRef.current?.click()
+                      }
                     }}
                     isPdf={isPdf}
                   />
@@ -2874,6 +2880,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           </div>
         </div>
       </div>
+      {/* Hidden PDF-only file picker for exploded DXF → PDF recovery flow */}
+      <input
+        ref={pdfInputRef}
+        type="file"
+        accept=".pdf"
+        style={{ display: 'none' }}
+        onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]) }}
+      />
     </div>
   )
 }

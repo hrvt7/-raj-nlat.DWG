@@ -80,14 +80,30 @@ export function computeWorkflowStatus({
   if (!hasRecognition && !hasRows && !isPdf) {
     // DXF loaded but exploded or no blocks
     const isExploded = dxfAudit?.status === 'EXPLODED_RISK'
+
+    // EXPLODED_RISK: guide user to PDF fallback instead of dead-end reexport CTA
+    if (isExploded) {
+      const explodedReasons = [
+        ...(dxfAudit?.missing || []),
+        'Blokk-alapú felmérés nem lehetséges — a rajz nem tartalmaz felismerhető blokkokat',
+        'Alternatíva: kérd a tervezőt, hogy NE robbantva exportálja a DXF-et',
+      ]
+      return buildStatus('parse_failed', {
+        statusLine: 'Robbantott rajz — váltás PDF felmérésre ajánlott',
+        statusColor: 'red',
+        cta: { label: 'Váltás PDF felmérésre →', action: 'switch_to_pdf' },
+        detail: {
+          reasons: explodedReasons,
+          stats: dxfAudit?.stats || {},
+        },
+        badges: { takeoff: 'error', cable: null, calc: null },
+      })
+    }
+
     return buildStatus('parse_failed', {
-      statusLine: isExploded
-        ? 'Robbantott rajz — nincs felismerhető blokk'
-        : 'Nem találtunk tételt a rajzban',
+      statusLine: 'Nem találtunk tételt a rajzban',
       statusColor: 'red',
-      cta: isExploded
-        ? { label: 'Kérd újra nem-robbantva', action: 'reexport' }
-        : { label: 'Ellenőrizd a fájlt', action: 'retry' },
+      cta: { label: 'Ellenőrizd a fájlt', action: 'retry' },
       detail: {
         reasons: dxfAudit?.missing || [],
         stats: dxfAudit?.stats || {},

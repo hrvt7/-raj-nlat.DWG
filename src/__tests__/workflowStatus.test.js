@@ -81,7 +81,7 @@ describe('computeWorkflowStatus', () => {
       expect(result.badges.takeoff).toBe('error')
     })
 
-    it('detects EXPLODED_RISK as parse_failed when no recognition', () => {
+    it('detects EXPLODED_RISK as parse_failed with switch_to_pdf CTA', () => {
       const result = computeWorkflowStatus({
         hasFile: true,
         dxfAudit: makeDxfAudit({ status: 'EXPLODED_RISK', missing: ['Robbantott rajz'] }),
@@ -89,7 +89,8 @@ describe('computeWorkflowStatus', () => {
       })
       expect(result.stage).toBe('parse_failed')
       expect(result.statusLine).toContain('Robbantott')
-      expect(result.cta.action).toBe('reexport')
+      expect(result.statusLine).toContain('PDF')
+      expect(result.cta.action).toBe('switch_to_pdf')
     })
 
     it('falls through to normal flow if exploded but has rows', () => {
