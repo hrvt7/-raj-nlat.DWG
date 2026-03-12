@@ -778,7 +778,10 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 // Shows blocks that recognizeBlock + memory could not match. The user picks an
 // assembly for each; the override is recorded immediately to recognition memory
 // so the same block is auto-matched on future encounters.
-function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, evidenceMap, progress }) {
+/** Threshold for bulk-skip: unknown blocks with qty ≤ this are "low-impact" */
+const BULK_SKIP_QTY_THRESHOLD = 2
+
+function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress }) {
   if (!unknownItems || unknownItems.length === 0) return null
 
   // Sort by qty descending — highest impact blocks first
@@ -832,6 +835,30 @@ function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, evide
           </div>
         </div>
       )}
+      {/* Bulk-skip: exclude all low-qty unknowns in one click */}
+      {(() => {
+        const lowImpactCount = sorted.filter(i => i.qty <= BULK_SKIP_QTY_THRESHOLD).length
+        if (lowImpactCount < 2 || !onBulkSkipLowImpact) return null
+        const lowImpactQty = sorted.filter(i => i.qty <= BULK_SKIP_QTY_THRESHOLD).reduce((s, i) => s + i.qty, 0)
+        return (
+          <button
+            data-testid="bulk-skip-low-impact"
+            onClick={() => onBulkSkipLowImpact(BULK_SKIP_QTY_THRESHOLD)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              width: '100%', padding: '6px 10px', marginBottom: 6,
+              background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+              borderRadius: 6, cursor: 'pointer', fontSize: 10,
+              fontFamily: 'DM Mono', color: C.muted,
+              transition: 'background 0.15s',
+            }}
+            title={`${lowImpactCount} blokk (≤${BULK_SKIP_QTY_THRESHOLD} db) kihagyása — nem befolyásolja az árajánlatot`}
+          >
+            <span style={{ fontSize: 12 }}>⏭</span>
+            {lowImpactCount} alacsony hatású kihagyása ({lowImpactQty} db, ≤{BULK_SKIP_QTY_THRESHOLD} db/fajta)
+          </button>
+        )
+      })()}
       {sorted.map(item => {
         // Compute quick-pick suggestions from evidence signals
         const evidence = evidenceMap?.get(item.blockName) || null
@@ -1766,6 +1793,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     })
   }, [])
 
+  // ── Bulk-skip: exclude all unknown blocks with qty ≤ threshold ─────────
+  const handleBulkSkipLowImpact = useCallback((threshold) => {
+    const toSkip = unknownItems.filter(i => i.qty <= threshold).map(i => i.blockName)
+    if (toSkip.length === 0) return
+    setDeletedItems(prev => {
+      const next = new Set(prev)
+      toSkip.forEach(bn => next.add(bn))
+      return next
+    })
+  }, [unknownItems])
+
   // ── Save (per-plan or quote) ──────────────────────────────────────────────
   const handleSave = async () => {
     setSaveError(null) // clear previous error immediately on new click
@@ -2349,6 +2387,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     assemblies={assemblies}
                     onAssign={handleAssignUnknown}
                     onDelete={handleDeleteUnknown}
+                    onBulkSkipLowImpact={handleBulkSkipLowImpact}
                     evidenceMap={evidenceMap}
                     progress={unknownProgress}
                   />
