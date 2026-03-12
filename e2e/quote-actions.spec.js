@@ -1,10 +1,9 @@
-// ─── Playwright E2E: QuoteView action button placement ──────────────────────
+// ─── Playwright E2E: QuoteView action button bar ─────────────────────────────
 // Verifies:
-//   1. PDF letöltése + PDF nyomtatása are inside the PDF Export card
-//   2. CSV letöltése is inside the Anyagjegyzék (BOM) card
-//   3. Email küldése is inside the Csoportosítás card
-//   4. PDF nyomtatása fires handlePrint (captures __lastPrintHtml)
-//   5. All five action cards render in the controls row
+//   1. All 4 action buttons render and are visible (PDF letöltése, PDF nyomtatása, Email küldése, CSV letöltése)
+//   2. Action buttons are NOT inside the config cards (PDF Export, Csoportosítás, BOM)
+//   3. PDF nyomtatása fires handlePrint (captures __lastPrintHtml)
+//   4. Email küldése fires mailto from action bar
 
 import { test, expect } from '@playwright/test'
 
@@ -78,42 +77,31 @@ async function seedAndOpen(page) {
   await expect(page.locator('text=Adatok')).toBeVisible({ timeout: 5_000 })
 }
 
-// ─── Test: PDF Export card contains PDF letöltése and PDF nyomtatása ──────────
-test('PDF Export card contains download and print buttons', async ({ page }) => {
+// ─── Test: All 4 action buttons render ───────────────────────────────────────
+test('All four action buttons are visible', async ({ page }) => {
   await seedAndOpen(page)
 
-  // Find the PDF Export card by its title text, then scope button search within the parent card
+  const pdfDownload = page.locator('button', { hasText: 'PDF letöltése' })
+  const pdfPrint    = page.locator('button', { hasText: 'PDF nyomtatása' })
+  const email       = page.locator('button', { hasText: 'Email küldése' })
+  const csv         = page.locator('button', { hasText: 'CSV letöltése' })
+
+  await expect(pdfDownload).toBeVisible({ timeout: 3_000 })
+  await expect(pdfPrint).toBeVisible({ timeout: 3_000 })
+  await expect(email).toBeVisible({ timeout: 3_000 })
+  await expect(csv).toBeVisible({ timeout: 3_000 })
+})
+
+// ─── Test: Config cards no longer contain action buttons ─────────────────────
+test('PDF Export card does not contain action buttons', async ({ page }) => {
+  await seedAndOpen(page)
+
   const pdfCard = page.locator('div', { hasText: /^PDF Export$/ }).locator('..')
   const downloadBtn = pdfCard.locator('button', { hasText: 'PDF letöltése' })
   const printBtn = pdfCard.locator('button', { hasText: 'PDF nyomtatása' })
 
-  await expect(downloadBtn).toBeVisible({ timeout: 3_000 })
-  await expect(printBtn).toBeVisible({ timeout: 3_000 })
-
-  // Email küldése should NOT be in this card
-  const emailBtn = pdfCard.locator('button', { hasText: 'Email küldése' })
-  await expect(emailBtn).toHaveCount(0)
-})
-
-// ─── Test: Csoportosítás card contains Email küldése ─────────────────────────
-test('Csoportosítás card contains Email küldése button', async ({ page }) => {
-  await seedAndOpen(page)
-
-  // Find the Csoportosítás card
-  const groupCard = page.locator('div', { hasText: /^Csoportosítás$/ }).locator('..')
-  const emailBtn = groupCard.locator('button', { hasText: 'Email küldése' })
-
-  await expect(emailBtn).toBeVisible({ timeout: 3_000 })
-})
-
-// ─── Test: BOM card still has CSV letöltése ──────────────────────────────────
-test('Anyagjegyzék card contains CSV letöltése button', async ({ page }) => {
-  await seedAndOpen(page)
-
-  const bomCard = page.locator('div', { hasText: /^Anyagjegyzék/ }).locator('..')
-  const csvBtn = bomCard.locator('button', { hasText: 'CSV letöltése' })
-
-  await expect(csvBtn).toBeVisible({ timeout: 3_000 })
+  await expect(downloadBtn).toHaveCount(0)
+  await expect(printBtn).toHaveCount(0)
 })
 
 // ─── Test: PDF nyomtatása fires handlePrint (captures __lastPrintHtml) ───────
@@ -143,8 +131,8 @@ test('PDF nyomtatása button fires print handler', async ({ page }) => {
   expect(html).toContain('Actions E2E Projekt')
 })
 
-// ─── Test: Email küldése still works from new location (mailto) ──────────────
-test('Email küldése in Csoportosítás card fires mailto', async ({ page }) => {
+// ─── Test: Email küldése fires mailto from action bar ────────────────────────
+test('Email küldése in action bar fires mailto', async ({ page }) => {
   await seedAndOpen(page)
 
   await page.evaluate(() => {
