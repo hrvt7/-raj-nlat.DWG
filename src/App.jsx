@@ -196,6 +196,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   // ── Per-component gross (net + ÁFA) for KPI cards ─────────────────────────
   const grossMaterials = totalMaterials + Math.round(totalMaterials * vatPct / 100)
   const grossLabor = newTotalLabor + Math.round(newTotalLabor * vatPct / 100)
+  const grossMarkup = newMarkupAmount + Math.round(newMarkupAmount * vatPct / 100)
 
   // ── Save handler: build updated quote, persist ─────────────────────────────
   const handleMetaSave = () => {
@@ -337,6 +338,17 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>Nettó {fmt(newTotalLabor)} + ÁFA {vatPct}%</div>
         </div>
+        {/* Árrés — only visible when markup > 0 */}
+        {newMarkupAmount > 0 && (
+          <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
+            <span style={labelStyle}>Árrés ({editMarkup}%)</span>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: '#EF8354', whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span>{fmt(grossMarkup)}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>Ft</span>
+            </div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>Nettó {fmt(newMarkupAmount)} + ÁFA {vatPct}%</div>
+          </div>
+        )}
         {/* Hours */}
         <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
           <span style={labelStyle}>Munkaóra</span>

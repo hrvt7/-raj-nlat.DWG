@@ -43,6 +43,15 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
   const validUntil = new Date(new Date(createdAt).getTime() + validity * 86400000)
   const hourlyRate = Number(quote.pricingData?.hourlyRate) || 9000
 
+  // ── Per-component amounts for transparent breakdown ──────────────────────
+  const rawMaterials = Math.round(Number(quote.totalMaterials) || 0)
+  const rawLabor = Math.round(Number(quote.totalLabor) || 0)
+  const rawSubtotal = rawMaterials + rawLabor
+  const markupAmount = outputMode === 'labor_only'
+    ? Math.round(rawLabor * markupPct)
+    : Math.round(rawSubtotal * markupPct)
+  const markupPctDisplay = Math.round(markupPct * 100)
+
   // ── Logo HTML (XSS-safe: only allow data: URIs for base64 images) ──────────
   const logoSrc = company.logo_base64 || ''
   const isSafeDataUri = /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,/i.test(logoSrc)
@@ -52,8 +61,9 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
 
   // ── KPI cards (filtered by outputMode) ────────────────────────────────────
   const kpiCardDefs = [
-    outputMode !== 'labor_only' && { label: 'Anyagköltség (nettó)', value: fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft', accent: false },
-    { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)', value: fmtHU(Math.round(quote.totalLabor || 0)) + ' Ft', accent: false },
+    outputMode !== 'labor_only' && { label: 'Anyagköltség (nettó)', value: fmtHU(rawMaterials) + ' Ft', accent: false },
+    { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)', value: fmtHU(rawLabor) + ' Ft', accent: false },
+    markupAmount > 0 && { label: `Árrés (${markupPctDisplay}%)`, value: fmtHU(markupAmount) + ' Ft', accent: false },
     { label: 'Munkaóra',             value: (quote.totalHours || 0).toFixed(1)             + ' ó',  accent: false },
     { label: outputMode === 'labor_only' ? 'Bruttó munkadíj összeg' : 'Bruttó végösszeg', value: fmtHU(dGross) + ' Ft', accent: true },
   ].filter(Boolean)
@@ -66,8 +76,9 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
   // ── Financial summary table (filtered by outputMode) ─────────────────────
   const isLO = outputMode === 'labor_only'
   const finRows = [
-    !isLO && ['Anyagköltség', fmtHU(Math.round(quote.totalMaterials || 0)) + ' Ft'],
-    [isLO ? 'Szerelési munkadíj' : 'Munkadíj', fmtHU(Math.round(quote.totalLabor || 0)) + ' Ft'],
+    !isLO && ['Anyagköltség', fmtHU(rawMaterials) + ' Ft'],
+    [isLO ? 'Szerelési munkadíj' : 'Munkadíj', fmtHU(rawLabor) + ' Ft'],
+    markupAmount > 0 && [`Árrés (${markupPctDisplay}%)`, fmtHU(markupAmount) + ' Ft'],
     [isLO ? 'Nettó munkadíj összesen' : 'Nettó összköltség', fmtHU(dNet) + ' Ft'],
     [`ÁFA (${vatPct}%)`, fmtHU(dVat) + ' Ft'],
   ].filter(Boolean)

@@ -237,6 +237,63 @@ describe('buildQuoteHtml — detail levels', () => {
   })
 })
 
+// ─── Markup (Árrés) transparency in PDF ───────────────────────────────────────
+describe('buildQuoteHtml — markup (Árrés) transparency', () => {
+  const quoteWithMarkup = {
+    ...baseQuote,
+    totalMaterials: 450000,
+    totalLabor: 320000,
+    pricingData: { hourlyRate: 9000, markup_pct: 0.15 },
+  }
+
+  it('shows Árrés KPI card when markup > 0', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
+    expect(html).toContain('Árrés (15%)')
+    // Markup = (450000 + 320000) * 0.15 = 115500
+    expect(html).toContain('115\u00a0500')  // fmtHU uses non-breaking space
+  })
+
+  it('shows Árrés row in financial summary when markup > 0', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
+    // Should appear as a financial table row
+    expect(html).toMatch(/fin-label[^>]*>Árrés \(15%\)/)
+  })
+
+  it('financial summary adds up: materials + labor + markup = net', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
+    // materials = 450000, labor = 320000, markup = 115500, net = 885500
+    // All should appear in the HTML
+    expect(html).toContain('450\u00a0000')  // materials
+    expect(html).toContain('320\u00a0000')  // labor
+    expect(html).toContain('115\u00a0500')  // markup
+    expect(html).toContain('885\u00a0500')  // net total
+  })
+
+  it('omits Árrés KPI card when markup = 0', () => {
+    const html = buildQuoteHtml(baseQuote, baseSettings)  // baseQuote has markup_pct: 0
+    expect(html).not.toContain('Árrés')
+  })
+
+  it('omits Árrés row from financial summary when markup = 0', () => {
+    const html = buildQuoteHtml(baseQuote, baseSettings)
+    expect(html).not.toMatch(/Árrés/)
+  })
+
+  it('labor_only mode shows Árrés applied to labor only', () => {
+    const html = buildQuoteHtml(quoteWithMarkup, baseSettings, 'summary', 'labor_only')
+    // labor_only: markup = 320000 * 0.15 = 48000
+    expect(html).toContain('Árrés (15%)')
+    expect(html).toContain('48\u00a0000')
+  })
+
+  it('old quotes without pricingData degrade safely (no Árrés shown)', () => {
+    const oldQuote = { ...baseQuote, pricingData: undefined }
+    const html = buildQuoteHtml(oldQuote, baseSettings)
+    expect(html).toContain('<!DOCTYPE html>')
+    expect(html).not.toContain('Árrés')
+  })
+})
+
 describe('createQuote — new fields have defaults', () => {
   // Verify createQuote produces the new fields so they never arrive as undefined
   it('new quote has empty string defaults for clientAddress, clientTaxNumber, projectAddress', async () => {
