@@ -58,6 +58,7 @@ export function createQuote({ displayName, clientName, outputMode, pricing, pric
     client_name:      clientName || '',
     clientAddress:    '',
     clientTaxNumber:  '',
+    clientEmail:      '',
     projectAddress:   '',
 
     // ── Timestamps & status ──────────────────────────────────────────────

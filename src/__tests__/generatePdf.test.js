@@ -2,7 +2,7 @@
 // Verifies the professional quote PDF output structure, parties block,
 // project scope, client fields, and graceful degradation.
 import { describe, it, expect, vi } from 'vitest'
-import { buildQuoteHtml, sanitizeFilename, generatePdf } from '../utils/generatePdf.js'
+import { buildQuoteHtml, sanitizeFilename, generatePdf, buildMailtoUrl } from '../utils/generatePdf.js'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 const baseSettings = {
@@ -334,6 +334,91 @@ describe('generatePdf — export behavior', () => {
   })
 })
 
+// ─── buildMailtoUrl ────────────────────────────────────────────────────────────
+describe('buildMailtoUrl', () => {
+  it('returns a mailto: URL with encoded subject and body', () => {
+    const url = buildMailtoUrl({ projectName: 'Teszt Projekt', companyName: 'Kft.' })
+    expect(url).toMatch(/^mailto:/)
+    expect(url).toContain('subject=')
+    expect(url).toContain('body=')
+  })
+
+  it('encodes client email as recipient', () => {
+    const url = buildMailtoUrl({ clientEmail: 'ugyfel@teszt.hu', projectName: 'P1' })
+    expect(url.startsWith('mailto:ugyfel%40teszt.hu?')).toBe(true)
+  })
+
+  it('leaves recipient empty when no clientEmail', () => {
+    const url = buildMailtoUrl({ projectName: 'P1' })
+    expect(url.startsWith('mailto:?')).toBe(true)
+  })
+
+  it('subject contains project name', () => {
+    const url = buildMailtoUrl({ projectName: 'Lakás Villamos' })
+    const subject = decodeURIComponent(url.split('subject=')[1].split('&')[0])
+    expect(subject).toContain('Lakás Villamos')
+    expect(subject).toContain('Árajánlat')
+  })
+
+  it('body uses client name in greeting when provided', () => {
+    const url = buildMailtoUrl({ clientName: 'Nagy Péter', projectName: 'P1' })
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(body).toContain('Tisztelt Nagy Péter!')
+  })
+
+  it('body falls back to generic greeting when no client name', () => {
+    const url = buildMailtoUrl({ projectName: 'P1' })
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(body).toContain('Tisztelt Partnerünk!')
+  })
+
+  it('body includes gross total when provided', () => {
+    const url = buildMailtoUrl({ projectName: 'P1', displayGross: 1234567 })
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(body).toContain('1\u00a0234\u00a0567') // hu-HU formatted (non-breaking spaces)
+    expect(body).toContain('Ft')
+  })
+
+  it('body omits gross line when displayGross is 0', () => {
+    const url = buildMailtoUrl({ projectName: 'P1', displayGross: 0 })
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(body).not.toContain('végösszeg')
+  })
+
+  it('body includes company contact info', () => {
+    const url = buildMailtoUrl({
+      projectName: 'P1',
+      companyName: 'Kovács Kft.',
+      companyEmail: 'iroda@kovacs.hu',
+      companyPhone: '+36 20 123 4567',
+    })
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(body).toContain('Kovács Kft.')
+    expect(body).toContain('Email: iroda@kovacs.hu')
+    expect(body).toContain('Tel: +36 20 123 4567')
+  })
+
+  it('body reminds user about manual PDF attachment', () => {
+    const url = buildMailtoUrl({ projectName: 'P1' })
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(body).toContain('PDF')
+    expect(body).toContain('csatol')
+  })
+
+  it('handles all-empty params gracefully', () => {
+    const url = buildMailtoUrl()
+    expect(url).toMatch(/^mailto:\?subject=/)
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(body).toContain('Tisztelt Partnerünk!')
+  })
+
+  it('subject falls back to Árajánlat when projectName is empty', () => {
+    const url = buildMailtoUrl({ projectName: '' })
+    const subject = decodeURIComponent(url.split('subject=')[1].split('&')[0])
+    expect(subject).toBe('Árajánlat — Árajánlat')
+  })
+})
+
 describe('createQuote — new fields have defaults', () => {
   // Verify createQuote produces the new fields so they never arrive as undefined
   it('new quote has empty string defaults for clientAddress, clientTaxNumber, projectAddress', async () => {
@@ -352,6 +437,7 @@ describe('createQuote — new fields have defaults', () => {
     })
     expect(q.clientAddress).toBe('')
     expect(q.clientTaxNumber).toBe('')
+    expect(q.clientEmail).toBe('')
     expect(q.projectAddress).toBe('')
   })
 })

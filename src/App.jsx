@@ -139,6 +139,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const [editClient, setEditClient] = useState(quote.clientName || '')
   const [editClientAddr, setEditClientAddr] = useState(quote.clientAddress || '')
   const [editClientTax, setEditClientTax] = useState(quote.clientTaxNumber || '')
+  const [editClientEmail, setEditClientEmail] = useState(quote.clientEmail || '')
   const [editProjectAddr, setEditProjectAddr] = useState(quote.projectAddress || '')
   const [editRate, setEditRate] = useState(Number(quote.pricingData?.hourlyRate) || 9000)
   const [editMarkup, setEditMarkup] = useState(((quote.pricingData?.markup_pct) || 0) * 100)
@@ -155,6 +156,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       setEditClient(quote.clientName || '')
       setEditClientAddr(quote.clientAddress || '')
       setEditClientTax(quote.clientTaxNumber || '')
+      setEditClientEmail(quote.clientEmail || '')
       setEditProjectAddr(quote.projectAddress || '')
       setEditRate(Number(quote.pricingData?.hourlyRate) || 9000)
       setEditMarkup(((quote.pricingData?.markup_pct) || 0) * 100)
@@ -173,6 +175,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || editClient !== (quote.clientName || '')
     || editClientAddr !== (quote.clientAddress || '')
     || editClientTax !== (quote.clientTaxNumber || '')
+    || editClientEmail !== (quote.clientEmail || '')
     || editProjectAddr !== (quote.projectAddress || '')
     || Number(editRate) !== (Number(quote.pricingData?.hourlyRate) || 9000)
     || Math.abs(Number(editMarkup) - ((quote.pricingData?.markup_pct || 0) * 100)) > 0.001
@@ -212,6 +215,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       client_name: editClient,
       clientAddress: editClientAddr,
       clientTaxNumber: editClientTax,
+      clientEmail: editClientEmail,
       projectAddress: editProjectAddr,
       gross: net,
       totalLabor: newTotalLabor,
@@ -239,7 +243,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       groupBy,
       projectName: editName, project_name: editName, name: editName,
       clientName: editClient, client_name: editClient,
-      clientAddress: editClientAddr, clientTaxNumber: editClientTax, projectAddress: editProjectAddr,
+      clientAddress: editClientAddr, clientTaxNumber: editClientTax, clientEmail: editClientEmail, projectAddress: editProjectAddr,
       gross: net, totalLabor: newTotalLabor,
       pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
       inclusions: editInclusions,
@@ -256,6 +260,20 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     } finally {
       setPdfGenerating(false)
     }
+  }
+
+  const handleEmail = async () => {
+    const { buildMailtoUrl } = await import('./utils/generatePdf.js')
+    const url = buildMailtoUrl({
+      clientEmail: editClientEmail,
+      clientName: editClient,
+      projectName: editName,
+      displayGross,
+      companyName: settings?.company?.name || '',
+      companyEmail: settings?.company?.email || '',
+      companyPhone: settings?.company?.phone || '',
+    })
+    window.location.href = url
   }
 
   // Separate items by type for the grouped table
@@ -412,6 +430,17 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             opacity: pdfGenerating ? 0.7 : 1, transition: 'all 0.15s', marginTop: 'auto',
           }}>
             {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
+          </button>
+          <button onClick={handleEmail} style={{
+            width: '100%', padding: '8px', borderRadius: 9, cursor: 'pointer',
+            background: 'transparent',
+            border: `1px solid ${C.border}`,
+            color: C.textSub,
+            fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            transition: 'all 0.15s',
+          }}>
+            ✉ Email küldése
           </button>
         </div>
 
@@ -766,6 +795,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                 style={{ ...monoVal, fontSize: 11, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 8px', outline: 'none', boxSizing: 'border-box', marginBottom: 4 }} />
               <input value={editClientTax} onChange={e => setEditClientTax(e.target.value)}
                 placeholder="Adószám…"
+                style={{ ...monoVal, fontSize: 11, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 8px', outline: 'none', boxSizing: 'border-box', marginBottom: 4 }} />
+              <input value={editClientEmail} onChange={e => setEditClientEmail(e.target.value)}
+                placeholder="Email cím…" type="email"
                 style={{ ...monoVal, fontSize: 11, width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 8px', outline: 'none', boxSizing: 'border-box' }} />
             </div>
             {/* Projekt helyszíne */}

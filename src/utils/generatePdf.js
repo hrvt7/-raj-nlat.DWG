@@ -644,3 +644,68 @@ export async function generatePdf(quote, settings, detailLevel = 'summary', outp
     addedLinks.forEach(l => l.remove())
   }
 }
+
+// ─── Mailto URL builder ────────────────────────────────────────────────────────
+// Builds a mailto: URL for composing a quote email in the user's mail client.
+// No attachment — body reminds user to attach the previously downloaded PDF.
+
+const fmtHUmail = n => {
+  const num = Number(n)
+  return Number.isFinite(num) ? num.toLocaleString('hu-HU') : '0'
+}
+
+/**
+ * @param {object} opts
+ * @param {string} [opts.clientEmail]   – recipient email (may be empty)
+ * @param {string} [opts.clientName]    – client display name
+ * @param {string} [opts.projectName]   – quote / project name
+ * @param {number} [opts.displayGross]  – gross total in HUF (for the body summary)
+ * @param {string} [opts.companyName]   – sender company name (from settings)
+ * @param {string} [opts.companyEmail]  – sender email (from settings)
+ * @param {string} [opts.companyPhone]  – sender phone (from settings)
+ * @returns {string} mailto: URL
+ */
+export function buildMailtoUrl({
+  clientEmail = '',
+  clientName = '',
+  projectName = '',
+  displayGross = 0,
+  companyName = '',
+  companyEmail = '',
+  companyPhone = '',
+} = {}) {
+  const to = (clientEmail || '').trim()
+  const projLabel = (projectName || '').trim() || 'Árajánlat'
+
+  const subject = `Árajánlat — ${projLabel}`
+
+  const greeting = clientName?.trim()
+    ? `Tisztelt ${clientName.trim()}!`
+    : 'Tisztelt Partnerünk!'
+
+  const grossLine = displayGross
+    ? `\nAz ajánlat végösszege (bruttó): ${fmtHUmail(displayGross)} Ft\n`
+    : ''
+
+  const body = [
+    greeting,
+    '',
+    `Mellékeljük árajánlatunkat a(z) „${projLabel}" projekthez.`,
+    grossLine,
+    'A részletes árajánlatot PDF formátumban csatoltuk az emailhez.',
+    '(Amennyiben a PDF nincs csatolva, kérjük töltse le az alkalmazásból és csatolja kézzel.)',
+    '',
+    'Kérdés esetén készséggel állunk rendelkezésre.',
+    '',
+    'Üdvözlettel,',
+    companyName || '',
+    companyEmail ? `Email: ${companyEmail}` : '',
+    companyPhone ? `Tel: ${companyPhone}` : '',
+  ].filter((line, i, arr) => {
+    // Remove trailing empty signature lines (where company info is missing)
+    if (i >= arr.length - 3 && line === '') return false
+    return true
+  }).join('\n')
+
+  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+}
