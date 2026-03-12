@@ -362,29 +362,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       {/* ── Controls card grid (5 cards) ──────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
 
-        {/* Card A — Ajánlat mód (outputMode) */}
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Ajánlat mód</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {OUTPUT_MODES.map(mode => (
-              <button key={mode.key} onClick={() => setOutputMode(mode.key)} style={{
-                padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                background: outputMode === mode.key ? 'rgba(76,201,240,0.10)' : C.bg,
-                border: `1px solid ${outputMode === mode.key ? 'rgba(76,201,240,0.30)' : C.border}`,
-                color: outputMode === mode.key ? C.blue : C.textSub,
-                fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                {mode.label}
-                {outputMode === mode.key && (
-                  <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Card B — PDF Export */}
+        {/* Card 1 — PDF Export */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>PDF Export</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -417,7 +395,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           </button>
         </div>
 
-        {/* Card C — BOM */}
+        {/* Card 2 — Anyagjegyzék (BOM) */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Anyagjegyzék (BOM)</div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, lineHeight: 1.5 }}>
@@ -445,7 +423,51 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           </button>
         </div>
 
-        {/* Card D — Státusz */}
+        {/* Card 3 — Ajánlat mód (outputMode) */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Ajánlat mód</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {OUTPUT_MODES.map(mode => (
+              <button key={mode.key} onClick={() => setOutputMode(mode.key)} style={{
+                padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                background: outputMode === mode.key ? 'rgba(76,201,240,0.10)' : C.bg,
+                border: `1px solid ${outputMode === mode.key ? 'rgba(76,201,240,0.30)' : C.border}`,
+                color: outputMode === mode.key ? C.blue : C.textSub,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                {mode.label}
+                {outputMode === mode.key && (
+                  <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Card 4 — Csoportosítás */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Csoportosítás</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {GROUP_BY_OPTIONS.map(opt => (
+              <button key={opt} onClick={() => setGroupBy(opt)} style={{
+                padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                background: groupBy === opt ? 'rgba(255,209,102,0.10)' : C.bg,
+                border: `1px solid ${groupBy === opt ? 'rgba(255,209,102,0.30)' : C.border}`,
+                color: groupBy === opt ? C.yellow : C.textSub,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                {GROUP_BY_LABELS[opt]}
+                {groupBy === opt && (
+                  <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Card 5 — Státusz */}
         <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Státusz</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -466,28 +488,6 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                 </button>
               )
             })}
-          </div>
-        </div>
-
-        {/* Card E — Csoportosítás */}
-        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 12, color: C.text, marginBottom: 2 }}>Csoportosítás</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {GROUP_BY_OPTIONS.map(opt => (
-              <button key={opt} onClick={() => setGroupBy(opt)} style={{
-                padding: '8px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
-                background: groupBy === opt ? 'rgba(255,209,102,0.10)' : C.bg,
-                border: `1px solid ${groupBy === opt ? 'rgba(255,209,102,0.30)' : C.border}`,
-                color: groupBy === opt ? C.yellow : C.textSub,
-                fontFamily: 'Syne', fontWeight: 700, fontSize: 11, transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                {GROUP_BY_LABELS[opt]}
-                {groupBy === opt && (
-                  <span style={{ marginLeft: 'auto', fontFamily: 'DM Mono', fontSize: 9, opacity: 0.6 }}>&#10003;</span>
-                )}
-              </button>
-            ))}
           </div>
         </div>
       </div>
