@@ -777,8 +777,14 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 // Shows blocks that recognizeBlock + memory could not match. The user picks an
 // assembly for each; the override is recorded immediately to recognition memory
 // so the same block is auto-matched on future encounters.
-function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, evidenceMap }) {
+function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, evidenceMap, progress }) {
   if (!unknownItems || unknownItems.length === 0) return null
+
+  // Sort by qty descending — highest impact blocks first
+  const sorted = useMemo(() =>
+    [...unknownItems].sort((a, b) => b.qty - a.qty),
+    [unknownItems]
+  )
 
   // Build assembly options: only top-level assemblies (not variants), sorted by label
   const asmOptions = assemblies
@@ -793,12 +799,39 @@ function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, evide
     }}>
       <div style={{
         fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.red,
-        marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+        marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6,
       }}>
         <span>⚠</span>
         {unknownItems.length} ismeretlen blokk — rendelj hozzá tételt
       </div>
-      {unknownItems.map(item => {
+      {/* Progress summary: shows resolution coverage when there's work to do */}
+      {progress && progress.totalTypes > 0 && (
+        <div data-testid="unknown-progress" style={{ marginBottom: 8 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3,
+          }}>
+            <div style={{
+              flex: 1, height: 3, borderRadius: 1.5,
+              background: 'rgba(255,255,255,0.06)', overflow: 'hidden',
+            }}>
+              <div style={{
+                height: '100%', borderRadius: 1.5,
+                width: `${progress.coveragePct}%`,
+                background: progress.coveragePct >= 80 ? C.accent
+                  : progress.coveragePct >= 40 ? C.yellow : C.red,
+                transition: 'width 0.4s ease',
+              }} />
+            </div>
+            <span style={{
+              fontFamily: 'DM Mono', fontSize: 9, color: C.muted,
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}>
+              {progress.resolvedTypes}/{progress.totalTypes} fajta — {progress.coveragePct}%
+            </span>
+          </div>
+        </div>
+      )}
+      {sorted.map(item => {
         // Compute quick-pick suggestions from evidence signals
         const evidence = evidenceMap?.get(item.blockName) || null
         const suggestions = suggestAssemblies(item.blockName, evidence, assemblies)
@@ -1369,6 +1402,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       return !resolvedAsmId
     })
   }, [effectiveItems, asmOverrides])
+
+  // ── Unknown block resolution progress (for UnknownBlockPanel progress bar) ──
+  const unknownProgress = useMemo(() => {
+    const totalTypes = effectiveItems.length
+    const unresolvedTypes = unknownItems.length
+    const resolvedTypes = totalTypes - unresolvedTypes
+    const totalQty = effectiveItems.reduce((s, i) => s + i.qty, 0)
+    const unresolvedQty = unknownItems.reduce((s, i) => s + i.qty, 0)
+    const resolvedQty = totalQty - unresolvedQty
+    const coveragePct = totalQty > 0 ? Math.round((resolvedQty / totalQty) * 100) : 0
+    return { resolvedTypes, totalTypes, resolvedQty, totalQty, coveragePct }
+  }, [effectiveItems, unknownItems])
 
   // ── Review state classification ──────────────────────────────────────────
   // Classify ALL recognized items (including deleted) so the review summary
@@ -2299,6 +2344,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     onAssign={handleAssignUnknown}
                     onDelete={handleDeleteUnknown}
                     evidenceMap={evidenceMap}
+                    progress={unknownProgress}
                   />
                 )}
 

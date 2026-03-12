@@ -122,12 +122,20 @@ export function computeWorkflowStatus({
     const unresolvedQty = reviewSummary?.unresolvedQty || 0
     const reasons = quoteReadiness.reasons || []
 
+    // Enrich for MANUAL_HEAVY DXF — most blocks need manual assignment
+    const isManualHeavy = dxfAudit?.status === 'MANUAL_HEAVY'
+    const enrichedReasons = isManualHeavy
+      ? [...reasons, 'A rajz legtöbb blokkja ismeretlen — a legnagyobb darabszámúak vannak elöl']
+      : reasons
+
     return buildStatus('unresolved_blocks', {
-      statusLine: `${unresolvedCount} ismeretlen blokk (${unresolvedQty} db) — rendelj hozzá tételt`,
+      statusLine: isManualHeavy
+        ? `${unresolvedCount} ismeretlen blokk (${unresolvedQty} db) — legnagyobb tételektől`
+        : `${unresolvedCount} ismeretlen blokk (${unresolvedQty} db) — rendelj hozzá tételt`,
       statusColor: 'red',
       cta: { label: 'Blokkok hozzárendelése', action: 'review_blocks' },
       detail: {
-        reasons,
+        reasons: enrichedReasons,
         stats: buildReviewStats(reviewSummary),
       },
       badges: {

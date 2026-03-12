@@ -137,6 +137,50 @@ describe('computeWorkflowStatus', () => {
       expect(result.detail.reasons).toHaveLength(1)
       expect(result.detail.reasons[0]).toContain('2 blokk')
     })
+
+    it('enriches status line for MANUAL_HEAVY dxfAudit', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit({ status: 'MANUAL_HEAVY' }),
+        reviewSummary: makeReviewSummary({
+          unresolved: 12, unresolvedQty: 45, total: 15,
+          confirmed: 1, confirmedQty: 5, autoHigh: 2, autoHighQty: 8,
+        }),
+        quoteReadiness: { status: 'review_required', reasons: ['12 blokk nincs hozzárendelve (45 db)'] },
+        takeoffRowCount: 3,
+      })
+      expect(result.stage).toBe('unresolved_blocks')
+      expect(result.statusLine).toContain('legnagyobb')
+    })
+
+    it('adds guidance hint in reasons for MANUAL_HEAVY', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit({ status: 'MANUAL_HEAVY' }),
+        reviewSummary: makeReviewSummary({
+          unresolved: 10, unresolvedQty: 30, total: 12,
+        }),
+        quoteReadiness: { status: 'review_required', reasons: ['10 blokk nincs hozzárendelve (30 db)'] },
+        takeoffRowCount: 2,
+      })
+      // Original reason + MANUAL_HEAVY guidance hint
+      expect(result.detail.reasons).toHaveLength(2)
+      expect(result.detail.reasons[1]).toContain('legnagyobb darabszám')
+    })
+
+    it('does NOT enrich status line for non-MANUAL_HEAVY audit', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit({ status: 'PARTIAL_AUTO' }),
+        reviewSummary: makeReviewSummary({
+          unresolved: 3, unresolvedQty: 8, total: 6,
+        }),
+        quoteReadiness: { status: 'review_required', reasons: ['3 blokk nincs hozzárendelve (8 db)'] },
+        takeoffRowCount: 3,
+      })
+      expect(result.statusLine).not.toContain('legnagyobb')
+      expect(result.detail.reasons).toHaveLength(1) // no extra hint
+    })
   })
 
   // ── Stage: review_warnings ─────────────────────────────────────────────────
