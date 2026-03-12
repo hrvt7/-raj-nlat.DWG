@@ -112,6 +112,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const mousePdfRef = useRef(null) // { x, y } mouse in pdf coords
   const [renderTick, setRenderTick] = useState(0)
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
+  const hydratedRef = useRef(false) // true after annotation restore completes — guards auto-save
 
   // ── Dirty state tracking (unsaved local changes) ──
   const dirtyRef = useRef(false)
@@ -141,6 +142,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   // ── Load saved annotations on mount ──
   useEffect(() => {
     if (!planId) return
+    hydratedRef.current = false // reset — auto-save guard active until restore finishes
     getPlanAnnotations(planId).then(ann => {
       if (ann.markers?.length) {
         const normalized = normalizeMarkers(ann.markers)
@@ -173,6 +175,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // Reset dirty after hydration from store
       dirtyRef.current = false
       if (onDirtyChange) onDirtyChange(false)
+      hydratedRef.current = true // annotation restore complete — auto-save now safe
     })
   }, [planId])
 
@@ -240,9 +243,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   // ── Auto-save annotations on unmount ──
   // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
   // The ref may be stale if DetectionReviewPanel applied markers while this viewer was open.
+  // GUARD: Skip auto-save if annotations were never hydrated from IDB. This prevents
+  // React StrictMode double-mount from writing empty markers over seeded data — the
+  // first unmount fires before the async annotation restore completes.
   useEffect(() => {
     return () => {
       if (!planId) return
+      if (!hydratedRef.current) return // not yet hydrated — don't overwrite IDB
       const localMarkers = markersRef.current
       // Async merge: load store state, keep detection markers from store that aren't in ref
       getPlanAnnotations(planId).then(stored => {
@@ -735,6 +742,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     return () => obs.disconnect()
   }, [drawOverlay])
 
+  // ── Repaint overlay when renderTick changes (e.g. markers restored from IDB) ──
+  useEffect(() => {
+    drawOverlay()
+  }, [renderTick, drawOverlay])
+
   // ── Count summary ──
   // UNIFIED: groups markers by asmId for assembly-level detail.
   // Markers without asmId (panel, detection) group by category as fallback.
@@ -848,6 +860,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
         {/* Visible overlay canvas (draws PDF + annotations) */}
         <canvas
+          data-testid="pdf-overlay-canvas"
           ref={overlayRef}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
           onMouseDown={handleMouseDown}

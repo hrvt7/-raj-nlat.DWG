@@ -2112,6 +2112,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               <Suspense fallback={<div style={{ width: '100%', height: '100%', background: C.bg }} />}>
                 <PdfViewerPanel
                   file={file}
+                  planId={planId}
                   style={{ height: '100%', border: 'none', borderRadius: 0 }}
                   assemblies={assemblies}
                   focusTarget={focusTarget}
