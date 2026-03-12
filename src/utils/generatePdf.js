@@ -618,26 +618,20 @@ export async function generatePdf(quote, settings, detailLevel = 'summary', outp
     const dateStr = new Date().toISOString().slice(0, 10)
     const filename = `${projectName}_${dateStr}.pdf`
 
-    // ── Save: try File System Access API (Chrome save-as dialog) ─────────
-    if (window.showSaveFilePicker) {
-      try {
-        const blob = pdf.output('blob')
-        const handle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: 'PDF fájl', accept: { 'application/pdf': ['.pdf'] } }],
-        })
-        const writable = await handle.createWritable()
-        await writable.write(blob)
-        await writable.close()
-        return
-      } catch (e) {
-        if (e.name === 'AbortError') return  // User cancelled save dialog
-        // Fall through to standard download
-      }
-    }
-
-    // ── Fallback: trigger standard browser download ──────────────────────
-    pdf.save(filename)
+    // ── Save: anchor-based blob download ────────────────────────────────
+    // Direct blob download via <a download> — avoids jsPDF's bundled
+    // FileSaver.js which can open a blank popup window as last-resort
+    // fallback, and avoids showSaveFilePicker which requires a user
+    // gesture that has expired by this point in the async pipeline.
+    const blob = pdf.output('blob')
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 40_000)
   } finally {
     // Clean up hidden container and injected font links
     document.body.removeChild(container)

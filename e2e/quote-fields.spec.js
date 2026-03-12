@@ -143,11 +143,9 @@ test('PDF export HTML contains new client/project field values', async ({ page }
   await taxInput.fill('87654321-1-04')
   await projInput.fill('1052 Budapest, Váci utca 12.')
 
-  // Reset the E2E hook and suppress file-save dialogs
+  // Reset the E2E hook
   await page.evaluate(() => {
     window.__lastPdfHtml = null
-    // Suppress showSaveFilePicker to avoid native save dialog in test
-    delete window.showSaveFilePicker
   })
 
   // Click the PDF button — find the button with PDF-related text
