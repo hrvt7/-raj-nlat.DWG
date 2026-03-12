@@ -45,6 +45,7 @@ import { buildBlockEvidence } from '../data/evidenceExtractor.js'
 import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
+import { suggestAssemblies } from '../utils/suggestAssemblies.js'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -776,7 +777,7 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 // Shows blocks that recognizeBlock + memory could not match. The user picks an
 // assembly for each; the override is recorded immediately to recognition memory
 // so the same block is auto-matched on future encounters.
-function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete }) {
+function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, evidenceMap }) {
   if (!unknownItems || unknownItems.length === 0) return null
 
   // Build assembly options: only top-level assemblies (not variants), sorted by label
@@ -797,60 +798,94 @@ function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete }) {
         <span>⚠</span>
         {unknownItems.length} ismeretlen blokk — rendelj hozzá tételt
       </div>
-      {unknownItems.map(item => (
-        <div key={item.blockName} data-testid="unknown-block-row" style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '5px 0', borderTop: `1px solid ${C.border}`,
-        }}>
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: C.muted, flexShrink: 0,
-          }} />
-          <div style={{
-            flex: 1, minWidth: 0,
-            fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}
-            title={item.blockName}
-          >
-            {item.blockName}
-          </div>
-          <span style={{
-            fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0,
+      {unknownItems.map(item => {
+        // Compute quick-pick suggestions from evidence signals
+        const evidence = evidenceMap?.get(item.blockName) || null
+        const suggestions = suggestAssemblies(item.blockName, evidence, assemblies)
+
+        return (
+          <div key={item.blockName} data-testid="unknown-block-row" style={{
+            padding: '6px 0', borderTop: `1px solid ${C.border}`,
           }}>
-            {item.qty} db
-          </span>
-          <select
-            data-testid="unknown-block-select"
-            value=""
-            onChange={e => {
-              if (e.target.value) onAssign(item.blockName, e.target.value)
-            }}
-            style={{
-              background: C.bg, border: `1px solid ${C.borderLight}`,
-              borderRadius: 6, color: C.textSub, fontSize: 10,
-              fontFamily: 'DM Mono', padding: '3px 6px', cursor: 'pointer',
-              maxWidth: 140, flexShrink: 0,
-            }}
-          >
-            <option value="">Hozzárendelés…</option>
-            {asmOptions.map(a => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => onDelete(item.blockName)}
-            title="Kihagyás"
-            style={{
-              width: 20, height: 20, borderRadius: '50%',
-              background: 'transparent', border: `1px solid ${C.border}`,
-              color: C.muted, fontSize: 11, fontWeight: 700,
-              cursor: 'pointer', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', lineHeight: 1, padding: 0, flexShrink: 0,
-            }}
-          >✕</button>
-        </div>
-      ))}
+            {/* Row 1: block info + controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: C.muted, flexShrink: 0,
+              }} />
+              <div style={{
+                flex: 1, minWidth: 0,
+                fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+                title={item.blockName}
+              >
+                {item.blockName}
+              </div>
+              <span style={{
+                fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0,
+              }}>
+                {item.qty} db
+              </span>
+              <select
+                data-testid="unknown-block-select"
+                value=""
+                onChange={e => {
+                  if (e.target.value) onAssign(item.blockName, e.target.value)
+                }}
+                style={{
+                  background: C.bg, border: `1px solid ${C.borderLight}`,
+                  borderRadius: 6, color: C.textSub, fontSize: 10,
+                  fontFamily: 'DM Mono', padding: '3px 6px', cursor: 'pointer',
+                  maxWidth: 140, flexShrink: 0,
+                }}
+              >
+                <option value="">Hozzárendelés…</option>
+                {asmOptions.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => onDelete(item.blockName)}
+                title="Kihagyás"
+                style={{
+                  width: 20, height: 20, borderRadius: '50%',
+                  background: 'transparent', border: `1px solid ${C.border}`,
+                  color: C.muted, fontSize: 11, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', lineHeight: 1, padding: 0, flexShrink: 0,
+                }}
+              >✕</button>
+            </div>
+            {/* Row 2: quick-pick suggestion chips (if any) */}
+            {suggestions.length > 0 && (
+              <div data-testid="quick-pick-row" style={{
+                display: 'flex', gap: 4, marginTop: 4, marginLeft: 16,
+                flexWrap: 'wrap',
+              }}>
+                {suggestions.map(asm => (
+                  <button
+                    key={asm.id}
+                    data-testid="quick-pick-btn"
+                    onClick={() => onAssign(item.blockName, asm.id)}
+                    title={asm.description || asm.name}
+                    style={{
+                      background: 'rgba(76,201,240,0.08)',
+                      border: `1px solid rgba(76,201,240,0.25)`,
+                      borderRadius: 5, padding: '2px 8px',
+                      fontFamily: 'DM Mono', fontSize: 10, fontWeight: 500,
+                      color: C.blue, cursor: 'pointer',
+                      whiteSpace: 'nowrap', lineHeight: 1.4,
+                    }}
+                  >
+                    {asm.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -2263,6 +2298,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     assemblies={assemblies}
                     onAssign={handleAssignUnknown}
                     onDelete={handleDeleteUnknown}
+                    evidenceMap={evidenceMap}
                   />
                 )}
 
