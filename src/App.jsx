@@ -528,63 +528,49 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         </div>
       </div>
 
-      {/* ── Action bar (4 mini action tiles) ───────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-        {/* Tile 1 — PDF letöltése */}
+      {/* ── Action bar (4 action buttons) ────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
         <button onClick={handlePdf} disabled={pdfGenerating} style={{
-          padding: '12px 14px', borderRadius: 10, cursor: pdfGenerating ? 'wait' : 'pointer',
-          background: pdfGenerating ? C.accentDim : 'rgba(0,229,160,0.10)',
-          border: `1px solid ${pdfGenerating ? C.accentBorder : 'rgba(0,229,160,0.25)'}`,
-          color: pdfGenerating ? C.muted : C.accent,
+          padding: '10px', borderRadius: 9, cursor: pdfGenerating ? 'wait' : 'pointer',
+          background: pdfGenerating ? C.accentDim : C.accent,
+          border: 'none', color: '#09090B',
           fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           opacity: pdfGenerating ? 0.7 : 1, transition: 'all 0.15s',
         }}>
-          <span style={{ fontSize: 14 }}>📥</span>
           {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
         </button>
-        {/* Tile 2 — PDF nyomtatása */}
         <button onClick={handlePrint} style={{
-          padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-          background: C.redDim,
-          border: `1px solid rgba(255,107,107,0.25)`,
-          color: C.red,
-          fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: '10px', borderRadius: 9, cursor: 'pointer',
+          background: C.bg, border: `1px solid ${C.border}`, color: C.textSub,
+          fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'all 0.15s',
         }}>
-          <span style={{ fontSize: 14 }}>🖨</span>
           PDF nyomtatása
         </button>
-        {/* Tile 3 — Email küldése */}
         <button onClick={handleEmail} style={{
-          padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
-          background: 'rgba(76,201,240,0.10)',
-          border: `1px solid rgba(76,201,240,0.25)`,
-          color: C.blue,
-          fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: '10px', borderRadius: 9, cursor: 'pointer',
+          background: C.bg, border: `1px solid ${C.border}`, color: C.textSub,
+          fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'all 0.15s',
         }}>
-          <span style={{ fontSize: 14 }}>✉</span>
           Email küldése
         </button>
-        {/* Tile 4 — CSV letöltése */}
         <button
           onClick={async () => { const { exportBOM } = await import('./utils/bomExport.js'); exportBOM(quote) }}
           disabled={!hasBom}
           style={{
-            padding: '12px 14px', borderRadius: 10,
+            padding: '10px', borderRadius: 9,
             cursor: hasBom ? 'pointer' : 'not-allowed',
-            background: hasBom ? 'rgba(255,209,102,0.10)' : C.bgHover,
-            border: `1px solid ${hasBom ? 'rgba(255,209,102,0.25)' : C.border}`,
-            color: hasBom ? C.yellow : C.muted,
-            fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            background: C.bg, border: `1px solid ${C.border}`,
+            color: hasBom ? C.textSub : C.muted,
+            fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: hasBom ? 1 : 0.5, transition: 'all 0.15s',
           }}
         >
-          <span style={{ fontSize: 14 }}>📊</span>
           {hasBom ? 'CSV letöltése' : 'Nincs anyagtétel'}
         </button>
       </div>
