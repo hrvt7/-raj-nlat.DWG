@@ -34,6 +34,7 @@ import { CABLE_CONFIDENCE_STRONG } from './reviewState.js'
  * @param {number}       opts.takeoffRowCount — takeoffRows.length
  * @param {boolean}      opts.isPdf           — PDF mode (no DXF audit)
  * @param {boolean}      opts.hasFile         — file is loaded
+ * @param {boolean}      opts.cableReviewed   — user already reviewed cable (panel-assisted persisted)
  * @returns {object}     WorkflowStatus
  */
 export function computeWorkflowStatus({
@@ -44,6 +45,7 @@ export function computeWorkflowStatus({
   takeoffRowCount = 0,
   isPdf = false,
   hasFile = false,
+  cableReviewed = false,
 } = {}) {
   // ── Stage 0: no file yet ─────────────────────────────────────────────
   if (!hasFile) {
@@ -130,7 +132,7 @@ export function computeWorkflowStatus({
       },
       badges: {
         takeoff: 'error',
-        cable: getCableBadge(cableAudit),
+        cable: getCableBadge(cableAudit, cableReviewed),
         calc: 'blocked',
       },
     })
@@ -140,8 +142,10 @@ export function computeWorkflowStatus({
   if (quoteReadiness?.status === 'ready_with_warnings') {
     const reasons = quoteReadiness.reasons || []
     const hasAutoLow = (reviewSummary?.autoLow || 0) > 0
-    const weakCable = cableAudit?.cableConfidence != null &&
+    const rawWeakCable = cableAudit?.cableConfidence != null &&
       cableAudit.cableConfidence < CABLE_CONFIDENCE_STRONG
+    // Suppress cable warnings when user already reviewed cable via panel-assisted mode
+    const weakCable = rawWeakCable && !(cableReviewed && cableAudit?.cableMode === 'PANEL_ASSISTED')
 
     // Surface top cable warnings in detail.reasons so WorkflowStatusCard
     // explains WHY cable is uncertain (not just "Kábelbecslés bizonytalanabb").
@@ -169,7 +173,7 @@ export function computeWorkflowStatus({
       },
       badges: {
         takeoff: hasAutoLow ? 'warning' : null,
-        cable: getCableBadge(cableAudit),
+        cable: getCableBadge(cableAudit, cableReviewed),
         calc: null,
       },
     })
@@ -181,7 +185,7 @@ export function computeWorkflowStatus({
     : takeoffRowCount
 
   // Even in ready stage, surface cable warnings if badge is active
-  const cableBadge = getCableBadge(cableAudit)
+  const cableBadge = getCableBadge(cableAudit, cableReviewed)
   const readyReasons = cableBadge ? getCableReasons(cableAudit, true) : []
 
   return buildStatus('ready', {
@@ -239,10 +243,14 @@ function getCableReasons(cableAudit, weakCable) {
 
 /**
  * Compute cable tab badge from cable audit.
+ * @param {object|null} cableAudit
+ * @param {boolean} [cableReviewed=false] — user reviewed cable (panel-assisted)
  * @returns {'warning'|null}
  */
-function getCableBadge(cableAudit) {
+function getCableBadge(cableAudit, cableReviewed = false) {
   if (!cableAudit) return null
+  // Suppress badge when user already reviewed via panel-assisted
+  if (cableReviewed && cableAudit.cableMode === 'PANEL_ASSISTED') return null
   if (cableAudit.manualCableRecommended) return 'warning'
   if (cableAudit.cableConfidence != null &&
       cableAudit.cableConfidence < CABLE_CONFIDENCE_STRONG) return 'warning'

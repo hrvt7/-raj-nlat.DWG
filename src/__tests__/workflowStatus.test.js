@@ -358,6 +358,94 @@ describe('computeWorkflowStatus', () => {
     })
   })
 
+  // ── cableReviewed suppression ────────────────────────────────────────────
+  describe('cableReviewed suppresses cable warnings for PANEL_ASSISTED', () => {
+    it('suppresses weak cable CTA when cableReviewed + PANEL_ASSISTED', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['Kábelbecslés bizonytalanabb (62%)'] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.62,
+          cableMode: 'PANEL_ASSISTED',
+          manualCableRecommended: false,
+          cableWarnings: ['Elosztó alapú becslés'],
+        }),
+        takeoffRowCount: 8,
+        cableReviewed: true,
+      })
+      // weakCable suppressed → no cable CTA, falls back to save
+      expect(result.cta.action).toBe('save')
+    })
+
+    it('suppresses cable badge when cableReviewed + PANEL_ASSISTED', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready', reasons: [] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.62,
+          cableMode: 'PANEL_ASSISTED',
+          cableWarnings: [],
+        }),
+        takeoffRowCount: 8,
+        cableReviewed: true,
+      })
+      expect(result.badges.cable).toBeNull()
+    })
+
+    it('does NOT suppress cable CTA when cableReviewed but NOT PANEL_ASSISTED', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['Kábelbecslés bizonytalanabb (40%)'] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.4,
+          cableMode: 'MST_ESTIMATE',
+          manualCableRecommended: false,
+        }),
+        takeoffRowCount: 8,
+        cableReviewed: true,
+      })
+      // Not PANEL_ASSISTED → cableReviewed doesn't suppress
+      expect(result.cta.action).toBe('check_cable')
+      expect(result.badges.cable).toBe('warning')
+    })
+
+    it('does NOT suppress cable CTA when NOT cableReviewed', () => {
+      const result = computeWorkflowStatus({
+        hasFile: true,
+        dxfAudit: makeDxfAudit(),
+        reviewSummary: makeReviewSummary({
+          confirmed: 5, autoHigh: 3, total: 8,
+          confirmedQty: 10, autoHighQty: 6,
+        }),
+        quoteReadiness: { status: 'ready_with_warnings', reasons: ['Kábelbecslés bizonytalanabb (62%)'] },
+        cableAudit: makeCableAudit({
+          cableConfidence: 0.62,
+          cableMode: 'PANEL_ASSISTED',
+          manualCableRecommended: false,
+        }),
+        takeoffRowCount: 8,
+        cableReviewed: false,
+      })
+      // Not reviewed → still shows cable CTA
+      expect(result.cta.action).toBe('check_cable')
+    })
+  })
+
   // ── Tab badges ─────────────────────────────────────────────────────────────
   describe('tab badges', () => {
     it('cable badge shows warning for low confidence', () => {

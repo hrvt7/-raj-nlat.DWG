@@ -897,6 +897,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [manualCableMode, setManualCableMode] = useState(false)
   const [referencePanels, setReferencePanels] = useState([])
 
+  // ── Cable review persistence — suppress stale cable warnings on reopen ──
+  const [cableReviewed, setCableReviewed] = useState(false)
+
   // ── PDF manual markers (assembly-based counting from PdfViewer) ─────────
   const [pdfMarkers, setPdfMarkers] = useState([])
   const prevMarkerCountRef = useRef(0)
@@ -1008,6 +1011,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       // Restore reference panels (manual cable mode)
       if (ann?.referencePanels?.length > 0) {
         setReferencePanels(ann.referencePanels)
+      }
+      // Restore cable review flag (suppress stale cable warnings on reopen)
+      if (ann?.cableReviewed) {
+        setCableReviewed(true)
       }
     })()
   }, [planId, file]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1341,8 +1348,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   const quoteReadiness = useMemo(() => {
     const cableConf = cableEstimate?.confidence ?? null
-    return computeQuoteReadiness(reviewSummary, cableConf)
-  }, [reviewSummary, cableEstimate])
+    return computeQuoteReadiness(reviewSummary, cableConf, { cableReviewed })
+  }, [reviewSummary, cableEstimate, cableReviewed])
 
   // ── DXF Import Audit (structured quality summary) ────────────────────────
   const dxfAudit = useMemo(() => {
@@ -1461,8 +1468,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       dxfAudit, reviewSummary, quoteReadiness, cableAudit,
       takeoffRowCount: takeoffRows.length,
       isPdf, hasFile: !!parsedDxf || isPdf,
+      cableReviewed,
     })
-  }, [dxfAudit, reviewSummary, quoteReadiness, cableAudit, takeoffRows.length, isPdf, parsedDxf])
+  }, [dxfAudit, reviewSummary, quoteReadiness, cableAudit, takeoffRows.length, isPdf, parsedDxf, cableReviewed])
 
   const saveGating = useMemo(() => getSaveGating(workflowStatus), [workflowStatus])
 
@@ -1701,6 +1709,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           variantOverrides,
           deletedItems: [...deletedItems],
           referencePanels,
+          cableReviewed: cableEstimate?._source === 'panel_assisted' || cableReviewed,
         })
         // Persist pricing summary + snapshot for quote generation on plan metadata
         // Resolve plan-level system type from filename inference (fallback: 'general')

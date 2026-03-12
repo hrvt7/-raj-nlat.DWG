@@ -132,13 +132,17 @@ export function buildReviewSummary(classifiedItems) {
  *
  * @param {object} summary — from buildReviewSummary
  * @param {number|null} cableConfidence — cable estimate confidence (0–1) or null if no cable
+ * @param {object} [opts] — optional flags
+ * @param {boolean} [opts.cableReviewed=false] — if true, user already reviewed cable (panel-assisted),
+ *   suppress weak-cable warning even if confidence < threshold.
  * @returns {object} — { status, reasons[] }
  *   status: 'ready' | 'ready_with_warnings' | 'review_required'
  *   reasons: human-readable warning strings (Hungarian)
  */
-export function computeQuoteReadiness(summary, cableConfidence = null) {
+export function computeQuoteReadiness(summary, cableConfidence = null, opts = {}) {
   if (!summary) return { status: 'review_required', reasons: ['Nincs felismerési adat'] }
 
+  const { cableReviewed = false } = opts
   const reasons = []
 
   // Hard blocker: unresolved items
@@ -159,8 +163,8 @@ export function computeQuoteReadiness(summary, cableConfidence = null) {
     reasons.push(`${summary.autoLow} tétel gyenge felismeréssel (${summary.autoLowQty} db)`)
   }
 
-  // Warnings: weak cable
-  if (cableConfidence !== null && cableConfidence < CABLE_CONFIDENCE_STRONG) {
+  // Warnings: weak cable — skip if user already reviewed cable (panel-assisted)
+  if (!cableReviewed && cableConfidence !== null && cableConfidence < CABLE_CONFIDENCE_STRONG) {
     const pct = Math.round(cableConfidence * 100)
     reasons.push(`Kábelbecslés bizonytalanabb (${pct}%)`)
   }

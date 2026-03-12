@@ -298,6 +298,35 @@ describe('computeQuoteReadiness', () => {
     const result = computeQuoteReadiness(null, null)
     expect(result.status).toBe('review_required')
   })
+
+  // ── cableReviewed opt ──────────────────────────────────────────────────────
+  it('suppresses weak cable warning when cableReviewed is true', () => {
+    const result = computeQuoteReadiness(makeSummary(), 0.55, { cableReviewed: true })
+    expect(result.status).toBe('ready')
+    expect(result.reasons).toEqual([])
+  })
+
+  it('does NOT suppress auto_low warnings when cableReviewed is true', () => {
+    const result = computeQuoteReadiness(
+      makeSummary({ autoLow: 2, autoLowQty: 4 }),
+      0.55,
+      { cableReviewed: true },
+    )
+    expect(result.status).toBe('ready_with_warnings')
+    expect(result.reasons).toHaveLength(1) // only auto_low, no cable
+    expect(result.reasons[0]).toContain('tétel gyenge')
+  })
+
+  it('still warns cable when cableReviewed is false', () => {
+    const result = computeQuoteReadiness(makeSummary(), 0.55, { cableReviewed: false })
+    expect(result.status).toBe('ready_with_warnings')
+    expect(result.reasons[0]).toContain('Kábelbecslés')
+  })
+
+  it('backward compat: no opts → cable still warns', () => {
+    const result = computeQuoteReadiness(makeSummary(), 0.55)
+    expect(result.status).toBe('ready_with_warnings')
+  })
 })
 
 // ─── shouldTrainMemory ───────────────────────────────────────────────────────
