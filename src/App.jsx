@@ -236,6 +236,26 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
 
   const handlePdf = async () => {
     setPdfGenerating(true)
+
+    // ── Acquire file handle IMMEDIATELY while user gesture is still valid ──
+    // showSaveFilePicker must be called synchronously from the click handler
+    // (before any await) so the browser trusts the user-activation gesture.
+    let fileHandle = null
+    const safeName = (editName || 'ajanlat').replace(/[<>:"/\\|?*]/g, '').trim().replace(/\s+/g, '_') || 'ajanlat'
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const suggestedName = `${safeName}_${dateStr}.pdf`
+    if (typeof window.showSaveFilePicker === 'function') {
+      try {
+        fileHandle = await window.showSaveFilePicker({
+          suggestedName,
+          types: [{ description: 'PDF dokumentum', accept: { 'application/pdf': ['.pdf'] } }],
+        })
+      } catch (e) {
+        if (e.name === 'AbortError') { setPdfGenerating(false); return } // user cancelled
+        fileHandle = null // other error → fall through to anchor download
+      }
+    }
+
     // Build a live quote snapshot for PDF so it uses current edits (even unsaved)
     const liveQuote = {
       ...quote,
@@ -253,7 +273,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     }
     try {
       const { generatePdf } = await import('./utils/generatePdf.js')
-      await generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy)
+      await generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy, fileHandle)
     } catch (err) {
       console.error('PDF generation failed:', err)
       alert('PDF generálás sikertelen. Kérjük próbáld újra.')

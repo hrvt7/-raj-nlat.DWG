@@ -395,6 +395,22 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
     .page-footer span { font-family: 'DM Mono', monospace; font-size: 7pt; color: #9CA3AF; }
     .page-footer .pf-branding { color: #00845A; }
 
+    /* ── PAGE-BREAK QUALITY ──────────────────────────────────────────── */
+    .parties-row, .fin-table-wrap, .kpi-row,
+    .party-box, .notes-box, .terms-box, .incl-excl-row {
+      page-break-inside: avoid; break-inside: avoid;
+    }
+    .sig-section {
+      page-break-inside: avoid; break-inside: avoid;
+      page-break-before: auto;
+    }
+    .section-header, .group-header-pdf {
+      page-break-after: avoid; break-after: avoid;
+    }
+    .data-table tr {
+      page-break-inside: avoid; break-inside: avoid;
+    }
+
     /* ── PRINT OVERRIDES ──────────────────────────────────────────────── */
     @media print {
       html, body { width: 210mm; }
@@ -541,7 +557,7 @@ export function sanitizeFilename(name) {
 // ─── Main entry point ─────────────────────────────────────────────────────────
 // Generates a real downloadable PDF file using html2canvas + jsPDF.
 // outputMode: 'combined' | 'labor_only' | 'split_material_labor'
-export async function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
+export async function generatePdf(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none', fileHandle = null) {
   const html = buildQuoteHtml(quote, settings, detailLevel, outputMode, groupBy)
 
   // Expose HTML for E2E tests (zero-cost property assignment)
@@ -605,8 +621,9 @@ export async function generatePdf(quote, settings, detailLevel = 'summary', outp
     pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
     heightLeft -= A4_H
 
-    // Additional pages
-    while (heightLeft > 0) {
+    // Additional pages — skip orphan last page (footer-only spillover < 15mm)
+    const ORPHAN_THRESHOLD_MM = 15
+    while (heightLeft > ORPHAN_THRESHOLD_MM) {
       position -= A4_H
       pdf.addPage()
       pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
@@ -618,20 +635,25 @@ export async function generatePdf(quote, settings, detailLevel = 'summary', outp
     const dateStr = new Date().toISOString().slice(0, 10)
     const filename = `${projectName}_${dateStr}.pdf`
 
-    // ── Save: anchor-based blob download ────────────────────────────────
-    // Direct blob download via <a download> — avoids jsPDF's bundled
-    // FileSaver.js which can open a blank popup window as last-resort
-    // fallback, and avoids showSaveFilePicker which requires a user
-    // gesture that has expired by this point in the async pipeline.
+    // ── Save: prefer File System Access API, fallback to anchor download ─
     const blob = pdf.output('blob')
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 40_000)
+
+    if (fileHandle) {
+      // File System Access API — file picker was shown pre-render (gesture-valid)
+      const writable = await fileHandle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+    } else {
+      // Anchor-based blob download — universal fallback
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 40_000)
+    }
   } finally {
     // Clean up hidden container and injected font links
     document.body.removeChild(container)

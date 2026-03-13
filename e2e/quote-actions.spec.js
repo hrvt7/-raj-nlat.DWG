@@ -185,3 +185,33 @@ test('PDF előnézet button fires preview with real content', async ({ page }) =
   expect(html).toContain('Actions E2E Projekt')
   expect(html).toContain('Teszt Kft.')
 })
+
+// ─── Test: PDF letöltése triggers real file download ─────────────────────────
+test('PDF letöltése triggers real file download with correct content', async ({ page }) => {
+  await seedAndOpen(page)
+
+  // Dismiss alert if html2canvas/jsPDF fail in test env
+  page.on('dialog', dialog => dialog.dismiss())
+
+  // Ensure no showSaveFilePicker (force anchor download path in test)
+  await page.evaluate(() => {
+    delete window.showSaveFilePicker
+    window.__lastPdfHtml = null
+  })
+
+  const pdfBtn = page.locator('button', { hasText: 'PDF letöltése' })
+  await expect(pdfBtn).toBeVisible({ timeout: 3_000 })
+
+  // Listen for download event — anchor-based blob download triggers this
+  const downloadPromise = page.waitForEvent('download', { timeout: 30_000 })
+  await pdfBtn.click()
+
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toContain('.pdf')
+  expect(download.suggestedFilename()).toContain('Actions_E2E_Projekt')
+
+  // Verify HTML was generated with correct quote content
+  const html = await page.evaluate(() => window.__lastPdfHtml)
+  expect(html).toContain('Actions E2E Projekt')
+  expect(html).toContain('Teszt Kft.')
+})
