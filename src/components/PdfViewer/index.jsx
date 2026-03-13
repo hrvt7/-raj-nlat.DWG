@@ -55,6 +55,34 @@ function formatDist(m) {
   return `${m.toFixed(1)} m`
 }
 
+// ── Rotation-invariant coordinate helpers ─────────────────────────────────
+// W, H are UNROTATED page dimensions (at 1× scale).
+// Rotation is CW in degrees (0, 90, 180, 270).
+//
+// docToCanvas: unrotated document coords → rotated canvas coords
+// canvasToDoc: rotated canvas coords → unrotated document coords
+//
+// These ensure markers are stored in rotation-invariant (doc) space and
+// rendered correctly regardless of the current rotation.
+
+export function docToCanvas(dx, dy, rot, W, H) {
+  switch (rot) {
+    case 90:  return { x: dy,     y: W - dx }
+    case 180: return { x: W - dx, y: H - dy }
+    case 270: return { x: H - dy, y: dx }
+    default:  return { x: dx,     y: dy }
+  }
+}
+
+export function canvasToDoc(cx, cy, rot, W, H) {
+  switch (rot) {
+    case 90:  return { x: W - cy, y: cx }
+    case 180: return { x: W - cx, y: H - cy }
+    case 270: return { x: cy,     y: H - cx }
+    default:  return { x: cx,     y: cy }
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
@@ -84,6 +112,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   // ── View transform (pan/zoom) ──
   const viewRef = useRef({ offsetX: 0, offsetY: 0, zoom: 1, pageWidth: 0, pageHeight: 0 })
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startOX: 0, startOY: 0 })
+
+  // ── Unrotated page dimensions (for rotation-invariant coordinate conversion) ──
+  const unrotatedDimsRef = useRef({ w: 0, h: 0 })
+  // ── Legacy annotation migration: { rotation } when saved coords need canvas→doc conversion ──
+  const migrationRef = useRef(null)
 
   // ── Tools ──
   const [activeTool, setActiveTool] = useState(null)
@@ -172,6 +205,10 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         quoteOverridesRef.current = ann.quoteOverrides
       }
       if (ann.rotation != null) setRotation(ann.rotation)
+      // ── Backward compat: schedule migration if coords are legacy (canvas-space) ──
+      if (!ann.coordVersion || ann.coordVersion < 2) {
+        migrationRef.current = { rotation: ann.rotation || 0 }
+      }
       // Reset dirty after hydration from store
       dirtyRef.current = false
       if (onDirtyChange) onDirtyChange(false)
@@ -217,8 +254,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const ch = containerRef.current.clientHeight
     const targetZoom = Math.max(v.zoom, 2.0)
     v.zoom = targetZoom
-    v.offsetX = cw / 2 - target.x * targetZoom
-    v.offsetY = ch / 2 - target.y * targetZoom
+    // target.x/y are in doc coords — convert to canvas coords for offset calculation
+    const d = unrotatedDimsRef.current
+    const c = docToCanvas(target.x, target.y, rotationRef.current, d.w, d.h)
+    v.offsetX = cw / 2 - c.x * targetZoom
+    v.offsetY = ch / 2 - c.y * targetZoom
     highlightRef.current = { x: target.x, y: target.y, startTime: Date.now() }
     setRenderTick(t => t + 1)
     return true
@@ -272,6 +312,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           assignments: assignmentsRef.current,
           quoteOverrides: quoteOverridesRef.current,
           rotation: rotationRef.current,
+          coordVersion: 2, // markers/measurements in unrotated doc coords
         }, { silent: true })
       }).catch(() => {
         // Fallback: save what we have if store read fails
@@ -285,6 +326,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           assignments: assignmentsRef.current,
           quoteOverrides: quoteOverridesRef.current,
           rotation: rotationRef.current,
+          coordVersion: 2, // markers/measurements in unrotated doc coords
         }, { silent: true })
       })
     }
@@ -329,6 +371,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     try {
       const page = await doc.getPage(num)
       const viewport = page.getViewport({ scale: 2, rotation: rotationRef.current }) // hi-dpi + rotation
+      // Store unrotated page dimensions for rotation-invariant coordinate conversion
+      const unrotVp = page.getViewport({ scale: 2, rotation: 0 })
+      unrotatedDimsRef.current = { w: unrotVp.width / 2, h: unrotVp.height / 2 }
       const canvas = pdfCanvasRef.current
       canvas.width = viewport.width
       canvas.height = viewport.height
@@ -365,8 +410,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           const ch = ct.clientHeight
           const targetZoom = Math.max(vv.zoom, 2.0)
           vv.zoom = targetZoom
-          vv.offsetX = cw / 2 - pf.x * targetZoom
-          vv.offsetY = ch / 2 - pf.y * targetZoom
+          // pf.x/y are in doc coords — convert to canvas for offset calc
+          const dd = unrotatedDimsRef.current
+          const cc = docToCanvas(pf.x, pf.y, rotationRef.current, dd.w, dd.h)
+          vv.offsetX = cw / 2 - cc.x * targetZoom
+          vv.offsetY = ch / 2 - cc.y * targetZoom
           highlightRef.current = { x: pf.x, y: pf.y, startTime: Date.now() }
           setRenderTick(t => t + 1)
           setTimeout(() => {
@@ -390,20 +438,24 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (pdfDoc && pageNum > 0) renderPage(pdfDoc, pageNum)
   }, [rotation, pdfDoc, pageNum, renderPage])
 
-  // ── Coordinate conversion ──
+  // ── Coordinate conversion (rotation-invariant document coords) ──
+  // screenToPdf: screen pixel → unrotated document coords
   const screenToPdf = useCallback((sx, sy) => {
     const v = viewRef.current
-    return {
-      x: (sx - v.offsetX) / v.zoom,
-      y: (sy - v.offsetY) / v.zoom,
-    }
+    const cx = (sx - v.offsetX) / v.zoom
+    const cy = (sy - v.offsetY) / v.zoom
+    const d = unrotatedDimsRef.current
+    return canvasToDoc(cx, cy, rotationRef.current, d.w, d.h)
   }, [])
 
-  const pdfToScreen = useCallback((px, py) => {
+  // pdfToScreen: unrotated document coords → screen pixel
+  const pdfToScreen = useCallback((dx, dy) => {
     const v = viewRef.current
+    const d = unrotatedDimsRef.current
+    const c = docToCanvas(dx, dy, rotationRef.current, d.w, d.h)
     return {
-      x: px * v.zoom + v.offsetX,
-      y: py * v.zoom + v.offsetY,
+      x: c.x * v.zoom + v.offsetX,
+      y: c.y * v.zoom + v.offsetY,
     }
   }, [])
 
@@ -424,10 +476,28 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     ctx.clearRect(0, 0, cw, ch)
 
     const v = viewRef.current
-    const proj = (px, py) => ({
-      x: px * v.zoom + v.offsetX,
-      y: py * v.zoom + v.offsetY,
-    })
+    const d = unrotatedDimsRef.current
+    const rot = rotationRef.current
+    // ── One-time migration of legacy canvas-coord annotations to doc coords ──
+    if (migrationRef.current && d.w > 0) {
+      const mig = migrationRef.current
+      migrationRef.current = null
+      markersRef.current = markersRef.current.map(m => {
+        const doc = canvasToDoc(m.x, m.y, mig.rotation, d.w, d.h)
+        return { ...m, x: doc.x, y: doc.y }
+      })
+      measuresRef.current = measuresRef.current.map(seg => {
+        const doc1 = canvasToDoc(seg.x1, seg.y1, mig.rotation, d.w, d.h)
+        const doc2 = canvasToDoc(seg.x2, seg.y2, mig.rotation, d.w, d.h)
+        return { ...seg, x1: doc1.x, y1: doc1.y, x2: doc2.x, y2: doc2.y }
+      })
+      if (onMarkersChange) onMarkersChange([...markersRef.current])
+    }
+    // proj: unrotated doc coords → screen coords (via docToCanvas + zoom/offset)
+    const proj = (dx, dy) => {
+      const c = docToCanvas(dx, dy, rot, d.w, d.h)
+      return { x: c.x * v.zoom + v.offsetX, y: c.y * v.zoom + v.offsetY }
+    }
     const sf = scaleRef.current
 
     // Draw PDF canvas at current transform
