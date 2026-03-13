@@ -350,6 +350,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   // Label style reused throughout
   const labelStyle = { fontFamily: 'DM Mono', fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5, display: 'block' }
   const monoVal    = { fontFamily: 'DM Mono', fontSize: 13, color: C.text, fontWeight: 500 }
+  const actionBase = { padding: '10px', borderRadius: 9, border: 'none', fontFamily: 'Syne', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', color: '#09090B' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -475,6 +476,14 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               </button>
             ))}
           </div>
+          <button onClick={handlePdf} disabled={pdfGenerating} style={{
+            ...actionBase, width: '100%', marginTop: 'auto',
+            background: pdfGenerating ? C.accentDim : C.accent,
+            cursor: pdfGenerating ? 'wait' : 'pointer',
+            opacity: pdfGenerating ? 0.7 : 1,
+          }}>
+            {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
+          </button>
         </div>
 
         {/* Card 2 — Anyagjegyzék (BOM) */}
@@ -573,43 +582,6 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           </div>
         </div>
       </div>
-
-      {/* ── Action bar (4 action buttons) ────────────────────────────── */}
-      {(() => {
-        const actionBase = {
-          padding: '10px', borderRadius: 9, border: 'none',
-          fontFamily: 'Syne', fontWeight: 800, fontSize: 12,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'all 0.15s', color: '#09090B',
-        }
-        return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-            <button onClick={handlePdf} disabled={pdfGenerating} style={{
-              ...actionBase,
-              background: pdfGenerating ? C.accentDim : C.accent,
-              cursor: pdfGenerating ? 'wait' : 'pointer',
-              opacity: pdfGenerating ? 0.7 : 1,
-            }}>
-              {pdfGenerating ? 'Generálás...' : 'PDF letöltése'}
-            </button>
-            <button onClick={handlePrint} style={{
-              ...actionBase, background: C.red, cursor: 'pointer',
-            }}>
-              PDF nyomtatása
-            </button>
-            <button onClick={handleEmail} style={{
-              ...actionBase, background: C.blue, cursor: 'pointer',
-            }}>
-              Email küldése
-            </button>
-            <button onClick={handlePreview} style={{
-              ...actionBase, background: '#B07CFF', cursor: 'pointer',
-            }}>
-              PDF előnézet
-            </button>
-          </div>
-        )
-      })()}
 
       {/* ── Main body: left (items) + right (sidebar) ────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 260px', gap: 20, alignItems: 'start' }}>
@@ -921,7 +893,24 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             </button>
           </div>
 
-
+          {/* ── Sidebar action buttons ─────────────────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button onClick={handlePrint} style={{
+              ...actionBase, width: '100%', background: C.red, cursor: 'pointer',
+            }}>
+              PDF nyomtatása
+            </button>
+            <button onClick={handleEmail} style={{
+              ...actionBase, width: '100%', background: C.blue, cursor: 'pointer',
+            }}>
+              Email küldése
+            </button>
+            <button onClick={handlePreview} style={{
+              ...actionBase, width: '100%', background: '#B07CFF', cursor: 'pointer',
+            }}>
+              PDF előnézet
+            </button>
+          </div>
 
         </div>
       </div>
