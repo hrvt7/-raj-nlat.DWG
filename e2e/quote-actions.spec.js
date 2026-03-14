@@ -106,15 +106,15 @@ test('Anyagjegyzék card contains Anyagjegyzék letöltése button', async ({ pa
   await expect(bomBtn).toBeVisible({ timeout: 3_000 })
 })
 
-// ─── Test: Config cards no longer contain action buttons ─────────────────────
-test('PDF Export card does not contain action buttons', async ({ page }) => {
+// ─── Test: PDF Export card contains download, but not print/email/preview ─────
+test('PDF Export card contains PDF letöltése but not other action buttons', async ({ page }) => {
   await seedAndOpen(page)
 
   const pdfCard = page.locator('div', { hasText: /^PDF Export$/ }).locator('..')
   const downloadBtn = pdfCard.locator('button', { hasText: 'PDF letöltése' })
   const printBtn = pdfCard.locator('button', { hasText: 'PDF nyomtatása' })
 
-  await expect(downloadBtn).toHaveCount(0)
+  await expect(downloadBtn).toHaveCount(1)
   await expect(printBtn).toHaveCount(0)
 })
 
