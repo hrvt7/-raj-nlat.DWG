@@ -47,6 +47,10 @@ export function generateTemplateId() {
  * @param {string} imageDataUrl - base64 PNG data URL of the cropped symbol
  */
 export async function saveTemplate(meta, imageDataUrl) {
+  // Write image to IndexedDB FIRST — if this fails, no metadata is written,
+  // preventing phantom metadata entries that point to missing image data.
+  await legendTemplateStore.setItem(meta.id, imageDataUrl)
+
   const all = loadMeta()
   const existing = all.findIndex(t => t.id === meta.id)
   if (existing >= 0) {
@@ -55,7 +59,6 @@ export async function saveTemplate(meta, imageDataUrl) {
     all.unshift(meta)
   }
   saveMeta(all)
-  await legendTemplateStore.setItem(meta.id, imageDataUrl)
   return meta
 }
 
