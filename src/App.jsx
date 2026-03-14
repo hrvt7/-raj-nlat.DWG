@@ -334,8 +334,16 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     const html = await buildLiveQuoteHtml()
     if (typeof window !== 'undefined') window.__lastPreviewHtml = html
     const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close(); w.focus() }
-    else { alert('A böngésző blokkolta a felugró ablakot. Engedélyezd a popupokat ehhez az oldalhoz, majd próbáld újra.') }
+    if (w) {
+      w.document.write(html); w.document.close()
+      // Hide content until fonts are ready so the user never sees fallback-font first paint
+      w.document.body.style.visibility = 'hidden'
+      const fontsReady = w.document.fonts?.ready || Promise.resolve()
+      const fontTimeout = new Promise(r => setTimeout(r, 2000))
+      Promise.race([fontsReady, fontTimeout])
+        .then(() => { w.document.body.style.visibility = 'visible'; w.focus() })
+        .catch(() => { w.document.body.style.visibility = 'visible'; w.focus() })
+    } else { alert('A böngésző blokkolta a felugró ablakot. Engedélyezd a popupokat ehhez az oldalhoz, majd próbáld újra.') }
   }
 
   // Separate items by type for the grouped table
