@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -1128,6 +1128,31 @@ function SaaSShell() {
         .catch(() => setSubStatus({ plan: 'free', active: false }))
     }
   }, [session])
+
+  // ── Remote read-back: hydrate empty local state from cloud for signed-in users ──
+  // Conservative: only applies when localStorage key has NEVER been written.
+  // Does NOT overwrite existing non-empty local data.
+  useEffect(() => {
+    if (!session) return
+    const hasLocalSettings = localStorage.getItem('takeoffpro_settings') !== null
+    const hasLocalQuotes = localStorage.getItem('takeoffpro_quotes') !== null
+    if (hasLocalSettings && hasLocalQuotes) return
+    ;(async () => {
+      try {
+        if (!hasLocalSettings) {
+          const remote = await loadSettingsRemote()
+          if (remote) { saveSettings(remote); setSettings(loadSettings()) }
+        }
+        if (!hasLocalQuotes) {
+          const rows = await loadQuotesRemote()
+          const mapped = (rows || []).map(r => r.pricing_data).filter(Boolean)
+          if (mapped.length > 0) { saveQuotes(mapped); setQuotes(loadQuotes()) }
+        }
+      } catch (err) {
+        console.warn('[App] Remote read-back failed (non-blocking):', err.message)
+      }
+    })()
+  }, [session]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Legacy route redirects → projektek ──────────────────────────────────────
   useEffect(() => {
