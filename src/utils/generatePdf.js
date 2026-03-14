@@ -592,6 +592,42 @@ export async function generatePdf(quote, settings, detailLevel = 'summary', outp
     await document.fonts.ready
     await new Promise(r => setTimeout(r, 500))
 
+    // ── Pre-capture pagination: push keep-together blocks past page boundaries ──
+    // html2canvas ignores CSS page-break rules, so we manually insert invisible
+    // spacer divs before blocks that would be split by an A4 page boundary.
+    {
+      const PAGE_H_PX = Math.round(794 * (297 / 210)) // ≈1123px — A4 aspect at 794px width
+      const KEEP_TOGETHER = '.parties-row,.kpi-row,.fin-table-wrap,.sig-section,.section-header,.group-header-pdf,.data-table,.notes-box,.terms-box,.incl-excl-row,.acceptance-note'
+      const blocks = container.querySelectorAll(KEEP_TOGETHER)
+      const spacers = [] // track inserted spacers for measurement stability
+
+      for (const block of blocks) {
+        const top = block.offsetTop
+        const height = block.offsetHeight
+        if (height <= 0 || height >= PAGE_H_PX) continue // skip empty or taller-than-page
+
+        const pageBottom = Math.ceil((top + 1) / PAGE_H_PX) * PAGE_H_PX
+        const wouldSplit = top < pageBottom && (top + height) > pageBottom
+
+        if (!wouldSplit) continue
+
+        // For section headers / group headers: keep together with next sibling
+        let keepHeight = height
+        const isHeader = block.classList.contains('section-header') || block.classList.contains('group-header-pdf')
+        if (isHeader && block.nextElementSibling) {
+          keepHeight += block.nextElementSibling.offsetHeight
+        }
+        // Only push if the combined block fits on one page
+        if (keepHeight >= PAGE_H_PX) continue
+
+        const gap = pageBottom - top
+        const spacer = document.createElement('div')
+        spacer.style.cssText = `height:${gap}px;width:100%;flex-shrink:0;`
+        block.parentNode.insertBefore(spacer, block)
+        spacers.push(spacer)
+      }
+    }
+
     // Dynamic import (code-split — keeps main bundle small)
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
       import('html2canvas'),
