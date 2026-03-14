@@ -106,6 +106,10 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
       hydratedRef.current = true // annotation restore complete — auto-save now safe
+    }).catch(() => {
+      // Load failed (corrupt IDB, etc.) — nothing stored to protect,
+      // so unblock auto-save to preserve any markers placed this session.
+      hydratedRef.current = true
     })
   }, [planId])
 
