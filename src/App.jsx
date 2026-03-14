@@ -322,8 +322,12 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     const html = await buildLiveQuoteHtml()
     if (typeof window !== 'undefined') window.__lastPrintHtml = html
     const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close(); w.focus(); w.print() }
-    else { alert('A böngésző blokkolta a felugró ablakot. Engedélyezd a popupokat ehhez az oldalhoz, majd próbáld újra.') }
+    if (w) {
+      w.document.write(html); w.document.close(); w.focus()
+      // Wait for fonts to load in the popup before printing — prevents fallback font rendering
+      const fontsReady = w.document.fonts?.ready || Promise.resolve()
+      fontsReady.then(() => w.print()).catch(() => w.print())
+    } else { alert('A böngésző blokkolta a felugró ablakot. Engedélyezd a popupokat ehhez az oldalhoz, majd próbáld újra.') }
   }
 
   const handlePreview = async () => {
