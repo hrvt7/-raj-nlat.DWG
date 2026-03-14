@@ -10,7 +10,7 @@
  */
 export function quoteToCSV(quote, settings) {
   const vatPct = parseFloat(settings?.labor?.vat_percent ?? 27)
-  const hourlyRate = parseFloat(settings?.labor?.hourly_rate ?? 9000)
+  const hourlyRate = parseFloat(quote?.pricingData?.hourlyRate ?? settings?.labor?.hourly_rate ?? 9000)
 
   // Header row
   const headers = [
