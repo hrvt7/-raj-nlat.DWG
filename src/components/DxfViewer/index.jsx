@@ -506,6 +506,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     if (viewer?.camera) {
       const cam = viewer.camera
       const f = 0.75
+      if (Math.abs(cam.right - cam.left) * f < 0.01) return // prevent degenerate frustum
       cam.left *= f; cam.right *= f; cam.top *= f; cam.bottom *= f
       cam.updateProjectionMatrix()
       viewer.Render()
@@ -517,6 +518,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     if (viewer?.camera) {
       const cam = viewer.camera
       const f = 1.33
+      if (Math.abs(cam.right - cam.left) * f > 1e8) return // prevent precision loss
       cam.left *= f; cam.right *= f; cam.top *= f; cam.bottom *= f
       cam.updateProjectionMatrix()
       viewer.Render()
