@@ -1131,21 +1131,45 @@ function SaaSShell() {
     }
   }, [session])
 
-  // ── Remote read-back: hydrate empty local state from cloud for signed-in users ──
-  // Conservative: only applies when localStorage key has NEVER been written.
-  // Does NOT overwrite existing non-empty local data.
+  // ── Remote read-back: hydrate empty/broken local state from cloud for signed-in users ──
+  // Conservative: only recovers when local data is clearly missing, empty, or corrupted.
+  // Does NOT overwrite valid non-empty local data.
   useEffect(() => {
     if (!session) return
-    const hasLocalSettings = localStorage.getItem('takeoffpro_settings') !== null
-    const hasLocalQuotes = localStorage.getItem('takeoffpro_quotes') !== null
-    if (hasLocalSettings && hasLocalQuotes) return
+
+    // Detect recoverable local state (missing / empty / malformed)
+    const isSettingsRecoverable = () => {
+      try {
+        const raw = localStorage.getItem('takeoffpro_settings')
+        if (raw === null) return true
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return true
+        return Object.keys(parsed).length === 0 // empty {}
+      } catch { return true } // malformed JSON
+    }
+    const isQuotesRecoverable = () => {
+      try {
+        const raw = localStorage.getItem('takeoffpro_quotes')
+        if (raw === null) return true
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return true
+        // Versioned envelope: { _v, data: [...] } or legacy raw array
+        const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : null)
+        return !arr || arr.length === 0
+      } catch { return true } // malformed JSON
+    }
+
+    const settingsNeedsRecovery = isSettingsRecoverable()
+    const quotesNeedsRecovery = isQuotesRecoverable()
+    if (!settingsNeedsRecovery && !quotesNeedsRecovery) return
+
     ;(async () => {
       try {
-        if (!hasLocalSettings) {
+        if (settingsNeedsRecovery) {
           const remote = await loadSettingsRemote()
           if (remote) { saveSettings(remote); setSettings(loadSettings()) }
         }
-        if (!hasLocalQuotes) {
+        if (quotesNeedsRecovery) {
           const rows = await loadQuotesRemote()
           const mapped = (rows || []).map(r => r.pricing_data).filter(Boolean)
           if (mapped.length > 0) { saveQuotes(mapped); setQuotes(loadQuotes()) }
