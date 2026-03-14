@@ -792,13 +792,13 @@ function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChan
 const BULK_SKIP_QTY_THRESHOLD = 2
 
 function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress }) {
-  if (!unknownItems || unknownItems.length === 0) return null
-
   // Sort by qty descending — highest impact blocks first
   const sorted = useMemo(() =>
-    [...unknownItems].sort((a, b) => b.qty - a.qty),
+    [...(unknownItems || [])].sort((a, b) => b.qty - a.qty),
     [unknownItems]
   )
+
+  if (!unknownItems || unknownItems.length === 0) return null
 
   // Build assembly options: only top-level assemblies (not variants), sorted by label
   const asmOptions = assemblies
