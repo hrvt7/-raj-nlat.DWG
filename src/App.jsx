@@ -321,6 +321,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     if (typeof window !== 'undefined') window.__lastPrintHtml = html
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close(); w.focus(); w.print() }
+    else { alert('A böngésző blokkolta a felugró ablakot. Engedélyezd a popupokat ehhez az oldalhoz, majd próbáld újra.') }
   }
 
   const handlePreview = async () => {
@@ -328,6 +329,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     if (typeof window !== 'undefined') window.__lastPreviewHtml = html
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close(); w.focus() }
+    else { alert('A böngésző blokkolta a felugró ablakot. Engedélyezd a popupokat ehhez az oldalhoz, majd próbáld újra.') }
   }
 
   // Separate items by type for the grouped table
