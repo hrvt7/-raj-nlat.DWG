@@ -647,6 +647,33 @@ export async function generatePdf(quote, settings, detailLevel = 'summary', outp
       }
     }
 
+    // ── Pass 2: row-level protection for long data tables ────────────────
+    // The block-level pass above skips tables taller than one page.
+    // Inside those tables, individual <tr> can still split across an A4
+    // boundary. Insert spacer rows to push split-risk rows to the next page.
+    {
+      const PAGE_H = Math.round(794 * (297 / 210))
+      const containerTop = container.getBoundingClientRect().top
+      const rows = container.querySelectorAll('.data-table tbody tr')
+      for (const row of rows) {
+        const rect = row.getBoundingClientRect()
+        const top = rect.top - containerTop
+        const height = rect.height
+        if (height <= 0 || height >= PAGE_H) continue
+
+        const pageBottom = Math.ceil((top + 1) / PAGE_H) * PAGE_H
+        if (top >= pageBottom || (top + height) <= pageBottom) continue
+
+        const gap = pageBottom - top
+        const spacerRow = document.createElement('tr')
+        const spacerCell = document.createElement('td')
+        spacerCell.setAttribute('colspan', '99')
+        spacerCell.style.cssText = `height:${gap}px;padding:0;border:none;line-height:0;font-size:0;`
+        spacerRow.appendChild(spacerCell)
+        row.parentNode.insertBefore(spacerRow, row)
+      }
+    }
+
     // Dynamic import (code-split — keeps main bundle small)
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
       import('html2canvas'),
