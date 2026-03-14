@@ -588,9 +588,28 @@ export async function generatePdf(quote, settings, detailLevel = 'summary', outp
   document.body.appendChild(container)
 
   try {
-    // Wait for fonts + rendering
-    await document.fonts.ready
-    await new Promise(r => setTimeout(r, 500))
+    // Wait for fonts — explicitly trigger loading of each required typeface.
+    // document.fonts.ready alone can resolve instantly if the injected <link>
+    // hasn't started loading yet. document.fonts.load(spec) forces the browser
+    // to fetch the named font and returns a promise that resolves only when
+    // that specific face is available.
+    const fontFaces = [
+      'bold 16px "Syne"',
+      '500 10px "DM Mono"',
+      '400 10px "Inter"',
+    ]
+    const fontTimeout = new Promise(r => setTimeout(r, 2000))
+    await Promise.race([
+      Promise.all([
+        document.fonts.ready,
+        ...fontFaces.map(f => document.fonts.load(f).catch(() => {})),
+      ]),
+      fontTimeout,
+    ])
+    // Force synchronous reflow with final fonts, then wait for two
+    // animation frames so the browser has painted the stable layout.
+    container.offsetHeight          // eslint-disable-line no-unused-expressions
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
     // ── Pre-capture pagination: push keep-together blocks past page boundaries ──
     // html2canvas ignores CSS page-break rules, so we manually insert invisible
