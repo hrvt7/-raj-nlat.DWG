@@ -91,11 +91,13 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   const mouseScreenRef = useRef(null) // {x,y} current mouse in screen coords
   const activeToolRef = useRef(null)
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
+  const hydratedRef = useRef(false) // true once async annotation restore completes
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
 
   // ── Load saved annotations on mount ──
   useEffect(() => {
     if (!planId) return
+    hydratedRef.current = false // reset — auto-save guard active until restore finishes
     getPlanAnnotations(planId).then(ann => {
       if (ann.markers?.length) { markersRef.current = normalizeMarkers(ann.markers); setRenderTick(t => t + 1) }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements }
@@ -103,6 +105,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
+      hydratedRef.current = true // annotation restore complete — auto-save now safe
     })
   }, [planId])
 
@@ -141,9 +144,12 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
 
   // ── Auto-save annotations on unmount ──
   // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
+  // GUARD: Skip auto-save if annotations were never hydrated from IDB. This prevents
+  // fast mount/unmount from writing empty markers over stored data.
   useEffect(() => {
     return () => {
       if (!planId) return
+      if (!hydratedRef.current) return // not yet hydrated — don't overwrite IDB
       const localMarkers = markersRef.current
       getPlanAnnotations(planId).then(stored => {
         const storedMarkers = normalizeMarkers(stored?.markers || [])
