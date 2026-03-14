@@ -905,8 +905,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
-        onZoomIn={() => { viewRef.current.zoom *= 1.2; drawOverlay() }}
-        onZoomOut={() => { viewRef.current.zoom /= 1.2; drawOverlay() }}
+        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlay() }}
+        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlay() }}
         onUndo={handleUndo} onClearAll={handleClearAll}
         onToggleCountPanel={() => setCountPanelOpen(!countPanelOpen)}
         countPanelOpen={countPanelOpen}
