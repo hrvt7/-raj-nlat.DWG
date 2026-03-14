@@ -170,6 +170,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     }
   }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
 
+  // ── Derived pricing from editable rate + markup ────────────────────────────
+  const vatPct = Number(settings?.labor?.vat_percent) || 27
+  // Guard: empty input falls back to stored rate, then 9000 — prevents silent zero labor
+  const effectiveRate = editRate === '' ? (Number(quote.pricingData?.hourlyRate) || 9000) : Number(editRate)
+
   // ── Dirty check (normalized numeric comparison) ────────────────────────────
   const isDirty = editName !== (quote.projectName || '')
     || editClient !== (quote.clientName || '')
@@ -177,7 +182,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || editClientTax !== (quote.clientTaxNumber || '')
     || editClientEmail !== (quote.clientEmail || '')
     || editProjectAddr !== (quote.projectAddress || '')
-    || Number(editRate) !== (Number(quote.pricingData?.hourlyRate) || 9000)
+    || effectiveRate !== (Number(quote.pricingData?.hourlyRate) || 9000)
     || Math.abs(Number(editMarkup) - ((quote.pricingData?.markup_pct || 0) * 100)) > 0.001
     || outputMode !== (quote.outputMode || 'combined')
     || groupBy !== (quote.groupBy || 'none')
@@ -185,12 +190,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || editExclusions !== (quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
     || editValidity !== (quote.validityText ?? '')
     || editPaymentTerms !== (quote.paymentTermsText ?? '')
-
-  // ── Derived pricing from editable rate + markup ────────────────────────────
-  const vatPct = Number(settings?.labor?.vat_percent) || 27
   const totalHours = quote.totalHours || 0
   const totalMaterials = Math.round(quote.totalMaterials || 0)
-  const newTotalLabor = Math.round(totalHours * Number(editRate))
+  const newTotalLabor = Math.round(totalHours * effectiveRate)
   const newSubtotal = totalMaterials + newTotalLabor
   const newMarkupAmount = Math.round(newSubtotal * (Number(editMarkup) / 100))
   const net = newSubtotal + newMarkupAmount
@@ -222,7 +224,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       summary: { ...quote.summary, grandTotal: net },
       pricingData: {
         ...quote.pricingData,
-        hourlyRate: Number(editRate),
+        hourlyRate: effectiveRate,
         markup_pct: Number(editMarkup) / 100,
       },
       inclusions: editInclusions,
@@ -265,7 +267,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       clientName: editClient, client_name: editClient,
       clientAddress: editClientAddr, clientTaxNumber: editClientTax, clientEmail: editClientEmail, projectAddress: editProjectAddr,
       gross: net, totalLabor: newTotalLabor,
-      pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
+      pricingData: { ...quote.pricingData, hourlyRate: effectiveRate, markup_pct: Number(editMarkup) / 100 },
       inclusions: editInclusions,
       exclusions: editExclusions,
       validityText: editValidity,
@@ -307,7 +309,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       clientName: editClient, client_name: editClient,
       clientAddress: editClientAddr, clientTaxNumber: editClientTax, clientEmail: editClientEmail, projectAddress: editProjectAddr,
       gross: net, totalLabor: newTotalLabor,
-      pricingData: { ...quote.pricingData, hourlyRate: Number(editRate), markup_pct: Number(editMarkup) / 100 },
+      pricingData: { ...quote.pricingData, hourlyRate: effectiveRate, markup_pct: Number(editMarkup) / 100 },
       inclusions: editInclusions,
       exclusions: editExclusions,
       validityText: editValidity,
@@ -450,7 +452,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             <span>{(quote.totalHours || 0).toFixed(1)}</span>
             <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>ó</span>
           </div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>{fmt(Number(editRate))} Ft/ó óradíj</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>{fmt(effectiveRate)} Ft/ó óradíj</div>
         </div>
       </div>
 
@@ -651,7 +653,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               return (groupBy === 'system' ? groupItemsBySystem : groupItemsByFloor)(quote.items || []).map(group => {
               const grpLabor = group.items.filter(i => i.type === 'labor')
               const grpMat   = group.items.filter(i => i.type === 'material' || i.type === 'cable')
-              const grpLaborTotal  = grpLabor.reduce((s, i) => s + (i.hours || 0) * Number(editRate), 0)
+              const grpLaborTotal  = grpLabor.reduce((s, i) => s + (i.hours || 0) * effectiveRate, 0)
               const grpMatTotal    = grpMat.reduce((s, i) => s + (i.unitPrice || 0) * i.qty, 0)
               const grpTotal       = outputMode === 'labor_only' ? grpLaborTotal : (grpLaborTotal + grpMatTotal)
               return (
@@ -675,11 +677,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                       title={`${group.label} · Munka`} count={grpLabor.length} accentColor={C.blue}
                       items={grpLabor}
                       renderRow={item => {
-                        const total = (item.hours || 0) * Number(editRate)
+                        const total = (item.hours || 0) * effectiveRate
                         return [
                           item.name,
                           `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
-                          `${fmt(Number(editRate))} Ft/ó`,
+                          `${fmt(effectiveRate)} Ft/ó`,
                           `${(item.hours || 0).toFixed(2)} ó`,
                           <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.blue }}>{fmt(Math.round(total))} Ft</span>,
                         ]
@@ -716,11 +718,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               title="Munka" count={laborItems.length} accentColor={C.blue}
               items={laborItems}
               renderRow={item => {
-                const total = (item.hours || 0) * Number(editRate)
+                const total = (item.hours || 0) * effectiveRate
                 return [
                   item.name,
                   `${+(item.qty || 0).toFixed(2)} ${item.unit || ''}`,
-                  `${fmt(Number(editRate))} Ft/ó`,
+                  `${fmt(effectiveRate)} Ft/ó`,
                   `${(item.hours || 0).toFixed(2)} ó`,
                   <span style={{ fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, color: C.blue }}>{fmt(Math.round(total))} Ft</span>,
                 ]
