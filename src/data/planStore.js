@@ -94,6 +94,12 @@ export function generatePlanId() {
  * @param {File|Blob} fileBlob - The raw DXF/DWG file
  */
 export async function savePlan(plan, fileBlob) {
+  // Store file blob in IndexedDB FIRST — if this fails, no metadata is written,
+  // preventing orphan metadata entries that point to missing files.
+  if (fileBlob) {
+    await planFileStore.setItem(plan.id, fileBlob)
+  }
+
   planMetaGuardedWrite((meta) => {
     const existing = meta.findIndex(p => p.id === plan.id)
     if (existing >= 0) {
@@ -103,11 +109,6 @@ export async function savePlan(plan, fileBlob) {
     }
     return meta
   })
-
-  // Store file blob in IndexedDB
-  if (fileBlob) {
-    await planFileStore.setItem(plan.id, fileBlob)
-  }
 
   return plan
 }
