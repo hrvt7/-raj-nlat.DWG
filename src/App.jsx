@@ -25,7 +25,7 @@ import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, groupItemsBySystem, groupItemsByFloor } from './data/quoteDefaults.js'
 import { quoteDisplayTotals } from './utils/quoteDisplayTotals.js'
-import { generateBOMRows } from './utils/bomExport.js'
+import { generateBOMRows, exportBOM } from './utils/bomExport.js'
 import { createQuote } from './utils/createQuote.js'
 import { seedDemoData } from './data/demoSeed.js'
 
@@ -514,7 +514,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             </div>
           )}
           <button
-            onClick={async () => { const { exportBOM } = await import('./utils/bomExport.js'); exportBOM(quote) }}
+            onClick={() => exportBOM(quote)}
             disabled={!hasBom}
             style={{
               width: '100%', padding: '10px', borderRadius: 9,
