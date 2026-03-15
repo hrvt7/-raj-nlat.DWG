@@ -16,7 +16,7 @@ const MaterialsPage          = lazy(() => import('./pages/Materials.jsx'))
 const LegendPanel            = lazy(() => import('./components/LegendPanel.jsx'))
 const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPanel.jsx'))
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
-import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote } from './data/store.js'
+import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
 import { QuoteStatusBadge, fmt, ToastProvider } from './components/ui.jsx'
@@ -1108,6 +1108,7 @@ function SaaSShell() {
   const [settings, setSettings] = useState(loadSettings)
   const [materials, setMaterials] = useState(loadMaterials)
   const [quotes, setQuotes] = useState(loadQuotes)
+  const [asmRev, setAsmRev] = useState(0)         // cross-tab assemblies reload key
   const [viewingQuote, setViewingQuote] = useState(null)
 
   // ── Auth state ─────────────────────────────────────────────────────────────
@@ -1394,8 +1395,11 @@ function SaaSShell() {
     const handler = (e) => {
       if (!e.key || !e.key.startsWith('takeoffpro_')) return
       // Reload relevant state based on which key changed
-      if (e.key.includes('quotes')) setQuotes(loadQuotes())
-      if (e.key.includes('settings')) setSettings(loadSettings())
+      if (e.key.includes('quotes'))     setQuotes(loadQuotes())
+      if (e.key.includes('settings'))   setSettings(loadSettings())
+      if (e.key.includes('assemblies')) setAsmRev(r => r + 1)
+      if (e.key.includes('materials'))  setMaterials(loadMaterials())
+      if (e.key.includes('work_items')) setWorkItems(loadWorkItems())
     }
     window.addEventListener('storage', handler)
     return () => window.removeEventListener('storage', handler)
@@ -1570,7 +1574,7 @@ function SaaSShell() {
                   legendPanelOpen={!!legendPanelData}
                 />
               ) : page === 'assemblies' ? (
-                <AssembliesPage activeTrade={activeTrade} />
+                <AssembliesPage key={asmRev} activeTrade={activeTrade} />
               ) : page === 'settings' ? (
                 <Settings settings={settings} materials={materials}
                   onSettingsChange={handleSettingsChange}
