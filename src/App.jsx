@@ -1110,6 +1110,7 @@ function SaaSShell() {
   const [quotes, setQuotes] = useState(loadQuotes)
   const [asmRev, setAsmRev] = useState(0)         // cross-tab assemblies reload key
   const [projRev, setProjRev] = useState(0)       // cross-tab projects reload key
+  const [planRev, setPlanRev] = useState(0)       // cross-tab plans reload key
   const [viewingQuote, setViewingQuote] = useState(null)
 
   // ── Auth state ─────────────────────────────────────────────────────────────
@@ -1402,6 +1403,7 @@ function SaaSShell() {
       if (e.key.includes('materials'))  setMaterials(loadMaterials())
       if (e.key.includes('work_items'))    setWorkItems(loadWorkItems())
       if (e.key.includes('projects_meta')) setProjRev(r => r + 1)
+      if (e.key.includes('plans_meta'))    setPlanRev(r => r + 1)
     }
     window.addEventListener('storage', handler)
     return () => window.removeEventListener('storage', handler)
@@ -1556,7 +1558,7 @@ function SaaSShell() {
               ) : page === 'materials' ? (
                 <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
               ) : page === 'projektek' ? (
-                <ProjektekPage key={projRev}
+                <ProjektekPage key={`${projRev}-${planRev}`}
                   onOpenFile={(f, plan) => {
                     if (viewerDirtyRef.current) { showAutoSaveToast(); viewerDirtyRef.current = false }
                     setFelmeresFile(f); setFelmeresOpenPlan(plan || null); setPage('projektek-workspace')

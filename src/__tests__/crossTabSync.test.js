@@ -1,6 +1,7 @@
 // ─── Cross-Tab Storage Sync — Regression Tests ─────────────────────────────
 // Verifies that the App.jsx storage-event handler dispatches reloads for all
-// synced keys: quotes, settings, assemblies, materials, work_items, projects_meta.
+// synced keys: quotes, settings, assemblies, materials, work_items,
+// projects_meta, plans_meta.
 //
 // The handler pattern is:
 //   window.addEventListener('storage', (e) => {
@@ -11,6 +12,7 @@
 //     if (e.key.includes('materials'))     → setMaterials(loadMaterials())
 //     if (e.key.includes('work_items'))    → setWorkItems(loadWorkItems())
 //     if (e.key.includes('projects_meta')) → setProjRev(r => r + 1)
+//     if (e.key.includes('plans_meta'))    → setPlanRev(r => r + 1)
 //   })
 //
 // This test exercises the key-matching logic in isolation to ensure
@@ -22,7 +24,7 @@ import { describe, it, expect } from 'vitest'
 // ── Simulate the handler's key-matching logic ─────────────────────────────
 // Extracted from App.jsx so the test stays in sync with the real handler.
 
-const SYNCED_KEYS = ['quotes', 'settings', 'assemblies', 'materials', 'work_items', 'projects_meta']
+const SYNCED_KEYS = ['quotes', 'settings', 'assemblies', 'materials', 'work_items', 'projects_meta', 'plans_meta']
 
 function simulateHandler(storageKey) {
   if (!storageKey || !storageKey.startsWith('takeoffpro_')) return []
@@ -33,6 +35,7 @@ function simulateHandler(storageKey) {
   if (storageKey.includes('materials'))     triggered.push('materials')
   if (storageKey.includes('work_items'))    triggered.push('work_items')
   if (storageKey.includes('projects_meta')) triggered.push('projects_meta')
+  if (storageKey.includes('plans_meta'))    triggered.push('plans_meta')
   return triggered
 }
 
@@ -66,6 +69,10 @@ describe('Cross-tab storage sync key matching', () => {
     expect(simulateHandler('takeoffpro_projects_meta')).toEqual(['projects_meta'])
   })
 
+  it('takeoffpro_plans_meta triggers plans_meta reload', () => {
+    expect(simulateHandler('takeoffpro_plans_meta')).toEqual(['plans_meta'])
+  })
+
   // ── Non-synced keys must NOT trigger any reload ──────────────────────────
 
   it('takeoffpro_templates does not trigger any reload', () => {
@@ -74,10 +81,6 @@ describe('Cross-tab storage sync key matching', () => {
 
   it('takeoffpro_asm_stats does not trigger any reload', () => {
     expect(simulateHandler('takeoffpro_asm_stats')).toEqual([])
-  })
-
-  it('takeoffpro_plans_meta does not trigger any reload', () => {
-    expect(simulateHandler('takeoffpro_plans_meta')).toEqual([])
   })
 
   it('takeoffpro_recmem_proj_xxx does not trigger any reload', () => {
@@ -109,24 +112,33 @@ describe('Cross-tab storage sync key matching', () => {
   // ── No key substring collision ───────────────────────────────────────────
 
   it('asm_stats does not accidentally trigger assemblies (no "assemblies" substring)', () => {
-    // 'takeoffpro_asm_stats' does NOT contain 'assemblies' — verify
     expect('takeoffpro_asm_stats'.includes('assemblies')).toBe(false)
     expect(simulateHandler('takeoffpro_asm_stats')).toEqual([])
   })
 
   it('plans_meta does not accidentally trigger projects_meta', () => {
-    // 'takeoffpro_plans_meta' does NOT contain 'projects_meta' — verify
     expect('takeoffpro_plans_meta'.includes('projects_meta')).toBe(false)
-    expect(simulateHandler('takeoffpro_plans_meta')).toEqual([])
+    expect(simulateHandler('takeoffpro_plans_meta')).toEqual(['plans_meta'])
+  })
+
+  it('projects_meta does not accidentally trigger plans_meta', () => {
+    // 'takeoffpro_projects_meta' does NOT contain 'plans_meta' — verify
+    expect('takeoffpro_projects_meta'.includes('plans_meta')).toBe(false)
+    expect(simulateHandler('takeoffpro_projects_meta')).toEqual(['projects_meta'])
   })
 
   it('recmem_proj_ does not accidentally trigger projects_meta', () => {
-    // 'takeoffpro_recmem_proj_abc' does NOT contain 'projects_meta' — verify
     expect('takeoffpro_recmem_proj_abc'.includes('projects_meta')).toBe(false)
     expect(simulateHandler('takeoffpro_recmem_proj_abc')).toEqual([])
   })
 
-  it('all 6 synced keys are covered', () => {
+  it('legend_templates_meta does not accidentally trigger plans_meta', () => {
+    // 'takeoffpro_legend_templates_meta' does NOT contain 'plans_meta' — verify
+    expect('takeoffpro_legend_templates_meta'.includes('plans_meta')).toBe(false)
+    expect(simulateHandler('takeoffpro_legend_templates_meta')).toEqual([])
+  })
+
+  it('all 7 synced keys are covered', () => {
     // Exhaustive: every SYNCED_KEY must trigger exactly itself
     const LS_KEYS = {
       quotes:        'takeoffpro_quotes',
@@ -135,6 +147,7 @@ describe('Cross-tab storage sync key matching', () => {
       materials:     'takeoffpro_materials',
       work_items:    'takeoffpro_work_items',
       projects_meta: 'takeoffpro_projects_meta',
+      plans_meta:    'takeoffpro_plans_meta',
     }
     for (const [name, lsKey] of Object.entries(LS_KEYS)) {
       const triggered = simulateHandler(lsKey)
