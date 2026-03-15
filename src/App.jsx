@@ -292,7 +292,33 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       companyPhone: settings?.company?.phone || '',
     })
     if (typeof window !== 'undefined') window.__lastMailtoUrl = url
+
+    // Detect whether a mail client actually opened.
+    // If the page loses focus/visibility within ~1.5 s the OS handed off to a
+    // mail app → suppress the fallback.  Otherwise show a helpful toast.
+    let opened = false
+    const onLeave = () => { opened = true }
+    window.addEventListener('blur', onLeave)
+    document.addEventListener('visibilitychange', onLeave)
+
     window.location.href = url
+
+    setTimeout(() => {
+      window.removeEventListener('blur', onLeave)
+      document.removeEventListener('visibilitychange', onLeave)
+      if (!opened) {
+        const to = (editClientEmail || '').trim()
+        if (to && navigator.clipboard) {
+          navigator.clipboard.writeText(to).then(() => {
+            showToast('✉', `Nem nyílt meg email kliens. A címzett (${to}) a vágólapra másolva.`, '#FF6B6B')
+          }).catch(() => {
+            showToast('✉', 'Nem nyílt meg email kliens. Kérjük ellenőrizze az alapértelmezett levelező beállítást.', '#FF6B6B')
+          })
+        } else {
+          showToast('✉', 'Nem nyílt meg email kliens. Kérjük ellenőrizze az alapértelmezett levelező beállítást.', '#FF6B6B')
+        }
+      }
+    }, 1500)
   }
 
   const buildLiveQuoteHtml = async () => {
