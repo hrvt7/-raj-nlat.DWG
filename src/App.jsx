@@ -196,12 +196,8 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const newSubtotal = totalMaterials + newTotalLabor
   const newMarkupAmount = Math.round(newSubtotal * (Number(editMarkup) / 100))
   const net = newSubtotal + newMarkupAmount
-  const vat = Math.round(net * vatPct / 100)
-
-  // ── Per-component gross (net + ÁFA) for KPI cards ─────────────────────────
-  const grossMaterials = totalMaterials + Math.round(totalMaterials * vatPct / 100)
-  const grossLabor = newTotalLabor + Math.round(newTotalLabor * vatPct / 100)
-  const grossMarkup = newMarkupAmount + Math.round(newMarkupAmount * vatPct / 100)
+  // (Per-component gross values are provided by quoteDisplayTotals below,
+  //  with proportional ÁFA allocation so they always sum to displayGross.)
 
   // ── Save handler: build updated quote, persist ─────────────────────────────
   const handleMetaSave = () => {
@@ -351,7 +347,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const laborItems = (quote.items || []).filter(i => i.type === 'labor')
 
   // ── Display values per outputMode (internal data untouched) ──────────────
-  const { displayNet, displayGross } = quoteDisplayTotals({
+  const { displayNet, displayGross, grossMaterials, grossLabor, grossMarkup, markupAmount } = quoteDisplayTotals({
     outputMode, totalLabor: newTotalLabor, totalMaterials,
     markupPct: Number(editMarkup) / 100, vatPct,
   })
@@ -454,7 +450,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               <span>{fmt(grossMarkup)}</span>
               <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>Ft</span>
             </div>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>Nettó {fmt(newMarkupAmount)} + ÁFA {vatPct}%</div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>Nettó {fmt(markupAmount)} + ÁFA {vatPct}%</div>
           </div>
         )}
         {/* Hours */}
