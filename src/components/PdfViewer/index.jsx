@@ -364,24 +364,41 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     return () => { cancelled = true }
   }, [file])
 
-  // ── Render page ──
-  const renderPageRef = useRef(null)
+  // ── Render page (concurrency-safe: latest render wins) ──
+  const renderPageRef = useRef(null)   // current pdf.js RenderTask (for cancellation)
+  const renderIdRef = useRef(0)        // monotonic sequence id — stale render detection
   const renderPage = useCallback(async (doc, num) => {
     if (!doc || !pdfCanvasRef.current) return
+
+    // Cancel any in-flight render before starting a new one
+    if (renderPageRef.current) {
+      renderPageRef.current.cancel()
+      renderPageRef.current = null
+    }
+    const renderId = ++renderIdRef.current
+
     try {
       const page = await doc.getPage(num)
+      if (renderId !== renderIdRef.current) return // superseded while awaiting getPage
+
       const viewport = page.getViewport({ scale: 2, rotation: rotationRef.current }) // hi-dpi + rotation
       // Store unrotated page dimensions for rotation-invariant coordinate conversion
       const unrotVp = page.getViewport({ scale: 2, rotation: 0 })
       unrotatedDimsRef.current = { w: unrotVp.width / 2, h: unrotVp.height / 2 }
       const canvas = pdfCanvasRef.current
+      if (!canvas) return // unmounted during await
       canvas.width = viewport.width
       canvas.height = viewport.height
       viewRef.current.pageWidth = viewport.width / 2
       viewRef.current.pageHeight = viewport.height / 2
 
       const ctx = canvas.getContext('2d')
-      await page.render({ canvasContext: ctx, viewport }).promise
+      const renderTask = page.render({ canvasContext: ctx, viewport })
+      renderPageRef.current = renderTask
+      await renderTask.promise
+      renderPageRef.current = null
+
+      if (renderId !== renderIdRef.current) return // superseded while rendering
 
       // Fit view initially
       if (containerRef.current) {
@@ -424,6 +441,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         })
       }
     } catch (err) {
+      // pdf.js throws RenderingCancelledException when we cancel an in-flight
+      // render — this is expected and not an error.
+      if (err?.name === 'RenderingCancelledException') return
       console.error('Page render error:', err)
     }
   }, [applyFocus])
