@@ -26,6 +26,9 @@ const PROMO_PROJECT_COUNT = 2   // 2+ distinct projects → promote to account
 // ── Max raw blockNames tracked per entry (memory hygiene) ────────────────────
 const MAX_BLOCK_NAMES = 20
 
+// ── Max account-level entries (LRU eviction above this cap) ──────────────────
+export const MAX_ACCOUNT_ENTRIES = 2000
+
 // ── Max signature length (truncate absurdly long names) ──────────────────────
 const MAX_SIGNATURE_LENGTH = 120
 
@@ -675,7 +678,30 @@ export function maybePromoteToAccount(signature) {
     }
 
     save(acctKey, acctMem)
+    evictAccountIfNeeded(acctMem, acctKey)
   }
+}
+
+/**
+ * Evict oldest account-memory entries when size exceeds MAX_ACCOUNT_ENTRIES.
+ * Eviction is LRU by lastConfirmed timestamp (oldest evicted first).
+ * Saves the pruned object only if eviction actually occurred.
+ * @param {Object} acctMem — account memory object (mutated in place)
+ * @param {string} acctKey — localStorage key
+ */
+function evictAccountIfNeeded(acctMem, acctKey) {
+  const keys = Object.keys(acctMem)
+  if (keys.length <= MAX_ACCOUNT_ENTRIES) return
+
+  // Sort entries by lastConfirmed ascending (oldest first)
+  keys.sort((a, b) => (acctMem[a].lastConfirmed || 0) - (acctMem[b].lastConfirmed || 0))
+
+  const excess = keys.length - MAX_ACCOUNT_ENTRIES
+  for (let i = 0; i < excess; i++) {
+    delete acctMem[keys[i]]
+  }
+
+  save(acctKey, acctMem)
 }
 
 // ── Conflict storage ─────────────────────────────────────────────────────────

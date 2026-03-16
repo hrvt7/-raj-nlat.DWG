@@ -27,6 +27,8 @@ import {
   forgetEntry,
   getMemoryStats,
   getAccountId,
+  MAX_ACCOUNT_ENTRIES,
+  maybePromoteToAccount,
 } from '../data/recognitionMemory.js'
 
 // ─── normalizeSignature ──────────────────────────────────────────────────────
@@ -336,5 +338,92 @@ describe('Edge cases', () => {
     const result = lookupMemory('ACCT_TEST', null)
     expect(result).not.toBeNull()
     expect(result.tier).toBe('account')
+  })
+})
+
+// ─── Account memory LRU eviction ──────────────────────────────────────────────
+
+describe('Account memory LRU eviction', () => {
+  it('keeps all entries when below MAX_ACCOUNT_ENTRIES', () => {
+    // Use names that produce distinct signatures (no trailing digits to strip)
+    const names = ['KEEP_ALPHA', 'KEEP_BETA', 'KEEP_GAMMA', 'KEEP_DELTA', 'KEEP_EPSILON']
+    for (const name of names) {
+      recordConfirmation(name, 'ASM-001', 'PRJ-1', 'user_override')
+      recordConfirmation(name, 'ASM-001', 'PRJ-2', 'user_override')
+    }
+    // Verify promotion happened by checking account key directly
+    const acctKey = `takeoffpro_recmem_account_${getAccountId()}`
+    const acctMem = JSON.parse(localStorage.getItem(acctKey) || '{}')
+    expect(Object.keys(acctMem).length).toBe(5)
+  })
+
+  it('evicts oldest entries when exceeding MAX_ACCOUNT_ENTRIES', () => {
+    const acctKey = `takeoffpro_recmem_account_${getAccountId()}`
+
+    // Seed account memory directly with MAX_ACCOUNT_ENTRIES entries
+    const acctMem = {}
+    for (let i = 0; i < MAX_ACCOUNT_ENTRIES; i++) {
+      acctMem[`SIG_${i}`] = {
+        signature: `SIG_${i}`,
+        asmId: 'ASM-001',
+        confirmCount: 1,
+        projectIds: ['PRJ-1', 'PRJ-2'],
+        blockNames: [],
+        firstConfirmed: 1000 + i,   // oldest = lowest i
+        lastConfirmed: 1000 + i,
+        source: 'promotion',
+        signalType: 'block_name',
+      }
+    }
+    localStorage.setItem(acctKey, JSON.stringify(acctMem))
+
+    // Now promote one more entry via the normal flow — this should trigger eviction
+    recordConfirmation('OVERFLOW_BLK', 'ASM-099', 'PRJ-A', 'user_override')
+    recordConfirmation('OVERFLOW_BLK', 'ASM-099', 'PRJ-B', 'user_override')
+
+    const final = JSON.parse(localStorage.getItem(acctKey))
+    const finalKeys = Object.keys(final)
+    expect(finalKeys.length).toBeLessThanOrEqual(MAX_ACCOUNT_ENTRIES)
+
+    // The newly promoted entry should be retained
+    const newSig = normalizeSignature('OVERFLOW_BLK')
+    expect(final[newSig]).toBeDefined()
+    expect(final[newSig].asmId).toBe('ASM-099')
+
+    // The oldest seeded entry (SIG_0, lastConfirmed=1000) should have been evicted
+    expect(final['SIG_0']).toBeUndefined()
+  })
+
+  it('retains most recently confirmed entries during eviction', () => {
+    const acctKey = `takeoffpro_recmem_account_${getAccountId()}`
+
+    // Seed account memory at exactly the cap
+    const acctMem = {}
+    for (let i = 0; i < MAX_ACCOUNT_ENTRIES; i++) {
+      acctMem[`REC_${i}`] = {
+        signature: `REC_${i}`,
+        asmId: 'ASM-001',
+        confirmCount: 1,
+        projectIds: ['PRJ-1', 'PRJ-2'],
+        blockNames: [],
+        firstConfirmed: i,
+        lastConfirmed: i,   // REC_1999 is newest, REC_0 is oldest
+        source: 'promotion',
+        signalType: 'block_name',
+      }
+    }
+    localStorage.setItem(acctKey, JSON.stringify(acctMem))
+
+    // Trigger promotion of one new entry
+    recordConfirmation('RECENT_WINNER', 'ASM-050', 'PRJ-X', 'user_override')
+    recordConfirmation('RECENT_WINNER', 'ASM-050', 'PRJ-Y', 'user_override')
+
+    const final = JSON.parse(localStorage.getItem(acctKey))
+
+    // The newest seeded entry should survive
+    expect(final[`REC_${MAX_ACCOUNT_ENTRIES - 1}`]).toBeDefined()
+
+    // The oldest seeded entry should be evicted
+    expect(final['REC_0']).toBeUndefined()
   })
 })
