@@ -7,7 +7,7 @@
 import localforage from 'localforage'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
-import { supabaseConfigured, savePlansRemote } from '../supabase.js'
+import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote } from '../supabase.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -226,6 +226,12 @@ function _notifyAnnotListeners(planId, annotations) {
  */
 export async function savePlanAnnotations(planId, annotations, opts) {
   await planAnnotStore.setItem(planId, annotations)
+  // Fire-and-forget remote backup (only when Supabase is configured)
+  if (supabaseConfigured) {
+    saveAnnotationsRemote(planId, annotations).catch(err =>
+      console.warn('[planStore] remote annotation backup failed:', err.message)
+    )
+  }
   // Update plan meta to reflect counts (guarded against cross-tab races)
   planMetaGuardedWrite((meta) => {
     const idx = meta.findIndex(p => p.id === planId)

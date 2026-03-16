@@ -140,6 +140,25 @@ export const saveProjectsRemote    = (d) => upsertUserBlob('projects', d)
 export const loadPlansRemote       = () => loadUserBlob('plans_meta')
 export const savePlansRemote       = (d) => upsertUserBlob('plans_meta', d)
 
+// ── Plan annotations (per-plan, keyed by user_id + plan_id) ─────────────────
+export async function saveAnnotationsRemote(planId, annotations) {
+  requireConfig('saveAnnotationsRemote')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const { error } = await supabase.from('plan_annotations').upsert(
+    { user_id: user.id, plan_id: planId, data: annotations },
+    { onConflict: 'user_id,plan_id' }
+  )
+  if (error) throw error
+}
+export async function loadAnnotationsRemote(planId) {
+  requireConfig('loadAnnotationsRemote')
+  const { data, error } = await supabase.from('plan_annotations')
+    .select('data').eq('plan_id', planId).single()
+  if (error && error.code !== 'PGRST116') throw error
+  return data?.data || null
+}
+
 // ── Subscription ───────────────────────────────────────────────────────────────
 export async function getSubscriptionStatus() {
   requireConfig('getSubscriptionStatus')
