@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -1396,6 +1396,11 @@ function SaaSShell() {
   const handleSettingsChange = newSettings => {
     saveSettings(newSettings)
     setSettings(newSettings)
+    if (session) {
+      saveSettingsRemote(newSettings).catch(err => {
+        console.error('[TakeoffPro] Remote settings sync failed:', err.message)
+      })
+    }
   }
 
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false)
