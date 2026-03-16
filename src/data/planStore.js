@@ -89,6 +89,9 @@ function planMetaGuardedWrite(mutator) {
   }, savePlansMeta)
 }
 
+/** Bulk-replace all plan metadata (used by remote recovery). */
+export function saveAllPlansMeta(plans) { savePlansMeta(plans) }
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function generatePlanId() {

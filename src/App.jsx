@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -17,7 +17,7 @@ const LegendPanel            = lazy(() => import('./components/LegendPanel.jsx')
 const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPanel.jsx'))
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
 import { loadSettings, saveSettings, loadWorkItems, saveWorkItems, loadMaterials, saveMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies, saveAssemblies } from './data/store.js'
-import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
+import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta, saveAllPlansMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, saveAllProjects, loadProjects, getProject } from './data/projectStore.js'
 import { QuoteStatusBadge, fmt, ToastProvider } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
@@ -1224,10 +1224,11 @@ function SaaSShell() {
     const materialsNeedRecovery = isArrayRecoverable('takeoffpro_materials')
     const workItemsNeedRecovery = isArrayRecoverable('takeoffpro_work_items')
     const projectsNeedRecovery = isEnvelopeRecoverable('takeoffpro_projects_meta')
+    const plansNeedRecovery = isEnvelopeRecoverable('takeoffpro_plans_meta')
 
     if (!settingsNeedsRecovery && !quotesNeedsRecovery &&
         !assembliesNeedRecovery && !materialsNeedRecovery && !workItemsNeedRecovery &&
-        !projectsNeedRecovery) return
+        !projectsNeedRecovery && !plansNeedRecovery) return
 
     ;(async () => {
       try {
@@ -1262,6 +1263,12 @@ function SaaSShell() {
           const remote = await loadProjectsRemote()
           if (Array.isArray(remote) && remote.length > 0) {
             saveAllProjects(remote); setProjRev(r => r + 1)
+          }
+        }
+        if (plansNeedRecovery) {
+          const remote = await loadPlansRemote()
+          if (Array.isArray(remote) && remote.length > 0) {
+            saveAllPlansMeta(remote); setPlanRev(r => r + 1)
           }
         }
       } catch (err) {
