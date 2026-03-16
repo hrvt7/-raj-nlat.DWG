@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -16,7 +16,7 @@ const MaterialsPage          = lazy(() => import('./pages/Materials.jsx'))
 const LegendPanel            = lazy(() => import('./components/LegendPanel.jsx'))
 const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPanel.jsx'))
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
-import { loadSettings, saveSettings, loadWorkItems, loadMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies } from './data/store.js'
+import { loadSettings, saveSettings, loadWorkItems, saveWorkItems, loadMaterials, saveMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies, saveAssemblies } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
 import { QuoteStatusBadge, fmt, ToastProvider } from './components/ui.jsx'
@@ -1195,10 +1195,25 @@ function SaaSShell() {
         return !arr || arr.length === 0
       } catch { return true } // malformed JSON
     }
+    // Catalog entities: recoverable when missing, unparseable, or empty array
+    const isArrayRecoverable = (lsKey) => {
+      try {
+        const raw = localStorage.getItem(lsKey)
+        if (raw === null) return true
+        const parsed = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return true
+        return parsed.length === 0
+      } catch { return true } // malformed JSON
+    }
 
     const settingsNeedsRecovery = isSettingsRecoverable()
     const quotesNeedsRecovery = isQuotesRecoverable()
-    if (!settingsNeedsRecovery && !quotesNeedsRecovery) return
+    const assembliesNeedRecovery = isArrayRecoverable('takeoffpro_assemblies')
+    const materialsNeedRecovery = isArrayRecoverable('takeoffpro_materials')
+    const workItemsNeedRecovery = isArrayRecoverable('takeoffpro_work_items')
+
+    if (!settingsNeedsRecovery && !quotesNeedsRecovery &&
+        !assembliesNeedRecovery && !materialsNeedRecovery && !workItemsNeedRecovery) return
 
     ;(async () => {
       try {
@@ -1210,6 +1225,24 @@ function SaaSShell() {
           const rows = await loadQuotesRemote()
           const mapped = (rows || []).map(r => r.pricing_data).filter(Boolean)
           if (mapped.length > 0) { saveQuotes(mapped); setQuotes(loadQuotes()) }
+        }
+        if (assembliesNeedRecovery) {
+          const remote = await loadAssembliesRemote()
+          if (Array.isArray(remote) && remote.length > 0) {
+            saveAssemblies(remote); setAsmRev(r => r + 1)
+          }
+        }
+        if (materialsNeedRecovery) {
+          const remote = await loadMaterialsRemote()
+          if (Array.isArray(remote) && remote.length > 0) {
+            saveMaterials(remote); setMaterials(loadMaterials())
+          }
+        }
+        if (workItemsNeedRecovery) {
+          const remote = await loadWorkItemsRemote()
+          if (Array.isArray(remote) && remote.length > 0) {
+            saveWorkItems(remote); setWorkItems(loadWorkItems())
+          }
         }
       } catch (err) {
         console.warn('[App] Remote read-back failed (non-blocking):', err.message)
