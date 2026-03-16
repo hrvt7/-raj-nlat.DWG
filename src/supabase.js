@@ -135,6 +135,8 @@ export const loadMaterialsRemote   = () => loadUserBlob('materials')
 export const saveMaterialsRemote   = (d) => upsertUserBlob('materials', d)
 export const loadAssembliesRemote  = () => loadUserBlob('assemblies')
 export const saveAssembliesRemote  = (d) => upsertUserBlob('assemblies', d)
+export const loadProjectsRemote    = () => loadUserBlob('projects')
+export const saveProjectsRemote    = (d) => upsertUserBlob('projects', d)
 
 // ── Subscription ───────────────────────────────────────────────────────────────
 export async function getSubscriptionStatus() {

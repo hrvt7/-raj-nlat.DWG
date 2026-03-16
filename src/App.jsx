@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -18,7 +18,7 @@ const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPa
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
 import { loadSettings, saveSettings, loadWorkItems, saveWorkItems, loadMaterials, saveMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies, saveAssemblies } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta } from './data/planStore.js'
-import { generateProjectId, saveProject, loadProjects, getProject } from './data/projectStore.js'
+import { generateProjectId, saveProject, saveAllProjects, loadProjects, getProject } from './data/projectStore.js'
 import { QuoteStatusBadge, fmt, ToastProvider } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
@@ -1206,14 +1206,28 @@ function SaaSShell() {
       } catch { return true } // malformed JSON
     }
 
+    // Versioned envelope entities: { _v, data: [...] } or legacy raw array
+    const isEnvelopeRecoverable = (lsKey) => {
+      try {
+        const raw = localStorage.getItem(lsKey)
+        if (raw === null) return true
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return true
+        const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : null)
+        return !arr || arr.length === 0
+      } catch { return true }
+    }
+
     const settingsNeedsRecovery = isSettingsRecoverable()
     const quotesNeedsRecovery = isQuotesRecoverable()
     const assembliesNeedRecovery = isArrayRecoverable('takeoffpro_assemblies')
     const materialsNeedRecovery = isArrayRecoverable('takeoffpro_materials')
     const workItemsNeedRecovery = isArrayRecoverable('takeoffpro_work_items')
+    const projectsNeedRecovery = isEnvelopeRecoverable('takeoffpro_projects_meta')
 
     if (!settingsNeedsRecovery && !quotesNeedsRecovery &&
-        !assembliesNeedRecovery && !materialsNeedRecovery && !workItemsNeedRecovery) return
+        !assembliesNeedRecovery && !materialsNeedRecovery && !workItemsNeedRecovery &&
+        !projectsNeedRecovery) return
 
     ;(async () => {
       try {
@@ -1242,6 +1256,12 @@ function SaaSShell() {
           const remote = await loadWorkItemsRemote()
           if (Array.isArray(remote) && remote.length > 0) {
             saveWorkItems(remote); setWorkItems(loadWorkItems())
+          }
+        }
+        if (projectsNeedRecovery) {
+          const remote = await loadProjectsRemote()
+          if (Array.isArray(remote) && remote.length > 0) {
+            saveAllProjects(remote); setProjRev(r => r + 1)
           }
         }
       } catch (err) {

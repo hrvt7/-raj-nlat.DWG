@@ -4,6 +4,7 @@
 // Stored in localStorage with versioned envelope (same as quote + plan stores).
 
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
+import { supabaseConfigured, saveProjectsRemote } from '../supabase.js'
 
 const LS_KEY = 'takeoffpro_projects_meta'
 
@@ -26,7 +27,16 @@ function saveMeta(projects) {
     console.error('[projectStore] save failed:', err)
     window.dispatchEvent(new CustomEvent('takeoffpro:storage-error', { detail: { error: err.message } }))
   }
+  // Fire-and-forget remote backup (no-op if unconfigured or no session)
+  if (supabaseConfigured) {
+    saveProjectsRemote(projects).catch(err => {
+      console.error('[projectStore] Remote sync failed:', err.message)
+    })
+  }
 }
+
+/** Bulk-replace all projects (used by remote recovery). */
+export function saveAllProjects(projects) { saveMeta(projects) }
 
 // ── ID generator ──────────────────────────────────────────────────────────────
 
