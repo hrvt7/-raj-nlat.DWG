@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { C, fmt, Card, Button, QuoteStatusBadge, EmptyState, Input, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { checkQuotePlanStatus } from '../utils/quoteOrphans.js'
 import { isDemoSeeded, seedDemoData } from '../data/demoSeed.js'
+import { deleteQuoteRemote } from '../supabase.js'
 // saveQuotes handled by parent via onQuotesChange
 
 const STATUS_TABS = [
@@ -12,7 +13,7 @@ const STATUS_TABS = [
   { key: 'lost',    label: 'Elveszett' },
 ]
 
-export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQuote, onRefresh }) {
+export default function QuotesPage({ quotes, onQuotesChange, session, onNavigate, onOpenQuote, onRefresh }) {
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -40,6 +41,11 @@ export default function QuotesPage({ quotes, onQuotesChange, onNavigate, onOpenQ
       onConfirm: () => {
         const updated = quotes.filter(q => q.id !== id)
         onQuotesChange(updated)
+        if (session) {
+          deleteQuoteRemote(id).catch(err => {
+            console.error('[TakeoffPro] Remote quote delete failed:', err.message)
+          })
+        }
         setConfirmState(null)
         toast.show('Ajánlat törölve', 'success')
       }

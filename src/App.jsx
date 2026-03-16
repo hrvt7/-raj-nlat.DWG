@@ -1581,6 +1581,7 @@ function SaaSShell() {
                   onTryDemo={handleTryDemo} />
               ) : page === 'quotes' ? (
                 <Quotes quotes={quotes} onQuotesChange={handleQuotesChange}
+                  session={session}
                   onNavigate={p => setPage(p)}
                   onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }}
                   onRefresh={() => setQuotes(loadQuotes())} />
