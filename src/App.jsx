@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -1586,9 +1586,9 @@ function SaaSShell() {
                   onOpenQuote={q => { setViewingQuote(q); setPage('quotes') }}
                   onRefresh={() => setQuotes(loadQuotes())} />
               ) : page === 'work-items' ? (
-                <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis) }} activeTrade={activeTrade} />
+                <WorkItems workItems={workItems} onWorkItemsChange={wis => { setWorkItems(wis); if (session) saveWorkItemsRemote(wis).catch(err => console.error('[TakeoffPro] Remote work items sync failed:', err.message)) }} activeTrade={activeTrade} />
               ) : page === 'materials' ? (
-                <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m) }} activeTrade={activeTrade} />
+                <MaterialsPage materials={materials} onMaterialsChange={m => { setMaterials(m); if (session) saveMaterialsRemote(m).catch(err => console.error('[TakeoffPro] Remote materials sync failed:', err.message)) }} activeTrade={activeTrade} />
               ) : page === 'projektek' ? (
                 <ProjektekPage key={`${projRev}-${planRev}`}
                   onOpenFile={(f, plan) => {
@@ -1610,11 +1610,11 @@ function SaaSShell() {
                   legendPanelOpen={!!legendPanelData}
                 />
               ) : page === 'assemblies' ? (
-                <AssembliesPage key={asmRev} activeTrade={activeTrade} />
+                <AssembliesPage key={asmRev} activeTrade={activeTrade} session={session} />
               ) : page === 'settings' ? (
                 <Settings settings={settings} materials={materials}
                   onSettingsChange={handleSettingsChange}
-                  onMaterialsChange={m => { setMaterials(m) }} />
+                  onMaterialsChange={m => { setMaterials(m); if (session) saveMaterialsRemote(m).catch(err => console.error('[TakeoffPro] Remote materials sync failed:', err.message)) }} />
               ) : null}
             </div>
             </Suspense>

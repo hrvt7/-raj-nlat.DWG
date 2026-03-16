@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { C, fmt, Card, Button, Badge, Input, EmptyState, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { WORK_ITEM_CATEGORIES, generateAssemblyId, getAssemblyCompleteness } from '../data/workItemsDb.js'
 import { loadAssemblies, saveAssemblies, loadWorkItems, loadMaterials, loadSettings, getAssemblyUsageCount } from '../data/store.js'
+import { saveAssembliesRemote } from '../supabase.js'
 import { getAssemblyCategoriesForTrade } from '../data/trades.js'
 import { ViewToggle, DraggableCardWrapper, ListTable, ListRow, useDraggableOrder } from '../components/CardGrid.jsx'
 import { CATALOG_GRID_STYLE, catalogCardShell, CARD_HEADER_STYLE, CARD_TITLE_STYLE, CARD_DESC_STYLE, CARD_DIVIDER_STYLE, CARD_STAT_LABEL, CARD_CODE_STYLE } from '../components/catalogCardStyles.js'
 
 // ─── Assembly Editor v3.0 – Grid + Modal ──────────────────────────────────────
 
-export default function AssembliesPage({ activeTrade }) {
+export default function AssembliesPage({ activeTrade, session }) {
   const [assemblies, setAssemblies] = useState(loadAssemblies)
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
@@ -33,7 +34,12 @@ export default function AssembliesPage({ activeTrade }) {
   const persist = useCallback((updated) => {
     setAssemblies(updated)
     saveAssemblies(updated)
-  }, [])
+    if (session) {
+      saveAssembliesRemote(updated).catch(err => {
+        console.error('[TakeoffPro] Remote assemblies sync failed:', err.message)
+      })
+    }
+  }, [session])
 
   const filtered = useMemo(() => assemblies.filter(a => {
     // Trade filter
