@@ -7,13 +7,14 @@ import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 
 const LS_KEYS = {
-  SETTINGS:   'takeoffpro_settings',
-  WORK_ITEMS: 'takeoffpro_work_items',
-  ASSEMBLIES: 'takeoffpro_assemblies',
-  MATERIALS:  'takeoffpro_materials',
-  QUOTES:     'takeoffpro_quotes',
-  TEMPLATES:  'takeoffpro_templates',
-  ASM_STATS:  'takeoffpro_asm_stats',
+  SETTINGS:      'takeoffpro_settings',
+  COMPANY_LOGO:  'takeoffpro_company_logo',
+  WORK_ITEMS:    'takeoffpro_work_items',
+  ASSEMBLIES:    'takeoffpro_assemblies',
+  MATERIALS:     'takeoffpro_materials',
+  QUOTES:        'takeoffpro_quotes',
+  TEMPLATES:     'takeoffpro_templates',
+  ASM_STATS:     'takeoffpro_asm_stats',
 }
 
 // ─── Default settings ────────────────────────────────────────────────────────
@@ -357,11 +358,51 @@ export function loadSettings() {
     merged.quote = { ...DEFAULT_SETTINGS.quote, ...stored.quote }
   }
 
+  // ── Migration: move embedded logo_base64 to dedicated key ──────────────
+  if (stored?.company?.logo_base64) {
+    const existingDedicated = loadCompanyLogo()
+    if (!existingDedicated) {
+      saveCompanyLogo(stored.company.logo_base64)
+    }
+    // Strip logo from settings blob and persist the clean version
+    delete stored.company.logo_base64
+    save(LS_KEYS.SETTINGS, stored)
+  }
+
+  // ── Rehydrate logo from dedicated key into runtime object ──────────────
+  merged.company = { ...merged.company, logo_base64: loadCompanyLogo() }
+
   return merged
 }
 export function saveSettings(settings) {
-  save(LS_KEYS.SETTINGS, settings)
+  // Strip logo_base64 from the settings blob — it lives in its own key
+  const toSave = { ...settings }
+  if (toSave.company) {
+    toSave.company = { ...toSave.company }
+    delete toSave.company.logo_base64
+  }
+  save(LS_KEYS.SETTINGS, toSave)
 }
+
+// ─── Company logo — dedicated localStorage key ──────────────────────────────
+export function loadCompanyLogo() {
+  try {
+    return localStorage.getItem(LS_KEYS.COMPANY_LOGO) || ''
+  } catch { return '' }
+}
+
+export function saveCompanyLogo(dataUrl) {
+  try {
+    if (dataUrl) {
+      localStorage.setItem(LS_KEYS.COMPANY_LOGO, dataUrl)
+    } else {
+      localStorage.removeItem(LS_KEYS.COMPANY_LOGO)
+    }
+  } catch (err) {
+    console.error('[TakeoffPro] logo save failed:', err.message)
+  }
+}
+
 
 export function loadWorkItems() {
   return load(LS_KEYS.WORK_ITEMS, WORK_ITEMS_DEFAULT)

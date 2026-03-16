@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, Input, SectionHeader, ConfirmDialog, useToast } from '../components/ui.jsx'
-import { saveSettings, saveMaterials, DEFAULT_MATERIALS, loadQuotes } from '../data/store.js'
+import { saveSettings, saveMaterials, DEFAULT_MATERIALS, loadQuotes, saveCompanyLogo } from '../data/store.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { loadProjects } from '../data/projectStore.js'
 import { loadPlans } from '../data/planStore.js'
@@ -102,7 +102,10 @@ function CompanyTab({ settings, update }) {
     if (!file) return
     if (file.size > 500 * 1024) { alert('A logó mérete max. 500 KB lehet.'); return }
     const reader = new FileReader()
-    reader.onload = ev => update('company.logo_base64', ev.target.result)
+    reader.onload = ev => {
+      saveCompanyLogo(ev.target.result)
+      update('company.logo_base64', ev.target.result)
+    }
     reader.readAsDataURL(file)
   }
 
@@ -143,7 +146,7 @@ function CompanyTab({ settings, update }) {
               {c.logo_base64 ? '🔄 Logó cseréje' : '📁 Logó feltöltése'}
             </button>
             {c.logo_base64 && (
-              <button onClick={() => update('company.logo_base64', '')} style={{
+              <button onClick={() => { saveCompanyLogo(''); update('company.logo_base64', '') }} style={{
                 padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
                 background: C.redDim, border: '1px solid rgba(255,107,107,0.2)',
                 color: C.red, fontFamily: 'DM Mono', fontSize: 11,
