@@ -7,6 +7,7 @@
 import localforage from 'localforage'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
+import { supabaseConfigured, savePlansRemote } from '../supabase.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -68,6 +69,12 @@ function savePlansMeta(plans) {
         detail: { key: LS_KEY, error: err.message, type: 'write' }
       }))
     }
+  }
+  // Fire-and-forget remote backup (no-op if unconfigured or no session)
+  if (supabaseConfigured) {
+    savePlansRemote(plans).catch(err => {
+      console.error('[planStore] Remote sync failed:', err.message)
+    })
   }
 }
 

@@ -1020,7 +1020,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
     setOpeningId(plan.id)
     try {
       const blob = await getPlanFile(plan.id)
-      if (!blob) { setOpeningId(null); return }
+      if (!blob) { setOpeningId(null); toast.show('A tervrajz fájl nem elérhető. Töltsd fel újra a fájlt.', 'error'); return }
       const ft = plan.fileType || getFileType(plan.name)
       const file = new File([blob], plan.name || FALLBACK_NAMES[ft] || 'terv.pdf', { type: MIME_TYPES[ft] || 'application/octet-stream' })
       if (onOpenFile) onOpenFile(file, plan)

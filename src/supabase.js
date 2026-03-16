@@ -137,6 +137,8 @@ export const loadAssembliesRemote  = () => loadUserBlob('assemblies')
 export const saveAssembliesRemote  = (d) => upsertUserBlob('assemblies', d)
 export const loadProjectsRemote    = () => loadUserBlob('projects')
 export const saveProjectsRemote    = (d) => upsertUserBlob('projects', d)
+export const loadPlansRemote       = () => loadUserBlob('plans_meta')
+export const savePlansRemote       = (d) => upsertUserBlob('plans_meta', d)
 
 // ── Subscription ───────────────────────────────────────────────────────────────
 export async function getSubscriptionStatus() {
