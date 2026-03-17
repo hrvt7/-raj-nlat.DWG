@@ -159,6 +159,36 @@ export async function loadAnnotationsRemote(planId) {
   return data?.data || null
 }
 
+// ── Plan file/blob Storage backup ────────────────────────────────────────────
+const PLAN_FILES_BUCKET = 'plan-files'
+
+const EXT_MAP = { pdf: 'pdf', dxf: 'dxf', dwg: 'dwg' }
+
+export async function uploadPlanBlob(planId, fileBlob, fileType) {
+  requireConfig('uploadPlanBlob')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const ext = EXT_MAP[fileType?.toLowerCase()] || 'bin'
+  const path = `${user.id}/${planId}.${ext}`
+  const { error } = await supabase.storage
+    .from(PLAN_FILES_BUCKET)
+    .upload(path, fileBlob, { upsert: true, contentType: fileBlob.type || 'application/octet-stream' })
+  if (error) throw error
+}
+
+export async function downloadPlanBlob(planId, fileType) {
+  requireConfig('downloadPlanBlob')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const ext = EXT_MAP[fileType?.toLowerCase()] || 'bin'
+  const path = `${user.id}/${planId}.${ext}`
+  const { data, error } = await supabase.storage
+    .from(PLAN_FILES_BUCKET)
+    .download(path)
+  if (error) throw error
+  return data // Blob
+}
+
 // ── Subscription ───────────────────────────────────────────────────────────────
 export async function getSubscriptionStatus() {
   requireConfig('getSubscriptionStatus')

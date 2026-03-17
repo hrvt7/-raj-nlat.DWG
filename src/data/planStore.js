@@ -7,7 +7,7 @@
 import localforage from 'localforage'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
-import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote, loadAnnotationsRemote } from '../supabase.js'
+import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote, loadAnnotationsRemote, uploadPlanBlob } from '../supabase.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -108,6 +108,12 @@ export async function savePlan(plan, fileBlob) {
   // preventing orphan metadata entries that point to missing files.
   if (fileBlob) {
     await planFileStore.setItem(plan.id, fileBlob)
+    // Fire-and-forget remote blob backup (only when Supabase is configured)
+    if (supabaseConfigured) {
+      uploadPlanBlob(plan.id, fileBlob, plan.fileType).catch(err =>
+        console.warn('[planStore] remote blob backup failed:', err.message)
+      )
+    }
   }
 
   planMetaGuardedWrite((meta) => {
