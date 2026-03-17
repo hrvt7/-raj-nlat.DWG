@@ -41,6 +41,85 @@ function FadeIn({ children, delay = 0, style = {}, className = '' }) {
   )
 }
 
+function StaggerText({ text, delay = 0, style = {} }) {
+  const [ref, visible] = useInView()
+  const words = text.split(' ')
+  return (
+    <span ref={ref} style={{ display: 'inline', ...style }}>
+      {words.map((word, i) => (
+        <span key={i} style={{
+          display: 'inline-block',
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'none' : 'translateY(14px)',
+          filter: visible ? 'blur(0)' : 'blur(3px)',
+          transition: `all 0.5s cubic-bezier(.16,1,.3,1) ${delay + i * 0.06}s`,
+          marginRight: '0.3em',
+        }}>{word}</span>
+      ))}
+    </span>
+  )
+}
+
+function AnimatedCounter({ value }) {
+  const [ref, visible] = useInView()
+  const [display, setDisplay] = useState(value)
+  const numMatch = value.match(/^[\d]+/)
+  useEffect(() => {
+    if (!visible || !numMatch) { setDisplay(value); return }
+    const target = parseInt(numMatch[0], 10)
+    const suffix = value.slice(numMatch[0].length)
+    const prefix = value.slice(0, value.indexOf(numMatch[0]))
+    let start = 0
+    const duration = 1200
+    const t0 = performance.now()
+    const step = (now) => {
+      const progress = Math.min((now - t0) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      const current = Math.round(eased * target)
+      setDisplay(prefix + current + suffix)
+      if (progress < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [visible])
+  return <span ref={ref}>{display}</span>
+}
+
+function TiltCard({ children, style = {} }) {
+  const ref = useRef(null)
+  const handleMove = (e) => {
+    const rect = ref.current.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width - 0.5
+    const y = (e.clientY - rect.top) / rect.height - 0.5
+    ref.current.style.transform = `perspective(800px) rotateY(${x * 10}deg) rotateX(${-y * 10}deg) scale(1.02)`
+    ref.current.style.background = `radial-gradient(circle at ${(x + 0.5) * 100}% ${(y + 0.5) * 100}%, rgba(0,229,160,0.06), rgba(255,255,255,0.015) 60%)`
+  }
+  const handleLeave = () => {
+    ref.current.style.transform = 'perspective(800px) rotateY(0) rotateX(0) scale(1)'
+    ref.current.style.background = 'rgba(255,255,255,0.02)'
+  }
+  return (
+    <div ref={ref} onMouseMove={handleMove} onMouseLeave={handleLeave}
+      style={{ transition: 'transform 0.15s ease-out, background 0.3s', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, padding: '32px 28px', cursor: 'default', ...style }}>
+      {children}
+    </div>
+  )
+}
+
+function GradientSeparator() {
+  return <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(0,229,160,0.08), transparent)' }} />
+}
+
+function FloatingDecor({ top, left, size = 6, delay = 0 }) {
+  return (
+    <div style={{
+      position: 'absolute', top, left, width: size, height: size,
+      borderRadius: '50%', border: '1px solid rgba(0,229,160,0.08)',
+      animation: `float 6s ease-in-out infinite ${delay}s`,
+      pointerEvents: 'none', zIndex: 0,
+    }} />
+  )
+}
+
 const SvgIcon = ({ path, size = 18, color = '#00E5A0', sw = 1.8 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
     {(Array.isArray(path) ? path : [path]).map((d, i) => <path key={i} d={d} />)}
@@ -2246,6 +2325,24 @@ export default function Landing({ onStart }) {
         /* ─ Hero headline: allow wrap on very small screens ─ */
         @media (max-width: 360px) {
           .hero-nowrap { white-space: normal !important; }
+        }
+
+        /* ─ PREMIUM ANIMATIONS ─ */
+        @keyframes ctaGlow {
+          0%, 100% { box-shadow: 0 0 30px rgba(0,229,160,0.3), 0 4px 20px rgba(0,0,0,0.3); }
+          50% { box-shadow: 0 0 50px rgba(0,229,160,0.55), 0 0 80px rgba(0,229,160,0.15), 0 4px 20px rgba(0,0,0,0.3); }
+        }
+        @keyframes glowPulse {
+          0%, 100% { text-shadow: 0 0 30px rgba(0,229,160,0.3); }
+          50% { text-shadow: 0 0 50px rgba(0,229,160,0.5), 0 0 80px rgba(0,229,160,0.2); }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(16px); filter: blur(3px); }
+          to { opacity: 1; transform: none; filter: blur(0); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-12px); }
         }
 
         /* ─ Overflow guard ─ */
