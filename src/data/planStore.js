@@ -7,7 +7,7 @@
 import localforage from 'localforage'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
-import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote } from '../supabase.js'
+import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote, loadAnnotationsRemote } from '../supabase.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -256,7 +256,21 @@ export async function savePlanAnnotations(planId, annotations, opts) {
  * @returns {Promise<Object|null>}
  */
 export async function getPlanAnnotations(planId) {
-  return await planAnnotStore.getItem(planId) || {
+  const local = await planAnnotStore.getItem(planId)
+  if (local) return local
+  // Conservative remote recovery: only when local is missing and Supabase is configured
+  if (supabaseConfigured) {
+    try {
+      const remote = await loadAnnotationsRemote(planId)
+      if (remote && (remote.markers?.length || remote.measurements?.length || remote.cableRoutes?.length || remote.scale?.calibrated)) {
+        await planAnnotStore.setItem(planId, remote)
+        return remote
+      }
+    } catch (err) {
+      console.warn('[planStore] remote annotation recovery failed:', err.message)
+    }
+  }
+  return {
     markers: [],
     measurements: [],
     scale: { factor: null, calibrated: false },
