@@ -16,6 +16,84 @@ function GlobalMouseGlow() {
   )
 }
 
+function ParticleBackground() {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    let raf
+    let particles = []
+    const COUNT = 42
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = window.innerWidth * dpr
+      canvas.height = window.innerHeight * dpr
+      canvas.style.width = window.innerWidth + 'px'
+      canvas.style.height = window.innerHeight + 'px'
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    const init = () => {
+      resize()
+      particles = Array.from({ length: COUNT }, () => ({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        r: 0.3 + Math.random() * 1.2,
+        o: 0.03 + Math.random() * 0.25,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+      }))
+    }
+
+    const draw = () => {
+      const w = window.innerWidth
+      const h = window.innerHeight
+      ctx.clearRect(0, 0, w, h)
+
+      // lines
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x
+          const dy = particles[i].y - particles[j].y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < 110) {
+            ctx.beginPath()
+            ctx.moveTo(particles[i].x, particles[i].y)
+            ctx.lineTo(particles[j].x, particles[j].y)
+            ctx.strokeStyle = `rgba(0,229,160,${0.04 * (1 - dist / 110)})`
+            ctx.lineWidth = 0.4
+            ctx.stroke()
+          }
+        }
+      }
+
+      // dots
+      for (const p of particles) {
+        p.x += p.vx
+        p.y += p.vy
+        if (p.x < -20) p.x = w + 20
+        if (p.x > w + 20) p.x = -20
+        if (p.y < -20) p.y = h + 20
+        if (p.y > h + 20) p.y = -20
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(0,229,160,${p.o})`
+        ctx.fill()
+      }
+
+      raf = requestAnimationFrame(draw)
+    }
+
+    init()
+    raf = requestAnimationFrame(draw)
+    window.addEventListener('resize', resize)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize) }
+  }, [])
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />
+}
+
 function useInView(threshold = 0.12) {
   const ref = useRef(null)
   const [visible, setVisible] = useState(false)
@@ -2530,6 +2608,7 @@ export default function Landing({ onStart }) {
         /* ─ Overflow guard ─ */
         .landing-root { overflow-x: hidden; }
       `}</style>
+      <ParticleBackground />
       <GlobalMouseGlow />
       <NavBar onStart={onStart} />
       <HeroSection onStart={onStart} />
