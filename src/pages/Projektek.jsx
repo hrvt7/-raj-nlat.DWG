@@ -4,10 +4,11 @@ import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { C, ConfirmDialog, EmptyState, Button, useToast } from '../components/ui.jsx'
 import { isDemoSeeded, seedDemoData } from '../data/demoSeed.js'
 import {
-  loadPlans, getPlanFile, savePlan, deletePlan,
+  loadPlans, getPlanFile, hasPlanFileLocally, savePlan, deletePlan,
   generatePlanId, savePlanThumbnail, getPlanThumbnail, getPlansByProject,
   updatePlanMeta,
 } from '../data/planStore.js'
+import { supabaseConfigured } from '../supabase.js'
 import {
   loadProjects, saveProject, deleteProject, generateProjectId, getProject,
   ensureFallbackProject,
@@ -1019,14 +1020,26 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
   const handleOpenSaved = useCallback(async (plan) => {
     setOpeningId(plan.id)
     try {
+      // Check if cloud recovery will be attempted — show feedback if so
+      const hasLocal = await hasPlanFileLocally(plan.id)
+      const attemptingRecovery = !hasLocal && supabaseConfigured
+      if (attemptingRecovery) {
+        toast.show('A tervfájl visszaállítása a felhőből…', 'info', 8000)
+      }
+
       const blob = await getPlanFile(plan.id)
       if (!blob) { setOpeningId(null); toast.show('A tervrajz fájl nem elérhető. Töltsd fel újra a fájlt.', 'error'); return }
+
+      if (attemptingRecovery) {
+        toast.show('Tervfájl sikeresen visszaállítva.', 'success', 2500)
+      }
+
       const ft = plan.fileType || getFileType(plan.name)
       const file = new File([blob], plan.name || FALLBACK_NAMES[ft] || 'terv.pdf', { type: MIME_TYPES[ft] || 'application/octet-stream' })
       if (onOpenFile) onOpenFile(file, plan)
       setOpeningId(null)
     } catch { setOpeningId(null) }
-  }, [onOpenFile])
+  }, [onOpenFile, toast])
 
   const handleDelete = useCallback(async (planId) => {
     try {

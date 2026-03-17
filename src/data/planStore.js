@@ -145,6 +145,16 @@ export function getPlansByProject(projectId) {
 }
 
 /**
+ * Quick check whether a plan file blob exists locally (no remote attempt).
+ * @param {string} planId
+ * @returns {Promise<boolean>}
+ */
+export async function hasPlanFileLocally(planId) {
+  const local = await planFileStore.getItem(planId)
+  return local != null
+}
+
+/**
  * Get a plan file blob from IndexedDB
  * @param {string} planId
  * @returns {Promise<Blob|null>}
