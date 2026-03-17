@@ -2533,14 +2533,31 @@ export default function Landing({ onStart }) {
       <GlobalMouseGlow />
       <NavBar onStart={onStart} />
       <HeroSection onStart={onStart} />
+      <GradientSeparator />
       <TradeSupportSection onStart={onStart} />
-      <NormTimeSection />
+      <GradientSeparator />
+      <div style={{ background: 'rgba(255,255,255,0.008)' }}>
+        <NormTimeSection />
+      </div>
+      <GradientSeparator />
       <AISection />
-      <PDFOutputSection />
+      <GradientSeparator />
+      <div style={{ background: 'rgba(255,255,255,0.008)' }}>
+        <PDFOutputSection />
+      </div>
+      <GradientSeparator />
       <HowSection />
-      <FeaturesSection />
+      <GradientSeparator />
+      <div style={{ background: 'rgba(255,255,255,0.008)' }}>
+        <FeaturesSection />
+      </div>
+      <GradientSeparator />
       <PricingSection />
-      <FAQSection />
+      <GradientSeparator />
+      <div style={{ background: 'rgba(255,255,255,0.008)' }}>
+        <FAQSection />
+      </div>
+      <GradientSeparator />
       <CTASection onStart={onStart} />
       <Footer />
     </div>
