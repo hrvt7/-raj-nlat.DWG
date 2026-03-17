@@ -7,7 +7,7 @@
 import localforage from 'localforage'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
-import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote, loadAnnotationsRemote, uploadPlanBlob, downloadPlanBlob } from '../supabase.js'
+import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote, loadAnnotationsRemote, deleteAnnotationsRemote, uploadPlanBlob, downloadPlanBlob, deletePlanBlob } from '../supabase.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -173,8 +173,30 @@ export async function getPlanFile(planId) {
  * @param {string} planId
  */
 export async function deletePlan(planId) {
+  // Read fileType from metadata BEFORE filtering it out (needed for remote blob path)
+  const planMeta = getPlanMeta(planId)
+  const fileType = planMeta?.fileType || null
+
+  // 1. Remove plan metadata (also triggers fire-and-forget savePlansRemote)
   planMetaGuardedWrite((meta) => meta.filter(p => p.id !== planId))
+  // 2. Remove local file blob
   await planFileStore.removeItem(planId)
+  // 3. Remove local annotations
+  await planAnnotStore.removeItem(planId)
+  // 4. Remove local thumbnail
+  await planThumbStore.removeItem(planId)
+
+  // 5. Fire-and-forget remote cleanup (only when Supabase is configured)
+  if (supabaseConfigured) {
+    deleteAnnotationsRemote(planId).catch(err =>
+      console.warn('[planStore] remote annotation cleanup failed:', err.message)
+    )
+    if (fileType) {
+      deletePlanBlob(planId, fileType).catch(err =>
+        console.warn('[planStore] remote blob cleanup failed:', err.message)
+      )
+    }
+  }
 }
 
 /**

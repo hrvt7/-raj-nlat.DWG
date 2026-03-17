@@ -159,6 +159,18 @@ export async function loadAnnotationsRemote(planId) {
   return data?.data || null
 }
 
+// ── Plan annotation cleanup ─────────────────────────────────────────────────
+export async function deleteAnnotationsRemote(planId) {
+  requireConfig('deleteAnnotationsRemote')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const { error } = await supabase.from('plan_annotations')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('plan_id', planId)
+  if (error) throw error
+}
+
 // ── Plan file/blob Storage backup ────────────────────────────────────────────
 const PLAN_FILES_BUCKET = 'plan-files'
 
@@ -187,6 +199,18 @@ export async function downloadPlanBlob(planId, fileType) {
     .download(path)
   if (error) throw error
   return data // Blob
+}
+
+export async function deletePlanBlob(planId, fileType) {
+  requireConfig('deletePlanBlob')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const ext = EXT_MAP[fileType?.toLowerCase()] || 'bin'
+  const path = `${user.id}/${planId}.${ext}`
+  const { error } = await supabase.storage
+    .from(PLAN_FILES_BUCKET)
+    .remove([path])
+  if (error) throw error
 }
 
 // ── Subscription ───────────────────────────────────────────────────────────────
