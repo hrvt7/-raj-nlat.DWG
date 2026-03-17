@@ -40,10 +40,10 @@ function ParticleBackground() {
       particles = Array.from({ length: COUNT }, () => ({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
-        r: 0.3 + Math.random() * 1.2,
-        o: 0.03 + Math.random() * 0.25,
-        vx: (Math.random() - 0.5) * 0.25,
-        vy: (Math.random() - 0.5) * 0.25,
+        r: 1 + Math.random() * 1.5,
+        o: 0.15 + Math.random() * 0.3,
+        vx: (Math.random() - 0.5) * 0.24,
+        vy: (Math.random() - 0.5) * 0.24,
       }))
     }
 
@@ -58,12 +58,12 @@ function ParticleBackground() {
           const dx = particles[i].x - particles[j].x
           const dy = particles[i].y - particles[j].y
           const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist < 110) {
+          if (dist < 150) {
             ctx.beginPath()
             ctx.moveTo(particles[i].x, particles[i].y)
             ctx.lineTo(particles[j].x, particles[j].y)
-            ctx.strokeStyle = `rgba(0,229,160,${0.04 * (1 - dist / 110)})`
-            ctx.lineWidth = 0.4
+            ctx.strokeStyle = `rgba(0,229,160,${0.09 * (1 - dist / 150)})`
+            ctx.lineWidth = 0.6
             ctx.stroke()
           }
         }
