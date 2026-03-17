@@ -91,7 +91,7 @@ function ParticleBackground() {
     window.addEventListener('resize', resize)
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize) }
   }, [])
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 9, pointerEvents: 'none' }} />
 }
 
 function useInView(threshold = 0.12) {
