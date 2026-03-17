@@ -7,7 +7,7 @@
 import localforage from 'localforage'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
-import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote, loadAnnotationsRemote, uploadPlanBlob } from '../supabase.js'
+import { supabaseConfigured, savePlansRemote, saveAnnotationsRemote, loadAnnotationsRemote, uploadPlanBlob, downloadPlanBlob } from '../supabase.js'
 
 // Configure localforage instances
 const planFileStore = localforage.createInstance({
@@ -150,7 +150,22 @@ export function getPlansByProject(projectId) {
  * @returns {Promise<Blob|null>}
  */
 export async function getPlanFile(planId) {
-  return await planFileStore.getItem(planId)
+  const local = await planFileStore.getItem(planId)
+  if (local) return local
+  // On-demand remote blob recovery when local is missing
+  if (supabaseConfigured) {
+    try {
+      const meta = getPlanMeta(planId)
+      const remote = await downloadPlanBlob(planId, meta?.fileType)
+      if (remote && remote.size > 0) {
+        await planFileStore.setItem(planId, remote)
+        return remote
+      }
+    } catch (err) {
+      console.warn('[planStore] remote blob recovery failed:', err.message)
+    }
+  }
+  return null
 }
 
 /**
