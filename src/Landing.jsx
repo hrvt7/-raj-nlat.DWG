@@ -468,6 +468,97 @@ function TakeoffAnimation() {
   )
 }
 
+function BlueprintBackground() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"
+      style={{ width: '100%', height: '100%', display: 'block' }}>
+      <defs>
+        <style>{`
+          .bp-bg-wall   { fill: none; stroke: #1E4030; stroke-width: 3px; }
+          .bp-bg-sym    { fill: none; stroke: #1E4030; stroke-width: 2px; }
+          .bp-bg-active { fill: none; stroke: #00E5A0; stroke-width: 3px; opacity: 0; }
+          .bp-bg-beam   { fill: url(#bpBgScanGrad); }
+          @keyframes bpBgScan {
+            0%   { transform: translateX(-100px); }
+            100% { transform: translateX(1700px); }
+          }
+          .bp-bg-scan-anim { animation: bpBgScan 10s linear infinite; }
+        `}</style>
+        <linearGradient id="bpBgScanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor="#00E5A0" stopOpacity="0" />
+          <stop offset="35%"  stopColor="#00E5A0" stopOpacity="0.12" />
+          <stop offset="50%"  stopColor="#00E5A0" stopOpacity="0.5" />
+          <stop offset="65%"  stopColor="#00E5A0" stopOpacity="0.12" />
+          <stop offset="100%" stopColor="#00E5A0" stopOpacity="0" />
+        </linearGradient>
+        <radialGradient id="bpBgSymGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="#00E5A0" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#00E5A0" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      <pattern id="bpBgGrid" width="100" height="100" patternUnits="userSpaceOnUse">
+        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#00E5A0" strokeWidth="0.5" opacity="0.04"/>
+      </pattern>
+      <rect width="100%" height="100%" fill="url(#bpBgGrid)" />
+
+      <g transform="translate(100, 100)">
+        <path className="bp-bg-wall" d="M50,50 L50,600 L400,600 L400,400 L800,400 L800,50 L50,50 Z" />
+        <path className="bp-bg-wall" d="M400,600 L800,600 L800,400" />
+        <line className="bp-bg-wall" x1="400" y1="50" x2="400" y2="400" />
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="200" y1="50" x2="200" y2="600" />
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="50"  y1="300" x2="400" y2="300" />
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="600" y1="50"  x2="600" y2="400" />
+        <line stroke="#132A1E" strokeWidth="1.5" strokeDasharray="10,5" x1="400" y1="500" x2="800" y2="500" />
+        <path stroke="#1A3828" strokeWidth="1.5" fill="none" d="M50,300 Q80,270 110,300" />
+        <path stroke="#1A3828" strokeWidth="1.5" fill="none" d="M400,400 Q430,370 460,400" />
+
+        {[[150,550,'1s'],[250,550,'1.2s'],[600,200,'2.5s']].map(([cx,cy,begin],i) => (
+          <g key={i} transform={`translate(${cx}, ${cy})`}>
+            <circle className="bp-bg-sym" r="10" />
+            <path className="bp-bg-sym" d="M-7,-7 L7,7 M-7,7 L7,-7" />
+            <circle className="bp-bg-active" r="20">
+              <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="10s" begin={begin} repeatCount="indefinite" />
+            </circle>
+            <circle r="28" fill="url(#bpBgSymGlow)" opacity="0">
+              <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="10s" begin={begin} repeatCount="indefinite" />
+            </circle>
+          </g>
+        ))}
+
+        {[[350,400,'1.8s'],[750,400,'3s']].map(([cx,cy,begin],i) => (
+          <g key={i} transform={`translate(${cx}, ${cy})`}>
+            <circle className="bp-bg-sym" r="12" />
+            <circle className="bp-bg-active" r="20">
+              <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="10s" begin={begin} repeatCount="indefinite" />
+            </circle>
+            <circle r="28" fill="url(#bpBgSymGlow)" opacity="0">
+              <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="10s" begin={begin} repeatCount="indefinite" />
+            </circle>
+          </g>
+        ))}
+
+        {[[225,225,'1.5s'],[600,500,'2.8s']].map(([cx,cy,begin],i) => (
+          <g key={i} transform={`translate(${cx}, ${cy})`}>
+            <circle className="bp-bg-sym" r="15" />
+            <path className="bp-bg-sym" d="M-15,0 L15,0 M0,-15 L0,15" />
+            <circle className="bp-bg-active" r="25">
+              <animate attributeName="opacity" values="0;1;0;0" keyTimes="0;0.2;0.4;1" dur="10s" begin={begin} repeatCount="indefinite" />
+            </circle>
+            <circle r="34" fill="url(#bpBgSymGlow)" opacity="0">
+              <animate attributeName="opacity" values="0;1;0" keyTimes="0;0.2;0.5" dur="10s" begin={begin} repeatCount="indefinite" />
+            </circle>
+          </g>
+        ))}
+
+        <rect className="bp-bg-beam bp-bg-scan-anim" x="-20" y="0" width="40" height="700" />
+        <line className="bp-bg-scan-anim" x1="20" y1="0" x2="20" y2="700"
+          stroke="#00E5A0" strokeWidth="1.5" opacity="0.9" />
+      </g>
+    </svg>
+  )
+}
+
 // ─── Hero unified 3-trade animation ──────────────────────────────────────────
 
 function HeroAnimation() {
@@ -795,75 +886,102 @@ function HeroAnimationMobile() {
 
 function HeroSection({ onStart }) {
   return (
-    <section className="hero-section" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, overflow: 'hidden', padding: '72px 48px 32px' }}>
+    <section className="hero-section" style={{ minHeight: '100vh', position: 'relative', zIndex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Subtle grid bg */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.025, backgroundImage: 'linear-gradient(#00E5A0 1px, transparent 1px), linear-gradient(90deg, #00E5A0 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+      {/* Blueprint background — full viewport */}
+      <div style={{ position: 'absolute', inset: 0, opacity: 0.2, zIndex: 0 }}>
+        <BlueprintBackground />
+      </div>
 
-      {/* Radial glow center */}
-      <div style={{ position: 'absolute', left: '50%', top: '40%', transform: 'translate(-50%,-50%)', width: 700, maxWidth: '100%', height: 500, background: 'radial-gradient(ellipse, rgba(0,229,160,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      {/* Gradient overlay for text readability */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1,
+        background: 'linear-gradient(180deg, rgba(10,10,10,0.6) 0%, rgba(10,10,10,0.85) 50%, rgba(10,10,10,0.95) 100%)' }} />
 
-      <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
+      {/* Floating decorative elements */}
+      <FloatingDecor top="15%" left="8%" size={8} delay={0} />
+      <FloatingDecor top="25%" left="85%" size={5} delay={1.5} />
+      <FloatingDecor top="60%" left="12%" size={6} delay={3} />
+      <FloatingDecor top="45%" left="90%" size={7} delay={2} />
 
-        {/* ── Headline – block spans = guaranteed 2 lines ── */}
-        <FadeIn>
-          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(22px, 3.2vw, 46px)', color: '#F0F0F0', marginBottom: 12, letterSpacing: '-0.03em' }}>
-            <span className="hero-nowrap" style={{ display: 'block', whiteSpace: 'nowrap' }}>DXF-ből profi árajánlat</span>
-            <span style={{ display: 'block', color: '#00E5A0', textShadow: '0 0 50px rgba(0,229,160,0.35)' }}>2 perc alatt</span>
+      {/* Hero content */}
+      <div style={{ position: 'relative', zIndex: 2, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '100px 48px 140px' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
+
+          <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(28px, 4vw, 52px)', color: '#F0F0F0', marginBottom: 16, letterSpacing: '-0.03em' }}>
+            <StaggerText text="DXF-ből profi árajánlat" style={{ display: 'block' }} />
+            <span style={{ display: 'block', color: '#00E5A0', animation: 'glowPulse 3s ease-in-out infinite' }}>
+              <StaggerText text="2 perc alatt" delay={0.36} />
+            </span>
           </h1>
-        </FadeIn>
 
-        {/* ── Subtext ── */}
-        <FadeIn delay={0.08}>
-          <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(12px, 1.3vw, 14px)', color: '#999', lineHeight: 1.75, maxWidth: 500, margin: '0 auto 20px' }}>
-            Töltsd fel a villamossági tervet, az alkalmazás automatikusan megszámolja a szerelvényeket, és generál egy profi PDF ajánlatot.
-          </p>
-        </FadeIn>
+          <FadeIn delay={0.5}>
+            <p style={{ fontFamily: 'DM Mono', fontSize: 'clamp(12px, 1.3vw, 15px)', color: '#999', lineHeight: 1.75, maxWidth: 520, margin: '0 auto 28px' }}>
+              Töltsd fel a villamossági tervet, az alkalmazás automatikusan megszámolja a szerelvényeket, és generál egy profi PDF ajánlatot.
+            </p>
+          </FadeIn>
 
-        {/* ── CTAs ── */}
-        <FadeIn delay={0.15}>
-          <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 28 }}>
-            <button onClick={onStart} style={{ padding: '12px 28px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 14, boxShadow: '0 0 40px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
-              onMouseEnter={e => { e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.55)'; e.target.style.transform='translateY(-2px) scale(1.02)' }}
-              onMouseLeave={e => { e.target.style.boxShadow='0 0 40px rgba(0,229,160,0.3)'; e.target.style.transform='none' }}>
-              Próbáld ki 14 napig →
-            </button>
-            <a href="#how" style={{ padding: '12px 24px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 13, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor='#444'; e.currentTarget.style.color='#CCC' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor='#252525'; e.currentTarget.style.color='#999' }}>
-              Hogyan működik?
-            </a>
-          </div>
-        </FadeIn>
+          <FadeIn delay={0.6}>
+            <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 28 }}>
+              <button onClick={onStart} className="hero-main-cta" style={{
+                position: 'relative', padding: '18px 40px',
+                background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 10,
+                cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 16,
+                boxShadow: '0 0 30px rgba(0,229,160,0.35), 0 4px 20px rgba(0,0,0,0.3)',
+                animation: 'ctaGlow 3s ease-in-out infinite', transition: 'transform 0.2s',
+              }}
+                onMouseEnter={e => e.target.style.transform = 'translateY(-2px) scale(1.03)'}
+                onMouseLeave={e => e.target.style.transform = 'none'}>
+                Próbáld ki 14 napig →
+              </button>
+              <a href="#how" style={{ padding: '18px 28px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 14, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#444'; e.currentTarget.style.color = '#CCC' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#252525'; e.currentTarget.style.color = '#999' }}>
+                Hogyan működik?
+              </a>
+            </div>
+          </FadeIn>
 
-        {/* ── Animated hero frame ──
-            width = min(780px, (100vh − 354px) × 16/9)
-            so SVG height = width × 9/16 ≤ (100vh − 354px)
-            → frame always fits inside the viewport ── */}
-        <FadeIn delay={0.22}>
-          <div className="hero-frame" style={{
-            position: 'relative', borderRadius: 16, overflow: 'hidden',
-            border: '1px solid rgba(0,229,160,0.1)',
-            boxShadow: '0 0 0 1px #090909, 0 40px 100px rgba(0,0,0,0.7), 0 0 60px rgba(0,229,160,0.04)',
-            background: '#040A06',
-            width: 'min(780px, calc((100vh - 354px) * 16 / 9))',
-            maxWidth: '100%',
-            margin: '0 auto',
+          <FadeIn delay={0.7}>
+            <div className="hero-frame" style={{
+              position: 'relative', borderRadius: 16, overflow: 'hidden',
+              border: '1px solid rgba(0,229,160,0.1)',
+              boxShadow: '0 0 0 1px #090909, 0 40px 100px rgba(0,0,0,0.7), 0 0 60px rgba(0,229,160,0.04)',
+              background: '#040A06',
+              width: 'min(780px, calc((100vh - 354px) * 16 / 9))',
+              maxWidth: '100%', margin: '0 auto',
+            }}>
+              {[
+                { top: 0, left: 0, borderTop: '1.5px solid #00E5A0', borderLeft: '1.5px solid #00E5A0', borderRadius: '4px 0 0 0' },
+                { top: 0, right: 0, borderTop: '1.5px solid #00E5A0', borderRight: '1.5px solid #00E5A0', borderRadius: '0 4px 0 0' },
+                { bottom: 0, left: 0, borderBottom: '1.5px solid #00E5A0', borderLeft: '1.5px solid #00E5A0', borderRadius: '0 0 0 4px' },
+                { bottom: 0, right: 0, borderBottom: '1.5px solid #00E5A0', borderRight: '1.5px solid #00E5A0', borderRadius: '0 0 4px 0' },
+              ].map((s, i) => <div key={i} style={{ position: 'absolute', width: 18, height: 18, opacity: 0.45, zIndex: 2, ...s }} />)}
+              <div className="ha-desktop"><HeroAnimation /></div>
+              <div className="ha-mobile"><HeroAnimationMobile /></div>
+            </div>
+          </FadeIn>
+        </div>
+      </div>
+
+      {/* Stats counter bar at hero bottom */}
+      <div className="hero-stats-bar" style={{
+        position: 'relative', zIndex: 2,
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+        borderTop: '1px solid rgba(0,229,160,0.08)',
+        background: 'rgba(10,10,10,0.6)',
+        backdropFilter: 'blur(16px)',
+      }}>
+        {STATS.map((s, i) => (
+          <div key={i} style={{
+            padding: '28px 0', textAlign: 'center',
+            borderRight: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none',
           }}>
-            {/* corner accents */}
-            {[
-              { top:0, left:0, borderTop:'1.5px solid #00E5A0', borderLeft:'1.5px solid #00E5A0', borderRadius:'4px 0 0 0' },
-              { top:0, right:0, borderTop:'1.5px solid #00E5A0', borderRight:'1.5px solid #00E5A0', borderRadius:'0 4px 0 0' },
-              { bottom:0, left:0, borderBottom:'1.5px solid #00E5A0', borderLeft:'1.5px solid #00E5A0', borderRadius:'0 0 0 4px' },
-              { bottom:0, right:0, borderBottom:'1.5px solid #00E5A0', borderRight:'1.5px solid #00E5A0', borderRadius:'0 0 4px 0' },
-            ].map((s,i) => <div key={i} style={{ position:'absolute', width:18, height:18, opacity:0.45, zIndex:2, ...s }} />)}
-            {/* Desktop: side-by-side scan + HUD */}
-            <div className="ha-desktop"><HeroAnimation /></div>
-            {/* Mobile: scan on top, HUD below */}
-            <div className="ha-mobile"><HeroAnimationMobile /></div>
+            <div style={{ fontSize: 'clamp(24px, 3vw, 36px)', fontFamily: 'Syne', fontWeight: 800, color: '#00E5A0', letterSpacing: '-0.03em' }}>
+              <AnimatedCounter value={s.value} />
+            </div>
+            <div style={{ fontSize: 'clamp(10px, 1vw, 12px)', color: 'rgba(255,255,255,0.35)', marginTop: 6, letterSpacing: '0.06em', fontFamily: 'DM Mono' }}>{s.label}</div>
           </div>
-        </FadeIn>
-
+        ))}
       </div>
     </section>
   )
@@ -2211,6 +2329,11 @@ export default function Landing({ onStart }) {
         @media (max-width: 768px) {
           .ha-mobile  { display: block !important; }
           .ha-desktop { display: none !important; }
+        }
+
+        /* ─ HERO stats bar ─ */
+        @media (max-width: 640px) {
+          .hero-stats-bar { grid-template-columns: repeat(2, 1fr) !important; }
         }
 
         /* ─ Tab-switch fade-slide animation ─ */
