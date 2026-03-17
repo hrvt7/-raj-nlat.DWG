@@ -2165,6 +2165,10 @@ function PDFOutputSection() {
 function PricingSection() {
   return (
     <section id="pricing" className="sec-100" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
+      {/* Floating decor */}
+      <FloatingDecor top="10%" left="15%" size={7} delay={1} />
+      <FloatingDecor top="80%" left="82%" size={5} delay={2.5} />
+
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         <FadeIn>
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
@@ -2177,65 +2181,68 @@ function PricingSection() {
           </div>
         </FadeIn>
 
-        {/* Single plan card */}
         <FadeIn delay={0.1}>
           <div className="pricing-card" style={{
-            background: 'linear-gradient(145deg, #0C1C15 0%, #08120E 100%)',
-            border: '1px solid rgba(0,229,160,0.28)',
-            borderRadius: 24, padding: '44px 44px 40px',
+            maxWidth: 480, margin: '0 auto',
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(0,229,160,0.12)',
+            borderRadius: 20, padding: '48px 40px',
             position: 'relative',
-            boxShadow: '0 0 80px rgba(0,229,160,0.08)',
+            boxShadow: '0 0 60px rgba(0,229,160,0.06), 0 20px 60px rgba(0,0,0,0.3)',
           }}>
-            {/* Top badge */}
-            <div className="pricing-badge" style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: '#00E5A0', color: '#0A0A0A', fontFamily: 'Syne', fontWeight: 800, fontSize: 10, padding: '4px 20px', borderRadius: 999, whiteSpace: 'nowrap', letterSpacing: '0.1em' }}>
-              TELJES CSOMAG · MINDEN FUNKCIÓ
+            {/* Badge */}
+            <div className="pricing-badge" style={{
+              position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
+              background: '#00E5A0', color: '#0A0A0A', padding: '6px 20px', borderRadius: 20,
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+              fontFamily: 'Syne', whiteSpace: 'nowrap',
+            }}>Teljes csomag</div>
+
+            {/* Contact CTA */}
+            <div style={{ textAlign: 'center', marginTop: 16, marginBottom: 32 }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>TakeoffPro</div>
+              <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#aaa', lineHeight: 1.75, marginBottom: 20, maxWidth: 320, margin: '0 auto 20px' }}>
+                Pontos árakért érdeklődjön – személyre szabott ajánlatot adunk.
+              </p>
+              <a href="tel:+36305252336" className="pricing-phone-cta"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 10,
+                  padding: '16px 28px', borderRadius: 10,
+                  background: '#00E5A0', color: '#0A0A0A',
+                  textDecoration: 'none', fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
+                  boxShadow: '0 0 30px rgba(0,229,160,0.3)',
+                  animation: 'ctaGlow 3s ease-in-out infinite',
+                  transition: 'transform 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.64 3.42 2 2 0 0 1 3.62 1.25h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 16.92z"/>
+                </svg>
+                +36 30 525 2336
+              </a>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444', marginTop: 12 }}>
+                Hétfő–Péntek · 8:00–17:00
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 40, alignItems: 'flex-start' }}>
+            {/* Divider */}
+            <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(0,229,160,0.08), transparent)', marginBottom: 24 }} />
 
-              {/* Left: contact CTA */}
-              <div style={{ flex: '0 0 auto', minWidth: 220 }}>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>TakeoffPro</div>
-
-                <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#aaa', lineHeight: 1.75, marginBottom: 24, maxWidth: 240 }}>
-                  Pontos árakért érdeklődjön – személyre szabott ajánlatot adunk.
-                </p>
-
-                {/* Phone CTA */}
-                <a href="tel:+36305252336" className="pricing-phone-cta"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '14px 20px', borderRadius: 10,
-                    background: '#00E5A0', color: '#0A0A0A',
-                    textDecoration: 'none', fontFamily: 'Syne', fontWeight: 700, fontSize: 15,
-                    boxShadow: '0 0 30px rgba(0,229,160,0.3)', transition: 'all 0.2s',
-                    marginBottom: 14,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow='0 0 50px rgba(0,229,160,0.5)'; e.currentTarget.style.transform='translateY(-1px)' }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow='0 0 30px rgba(0,229,160,0.3)'; e.currentTarget.style.transform='none' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.64 3.42 2 2 0 0 1 3.62 1.25h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 16.92z"/>
-                  </svg>
-                  +36 30 525 2336
-                </a>
-
-                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444', textAlign: 'center' }}>
-                  Hétfő–Péntek · 8:00–17:00
+            {/* Feature list with stagger */}
+            {PLAN.features.map((f, i) => (
+              <FadeIn key={i} delay={i * 0.04}>
+                <div style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <span style={{ color: '#00E5A0', fontSize: 16, flexShrink: 0 }}>✓</span>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontFamily: 'DM Mono' }}>{f}</span>
                 </div>
-              </div>
+              </FadeIn>
+            ))}
 
-              {/* Right: feature list */}
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#444', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Mit tartalmaz</div>
-                {PLAN.features.map((f, j) => (
-                  <div key={j} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 11 }}>
-                    <svg style={{ flexShrink: 0, marginTop: 2 }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#bbb', lineHeight: 1.5 }}>{f}</span>
-                  </div>
-                ))}
-              </div>
-
-            </div>
+            {/* Guarantee */}
+            <p style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'rgba(255,255,255,0.25)', fontFamily: 'DM Mono' }}>
+              Nincs bankkártya · Nincs elköteleződés · Azonnal lemondható
+            </p>
           </div>
         </FadeIn>
       </div>
