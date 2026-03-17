@@ -24,7 +24,11 @@ function ParticleBackground() {
     const ctx = canvas.getContext('2d')
     let raf
     let particles = []
-    const COUNT = 42
+    const COUNT = 44
+    let mouse = { x: -9999, y: -9999 }
+    let scrollY = window.scrollY
+    let prevScrollY = scrollY
+    let scrollVel = 0
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
@@ -40,17 +44,53 @@ function ParticleBackground() {
       particles = Array.from({ length: COUNT }, () => ({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
-        r: 1 + Math.random() * 1.5,
-        o: 0.15 + Math.random() * 0.3,
+        r: 1.2 + Math.random() * 1.6,
+        o: 0.2 + Math.random() * 0.35,
         vx: (Math.random() - 0.5) * 0.24,
         vy: (Math.random() - 0.5) * 0.24,
       }))
     }
 
+    const onMouse = (e) => { mouse.x = e.clientX; mouse.y = e.clientY }
+    const onScroll = () => { scrollY = window.scrollY }
+    const onMouseLeave = () => { mouse.x = -9999; mouse.y = -9999 }
+
     const draw = () => {
       const w = window.innerWidth
       const h = window.innerHeight
+
+      // scroll velocity — pushes particles sideways
+      scrollVel = (scrollY - prevScrollY) * 0.15
+      prevScrollY = scrollY
+
       ctx.clearRect(0, 0, w, h)
+
+      // update positions
+      for (const p of particles) {
+        // base drift
+        p.x += p.vx
+        p.y += p.vy
+
+        // scroll push — particles drift sideways + slight vertical shift
+        p.x += scrollVel * 0.3 * (0.5 + p.r * 0.3)
+        p.y += Math.abs(scrollVel) * 0.08
+
+        // mouse repulsion — gentle push away from cursor
+        const mdx = p.x - mouse.x
+        const mdy = p.y - mouse.y
+        const mDist = Math.sqrt(mdx * mdx + mdy * mdy)
+        if (mDist < 120 && mDist > 0) {
+          const force = (1 - mDist / 120) * 1.2
+          p.x += (mdx / mDist) * force
+          p.y += (mdy / mDist) * force
+        }
+
+        // wrap
+        if (p.x < -30) p.x = w + 30
+        if (p.x > w + 30) p.x = -30
+        if (p.y < -30) p.y = h + 30
+        if (p.y > h + 30) p.y = -30
+      }
 
       // lines
       for (let i = 0; i < particles.length; i++) {
@@ -62,8 +102,8 @@ function ParticleBackground() {
             ctx.beginPath()
             ctx.moveTo(particles[i].x, particles[i].y)
             ctx.lineTo(particles[j].x, particles[j].y)
-            ctx.strokeStyle = `rgba(0,229,160,${0.09 * (1 - dist / 150)})`
-            ctx.lineWidth = 0.6
+            ctx.strokeStyle = `rgba(0,229,160,${0.11 * (1 - dist / 150)})`
+            ctx.lineWidth = 0.7
             ctx.stroke()
           }
         }
@@ -71,12 +111,6 @@ function ParticleBackground() {
 
       // dots
       for (const p of particles) {
-        p.x += p.vx
-        p.y += p.vy
-        if (p.x < -20) p.x = w + 20
-        if (p.x > w + 20) p.x = -20
-        if (p.y < -20) p.y = h + 20
-        if (p.y > h + 20) p.y = -20
         ctx.beginPath()
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
         ctx.fillStyle = `rgba(0,229,160,${p.o})`
@@ -89,9 +123,18 @@ function ParticleBackground() {
     init()
     raf = requestAnimationFrame(draw)
     window.addEventListener('resize', resize)
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize) }
+    window.addEventListener('mousemove', onMouse)
+    window.addEventListener('mouseleave', onMouseLeave)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', resize)
+      window.removeEventListener('mousemove', onMouse)
+      window.removeEventListener('mouseleave', onMouseLeave)
+      window.removeEventListener('scroll', onScroll)
+    }
   }, [])
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 9, pointerEvents: 'none' }} />
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 2, pointerEvents: 'none', mixBlendMode: 'screen' }} />
 }
 
 function useInView(threshold = 0.12) {
