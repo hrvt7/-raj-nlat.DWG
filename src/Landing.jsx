@@ -1803,30 +1803,69 @@ function NormTimeSection() {
 }
 
 function HowSection() {
+  const [active, setActive] = useState(0)
   return (
     <section id="how" className="sec-100" style={{ padding: '100px 24px', position: 'relative', zIndex: 1 }}>
-      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
         <FadeIn>
-          <div style={{ textAlign: 'center', marginBottom: 64 }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.12em', marginBottom: 16, textTransform: 'uppercase' }}>Hogyan működik</div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(28px, 5vw, 48px)', color: '#F0F0F0', letterSpacing: '-0.02em' }}>5 lépés, 2 perc</h2>
           </div>
         </FadeIn>
-        <div style={{ position: 'relative' }}>
-          <div className="step-line" style={{ position: 'absolute', left: 28, top: 0, bottom: 0, width: 1, background: 'linear-gradient(to bottom, transparent, #222 10%, #222 90%, transparent)' }} />
-          {STEPS.map((s, i) => (
-            <FadeIn key={i} delay={i * 0.1}>
-              <div className="step-row" style={{ display: 'flex', gap: 28, marginBottom: 36, alignItems: 'flex-start' }}>
-                <div className="step-num" style={{ width: 56, height: 56, flexShrink: 0, background: '#0D0D0D', border: '1px solid #1E1E1E', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'DM Mono', fontSize: 11, color: '#00E5A0', letterSpacing: '0.05em', zIndex: 1, position: 'relative' }}>
-                  {s.n}
-                </div>
-                <div style={{ paddingTop: 12 }}>
-                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 17, color: '#F0F0F0', marginBottom: 8 }}>{s.title}</div>
-                  <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#888', lineHeight: 1.75 }}>{s.desc}</div>
+
+        {/* Desktop: horizontal timeline */}
+        <div className="how-timeline-desktop">
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 0, maxWidth: 800, margin: '0 auto 48px', position: 'relative' }}>
+            {/* Background line */}
+            <div style={{ position: 'absolute', top: 20, left: '10%', right: '10%', height: 2, background: 'rgba(255,255,255,0.04)' }} />
+            {/* Active line */}
+            <div style={{ position: 'absolute', top: 20, left: '10%', height: 2, background: '#00E5A0', width: `${(active / 4) * 80}%`, transition: 'width 0.5s cubic-bezier(.16,1,.3,1)', boxShadow: '0 0 10px rgba(0,229,160,0.3)' }} />
+
+            {STEPS.map((s, i) => (
+              <div key={i} onClick={() => setActive(i)} style={{ flex: 1, textAlign: 'center', cursor: 'pointer', position: 'relative', zIndex: 1 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: '50%', margin: '0 auto 12px',
+                  background: i <= active ? '#00E5A0' : 'rgba(255,255,255,0.05)',
+                  color: i <= active ? '#0A0A0A' : 'rgba(255,255,255,0.3)',
+                  display: 'grid', placeItems: 'center',
+                  fontSize: 14, fontWeight: 700, fontFamily: 'DM Mono',
+                  transition: 'all 0.3s',
+                  boxShadow: i === active ? '0 0 20px rgba(0,229,160,0.4)' : 'none',
+                }}>{s.n}</div>
+                <div style={{ fontSize: 12, color: i === active ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, transition: 'color 0.3s', fontFamily: 'DM Mono' }}>{s.title}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Active step description */}
+          <div key={active} style={{ maxWidth: 600, margin: '0 auto', textAlign: 'center', animation: 'fadeUp 0.4s ease both' }}>
+            <p style={{ fontSize: 'clamp(14px, 1.4vw, 17px)', color: 'rgba(255,255,255,0.5)', lineHeight: 1.7, fontWeight: 300, fontFamily: 'DM Mono' }}>{STEPS[active].desc}</p>
+          </div>
+        </div>
+
+        {/* Mobile: vertical timeline */}
+        <div className="how-timeline-mobile">
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', left: 20, top: 0, bottom: 0, width: 2, background: 'linear-gradient(to bottom, transparent, rgba(0,229,160,0.15) 10%, rgba(0,229,160,0.15) 90%, transparent)' }} />
+            {STEPS.map((s, i) => (
+              <div key={i} onClick={() => setActive(i)} style={{ display: 'flex', gap: 20, marginBottom: 24, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <div style={{
+                  width: 40, height: 40, flexShrink: 0, borderRadius: '50%',
+                  background: i === active ? '#00E5A0' : 'rgba(255,255,255,0.05)',
+                  color: i === active ? '#0A0A0A' : 'rgba(255,255,255,0.3)',
+                  display: 'grid', placeItems: 'center',
+                  fontFamily: 'DM Mono', fontSize: 14, fontWeight: 700,
+                  transition: 'all 0.3s', position: 'relative', zIndex: 1,
+                  boxShadow: i === active ? '0 0 20px rgba(0,229,160,0.4)' : 'none',
+                }}>{s.n}</div>
+                <div style={{ paddingTop: 6 }}>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: i === active ? '#fff' : '#888', marginBottom: 6, transition: 'color 0.3s' }}>{s.title}</div>
+                  {i === active && <div key={active} style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.75, animation: 'fadeUp 0.3s ease both' }}>{s.desc}</div>}
                 </div>
               </div>
-            </FadeIn>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -2378,11 +2417,12 @@ export default function Landing({ onStart }) {
           .pricing-cards { grid-template-columns: 1fr !important; }
         }
 
-        /* ─ HOW steps ─ */
+        /* ─ HOW timeline responsive ─ */
+        .how-timeline-mobile { display: none; }
+        .how-timeline-desktop { display: block; }
         @media (max-width: 640px) {
-          .step-row { gap: 16px !important; margin-bottom: 24px !important; }
-          .step-num { width: 44px !important; height: 44px !important; border-radius: 10px !important; }
-          .step-line { left: 22px !important; }
+          .how-timeline-mobile { display: block !important; }
+          .how-timeline-desktop { display: none !important; }
         }
 
         /* ─ FAQ ─ */
