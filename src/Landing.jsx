@@ -2263,12 +2263,20 @@ function FAQSection() {
         </FadeIn>
         {FAQ.map((item, i) => (
           <FadeIn key={i} delay={i * 0.06}>
-            <div style={{ borderBottom: '1px solid #181818', padding: '20px 0', cursor: 'pointer', userSelect: 'none' }} onClick={() => setOpen(open === i ? null : i)}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+            <div style={{ borderBottom: '1px solid #181818', cursor: 'pointer', userSelect: 'none' }} onClick={() => setOpen(open === i ? null : i)}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: '20px 0' }}>
                 <span className="faq-question" style={{ fontFamily: 'Syne', fontSize: 16, fontWeight: 600, color: open === i ? '#00E5A0' : '#DDD', transition: 'color 0.2s' }}>{item.q}</span>
-                <span style={{ color: open === i ? '#00E5A0' : '#555', fontSize: 20, transition: 'transform 0.2s, color 0.2s', transform: open === i ? 'rotate(45deg)' : 'none', flexShrink: 0 }}>+</span>
+                <span style={{ color: open === i ? '#00E5A0' : '#555', fontSize: 20, transition: 'transform 0.3s, color 0.2s', transform: open === i ? 'rotate(45deg)' : 'none', flexShrink: 0 }}>+</span>
               </div>
-              {open === i && <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#888', lineHeight: 1.8, marginTop: 14 }}>{item.a}</p>}
+              <div style={{
+                display: 'grid',
+                gridTemplateRows: open === i ? '1fr' : '0fr',
+                transition: 'grid-template-rows 0.3s ease',
+              }}>
+                <div style={{ overflow: 'hidden' }}>
+                  <p style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#888', lineHeight: 1.8, paddingBottom: open === i ? 20 : 0, transition: 'padding-bottom 0.3s ease' }}>{item.a}</p>
+                </div>
+              </div>
             </div>
           </FadeIn>
         ))}
@@ -2279,20 +2287,26 @@ function FAQSection() {
 
 function CTASection({ onStart }) {
   return (
-    <section className="cta-section" style={{ padding: '120px 24px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+    <section className="cta-section" style={{ padding: '100px 24px', textAlign: 'center', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+      {/* Background glow */}
+      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 300, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(0,229,160,0.06), transparent 70%)', pointerEvents: 'none' }} />
+
       <FadeIn>
-        <div style={{ maxWidth: 600, margin: '0 auto' }}>
-          <div style={{ width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,229,160,0.1) 0%, transparent 70%)', margin: '-80px auto 0', pointerEvents: 'none' }} />
-          <h2 style={{ fontFamily: 'Syne', fontWeight: 900, fontSize: 'clamp(28px, 5vw, 48px)', color: '#F0F0F0', letterSpacing: '-0.03em', marginBottom: 20 }}>
-            Kezdd el ma,<br /><span style={{ color: '#00E5A0' }}>14 napig ingyen</span>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ fontSize: 11, color: '#00E5A0', letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 16, fontFamily: 'DM Mono' }}>Készen állsz?</div>
+          <h2 style={{ fontSize: 'clamp(28px, 5vw, 48px)', fontFamily: 'Syne', fontWeight: 800, letterSpacing: '-0.03em', maxWidth: 600, margin: '0 auto 16px', color: '#F0F0F0' }}>
+            Az első profi ajánlatod <span style={{ color: '#00E5A0' }}>2 percre van</span>
           </h2>
-          <p style={{ fontFamily: 'DM Mono', fontSize: 14, color: '#888', marginBottom: 40, lineHeight: 1.8 }}>
-            Nincs regisztráció bonyolultsága, nincs elköteleződés.<br />Töltsd fel az első tervedet és lásd az eredményt.
-          </p>
-          <button className="cta-btn" onClick={onStart} style={{ padding: '18px 48px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 800, fontSize: 18, boxShadow: '0 0 60px rgba(0,229,160,0.3)', transition: 'all 0.2s' }}
-            onMouseEnter={e => { e.target.style.transform='translateY(-3px) scale(1.02)'; e.target.style.boxShadow='0 0 80px rgba(0,229,160,0.5)' }}
-            onMouseLeave={e => { e.target.style.transform='none'; e.target.style.boxShadow='0 0 60px rgba(0,229,160,0.3)' }}>
-            14 napos próba indítása →
+          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)', marginBottom: 32, fontFamily: 'DM Mono' }}>14 napos ingyenes próba · Nem kell bankkártya</p>
+          <button onClick={onStart} className="cta-btn" style={{
+            padding: '18px 48px', background: '#00E5A0', color: '#0A0A0A', border: 'none',
+            borderRadius: 10, fontSize: 17, fontWeight: 700, fontFamily: 'Syne', cursor: 'pointer',
+            boxShadow: '0 0 40px rgba(0,229,160,0.35), 0 4px 20px rgba(0,0,0,0.3)',
+            animation: 'ctaGlow 3s ease-in-out infinite', transition: 'transform 0.2s',
+          }}
+            onMouseEnter={e => e.target.style.transform = 'translateY(-3px) scale(1.02)'}
+            onMouseLeave={e => e.target.style.transform = 'none'}>
+            Indítsd el az ingyenes próbát →
           </button>
         </div>
       </FadeIn>
