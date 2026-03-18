@@ -1822,14 +1822,27 @@ styleEl.textContent = `
 document.head.appendChild(styleEl)
 
 // ─── Root App ──────────────────────────────────────────────────────────────────
+function routeFromLocation() {
+  const path = window.location.pathname
+  const hash = window.location.hash
+  if (path === '/success' || hash === '#success') return 'success'
+  if (hash === '#app') return 'app'
+  return 'landing'
+}
+
 export default function App() {
-  const [route, setRoute] = useState(() => {
-    const path = window.location.pathname
-    const hash = window.location.hash
-    if (path === '/success' || hash === '#success') return 'success'
-    if (hash === '#app') return 'app'
-    return 'landing'
-  })
+  const [route, setRoute] = useState(routeFromLocation)
+
+  // Keep route in sync with browser back/forward and direct hash changes
+  useEffect(() => {
+    const sync = () => setRoute(routeFromLocation())
+    window.addEventListener('hashchange', sync)
+    window.addEventListener('popstate', sync)
+    return () => {
+      window.removeEventListener('hashchange', sync)
+      window.removeEventListener('popstate', sync)
+    }
+  }, [])
 
   if (route === 'success') return <SuccessPage />
   if (route === 'app') return <SaaSShell />
