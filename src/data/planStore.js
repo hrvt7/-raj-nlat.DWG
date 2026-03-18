@@ -110,9 +110,12 @@ export async function savePlan(plan, fileBlob) {
     await planFileStore.setItem(plan.id, fileBlob)
     // Fire-and-forget remote blob backup (only when Supabase is configured)
     if (supabaseConfigured) {
-      uploadPlanBlob(plan.id, fileBlob, plan.fileType).catch(err =>
+      uploadPlanBlob(plan.id, fileBlob, plan.fileType).then(() => {
+        updatePlanMeta(plan.id, { remoteBackupAt: new Date().toISOString() })
+      }).catch(err => {
         console.warn('[planStore] remote blob backup failed:', err.message)
-      )
+        updatePlanMeta(plan.id, { remoteBackupAt: null })
+      })
     }
   }
 
