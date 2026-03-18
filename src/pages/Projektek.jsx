@@ -593,6 +593,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
   const detected = plan.detectedCount || 0
   const hasScale = plan.hasScale
   const hasCalc = plan.calcTotal != null && plan.calcTotal > 0
+  const backupStatus = supabaseConfigured ? (plan.remoteBackupAt === null ? 'failed' : plan.remoteBackupAt ? 'ok' : null) : null
   const calcTotal = plan.calcTotal || 0
   const calcItems = plan.calcItemCount || 0
 
@@ -617,6 +618,9 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
           </>
         })()}
         <div style={{ position: 'absolute', top: 7, left: 7 }}><Checkbox checked={selected} onChange={onSelect} /></div>
+        {backupStatus && (
+          <span title={backupStatus === 'ok' ? 'Felhőbe mentve' : 'Felhő mentés sikertelen'} style={{ position: 'absolute', top: 7, right: 7, padding: '2px 5px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', backdropFilter: 'blur(4px)', background: backupStatus === 'ok' ? 'rgba(0,229,160,0.15)' : 'rgba(255,99,99,0.15)', color: backupStatus === 'ok' ? C.accent : '#ff6363', lineHeight: 1 }}>☁{backupStatus === 'ok' ? '' : ' ✗'}</span>
+        )}
         {(markerCount > 0 || hasScale || detected > 0) && (
           <div style={{ position: 'absolute', bottom: 6, left: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {markerCount > 0 && <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 9, fontFamily: 'DM Mono', background: 'rgba(0,229,160,0.2)', color: C.accent, backdropFilter: 'blur(4px)' }}>✓ {markerCount} elem</span>}
@@ -1022,7 +1026,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
     try {
       // Check if cloud recovery will be attempted — show feedback if so
       const hasLocal = await hasPlanFileLocally(plan.id)
-      const attemptingRecovery = !hasLocal && supabaseConfigured
+      const backupKnownFailed = plan.remoteBackupAt === null
+      const attemptingRecovery = !hasLocal && supabaseConfigured && !backupKnownFailed
       if (attemptingRecovery) {
         toast.show('A tervfájl visszaállítása a felhőből…', 'info', 8000)
       }

@@ -167,8 +167,13 @@ export async function getPlanFile(planId) {
   if (local) return local
   // On-demand remote blob recovery when local is missing
   if (supabaseConfigured) {
+    const meta = getPlanMeta(planId)
+    // Skip remote attempt if backup is known to have failed (remoteBackupAt === null)
+    if (meta?.remoteBackupAt === null) {
+      console.info('[planStore] skipping remote recovery — backup previously failed for', planId)
+      return null
+    }
     try {
-      const meta = getPlanMeta(planId)
       const remote = await downloadPlanBlob(planId, meta?.fileType)
       if (remote && remote.size > 0) {
         await planFileStore.setItem(planId, remote)
