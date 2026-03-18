@@ -226,7 +226,7 @@ function NavBar({ onStart }) {
             onMouseEnter={e => e.target.style.color='#CCC'} onMouseLeave={e => e.target.style.color='#888'}>{l}</a>
         ))}
       </div>
-      <button className="nav-cta" onClick={onStart} style={{ padding: '10px 22px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 14, boxShadow: '0 0 20px rgba(0,229,160,0.25)', transition: 'all 0.2s' }}
+      <button className="nav-cta" onClick={onStart} style={{ padding: '10px 22px', background: '#00E5A0', color: '#0A0A0A', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Syne', fontWeight: 700, fontSize: 14, boxShadow: '0 0 20px rgba(0,229,160,0.25)', transition: 'all 0.2s', flexShrink: 0, whiteSpace: 'nowrap' }}
         onMouseEnter={e => { e.target.style.boxShadow='0 0 30px rgba(0,229,160,0.5)'; e.target.style.transform='translateY(-1px)' }}
         onMouseLeave={e => { e.target.style.boxShadow='0 0 20px rgba(0,229,160,0.25)'; e.target.style.transform='none' }}>
         Kipróbálom →
@@ -2147,12 +2147,12 @@ function PDFOutputSection() {
               </div>
             ))}
 
-            {/* CTA hint */}
-            <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(0,229,160,0.05)', border: '1px solid rgba(0,229,160,0.12)', borderRadius: 8, padding: '10px 16px' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M12 2v20M2 12l10 10 10-10"/>
+            {/* Info hint — non-interactive */}
+            <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(0,229,160,0.04)', border: '1px solid rgba(0,229,160,0.08)', borderRadius: 8, padding: '10px 16px', opacity: 0.7 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00E5A0" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.6 }}>
+                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
               </svg>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#00E5A0' }}>Minta PDF letöltése →</span>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#888' }}>Minta PDF-et az appban tudsz generálni a demó adatokból</span>
             </div>
           </FadeIn>
         </div>
@@ -2359,7 +2359,10 @@ export default function Landing({ onStart }) {
         @media (max-width: 640px) {
           .nav-links { display: none !important; }
           .nav-root  { padding: 10px 16px !important; }
-          .nav-cta   { padding: 8px 14px !important; font-size: 13px !important; }
+          .nav-cta   { padding: 8px 14px !important; font-size: 13px !important; flex-shrink: 0 !important; }
+        }
+        @media (max-width: 360px) {
+          .nav-cta { padding: 7px 10px !important; font-size: 12px !important; }
         }
 
         /* ─ HERO ─ */
@@ -2371,6 +2374,10 @@ export default function Landing({ onStart }) {
           .hero-section { padding: 76px 16px 48px !important; }
           .hero-ctas    { flex-direction: column !important; gap: 10px !important; }
           .hero-ctas > * { width: 100% !important; justify-content: center !important; text-align: center !important; }
+          .hero-main-cta { padding: 16px 24px !important; font-size: 15px !important; }
+        }
+        @media (max-width: 360px) {
+          .hero-main-cta { padding: 14px 18px !important; font-size: 14px !important; }
         }
 
         /* ─ SECTION padding ─ */
@@ -2392,6 +2399,11 @@ export default function Landing({ onStart }) {
         /* ─ HERO stats bar ─ */
         @media (max-width: 640px) {
           .hero-stats-bar { grid-template-columns: repeat(2, 1fr) !important; }
+          .hero-stats-bar > div { padding: 18px 8px !important; }
+        }
+        @media (max-width: 360px) {
+          .hero-stats-bar { grid-template-columns: 1fr 1fr !important; gap: 0 !important; }
+          .hero-stats-bar > div { padding: 14px 4px !important; }
         }
 
         /* ─ Tab-switch fade-slide animation ─ */
@@ -2499,9 +2511,12 @@ export default function Landing({ onStart }) {
           .section-header-gap { margin-bottom: 36px !important; }
         }
 
-        /* ─ Hero frame: use simple width on mobile ─ */
+        /* ─ Hero frame: use simple width on mobile, limit height ─ */
         @media (max-width: 768px) {
-          .hero-frame { width: 100% !important; }
+          .hero-frame { width: 100% !important; max-height: 50vh !important; }
+        }
+        @media (max-width: 480px) {
+          .hero-frame { max-height: 40vh !important; }
         }
 
         /* ─ Hero headline: allow wrap on very small screens ─ */
