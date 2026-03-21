@@ -195,7 +195,7 @@ function NavBar({ onStart }) {
       transition: 'all 0.3s', padding: '16px 40px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden' }}>
         <div style={{ width: 34, height: 34, background: '#050E08', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 16px rgba(0,229,160,0.25)', border: '1px solid rgba(0,229,160,0.2)', flexShrink: 0 }}>
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256" fill="none" aria-hidden="true">
             <defs>
@@ -2363,6 +2363,7 @@ export default function Landing({ onStart }) {
         }
         @media (max-width: 360px) {
           .nav-cta { padding: 7px 10px !important; font-size: 12px !important; }
+          .nav-root { gap: 8px !important; }
         }
 
         /* ─ HERO ─ */
@@ -2403,7 +2404,7 @@ export default function Landing({ onStart }) {
         }
         @media (max-width: 360px) {
           .hero-stats-bar { grid-template-columns: 1fr 1fr !important; gap: 0 !important; }
-          .hero-stats-bar > div { padding: 14px 4px !important; }
+          .hero-stats-bar > div { padding: 14px 6px !important; overflow: hidden; text-overflow: ellipsis; }
         }
 
         /* ─ Tab-switch fade-slide animation ─ */

@@ -72,7 +72,7 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
       )}
 
       {/* Stats row – quotes */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
         <StatCard
           label="Összes ajánlat"
           value={stats.all}
@@ -101,7 +101,7 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
 
       {/* Database stats strip */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20,
+        display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10, marginBottom: 20,
       }}>
         <DbStatCard
           label="Munkatételek"
