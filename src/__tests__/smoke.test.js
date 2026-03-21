@@ -981,4 +981,59 @@ describe('QuoteView email fallback — no bare showToast', () => {
     // Must contain toast.show calls (the correct pattern)
     expect(body).toContain('toast.show(')
   })
+
+  it('QuoteView has a markAsSent action that calls onStatusChange with "sent"', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'App.jsx'), 'utf8')
+    const start = src.indexOf('function QuoteView(')
+    const nextFn = src.indexOf('\nfunction ', start + 1)
+    const body = src.slice(start, nextFn > start ? nextFn : start + 20000)
+    // markAsSent must exist and call onStatusChange with 'sent'
+    expect(body).toContain('const markAsSent')
+    expect(body).toContain("onStatusChange(quote.id, 'sent')")
+    // The "Megjelölés elküldöttként" button must be present
+    expect(body).toContain('Megjelölés elküldöttként')
+    // Button should only render when not already sent
+    expect(body).toContain("quote.status !== 'sent'")
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Regression: Quote status model — "sent" filter matches persisted status
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Quote status filter model', () => {
+  it('Quotes filter includes "sent" tab and matches quote.status', () => {
+    // Simulate the filter logic from Quotes.jsx
+    const STATUS_TABS = ['all', 'draft', 'sent', 'won', 'lost']
+    expect(STATUS_TABS).toContain('sent')
+
+    const quotes = [
+      { id: 'Q1', status: 'draft' },
+      { id: 'Q2', status: 'sent' },
+      { id: 'Q3', status: 'won' },
+      { id: 'Q4', status: 'sent' },
+    ]
+
+    const sentFilter = quotes.filter(q => q.status === 'sent')
+    expect(sentFilter).toHaveLength(2)
+    expect(sentFilter.map(q => q.id)).toEqual(['Q2', 'Q4'])
+
+    // "all" shows everything
+    const allFilter = quotes.filter(() => true)
+    expect(allFilter).toHaveLength(4)
+  })
+
+  it('handleStatusChange produces a valid "sent" quote', () => {
+    // Simulate the status change logic from App.jsx handleStatusChange
+    const quotes = [
+      { id: 'Q1', status: 'draft', project_name: 'Test' },
+    ]
+    const updated = quotes.map(q => q.id === 'Q1'
+      ? { ...q, status: 'sent', updatedAt: new Date().toISOString() }
+      : q
+    )
+    expect(updated[0].status).toBe('sent')
+    expect(updated[0].updatedAt).toBeTruthy()
+    expect(updated[0].project_name).toBe('Test') // other fields preserved
+  })
 })

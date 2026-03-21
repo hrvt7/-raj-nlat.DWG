@@ -281,6 +281,13 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     }
   }
 
+  const markAsSent = () => {
+    if (onStatusChange && quote.status !== 'sent') {
+      onStatusChange(quote.id, 'sent')
+      toast.show('Ajánlat elküldöttként jelölve', 'success')
+    }
+  }
+
   const handleEmail = async () => {
     const { buildMailtoUrl } = await import('./utils/generatePdf.js')
     const url = buildMailtoUrl({
@@ -307,7 +314,12 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     setTimeout(() => {
       window.removeEventListener('blur', onLeave)
       document.removeEventListener('visibilitychange', onLeave)
-      if (!opened) {
+      if (opened) {
+        // Mail client appeared to open — prompt to mark as sent if still draft
+        if (quote.status !== 'sent') {
+          toast.show('Email kliens megnyitva — jelöld az ajánlatot elküldöttként, ha elküldted.', 'info')
+        }
+      } else {
         const to = (editClientEmail || '').trim()
         if (to && navigator.clipboard) {
           navigator.clipboard.writeText(to).then(() => {
@@ -944,6 +956,14 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             }}>
               Email küldése
             </button>
+            {quote.status !== 'sent' && (
+              <button onClick={markAsSent} style={{
+                ...actionBase, width: '100%', cursor: 'pointer',
+                background: 'transparent', border: `1px solid ${C.blue}`, color: C.blue,
+              }}>
+                ✓ Megjelölés elküldöttként
+              </button>
+            )}
             <button onClick={handlePreview} style={{
               ...actionBase, width: '100%', background: '#B07CFF', cursor: 'pointer',
             }}>
