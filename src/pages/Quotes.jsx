@@ -74,7 +74,7 @@ export default function QuotesPage({ quotes, onQuotesChange, session, onNavigate
             {filtered.length} ajánlat · összesen {fmt(totalValue)} Ft nettó
           </p>
         </div>
-        <Button onClick={() => onNavigate('new-quote')} >Új ajánlat</Button>
+        <Button onClick={() => { onNavigate('projektek'); toast.show('Válassz projektet és tervrajzot az ajánlat elkészítéséhez.', 'info', 4000) }} >Új ajánlat</Button>
       </div>
 
       {/* Filter bar */}
@@ -113,7 +113,7 @@ export default function QuotesPage({ quotes, onQuotesChange, session, onNavigate
           desc={search ? 'Próbálj más keresési feltételt.' : 'Készítsd el az első ajánlatot: hozz létre projektet, töltsd fel a tervrajzot, majd generálj árajánlatot.'}
           action={!search && (
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button onClick={() => onNavigate('new-quote')}>Új ajánlat</Button>
+              <Button onClick={() => { onNavigate('projektek'); toast.show('Válassz projektet és tervrajzot az ajánlat elkészítéséhez.', 'info', 4000) }}>Új ajánlat</Button>
               {!isDemoSeeded() && (
                 <Button variant="ghost" onClick={() => {
                   const { seeded } = seedDemoData()

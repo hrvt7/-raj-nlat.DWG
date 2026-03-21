@@ -1085,3 +1085,23 @@ describe('Assembly completeness — no NaN', () => {
     expect(src).toContain('completeness.percent')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Regression: "Új ajánlat" navigates to projektek with guidance, not new-quote
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('"Új ajánlat" — no ambiguous new-quote route', () => {
+  it('Quotes.jsx navigates to projektek, not new-quote', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'pages', 'Quotes.jsx'), 'utf8')
+    // Must NOT use the old 'new-quote' route
+    expect(src).not.toContain("onNavigate('new-quote')")
+    // Must navigate to projektek
+    expect(src).toContain("onNavigate('projektek')")
+  })
+
+  it('App.jsx legacy redirect no longer handles new-quote', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'App.jsx'), 'utf8')
+    // The legacy redirect should not reference new-quote
+    expect(src).not.toContain("page === 'new-quote'")
+  })
+})

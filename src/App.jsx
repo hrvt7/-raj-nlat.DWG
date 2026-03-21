@@ -1300,7 +1300,7 @@ function SaaSShell() {
 
   // ── Legacy route redirects → projektek ──────────────────────────────────────
   useEffect(() => {
-    if (page === 'plans' || page === 'new-quote') setPage('projektek')
+    if (page === 'plans') setPage('projektek')
   }, [page])
 
   // ── Orphan plan migration (once, on mount) ────────────────────────────────
