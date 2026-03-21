@@ -17,7 +17,6 @@ export default function AssembliesPage({ activeTrade, session }) {
   const [hideVariants, setHideVariants] = useState(true) // Hide child variants by default
   const [tagFilter, setTagFilter] = useState(null)
   const [aiPrompt, setAiPrompt] = useState('')
-  const [aiHistory, setAiHistory] = useState([])
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_asm_view') || 'grid')
   const [confirmState, setConfirmState] = useState(null)
   const toast = useToast()
@@ -62,12 +61,10 @@ export default function AssembliesPage({ activeTrade, session }) {
     return [...tags].sort()
   }, [assemblies])
 
-  // AI chat handler
+  // AI chat handler — not yet implemented, show clear feedback
   const handleAiSubmit = () => {
     if (!aiPrompt.trim()) return
-    setAiHistory(prev => [...prev, { role: 'user', text: aiPrompt, ts: Date.now() }])
-    // TODO: AI logic integration
-    setAiHistory(prev => [...prev, { role: 'ai', text: 'AI Assembly Builder hamarosan elérhető...', ts: Date.now() }])
+    toast.show('AI Assembly Builder hamarosan elérhető — ez a funkció még fejlesztés alatt áll.', 'info')
     setAiPrompt('')
   }
 
@@ -141,22 +138,23 @@ export default function AssembliesPage({ activeTrade, session }) {
         </div>
       </div>
 
-      {/* AI Assembly Builder */}
+      {/* AI Assembly Builder — not yet implemented */}
       <div style={{
-        background: 'linear-gradient(135deg, rgba(0,229,160,0.06) 0%, rgba(56,189,248,0.06) 100%)',
-        border: `1px solid rgba(0,229,160,0.15)`,
+        background: 'linear-gradient(135deg, rgba(0,229,160,0.04) 0%, rgba(56,189,248,0.04) 100%)',
+        border: `1px solid rgba(0,229,160,0.10)`,
         borderRadius: 12, padding: '12px 16px', marginBottom: 16,
         display: 'flex', alignItems: 'center', gap: 12,
+        opacity: 0.6,
       }}>
         <span style={{ fontSize: 18, flexShrink: 0 }}>✦</span>
         <input
           value={aiPrompt}
           onChange={e => setAiPrompt(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleAiSubmit() }}
-          placeholder="Assembly építése AI-val... pl. 'Hozz létre egy 3 fázisú ipari dugalj csomagot'"
+          placeholder="AI Assembly Builder (hamarosan)..."
           style={{
             flex: 1, background: 'transparent', border: 'none',
-            fontFamily: 'DM Mono', fontSize: 12, color: C.text, outline: 'none',
+            fontFamily: 'DM Mono', fontSize: 12, color: C.textMuted, outline: 'none',
           }}
         />
         <button
@@ -480,7 +478,7 @@ function AssemblyGridCard({ assembly, onClick }) {
         }}>
           <span style={CARD_STAT_LABEL}>Kész</span>
           <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 11, color: C.accent }}>
-            {Math.round(completeness * 100)}%
+            {completeness.percent}%
           </span>
         </div>
         <div style={{
@@ -488,7 +486,7 @@ function AssemblyGridCard({ assembly, onClick }) {
         }}>
           <div style={{
             height: '100%', background: C.accent,
-            width: `${completeness * 100}%`, transition: 'width 0.2s',
+            width: `${completeness.percent}%`, transition: 'width 0.2s',
           }} />
         </div>
       </div>
@@ -1228,7 +1226,7 @@ function MenuBtn({ label, onClick, danger }) {
 
 function CompletenessBar({ assembly, label = 'Kész' }) {
   const completeness = getAssemblyCompleteness(assembly)
-  const percent = Math.round(completeness * 100)
+  const percent = completeness.percent
 
   return (
     <div>

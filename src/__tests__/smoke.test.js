@@ -1037,3 +1037,51 @@ describe('Quote status filter model', () => {
     expect(updated[0].project_name).toBe('Test') // other fields preserved
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Regression: getAssemblyCompleteness returns object with numeric percent
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { getAssemblyCompleteness } from '../data/workItemsDb.js'
+
+describe('Assembly completeness — no NaN', () => {
+  it('returns an object with a bounded numeric percent for a minimal assembly', () => {
+    const result = getAssemblyCompleteness({ name: '', components: [] })
+    expect(result).toHaveProperty('percent')
+    expect(result).toHaveProperty('score')
+    expect(result).toHaveProperty('total')
+    expect(typeof result.percent).toBe('number')
+    expect(Number.isNaN(result.percent)).toBe(false)
+    expect(result.percent).toBeGreaterThanOrEqual(0)
+    expect(result.percent).toBeLessThanOrEqual(100)
+  })
+
+  it('returns 100% for a fully complete assembly', () => {
+    const full = {
+      name: 'Dugalj csomag',
+      description: 'Komplett dugalj',
+      category: 'szerelvenyek',
+      components: [
+        { itemType: 'material', name: 'Anyag' },
+        { itemType: 'workitem', name: 'Munka' },
+      ],
+    }
+    const result = getAssemblyCompleteness(full)
+    expect(result.percent).toBe(100)
+    expect(result.score).toBe(result.total)
+  })
+
+  it('returns a valid percent for empty/undefined assembly', () => {
+    const result = getAssemblyCompleteness({})
+    expect(Number.isNaN(result.percent)).toBe(false)
+    expect(result.percent).toBeGreaterThanOrEqual(0)
+  })
+
+  it('Assemblies.jsx card uses completeness.percent, not completeness * 100', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'pages', 'Assemblies.jsx'), 'utf8')
+    // Must NOT multiply completeness as a number (the old NaN bug)
+    expect(src).not.toMatch(/completeness\s*\*\s*100/)
+    // Must use completeness.percent
+    expect(src).toContain('completeness.percent')
+  })
+})
