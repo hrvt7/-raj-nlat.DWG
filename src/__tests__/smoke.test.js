@@ -956,3 +956,29 @@ describe('Demo Seed — data shape & idempotency', () => {
     expect(hasDemoData()).toBe(false)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Regression: QuoteView must not reference bare showToast (undefined in its scope)
+// Fixed: uses useToast() hook instead.  This test catches accidental revert.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+describe('QuoteView email fallback — no bare showToast', () => {
+  it('QuoteView body uses toast.show, not showToast', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'App.jsx'), 'utf8')
+    // Extract QuoteView function body (starts at "function QuoteView" and ends
+    // at the next top-level "function " or "// ─── " section heading)
+    const start = src.indexOf('function QuoteView(')
+    expect(start).toBeGreaterThan(-1)
+    // QuoteView is ~830 lines; grab enough to cover the handleEmail fallback
+    const nextFn = src.indexOf('\nfunction ', start + 1)
+    const body = src.slice(start, nextFn > start ? nextFn : start + 20000)
+    // Must NOT contain bare showToast calls (these would be ReferenceErrors)
+    const bareShowToast = body.match(/[^.]showToast\s*\(/g) || []
+    expect(bareShowToast).toHaveLength(0)
+    // Must contain toast.show calls (the correct pattern)
+    expect(body).toContain('toast.show(')
+  })
+})

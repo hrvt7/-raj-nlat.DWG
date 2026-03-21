@@ -19,7 +19,7 @@ const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx
 import { loadSettings, saveSettings, loadWorkItems, saveWorkItems, loadMaterials, saveMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies, saveAssemblies } from './data/store.js'
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta, saveAllPlansMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, saveAllProjects, loadProjects, getProject } from './data/projectStore.js'
-import { QuoteStatusBadge, fmt, ToastProvider } from './components/ui.jsx'
+import { QuoteStatusBadge, fmt, ToastProvider, useToast } from './components/ui.jsx'
 import SuccessPage from './pages/Success.jsx'
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -126,6 +126,7 @@ function PdfPreview({ level, outputMode = 'combined' }) {
 
 // ─── QuoteView ────────────────────────────────────────────────────────────────
 function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
+  const toast = useToast()
   const statuses = ['draft', 'sent', 'won', 'lost']
   const statusLabels = { draft: 'Piszkozat', sent: 'Elküldve', won: 'Nyertes', lost: 'Elveszett' }
   const statusColors = { draft: C.muted, sent: C.blue, won: C.accent, lost: C.red }
@@ -310,12 +311,12 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
         const to = (editClientEmail || '').trim()
         if (to && navigator.clipboard) {
           navigator.clipboard.writeText(to).then(() => {
-            showToast('✉', `Nem nyílt meg email kliens. A címzett (${to}) a vágólapra másolva.`, '#FF6B6B')
+            toast.show(`Nem nyílt meg email kliens. A címzett (${to}) a vágólapra másolva.`, 'warning')
           }).catch(() => {
-            showToast('✉', 'Nem nyílt meg email kliens. Kérjük ellenőrizze az alapértelmezett levelező beállítást.', '#FF6B6B')
+            toast.show('Nem nyílt meg email kliens. Kérjük ellenőrizze az alapértelmezett levelező beállítást.', 'warning')
           })
         } else {
-          showToast('✉', 'Nem nyílt meg email kliens. Kérjük ellenőrizze az alapértelmezett levelező beállítást.', '#FF6B6B')
+          toast.show('Nem nyílt meg email kliens. Kérjük ellenőrizze az alapértelmezett levelező beállítást.', 'warning')
         }
       }
     }, 1500)
