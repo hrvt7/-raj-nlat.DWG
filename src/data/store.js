@@ -550,6 +550,10 @@ export function loadTemplates() {
   return load(LS_KEYS.TEMPLATES, [])
 }
 
+export function saveTemplates(templates) {
+  save(LS_KEYS.TEMPLATES, Array.isArray(templates) ? templates : [])
+}
+
 export function saveTemplate(template) {
   const templates = loadTemplates()
   const now = new Date().toISOString()

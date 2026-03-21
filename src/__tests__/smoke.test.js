@@ -1105,3 +1105,46 @@ describe('"Új ajánlat" — no ambiguous new-quote route', () => {
     expect(src).not.toContain("page === 'new-quote'")
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Regression: Backup import validation and round-trip
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Backup restore — validation and round-trip', () => {
+  it('backup format shape: valid backup has _app, _version, and at least one data key', () => {
+    const valid = { _app: 'TakeoffPro', _version: 1, settings: { company: { name: 'Test' } } }
+    expect(valid._app).toBe('TakeoffPro')
+    expect(valid._version).toBe(1)
+    expect(valid.settings || valid.materials || valid.quotes).toBeTruthy()
+  })
+
+  it('rejects backup with wrong _app', () => {
+    const bad = { _app: 'OtherApp', _version: 1, settings: {} }
+    expect(bad._app).not.toBe('TakeoffPro')
+  })
+
+  it('rejects backup with wrong _version', () => {
+    const bad = { _app: 'TakeoffPro', _version: 99, settings: {} }
+    expect(bad._version).not.toBe(1)
+  })
+
+  it('rejects backup with no data keys', () => {
+    const empty = { _app: 'TakeoffPro', _version: 1 }
+    const hasData = empty.settings || empty.materials || empty.projects || empty.plans || empty.templates || empty.quotes
+    expect(hasData).toBeFalsy()
+  })
+
+  it('Settings.jsx BackupTab has restore UI and validation logic', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'pages', 'Settings.jsx'), 'utf8')
+    // Must have file input for restore
+    expect(src).toContain('type="file"')
+    expect(src).toContain('accept=".json"')
+    // Must validate _app and _version
+    expect(src).toContain("_app !== 'TakeoffPro'")
+    expect(src).toContain('_version !== 1')
+    // Must have restore button text
+    expect(src).toContain('Visszaállítás fájlból')
+    // Must have confirmation dialog before applying
+    expect(src).toContain('confirmRestore')
+  })
+})

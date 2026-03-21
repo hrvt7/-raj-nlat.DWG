@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { C, fmt, Card, Button, Input, SectionHeader, ConfirmDialog, useToast } from '../components/ui.jsx'
-import { saveSettings, saveMaterials, DEFAULT_MATERIALS, loadQuotes, saveCompanyLogo } from '../data/store.js'
+import { saveSettings, saveMaterials, DEFAULT_MATERIALS, loadQuotes, saveQuotes, saveTemplates, saveCompanyLogo } from '../data/store.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
-import { loadProjects } from '../data/projectStore.js'
-import { loadPlans } from '../data/planStore.js'
+import { loadProjects, saveAllProjects } from '../data/projectStore.js'
+import { loadPlans, saveAllPlansMeta } from '../data/planStore.js'
 import { loadTemplates } from '../data/legendStore.js'
 
 const TABS = [
@@ -75,7 +75,7 @@ export default function SettingsPage({ settings, onSettingsChange, materials, on
         <QuoteTab settings={settings} update={updateSettings} />
       )}
       {activeTab === 'backup' && (
-        <BackupTab settings={settings} materials={materials} />
+        <BackupTab settings={settings} materials={materials} onSettingsChange={onSettingsChange} onMaterialsChange={onMaterialsChange} />
       )}
     </div>
   )
@@ -720,8 +720,70 @@ function QuoteTab({ settings, update }) {
   )
 }
 
-function BackupTab({ settings, materials }) {
+function BackupTab({ settings, materials, onSettingsChange, onMaterialsChange }) {
   const [status, setStatus] = useState(null)
+  const [confirmRestore, setConfirmRestore] = useState(null) // holds parsed backup for confirmation
+  const fileInputRef = React.useRef(null)
+
+  const handleImport = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset input so the same file can be re-selected
+    e.target.value = ''
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result)
+
+        // Validate shape
+        if (data._app !== 'TakeoffPro' || data._version !== 1) {
+          setStatus({ type: 'error', msg: 'Nem kompatibilis backup fájl (hiányzó _app vagy _version).' })
+          return
+        }
+
+        // Check that at least one data entity is present
+        const hasData = data.settings || data.materials || data.projects || data.plans || data.templates || data.quotes
+        if (!hasData) {
+          setStatus({ type: 'error', msg: 'A backup fájl üres — nincs visszaállítható adat.' })
+          return
+        }
+
+        // Show confirmation with summary
+        setConfirmRestore(data)
+      } catch (err) {
+        setStatus({ type: 'error', msg: `Érvénytelen JSON fájl: ${err.message}` })
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const applyRestore = () => {
+    const data = confirmRestore
+    if (!data) return
+
+    try {
+      if (data.settings) {
+        saveSettings(data.settings)
+        if (onSettingsChange) onSettingsChange(data.settings)
+      }
+      if (data.materials) {
+        saveMaterials(data.materials)
+        if (onMaterialsChange) onMaterialsChange(data.materials)
+      }
+      if (data.projects) saveAllProjects(data.projects)
+      if (data.plans) saveAllPlansMeta(data.plans)
+      if (data.templates) saveTemplates(data.templates)
+      if (data.quotes) saveQuotes(data.quotes)
+
+      setConfirmRestore(null)
+      setStatus({ type: 'success', msg: `Visszaállítás kész — ${data._exportedAt ? new Date(data._exportedAt).toLocaleDateString('hu-HU') : 'ismeretlen dátumú'} backup betöltve.` })
+      setTimeout(() => setStatus(null), 5000)
+    } catch (err) {
+      setStatus({ type: 'error', msg: `Visszaállítási hiba: ${err.message}` })
+      setConfirmRestore(null)
+    }
+  }
 
   const handleExport = () => {
     try {
@@ -782,15 +844,40 @@ function BackupTab({ settings, materials }) {
         </div>
       </div>
 
-      <button onClick={handleExport} style={{
-        background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 8,
-        padding: '10px 20px', color: C.accent, fontFamily: 'Syne', fontWeight: 700,
-        fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <span style={{ fontSize: 15 }}>💾</span>
-        Backup letöltése (.json)
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button onClick={handleExport} style={{
+          background: C.accentDim, border: `1px solid ${C.accentBorder}`, borderRadius: 8,
+          padding: '10px 20px', color: C.accent, fontFamily: 'Syne', fontWeight: 700,
+          fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 15 }}>💾</span>
+          Backup letöltése (.json)
+        </button>
+        <button onClick={() => fileInputRef.current?.click()} style={{
+          background: 'rgba(76,201,240,0.08)', border: '1px solid rgba(76,201,240,0.2)', borderRadius: 8,
+          padding: '10px 20px', color: '#4CC9F0', fontFamily: 'Syne', fontWeight: 700,
+          fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 15 }}>📂</span>
+          Visszaállítás fájlból
+        </button>
+        <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport}
+          style={{ display: 'none' }} />
+      </div>
+
+      {/* Restore confirmation dialog */}
+      {confirmRestore && (
+        <ConfirmDialog
+          message="Biztosan visszaállítod a backup-ot?"
+          detail={`A jelenlegi adatok felülíródnak a ${confirmRestore._exportedAt ? new Date(confirmRestore._exportedAt).toLocaleDateString('hu-HU') + '-i' : ''} mentéssel. Ez nem vonható vissza.`}
+          confirmLabel="Visszaállítás"
+          onConfirm={applyRestore}
+          onCancel={() => setConfirmRestore(null)}
+        />
+      )}
+
       {status && (
         <div style={{
           marginTop: 12, padding: '8px 14px', borderRadius: 6,
