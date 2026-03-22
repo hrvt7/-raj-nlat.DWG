@@ -1146,5 +1146,19 @@ describe('Backup restore — validation and round-trip', () => {
     expect(src).toContain('Visszaállítás fájlból')
     // Must have confirmation dialog before applying
     expect(src).toContain('confirmRestore')
+    // Must call onRestoreComplete after applying restore
+    expect(src).toContain('onRestoreComplete')
+  })
+
+  it('App.jsx wires handleRestoreComplete to refresh all state after restore', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'App.jsx'), 'utf8')
+    // Must reload quotes, work items, and bump revision keys
+    expect(src).toContain('handleRestoreComplete')
+    expect(src).toContain('setQuotes(loadQuotes())')
+    expect(src).toContain('setProjRev')
+    expect(src).toContain('setPlanRev')
+    expect(src).toContain('setAsmRev')
+    // Must pass to Settings
+    expect(src).toContain('onRestoreComplete={handleRestoreComplete}')
   })
 })

@@ -16,7 +16,7 @@ const TABS = [
   { key: 'backup',       label: '💾 Mentés' },
 ]
 
-export default function SettingsPage({ settings, onSettingsChange, materials, onMaterialsChange }) {
+export default function SettingsPage({ settings, onSettingsChange, materials, onMaterialsChange, onRestoreComplete }) {
   const [activeTab, setActiveTab] = useState('company')
 
   const updateSettings = (path, value) => {
@@ -75,7 +75,7 @@ export default function SettingsPage({ settings, onSettingsChange, materials, on
         <QuoteTab settings={settings} update={updateSettings} />
       )}
       {activeTab === 'backup' && (
-        <BackupTab settings={settings} materials={materials} onSettingsChange={onSettingsChange} onMaterialsChange={onMaterialsChange} />
+        <BackupTab settings={settings} materials={materials} onSettingsChange={onSettingsChange} onMaterialsChange={onMaterialsChange} onRestoreComplete={onRestoreComplete} />
       )}
     </div>
   )
@@ -720,7 +720,7 @@ function QuoteTab({ settings, update }) {
   )
 }
 
-function BackupTab({ settings, materials, onSettingsChange, onMaterialsChange }) {
+function BackupTab({ settings, materials, onSettingsChange, onMaterialsChange, onRestoreComplete }) {
   const [status, setStatus] = useState(null)
   const [confirmRestore, setConfirmRestore] = useState(null) // holds parsed backup for confirmation
   const fileInputRef = React.useRef(null)
@@ -777,6 +777,7 @@ function BackupTab({ settings, materials, onSettingsChange, onMaterialsChange })
       if (data.quotes) saveQuotes(data.quotes)
 
       setConfirmRestore(null)
+      if (onRestoreComplete) onRestoreComplete()
       setStatus({ type: 'success', msg: `Visszaállítás kész — ${data._exportedAt ? new Date(data._exportedAt).toLocaleDateString('hu-HU') : 'ismeretlen dátumú'} backup betöltve.` })
       setTimeout(() => setStatus(null), 5000)
     } catch (err) {

@@ -1484,6 +1484,15 @@ function SaaSShell() {
     }
   }
 
+  // ── Post-restore full state refresh (backup import) ──────────────────────
+  const handleRestoreComplete = useCallback(() => {
+    setQuotes(loadQuotes())
+    setWorkItems(loadWorkItems())
+    setProjRev(r => r + 1)
+    setPlanRev(r => r + 1)
+    setAsmRev(r => r + 1)
+  }, [])
+
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
   React.useEffect(() => {
@@ -1695,7 +1704,8 @@ function SaaSShell() {
               ) : page === 'settings' ? (
                 <Settings settings={settings} materials={materials}
                   onSettingsChange={handleSettingsChange}
-                  onMaterialsChange={m => { setMaterials(m); if (session) saveMaterialsRemote(m).catch(err => console.error('[TakeoffPro] Remote materials sync failed:', err.message)) }} />
+                  onMaterialsChange={m => { setMaterials(m); if (session) saveMaterialsRemote(m).catch(err => console.error('[TakeoffPro] Remote materials sync failed:', err.message)) }}
+                  onRestoreComplete={handleRestoreComplete} />
               ) : null}
             </div>
             </Suspense>
