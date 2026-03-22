@@ -127,9 +127,9 @@ function PdfPreview({ level, outputMode = 'combined' }) {
 // ─── QuoteView ────────────────────────────────────────────────────────────────
 function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const toast = useToast()
-  const statuses = ['draft', 'sent', 'won', 'lost']
-  const statusLabels = { draft: 'Piszkozat', sent: 'Elküldve', won: 'Nyertes', lost: 'Elveszett' }
-  const statusColors = { draft: C.muted, sent: C.blue, won: C.accent, lost: C.red }
+  const statuses = ['draft', 'sent', 'won', 'lost', 'expired']
+  const statusLabels = { draft: 'Piszkozat', sent: 'Elküldve', won: 'Nyertes', lost: 'Elveszett', expired: 'Lejárt' }
+  const statusColors = { draft: C.muted, sent: C.blue, won: C.accent, lost: C.red, expired: C.yellow }
   const [pdfLevel, setPdfLevel] = useState('summary')
   const [pdfGenerating, setPdfGenerating] = useState(false)
   const [outputMode, setOutputMode] = useState(quote.outputMode || 'combined')
@@ -281,12 +281,15 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     }
   }
 
-  const markAsSent = () => {
-    if (onStatusChange && quote.status !== 'sent') {
-      onStatusChange(quote.id, 'sent')
-      toast.show('Ajánlat elküldöttként jelölve', 'success')
+  const markAs = (status, label) => {
+    if (onStatusChange && quote.status !== status) {
+      onStatusChange(quote.id, status)
+      toast.show(label, 'success')
     }
   }
+  const markAsSent = () => markAs('sent', 'Ajánlat elküldöttként jelölve')
+  const markAsWon  = () => markAs('won',  'Ajánlat nyertesként jelölve')
+  const markAsLost = () => markAs('lost', 'Ajánlat elveszettként jelölve')
 
   const handleEmail = async () => {
     const { buildMailtoUrl } = await import('./utils/generatePdf.js')
@@ -956,13 +959,29 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
             }}>
               Email küldése
             </button>
-            {quote.status !== 'sent' && (
+            {quote.status !== 'sent' && quote.status !== 'won' && quote.status !== 'lost' && (
               <button onClick={markAsSent} style={{
                 ...actionBase, width: '100%', cursor: 'pointer',
                 background: 'transparent', border: `1px solid ${C.blue}`, color: C.blue,
               }}>
                 ✓ Megjelölés elküldöttként
               </button>
+            )}
+            {quote.status === 'sent' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button onClick={markAsWon} style={{
+                  ...actionBase, cursor: 'pointer',
+                  background: 'transparent', border: `1px solid ${C.accent}`, color: C.accent,
+                }}>
+                  ✓ Nyertes
+                </button>
+                <button onClick={markAsLost} style={{
+                  ...actionBase, cursor: 'pointer',
+                  background: 'transparent', border: `1px solid ${C.red}`, color: C.red,
+                }}>
+                  ✗ Elveszett
+                </button>
+              </div>
             )}
             <button onClick={handlePreview} style={{
               ...actionBase, width: '100%', background: '#B07CFF', cursor: 'pointer',

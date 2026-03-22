@@ -11,6 +11,7 @@ const STATUS_TABS = [
   { key: 'sent',    label: 'Elküldve' },
   { key: 'won',     label: 'Nyertes' },
   { key: 'lost',    label: 'Elveszett' },
+  { key: 'expired', label: 'Lejárt' },
 ]
 
 export default function QuotesPage({ quotes, onQuotesChange, session, onNavigate, onOpenQuote, onRefresh }) {

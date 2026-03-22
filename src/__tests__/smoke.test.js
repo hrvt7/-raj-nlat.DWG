@@ -982,18 +982,23 @@ describe('QuoteView email fallback — no bare showToast', () => {
     expect(body).toContain('toast.show(')
   })
 
-  it('QuoteView has a markAsSent action that calls onStatusChange with "sent"', () => {
+  it('QuoteView has explicit status actions for sent, won, and lost', () => {
     const src = readFileSync(resolve(__dirname, '..', 'App.jsx'), 'utf8')
     const start = src.indexOf('function QuoteView(')
     const nextFn = src.indexOf('\nfunction ', start + 1)
     const body = src.slice(start, nextFn > start ? nextFn : start + 20000)
-    // markAsSent must exist and call onStatusChange with 'sent'
+    // markAs helper must exist and call onStatusChange
+    expect(body).toContain('const markAs')
+    expect(body).toContain('onStatusChange(quote.id, status)')
+    // All three status actions must be defined
     expect(body).toContain('const markAsSent')
-    expect(body).toContain("onStatusChange(quote.id, 'sent')")
+    expect(body).toContain('const markAsWon')
+    expect(body).toContain('const markAsLost')
     // The "Megjelölés elküldöttként" button must be present
     expect(body).toContain('Megjelölés elküldöttként')
-    // Button should only render when not already sent
-    expect(body).toContain("quote.status !== 'sent'")
+    // Won/Lost buttons must be present
+    expect(body).toContain('Nyertes')
+    expect(body).toContain('Elveszett')
   })
 })
 
@@ -1002,39 +1007,42 @@ describe('QuoteView email fallback — no bare showToast', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('Quote status filter model', () => {
-  it('Quotes filter includes "sent" tab and matches quote.status', () => {
-    // Simulate the filter logic from Quotes.jsx
-    const STATUS_TABS = ['all', 'draft', 'sent', 'won', 'lost']
+  it('all statuses have matching filter tabs', () => {
+    const STATUS_TABS = ['all', 'draft', 'sent', 'won', 'lost', 'expired']
     expect(STATUS_TABS).toContain('sent')
+    expect(STATUS_TABS).toContain('won')
+    expect(STATUS_TABS).toContain('lost')
+    expect(STATUS_TABS).toContain('expired')
 
     const quotes = [
       { id: 'Q1', status: 'draft' },
       { id: 'Q2', status: 'sent' },
       { id: 'Q3', status: 'won' },
-      { id: 'Q4', status: 'sent' },
+      { id: 'Q4', status: 'lost' },
+      { id: 'Q5', status: 'expired' },
     ]
 
-    const sentFilter = quotes.filter(q => q.status === 'sent')
-    expect(sentFilter).toHaveLength(2)
-    expect(sentFilter.map(q => q.id)).toEqual(['Q2', 'Q4'])
+    // Each filter matches its status
+    for (const s of ['draft', 'sent', 'won', 'lost', 'expired']) {
+      const filtered = quotes.filter(q => q.status === s)
+      expect(filtered).toHaveLength(1)
+    }
 
     // "all" shows everything
-    const allFilter = quotes.filter(() => true)
-    expect(allFilter).toHaveLength(4)
+    expect(quotes.filter(() => true)).toHaveLength(5)
   })
 
-  it('handleStatusChange produces a valid "sent" quote', () => {
-    // Simulate the status change logic from App.jsx handleStatusChange
-    const quotes = [
-      { id: 'Q1', status: 'draft', project_name: 'Test' },
-    ]
-    const updated = quotes.map(q => q.id === 'Q1'
-      ? { ...q, status: 'sent', updatedAt: new Date().toISOString() }
-      : q
-    )
-    expect(updated[0].status).toBe('sent')
-    expect(updated[0].updatedAt).toBeTruthy()
-    expect(updated[0].project_name).toBe('Test') // other fields preserved
+  it('handleStatusChange produces valid quotes for all statuses', () => {
+    for (const status of ['sent', 'won', 'lost', 'expired']) {
+      const quotes = [{ id: 'Q1', status: 'draft', project_name: 'Test' }]
+      const updated = quotes.map(q => q.id === 'Q1'
+        ? { ...q, status, updatedAt: new Date().toISOString() }
+        : q
+      )
+      expect(updated[0].status).toBe(status)
+      expect(updated[0].updatedAt).toBeTruthy()
+      expect(updated[0].project_name).toBe('Test')
+    }
   })
 })
 
