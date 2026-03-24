@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ brand_name|default('N/A') }} — Weboldal Audit</title>
+</head>
+<body>
+
+{% include 'cover.html' %}
+
+{% if audit_level == 'szint1' %}
+    {% include 'layman_summary.html' %}
+    {% include 'quick_wins.html' %}
+    {% include 'scorecard.html' %}
+    {% include 'next_steps.html' %}
+{% else %}
+    {# ═══ BLOKK A: AUDIT (8-10 oldal) ═══ #}
+    {% include 'layman_summary.html' %}
+    {% include 'quick_wins_layman.html' %}
+
+    {% with separator_title='Részletes technikai melléklet', separator_subtitle='A következő oldalak a technikai hátteret tartalmazzák. Ha nem technikai szakember, nyugodtan ugorja át — a fenti összefoglaló tartalmazza a lényeget.' %}
+        {% include 'separator.html' %}
+    {% endwith %}
+
+    {% include 'executive_summary.html' %}
+    {% include 'methodology.html' %}
+    {% include 'scorecard.html' %}
+    {% include 'findings.html' %}
+    {% include 'quick_wins.html' %}
+    {% include 'action_plan.html' %}
+
+    {# ═══ BLOKK B: SZOLGÁLTATÁSI AJÁNLAT (2-3 oldal) ═══ #}
+    {% with separator_title='Szolgáltatási Ajánlat', separator_subtitle='Az alábbi rész a javasolt együttműködési kereteket tartalmazza.' %}
+        {% include 'separator.html' %}
+    {% endwith %}
+
+    {% include 'proposal.html' %}
+    {% include 'competitors.html' %}
+
+    {# ═══ BLOKK C: OPERATÍV MELLÉKLETEK (3-4 oldal) ═══ #}
+    {% with separator_title='Marketing Műhelymunka Tervek', separator_subtitle='Részletes operatív anyagok a végrehajtáshoz.' %}
+        {% include 'separator.html' %}
+    {% endwith %}
+
+    {% include 'appendix.html' %}
+{% endif %}
+
+<div class="report-footer">
+    {{ config.disclaimer|default('') }}<br>
+    {{ config.footer_text|default('') }} | Generálva: {{ date|default('') }}
+</div>
+
+</body>
+</html>
