@@ -1,0 +1,454 @@
+---
+name: ai-audit-pipeline
+description: >
+  Teljes körű weboldal audit + proposal + akció pipeline — GEO/SEO, Marketing és Sales
+  elemzés, szolgáltatási ajánlat, megkeresési stratégia és akció tervek egyetlen paranccsal.
+  Automatikusan detektálja a szintet: ha csak URL van, 5 oldalas diagnózist ad; ha partner
+  adatlap is van csatolva, 15 oldalas teljes auditot. Használd ha a felhasználó bármit mond
+  ami "audit", "teljes elemzés", "weboldal audit", "riport", "vizsgáld meg ezt az oldalt",
+  "elemezd ezt a weboldalt", "nézd meg ezt a domaint", vagy bármilyen URL-t ad meg elemzésre.
+allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Agent, WebSearch
+---
+# AI Audit Pipeline — Automatikus Weboldal Elemzés
+
+> Egy URL → automatikus szint detektálás → profi magyar PDF riport
+
+---
+
+## Parancsok
+
+| Parancs | Mit csinál |
+|---------|-----------|
+| `/audit <url>` | Automatikus audit — ha csak URL van: 5 oldalas diagnózis (Szint 1). Ha partner adat is van csatolva: 15 oldalas teljes audit (Szint 2). |
+| `/audit partner <domain>` | Üres partner adatlap sablon generálása (PDF) — ezt küldd el az ügyfélnek kitöltésre |
+| `/audit compare <url>` | Havi delta riport — összehasonlítja a korábbi és jelenlegi auditot |
+
+---
+
+## FÁZIS 1: Felderítés + Szint Detektálás
+
+### Szint Detektálás (ELSŐ LÉPÉS — mielőtt bármi mást csinálsz)
+
+Mielőtt elindítod az auditot, ellenőrizd van-e csatolt partner adat:
+
+1. Nézd meg a felhasználó üzenetét — van-e benne a URL-en kívül:
+   - Csatolt fájl (PDF, MD, TXT, DOCX)
+   - Beillesztett szöveg ami cég adatokat tartalmaz (forgalom, bevétel, vendégszám, stb.)
+   - Hivatkozás egy fájlra (pl. "használd a ~/AuditUgyfelek/cegnev/partner.md fájlt")
+2. Ha TALÁL partner adatot → **SZINT 2** (teljes audit, 15 oldal)
+   Ha NEM talál partner adatot → **SZINT 1** (diagnózis, 5 oldal)
+3. Jelezd a felhasználónak:
+   - Szint 1: "Diagnózis mód — csak nyilvános adatokból dolgozom. Ha részletesebb auditot szeretnél, csatolj partner adatlapot."
+   - Szint 2: "Teljes audit mód — a partner adatokat is felhasználom."
+
+### Felderítés (mindkét szinten fut)
+
+1. **Weboldal letöltése** — Homepage HTML fetch (WebFetch)
+2. **Üzlettípus felismerése** — Szolgáltató / SaaS / E-commerce / Ügynökség / Helyi vállalkozás / Egyéb
+3. **Kulcsoldalak kinyerése** — Sitemap.xml vagy belső linkek alapján (max 30 oldal)
+4. **Alapadatok rögzítése** — Domain, cím, telefon, email, meta title/description, nyelvezet
+
+---
+
+## FÁZIS 2: GEO/SEO Elemzés (mindkét szinten fut)
+
+Indítsd el az alábbi subagent-eket párhuzamosan az Agent tool-lal:
+
+| Agent | Fájl | Feladata |
+|-------|------|---------|
+| geo-ai-visibility | `~/.claude/agents/geo-ai-visibility.md` | GEO audit, AI citability, crawler hozzáférés, llms.txt, brand mentions |
+| geo-platform-analysis | `~/.claude/agents/geo-platform-analysis.md` | Platform-specifikus optimalizálás (ChatGPT, Perplexity, Google AIO) |
+| geo-technical | `~/.claude/agents/geo-technical.md` | Technikai SEO, Core Web Vitals, crawlability, indexelhetőség |
+| geo-content | `~/.claude/agents/geo-content.md` | Tartalom minőség, E-E-A-T, olvashatóság + Schema markup, JSON-LD |
+
+**GEO pontszámítás:** AI Citability 25% | Brand Authority 20% | Tartalom & E-E-A-T 20% | Technikai alapok 15% | Strukturált adatok 10% | Platform optimalizálás 10%
+
+### Citability Score (szkript-alapú)
+
+A GEO AI Citability pontszámot NE becsüld — futtasd a citability_scorer.py szkriptet:
+
+```bash
+python3 ~/.claude/skills/geo/scripts/citability_scorer.py <url>
+```
+
+A szkript JSON-t ad vissza egy 0-100 pontszámmal. **HASZNÁLD EZT** az AI Citability kategóriában.
+Ha hibát dob → AI becslés fallback, de jelezd: "Automatizált mérés nem volt lehetséges, becslés alapján."
+
+### Brand Authority Score (szkript-alapú)
+
+```bash
+python3 ~/.claude/skills/geo/scripts/brand_scanner.py <domain>
+```
+
+YouTube, Reddit, Wikipedia, LinkedIn mention-ök alapján 0-100 pontszám. **HASZNÁLD EZT**.
+Ha hibát dob → AI becslés fallback.
+
+### Schema Markup Generálás
+
+Ha NINCS schema markup az oldalon (Strukturált adatok pontszám < 20):
+1. Válaszd ki a template-et: `~/.claude/skills/geo/schema/` mappából (local-business.json, organization.json, stb.)
+2. Töltsd ki a weboldal adataival
+3. CSATOLD a PDF-hez mint **"Kész megoldás"** + tesztelési link: https://search.google.com/test/rich-results
+→ JSON kulcs: `schema_code`
+
+### llms.txt Generálás
+
+Ha NINCS llms.txt az oldalon:
+1. Generálj llms.txt-t az ügyfél adataiból
+2. CSATOLD a PDF-hez mint **"Kész megoldás"**
+→ JSON kulcs: `llms_txt`
+
+---
+
+## FÁZIS 3: Marketing Elemzés (mindkét szinten fut)
+
+| Agent | Fájl | Feladata |
+|-------|------|---------|
+| market-content | `~/.claude/agents/market-content.md` | Tartalom, üzenetek, CRO, funnel, versenytársak, stratégia |
+
+**Marketing pontszámítás:** Tartalom & Üzenetek 25% | Konverzió Optimalizálás 20% | SEO & Felfedezhetőség 20% | Versenypozíció 15% | Brand & Bizalom 10% | Növekedés & Stratégia 10%
+
+---
+
+## FÁZIS 4: Sales Elemzés (CSAK SZINT 2)
+
+> **Szint 1-ben NEM fut a Sales elemzés.**
+
+| Agent | Fájl | Feladata |
+|-------|------|---------|
+| sales-company | `~/.claude/agents/sales-company.md` | Cég kutatás, döntéshozók, lead minősítés, versenypozíció, megkeresési stratégia |
+
+**Sales pontszámítás:** Cég illeszkedés 25% | Kapcsolati hozzáférés 20% | Lehetőség minőség 20% | Versenypozíció 15% | Megkeresési készenlét 20%
+
+### Lead Score (szkript-alapú, BANT + MEDDIC)
+
+```bash
+echo '<json>' | python3 ~/.claude/skills/sales/scripts/lead_scorer.py
+```
+
+BANT + MEDDIC átlag → Sales összpontszám súlyozó faktor. Ha hibát dob → AI becslés fallback.
+
+---
+
+## FÁZIS 5: Szintézis
+
+1. Összes agent eredmény összegyűjtése
+2. Pontszámok kiszámítása — GEO Score, Marketing Score, (Sales Score ha Szint 2)
+3. **Finding címkézés** — MINDEN finding-hoz KÖTELEZŐ:
+
+### Finding Címkézés (MINDKÉT SZINTBEN KÖTELEZŐ)
+
+🔴 **TÉNY** — A forráskódból közvetlenül ellenőrizhető. Pl: "canonical URL rossz", "nincs schema", "nincs sitemap"
+🟡 **ERŐS FELTÉTELEZÉS** — Nagyon valószínű de nem 100%. Pl: "a PDF menü rontja a mobil élményt"
+🟢 **JAVASLAT** — Ötlet amit érdemes tesztelni. Pl: "Instagram stratégia növelhetné a láthatóságot"
+
+**Szint 1:** CSAK 🔴 és max 1-2 🟡 — NINCS 🟢
+**Szint 2:** Minden típus lehet, de mind CÍMKÉZVE
+
+---
+
+## SZINT ELÁGAZÁS
+
+### → Ha SZINT 1: Ugorj a "SZINT 1 PDF" szekcióra
+### → Ha SZINT 2: Folytasd a Fázis 6-tal
+
+---
+
+## FÁZIS 6-9: CSAK SZINT 2
+
+> **🚨 STOP — Fázis 5 az audit FELE. A Fázis 6-8 a MÁSIK FELE. TILOS PDF-et generálni amíg Fázis 9 nem kész.**
+
+### FÁZIS 6: Proposal Generálás — KÖTELEZŐ
+
+3 tier-es csomag az audit findings-re szabva:
+- **Alap** (150-300 EUR/hó) | **Standard** (300-600 EUR/hó) | **Prémium** (600-1200 EUR/hó)
+- Mindegyikhez: mit tartalmaz, mit old meg, várható ROI
+- **Ajánlott csomag** megjelölése
+- **Becsült bevételi hatás** forintban — MINDIG hivatkozzon a partner adatra ha van
+→ JSON kulcsok: `proposal_packages`, `estimated_revenue_impact`
+
+### FÁZIS 7: Akció Tervek — KÖTELEZŐ
+
+- **Email szekvenciák**: welcome (3), nurture (5), konverzió (3)
+- **30 napos social naptár**: platformok, heti poszt szám, pillérek, 1 minta hét
+- **CRO javaslatok**: 5-8 landing page javítás
+- **Funnel elemzés**: 4-5 stage, lemorzsolódás, javítás
+- **Megkeresési stratégia**: csatorna, üzenet, 3 lépéses email szekvencia
+- **Laikus réteg**: executive_layman_intro, top3_layman, total_monthly_loss, simple_action_steps
+→ JSON kulcsok: `email_sequences`, `social_calendar_summary`, `cro_recommendations`, `funnel_analysis`, `outreach_strategy`, `executive_layman_intro`, `top3_layman`, `total_monthly_loss`, `simple_action_steps`
+
+### FÁZIS 8: Stratégiai Anyagok — KÖTELEZŐ
+
+- **ICP** (Ideális ügyfélprofil)
+- **Akcióterv 3 szinten**: quick wins, középtáv, stratégiai
+→ JSON kulcsok: `icp`, `action_plan`
+
+### FÁZIS 9: JSON Completeness Check — KÖTELEZŐ
+
+```
+SZINT 2 KÖTELEZŐ KULCSOK:
+☐ geo_score, marketing_score, sales_score
+☐ findings (min. 5, mind CÍMKÉZVE 🔴/🟡/🟢)
+☐ executive_layman_intro, top3_layman, total_monthly_loss, simple_action_steps
+☐ schema_code (ha Strukturált adatok < 20), llms_txt (ha nincs llms.txt)
+☐ proposal_packages (3 tier), estimated_revenue_impact
+☐ email_sequences, social_calendar_summary, cro_recommendations, funnel_analysis, outreach_strategy
+☐ icp, action_plan
+```
+
+**Ha BÁRMELYIK hiányzik → pótold, NE generálj PDF-et.**
+
+---
+
+## SZINT 1 PDF — Diagnózis (5 oldal, csak URL-ből)
+
+### Tiltólista (Szint 1-ben SOHA ne írd):
+- ❌ "havi X-Y Ft bevételt hagy az asztalon"
+- ❌ "havi X elvesztett foglalás/rendelés"
+- ❌ "X%-os növekedés"
+- ❌ "a vendégek 70%-a inkább online foglalna" (forrás nélkül)
+
+### Helyette:
+- ✅ "javítja az oldal Google-láthatóságát"
+- ✅ "csökkenti a látogatók lemorzsolódását"
+- ✅ "erősíti az online bizalmat"
+
+### Szint 1 PDF struktúra:
+
+**1. oldal — Címlap**
+- Cégnév, URL, dátum
+- GEO Score + Marketing Score (két gauge)
+- Alul: "Diagnózis — kizárólag nyilvános adatok alapján"
+
+**2. oldal — "Amit 2 percben tudnia kell"**
+- Max 5 finding, LAIKUS NYELVEN
+- Minden finding mellé KÖTELEZŐ címke: 🔴 TÉNY / 🟡 ERŐS FELTÉTELEZÉS
+- Hatás: "javítja a Google-láthatóságot", "csökkenti a lemorzsolódást" — NEM Ft összeg
+
+**3. oldal — "3 azonnali teendő"**
+- Max 3 quick win: mit / ki csinálja / mennyi idő / mennyibe kerül
+- Csak javítás költsége — NEM bevételi becslés
+
+**4. oldal — Scorecard**
+- GEO kategóriák (6 db), Marketing kategóriák (6 db), AI Crawler hozzáférés (5 sor)
+
+**5. oldal — Következő lépés**
+- "Ez a diagnózis nyilvánosan elérhető adatokból készült."
+- "Részletesebb elemzéshez szükséges: [forgalmi adatok, marketing büdzsé, célok]"
+- "Töltse ki az alábbi adatlapot:" + CTA
+- Ha van kész schema JSON-LD és/vagy llms.txt → MELLÉKELD mint "Kész megoldás"
+
+### Szint 1 JSON kulcsok:
+```
+☐ geo_score, marketing_score (sales_score NINCS)
+☐ findings (max 5, CÍMKÉZVE, NINCS Ft becslés)
+☐ quick_wins (max 3)
+☐ geo_categories, marketing_categories, geo_crawler_access, geo_platforms
+☐ schema_code (ha kell), llms_txt (ha kell)
+☐ competitors (ha van adat)
+```
+
+---
+
+## SZINT 2 PDF — Teljes Audit (15 oldal, URL + partner adat)
+
+A profi PDF NEM audit-log, hanem döntéshozói dokumentum.
+
+### PDF struktúra:
+
+**1. oldal — Címlap**
+- Cégnév, URL, dátum, készítő
+- GEO + Marketing + Sales Score (3 gauge)
+
+**2. oldal — Vezetői összefoglaló ("Mit jelent ez az Ön vállalkozása számára?")**
+- `executive_layman_intro`: 3-4 mondat laikus nyelven, analógiával
+- 3 box (`top3_layman`): probléma + analógia + havi veszteség + javítás költsége
+- "Összesen: `total_monthly_loss`"
+
+**3. oldal — "Mit tegyen először?"**
+- `simple_action_steps`: 3-5 lépés, laikus nyelven, semmilyen technikai szó
+- "Ha ezeket szeretné hogy mi megcsináljuk:" → link a Szolgáltatási ajánlat oldalra
+
+**4. oldal — Elválasztó**
+- "RÉSZLETES TECHNIKAI MELLÉKLET — Ha nem technikai szakember, nyugodtan ugorja át."
+
+**5. oldal — Audit scope és módszertan**
+- Audit dátuma, vizsgált oldalak száma, használt eszközök, mi NEM volt scope-ban
+
+**6. oldal — Scorecard**
+- GEO + Marketing + Sales kategóriák, platformok, crawler access
+
+**7-8. oldal — Feltárt problémák (Top findings)**
+- Severity: KRITIKUS / MAGAS / KÖZEPES
+- Minden finding alá "Magyarul:" doboz a laikus analógiával
+- Címkék: 🔴 TÉNY / 🟡 FELTÉTELEZÉS / 🟢 JAVASLAT
+
+**9. oldal — Quick wins (14 napos)**
+- 3-5 gyors javítás: mit / hatás / munkaigény
+
+**10. oldal — 30-90 napos roadmap**
+- 30 nap / 60 nap / 90 nap oszlopok
+
+**11. oldal — Szolgáltatási ajánlat (3 tier)**
+- Alap / Standard (AJÁNLOTT) / Prémium — árak, tartalom, ROI
+
+**12-13. oldal — Akció tervek**
+- Email szekvenciák, CRO javaslatok, Funnel elemzés, Social naptár összefoglaló
+
+**14. oldal — Versenytárs összehasonlítás**
+
+**15. oldal — Appendix**
+- Megkeresési stratégia, vizsgált URL-ek, módszertan, disclaimer
+
+---
+
+## Nyelvi Követelmények — KRITIKUS
+
+A teljes audit riport **hibátlan magyar nyelven** készül:
+- Minden ékezet tökéletes (á, é, í, ó, ö, ő, ú, ü, ű)
+- Természetes, üzleti magyar nyelv — NEM fordítás-szagú
+- Kerüld az AI-szagú fordulatokat
+- Rövid, határozott mondatok
+
+**Kerülendő:** "átfogó elemzésünk alapján", "szignifikáns javulás", "optimalizálási lehetőségek", "holisztikus", "komprehenzív", "leverálni"
+**Preferált:** "Három komoly probléma van az oldallal.", "Ez 30-40%-os forgalomnövekedést hozhat", "Konkrétan ez hiányzik: ..."
+
+---
+
+## "Magyarul ez azt jelenti" — Analógiák Gyűjteménye
+
+| Technikai fogalom | Laikus analógia |
+|---|---|
+| Canonical URL hiba | "A Google rossz oldalt mutat — mintha rossz telefonszám lenne a telefonkönyvben" |
+| Schema markup hiányzik | "A Google nem tudja gépileg leolvasni a nyitvatartást, árat — mintha névjegykártya lenne szöveg nélkül" |
+| Meta description hiányzik | "A Google-ben nem jelenik meg leírás az oldala alatt — üres, az emberek továbbgörgetnek" |
+| Sitemap.xml hiányzik | "Nem adott térképet a Google-nek — vakon bolyong és sok oldalt nem talál meg" |
+| Alt text hiányzik | "A képeinek nincs leírása — a Google vak a képekre" |
+| Nincs hreflang | "A kétnyelvű oldal össze van keverve — a Google magyarul keresőknek angolul mutathatja" |
+| Nincs online foglalás | "Csak telefonon lehet foglalni — aki nem tud hívni, elmegy a versenytárshoz" |
+| Review-k nem jelennek meg | "Van 300+ jó értékelése de az oldalon semmi nem látszik — mintha díja lenne de nem tenné ki" |
+| PDF menü | "Az étlap letölthető fájl — mobilon olvashatatlan és a Google sem indexeli" |
+| AI keresőkben láthatatlan | "Ha valaki megkérdezi a ChatGPT-t hol egyenek, az éttermét nem fogja ajánlani" |
+| Nincs GDPR/cookie consent | "Jogilag kötelező sütitájékoztató hiányzik — ez bírságot vonhat maga után" |
+| Nincs email lista | "Nem gyűjti a vendégek email címét — nem tud visszahívni őket akcióval" |
+| Core Web Vitals rossz | "Az oldal lassú — a látogatók 40%-a elmenekül ha 3 mp-nél tovább tölt" |
+
+---
+
+## Minőségi Kapuk
+
+- Max 30 oldal / audit, 30 mp timeout, robots.txt tiszteletben tartva
+- Ha agent nem ad vissza adatot → "Nem elérhető", NEM kitalált adat
+- PDF generálás előtt MINDIG JSON validitás ellenőrzés
+
+### SPA / JavaScript-renderelt Oldalak — KRITIKUS
+
+A WebFetch **NEM futtat JavaScript-et**. Sok modern oldal (Next.js, React, Angular, Vue) 404-et ad nyers HTTP kéréssel.
+
+**SZABÁLYOK:**
+1. Ha aloldal 404-et ad WebFetch-csel → **NE jelöld automatikusan hibásnak**
+2. Ha Next.js/React/Angular/Vue → SPA-gyanús
+3. **SOHA ne írj "X oldal nem működik" vagy "X oldal 404-et ad" ha JS framework-öt használ**
+4. Ehelyett: "Az oldal JavaScript-tel renderel, az automatikus ellenőrzés korlátozott."
+
+### Kontextuális Kutatás Üzleti Javaslatok Előtt — KRITIKUS
+
+**MIELŐTT üzleti modell javaslatot tennél (delivery, új szolgáltatás, stb.):**
+1. Keresni a tulajdonos nyilatkozatait: `WebSearch "[cég neve]" interjú OR podcast OR nyilatkozat`
+2. Ha a tulajdonos KIFEJEZETTEN elmondta hogy valamit NEM csinál → **TILOS javasolni**
+3. Ha nincs info → "Előzetes egyeztetés szükséges"
+
+---
+
+## Hibakezelés
+
+- Weboldal nem elérhető → jelezd, ne folytasd
+- Agent timeout → folytasd a többivel, jelöld a hiányzó területet
+- PDF generálás sikertelen → mentsd a JSON-t, jelezd a problémát
+- Nincs reportlab → `pip install reportlab --break-system-packages`
+
+---
+
+## Végrehajtási Sorrend
+
+### SZINT 1 (5 oldalas diagnózis):
+1. WebFetch URL → HTML
+2. Üzlettípus + alapadatok
+3. GEO agentek (3-4 db párhuzamosan)
+4. Marketing agent (1 db)
+5. Pontszámok, findings (CÍMKÉZVE), JSON
+6. PDF generálás (5 oldalas)
+7. Kimásolás → link
+
+### SZINT 2 (15 oldalas teljes audit):
+1. WebFetch URL → HTML
+2. Üzlettípus + alapadatok
+3. GEO agentek (3-4 db párhuzamosan)
+4. Marketing agent (1 db)
+5. Sales agent (1 db)
+6. Pontszámok, findings (CÍMKÉZVE), köztes JSON → `/tmp/audit-data-<domain>.json`
+   > ⛔ CHECKPOINT: "Audit adatok kész (6/12). Most jönnek a proposal-ok és akció tervek..."
+7. Proposal generálás (3 tier)
+8. Akció tervek (email, social, CRO, funnel, outreach)
+9. Laikus réteg (executive_layman_intro, top3_layman, simple_action_steps)
+10. Stratégiai anyagok (ICP, akcióterv)
+11. JSON completeness check → ha hiányzik valami, pótold
+12. PDF generálás (15 oldalas) → kimásolás → link
+
+> **CONTEXT LIMIT:** Ha elfogy a 6. lépés után → mentsd JSON-t, jelezd: "Audit 1. rész kész. Folytasd `/audit proposal <url>`"
+> **DE: Ha van context → TILOS megállni. A 7-10 KÖTELEZŐ.**
+
+---
+
+## Havi Delta Riport (`/audit compare <url>`)
+
+Havi csomagos ügyfeleknek. Összehasonlítja a korábbi és jelenlegi auditot.
+
+1. Korábbi JSON: `~/AuditUgyfelek/[domain]/baseline.json`
+2. Futtasd újra az auditot (Fázis 1-5, proposal NEM kell)
+3. Hasonlítsd össze kategóriánként
+4. Delta PDF: pontszám változás, "Ami javult" (zöld), "Ami hátravan" (piros), következő hónap prioritásai
+5. LAIKUS NYELVEN: "A Google keresőben a csillagok mostmár megjelennek — ez a schema markup javításnak köszönhető."
+
+### Baseline mentés:
+Teljes audit után → `~/AuditUgyfelek/[domain]/baseline.json`
+Ha létezik korábbi → `~/AuditUgyfelek/[domain]/audit-YYYY-MM-DD.json`
+
+---
+
+## Partner Adatlap Sablon (`/audit partner <domain>`)
+
+Generálj kitölthető PDF-et:
+
+```
+PARTNER ADATLAP — [Cégnév]
+
+CÉGADATOK
+Cégnév: _______________
+Kapcsolattartó: _______________
+Email: _______________
+Telefon: _______________
+
+FORGALMI ADATOK
+Havi vendégszám / rendelésszám: _______________
+Átlagos számlaérték: _______________ Ft
+Legerősebb / leggyengébb időszak: _______________
+Online vs. helyszíni arány: _____ % / _____ %
+
+DIGITÁLIS JELENLÉT
+Google Analytics: igen / nem
+Google Cégprofil: igen / nem
+Havi weboldal látogató (kb.): _______________
+Facebook / Instagram követők: _______________
+
+MARKETING
+Havi marketing költés (kb.): _______________ Ft
+Van webfejlesztő / marketinges: igen / nem — Ki: _______________
+
+CÉLOK
+3 legnagyobb üzleti probléma:
+1. _______________
+2. _______________
+3. _______________
+Mit szeretne elérni 6 hónapon belül: _______________
+```
