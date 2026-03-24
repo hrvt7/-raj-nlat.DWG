@@ -59,7 +59,8 @@ Indítsd el az alábbi subagent-eket párhuzamosan az Agent tool-lal:
 | geo-ai-visibility | `~/.claude/agents/geo-ai-visibility.md` | GEO audit, AI citability, crawler hozzáférés, llms.txt, brand mentions |
 | geo-platform-analysis | `~/.claude/agents/geo-platform-analysis.md` | Platform-specifikus optimalizálás (ChatGPT, Perplexity, Google AIO) |
 | geo-technical | `~/.claude/agents/geo-technical.md` | Technikai SEO, Core Web Vitals, crawlability, indexelhetőség |
-| geo-content | `~/.claude/agents/geo-content.md` | Tartalom minőség, E-E-A-T, olvashatóság + Schema markup, JSON-LD |
+| geo-content | `~/.claude/agents/geo-content.md` | Tartalom minőség, E-E-A-T, olvashatóság |
+| geo-schema | `~/.claude/agents/geo-schema.md` | Schema markup detektálás, validálás, JSON-LD generálás, llms.txt generálás |
 
 **GEO pontszámítás:** AI Citability 25% | Brand Authority 20% | Tartalom & E-E-A-T 20% | Technikai alapok 15% | Strukturált adatok 10% | Platform optimalizálás 10%
 
@@ -83,30 +84,41 @@ python3 ~/.claude/skills/geo/scripts/brand_scanner.py <domain>
 YouTube, Reddit, Wikipedia, LinkedIn mention-ök alapján 0-100 pontszám. **HASZNÁLD EZT**.
 Ha hibát dob → AI becslés fallback.
 
-### Schema Markup Generálás
+### Schema Markup + llms.txt Generálás (geo-schema agent)
 
-Ha NINCS schema markup az oldalon (Strukturált adatok pontszám < 20):
-1. Válaszd ki a template-et: `~/.claude/skills/geo/schema/` mappából (local-business.json, organization.json, stb.)
-2. Töltsd ki a weboldal adataival
-3. CSATOLD a PDF-hez mint **"Kész megoldás"** + tesztelési link: https://search.google.com/test/rich-results
-→ JSON kulcs: `schema_code`
-
-### llms.txt Generálás
-
-Ha NINCS llms.txt az oldalon:
-1. Generálj llms.txt-t az ügyfél adataiból
-2. CSATOLD a PDF-hez mint **"Kész megoldás"**
-→ JSON kulcs: `llms_txt`
+A **geo-schema** agent felelős a schema markup elemzéséért és generálásáért:
+- Ha NINCS schema markup (Strukturált adatok pontszám < 20) → generál JSON-LD-t a `~/.claude/skills/geo/schema/` template-ekből
+- Ha NINCS llms.txt → generálja az ügyfél adataiból
+- Mindkettőt CSATOLJA a PDF-hez mint **"Kész megoldás"**
+→ JSON kulcsok: `schema_code`, `llms_txt`
 
 ---
 
-## FÁZIS 3: Marketing Elemzés (mindkét szinten fut)
+## FÁZIS 3: Marketing Elemzés (mindkét szinten fut, de SZINT-FÜGGŐ agent szám)
+
+### Szint 1: 2 agent fut párhuzamosan
 
 | Agent | Fájl | Feladata |
 |-------|------|---------|
-| market-content | `~/.claude/agents/market-content.md` | Tartalom, üzenetek, CRO, funnel, versenytársak, stratégia |
+| market-content | `~/.claude/agents/market-content.md` | Tartalom, üzenetek, brand, bizalom |
+| market-technical | `~/.claude/agents/market-technical.md` | Technikai marketing: SEO infra, tracking, oldal struktúra |
 
-**Marketing pontszámítás:** Tartalom & Üzenetek 25% | Konverzió Optimalizálás 20% | SEO & Felfedezhetőség 20% | Versenypozíció 15% | Brand & Bizalom 10% | Növekedés & Stratégia 10%
+Szint 1-ben a Versenypozíció és Növekedés pontszámot a market-content és market-technical becsli.
+
+### Szint 2: 4 agent fut párhuzamosan
+
+| Agent | Fájl | Feladata |
+|-------|------|---------|
+| market-content | `~/.claude/agents/market-content.md` | Tartalom, üzenetek, brand, bizalom |
+| market-technical | `~/.claude/agents/market-technical.md` | Technikai marketing: SEO infra, tracking, oldal struktúra |
+| market-competitive | `~/.claude/agents/market-competitive.md` | Versenytárs kutatás: 3-5 versenytárs, pozícionálás, gap-ek |
+| market-strategy | `~/.claude/agents/market-strategy.md` | Stratégia, növekedés + **TULAJDONOS NYILATKOZAT KERESÉS** (kontextuális kutatás) |
+
+**Marketing pontszámítás:**
+- market-content → Tartalom & Üzenetek (25%) + Brand & Bizalom (10%)
+- market-technical → SEO & Felfedezhetőség (20%)
+- market-competitive → Versenypozíció (15%) — CSAK SZINT 2
+- market-strategy → Konverzió Optimalizálás (20%) + Növekedés & Stratégia (10%) — CSAK SZINT 2
 
 ---
 
@@ -114,11 +126,21 @@ Ha NINCS llms.txt az oldalon:
 
 > **Szint 1-ben NEM fut a Sales elemzés.**
 
+4 agent fut párhuzamosan:
+
 | Agent | Fájl | Feladata |
 |-------|------|---------|
-| sales-company | `~/.claude/agents/sales-company.md` | Cég kutatás, döntéshozók, lead minősítés, versenypozíció, megkeresési stratégia |
+| sales-company | `~/.claude/agents/sales-company.md` | Cég kutatás, firmográfia, tech stack, növekedési jelek |
+| sales-contacts | `~/.claude/agents/sales-contacts.md` | Döntéshozók keresése, buying committee, LinkedIn, személyre szabás |
+| sales-opportunity | `~/.claude/agents/sales-opportunity.md` | BANT minősítés, opportunity assessment, pain pontok |
+| sales-strategy | `~/.claude/agents/sales-strategy.md` | Outreach terv: csatorna, üzenet, timing, első email draft |
 
-**Sales pontszámítás:** Cég illeszkedés 25% | Kapcsolati hozzáférés 20% | Lehetőség minőség 20% | Versenypozíció 15% | Megkeresési készenlét 20%
+**Sales pontszámítás:**
+- sales-company → Cég illeszkedés (25%)
+- sales-contacts → Kapcsolati hozzáférés (20%)
+- sales-opportunity → Lehetőség minőség (20%)
+- sales-strategy → Megkeresési készenlét (20%)
+- Versenypozíció (15%) → a market-competitive eredményéből számolva
 
 ### Lead Score (szkript-alapú, BANT + MEDDIC)
 
@@ -416,11 +438,11 @@ A WebFetch **NEM futtat JavaScript-et**. Sok modern oldal (Next.js, React, Angul
 
 ## Végrehajtási Sorrend
 
-### SZINT 1 (5 oldalas diagnózis):
+### SZINT 1 (5 oldalas diagnózis — 7 agent):
 1. WebFetch URL → HTML
 2. Üzlettípus + alapadatok
-3. GEO agentek (3-4 db párhuzamosan)
-4. Marketing agent (1 db)
+3. GEO agentek (5 db párhuzamosan): geo-ai-visibility, geo-platform-analysis, geo-technical, geo-content, geo-schema
+4. Marketing agentek (2 db párhuzamosan): market-content, market-technical
 5. Pontszámok, findings (CÍMKÉZVE), JSON → `/tmp/audit-data-<domain>.json`
    > A JSON-ban `"audit_level": "szint1"` legyen!
 6. PDF generálás (5 oldalas):
@@ -429,12 +451,12 @@ A WebFetch **NEM futtat JavaScript-et**. Sok modern oldal (Next.js, React, Angul
    ```
 7. Kimásolás → link
 
-### SZINT 2 (15 oldalas teljes audit):
+### SZINT 2 (16+ oldalas teljes audit — 13 agent):
 1. WebFetch URL → HTML
 2. Üzlettípus + alapadatok
-3. GEO agentek (3-4 db párhuzamosan)
-4. Marketing agent (1 db)
-5. Sales agent (1 db)
+3. GEO agentek (5 db párhuzamosan): geo-ai-visibility, geo-platform-analysis, geo-technical, geo-content, geo-schema
+4. Marketing agentek (4 db párhuzamosan): market-content, market-technical, market-competitive, market-strategy
+5. Sales agentek (4 db párhuzamosan): sales-company, sales-contacts, sales-opportunity, sales-strategy
 6. Pontszámok, findings (CÍMKÉZVE), köztes JSON → `/tmp/audit-data-<domain>.json`
    > ⛔ CHECKPOINT: "Audit adatok kész (6/12). Most jönnek a proposal-ok és akció tervek..."
 7. Proposal generálás (3 tier)
@@ -442,10 +464,23 @@ A WebFetch **NEM futtat JavaScript-et**. Sok modern oldal (Next.js, React, Angul
 9. Laikus réteg (executive_layman_intro, top3_layman, simple_action_steps)
 10. Stratégiai anyagok (ICP, akcióterv)
 11. JSON completeness check → ha hiányzik valami, pótold
-12. PDF generálás (15 oldalas) → kimásolás → link
+12. PDF generálás (16+ oldalas) → kimásolás → link
 
 > **CONTEXT LIMIT:** Ha elfogy a 6. lépés után → mentsd JSON-t, jelezd: "Audit 1. rész kész. Folytasd `/audit proposal <url>`"
 > **DE: Ha van context → TILOS megállni. A 7-10 KÖTELEZŐ.**
+
+### Context Window Kezelés
+
+A Szint 2 audit 13 agent-et futtat. Ha a context window elfogy:
+
+1. A GEO agentek (5 db) MINDIG lefutnak — ezek a legfontosabbak
+2. A Marketing agentek (4 db) MINDIG lefutnak
+3. A Sales agentek (4 db) futnak HA van elég context
+4. Ha a Sales agentek nem futnak le → jelezd: "A Sales elemzés a context limit miatt nem készült el. Futtasd újra: `/audit sales <url>`"
+
+A fázisok HELYES sorrendje:
+- GEO agentek → szintézis részbeni → Marketing agentek → szintézis bővítés → Sales agentek → végső szintézis
+- Vagy ha van elég context: mind a 13 párhuzamosan → szintézis egyben
 
 ---
 
