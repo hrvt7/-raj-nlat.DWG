@@ -1,34 +1,6 @@
 {
-  "name": "takeoff-app",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "eslint src/ --ext .js,.jsx",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "playwright test"
-  },
   "dependencies": {
-    "@supabase/supabase-js": "^2.98.0",
-    "dxf-viewer": "^1.0.46",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^4.2.0",
-    "localforage": "^1.10.0",
-    "lucide-react": "^0.263.1",
-    "pdfjs-dist": "^5.5.207",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@vitejs/plugin-react": "^4.0.0",
-    "eslint": "^8.57.1",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^4.6.2",
-    "vite": "^4.4.0",
-    "vitest": "^1.6.1"
+    "@supabase/supabase-js": "^2.97.0",
+    "react-router-dom": "^7.13.0"
   }
 }
