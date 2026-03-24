@@ -420,9 +420,16 @@ Ha létezik korábbi → `~/AuditUgyfelek/[domain]/audit-YYYY-MM-DD.json`
 
 ---
 
-## Partner Adatlap Sablon (`/audit partner <domain>`)
+## Partner Adatlap Generálás (`/audit partner <domain>`)
 
-Generálj kitölthető PDF-et:
+Futtatás:
+```bash
+python3 ~/.claude/skills/ai-audit-pipeline/scripts/generate_partner_form.py "<Cégnév>" "PARTNER-ADATLAP-<domain>.pdf"
+```
+
+A PDF-et másold a felhasználó output mappájába.
+
+### Partner Adatlap tartalma (referencia):
 
 ```
 PARTNER ADATLAP — [Cégnév]
