@@ -1,0 +1,12 @@
+{
+  "company_name": "WebLelet",
+  "company_tagline": "AI-alapú weboldal diagnosztika",
+  "contact_email": "info@weblelet.hu",
+  "contact_phone": "+36 XX XXX XXXX",
+  "contact_website": "https://weblelet.hu",
+  "logo_path": null,
+  "primary_color": "#2563EB",
+  "accent_color": "#F59E0B",
+  "footer_text": "Készítette: WebLelet — AI-alapú weboldal diagnosztika",
+  "disclaimer": "Ez a riport AI-támogatott elemzési rendszerrel készült, kizárólag nyilvánosan elérhető adatok alapján."
+}

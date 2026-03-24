@@ -62,6 +62,34 @@ BORDER  = colors.HexColor("#E2E8F0")
 CARD_BG = colors.HexColor("#F1F5F9")
 W       = colors.white
 
+# ═══════════════════════════════════════════════════════════════════════
+# CONFIG BETÖLTÉS
+# ═══════════════════════════════════════════════════════════════════════
+
+def load_config():
+    """Betölti a white-label konfigurációt a config.json-ból."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    default = {
+        "company_name": "WebLelet",
+        "company_tagline": "AI-alapú weboldal diagnosztika",
+        "contact_email": "info@weblelet.hu",
+        "contact_phone": "+36 XX XXX XXXX",
+        "contact_website": "https://weblelet.hu",
+        "logo_path": None,
+        "primary_color": "#2563EB",
+        "accent_color": "#F59E0B",
+        "footer_text": "Készítette: WebLelet — AI-alapú weboldal diagnosztika",
+        "disclaimer": "Ez a riport AI-támogatott elemzési rendszerrel készült, kizárólag nyilvánosan elérhető adatok alapján."
+    }
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        default.update(cfg)
+    return default
+
+# Global config
+CONFIG = load_config()
+
 def sc_color(s):
     if s >= 80: return GREEN
     if s >= 60: return BLUE
@@ -615,42 +643,45 @@ def build_lite_pdf(data, output_path):
             story.append(Paragraph("✅  <b>llms.txt</b> — kész, feltölthető a domain gyökerébe", S['Blay11']))
         story.append(Spacer(1, 6*mm))
 
-    # Elérhetőség
+    # Elérhetőség (config-ból vagy data-ból)
     story.append(Spacer(1, 4*mm))
     story.append(Paragraph(
         "<b>Kérje a részletes auditot:</b>", S['Blay']))
     story.append(Spacer(1, 3*mm))
 
-    contact_email = data.get('contact_email', '')
-    contact_phone = data.get('contact_phone', '')
-    contact_website = data.get('contact_website', '')
+    contact_email = data.get('contact_email', CONFIG.get('contact_email', ''))
+    contact_phone = data.get('contact_phone', CONFIG.get('contact_phone', ''))
+    contact_website = data.get('contact_website', CONFIG.get('contact_website', ''))
     if contact_email:
-        story.append(Paragraph(f"📧  {contact_email}", S['Blay11']))
+        story.append(Paragraph(f"Email: {contact_email}", S['Blay11']))
     if contact_phone:
-        story.append(Paragraph(f"📞  {contact_phone}", S['Blay11']))
+        story.append(Paragraph(f"Telefon: {contact_phone}", S['Blay11']))
     if contact_website:
-        story.append(Paragraph(f"🌐  {contact_website}", S['Blay11']))
+        story.append(Paragraph(f"Web: {contact_website}", S['Blay11']))
 
     # Disclaimer
     story.append(Spacer(1, 10*mm))
-    story.append(Paragraph(
+    story.append(Paragraph(CONFIG.get('disclaimer',
         "Ez a riport AI-támogatott elemzési rendszerrel készült, kizárólag nyilvánosan elérhető adatok alapján. "
-        "Az eredmények tájékoztató jellegűek és nem helyettesítik a szakmai tanácsadást.",
+        "Az eredmények tájékoztató jellegűek és nem helyettesítik a szakmai tanácsadást."),
         S['Bxs']))
 
     # ═══════════ BUILD ═══════════
+    footer_text = CONFIG.get('footer_text', f'{brand}  •  Gyorsdiagnózis')
+    company = CONFIG.get('company_name', '')
+
     def footer(canvas, doc):
         canvas.saveState()
         canvas.setFont(FONT, 7)
         canvas.setFillColor(GRAY)
         canvas.drawCentredString(PAGE_W/2, 10*mm,
-            f"{brand}  •  Gyorsdiagnózis  •  {doc.page}. oldal")
+            f"{footer_text}  •  {doc.page}. oldal")
         canvas.restoreState()
 
     doc = SimpleDocTemplate(output_path, pagesize=A4,
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=16*mm, bottomMargin=18*mm,
-        title=f"Gyorsdiagnózis — {brand}", author="AI Audit Pipeline")
+        title=f"Gyorsdiagnózis — {brand}", author=company or "AI Audit Pipeline")
     doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=footer)
     return output_path
 
@@ -692,6 +723,9 @@ def build_pdf(data, output_path, lite=False):
     cover.append(Paragraph(domain, S['H0sub']))
     cover.append(Spacer(1, 3*mm))
     cover.append(Paragraph(date, S['H0sub']))
+    if CONFIG.get('company_name'):
+        cover.append(Spacer(1, 2*mm))
+        cover.append(Paragraph(f"Készítette: {CONFIG['company_name']}", S['H0sub']))
     cover.append(Spacer(1, 20*mm))
 
     # Pipeline score - nagy
@@ -1329,28 +1363,52 @@ def build_pdf(data, output_path, lite=False):
 
     # Disclaimer
     story.append(Spacer(1, 8*mm))
-    story.append(Paragraph(
+    story.append(Paragraph(CONFIG.get('disclaimer',
         "Ez a riport AI-támogatott elemzési rendszerrel készült, kizárólag nyilvánosan elérhető adatok alapján. "
-        "Az eredmények tájékoztató jellegűek és nem helyettesítik a szakmai tanácsadást.",
+        "Az eredmények tájékoztató jellegűek és nem helyettesítik a szakmai tanácsadást."),
         S['Bxs']))
     story.append(Paragraph(f"Generálva: {date}", S['Bxs']))
+
+    # Elérhetőség az utolsó oldalon
+    contact_parts = []
+    if CONFIG.get('contact_email'):
+        contact_parts.append(CONFIG['contact_email'])
+    if CONFIG.get('contact_phone'):
+        contact_parts.append(CONFIG['contact_phone'])
+    if CONFIG.get('contact_website'):
+        contact_parts.append(CONFIG['contact_website'])
+    if contact_parts:
+        story.append(Paragraph(" | ".join(contact_parts), S['Bxs']))
 
     # ══════════════════════════════════════════════════════════════
     # BUILD
     # ══════════════════════════════════════════════════════════════
+
+    footer_text = CONFIG.get('footer_text', f'{brand}  •  Weboldal Audit Riport')
+    company = CONFIG.get('company_name', '')
 
     def footer(canvas, doc):
         canvas.saveState()
         canvas.setFont(FONT, 7)
         canvas.setFillColor(GRAY)
         canvas.drawCentredString(PAGE_W/2, 10*mm,
-            f"{brand}  •  Weboldal Audit Riport  •  {doc.page}. oldal")
+            f"{footer_text}  •  {doc.page}. oldal")
         canvas.restoreState()
+
+    # Logó a címlapra ha van
+    logo_path = CONFIG.get('logo_path')
+    if logo_path and os.path.exists(logo_path):
+        try:
+            from reportlab.platypus import Image
+            logo = Image(logo_path, width=40*mm, height=15*mm, kind='proportional')
+            story.insert(0, logo)  # Címlap tetejére
+        except Exception:
+            pass  # Ha nem sikerül betölteni, kihagyjuk
 
     doc = SimpleDocTemplate(output_path, pagesize=A4,
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=16*mm, bottomMargin=18*mm,
-        title=f"Audit Riport — {brand}", author="AI Audit Pipeline")
+        title=f"Audit Riport — {brand}", author=company or "AI Audit Pipeline")
     doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=footer)
     return output_path
 
