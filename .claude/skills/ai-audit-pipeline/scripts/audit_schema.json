@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required_szint1": [
+    "url", "domain", "brand_name", "date", "business_type",
+    "geo_score", "marketing_score",
+    "geo_categories", "marketing_categories",
+    "geo_platforms", "geo_crawler_access",
+    "findings", "quick_wins"
+  ],
+  "required_szint2": [
+    "url", "domain", "brand_name", "date", "business_type",
+    "geo_score", "marketing_score", "sales_score", "pipeline_score",
+    "geo_categories", "marketing_categories", "sales_categories",
+    "geo_platforms", "geo_crawler_access",
+    "findings", "quick_wins",
+    "executive_layman_intro", "top3_layman", "total_monthly_loss", "simple_action_steps",
+    "proposal_packages", "estimated_revenue_impact",
+    "email_sequences", "social_calendar_summary",
+    "cro_recommendations", "funnel_analysis",
+    "outreach_strategy", "action_plan",
+    "competitors"
+  ],
+  "optional": [
+    "schema_code", "llms_txt", "icp",
+    "previous_audit"
+  ]
+}
