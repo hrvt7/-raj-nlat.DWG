@@ -376,8 +376,12 @@ A WebFetch **NEM futtat JavaScript-et**. Sok modern oldal (Next.js, React, Angul
 2. Üzlettípus + alapadatok
 3. GEO agentek (3-4 db párhuzamosan)
 4. Marketing agent (1 db)
-5. Pontszámok, findings (CÍMKÉZVE), JSON
-6. PDF generálás (5 oldalas)
+5. Pontszámok, findings (CÍMKÉZVE), JSON → `/tmp/audit-data-<domain>.json`
+   > A JSON-ban `"audit_level": "szint1"` legyen!
+6. PDF generálás (5 oldalas):
+   ```bash
+   python3 ~/.claude/skills/ai-audit-pipeline/scripts/generate_full_audit_pdf.py /tmp/audit-data-<domain>.json "AUDIT-DIAGNOZIS-<domain>.pdf" --lite
+   ```
 7. Kimásolás → link
 
 ### SZINT 2 (15 oldalas teljes audit):

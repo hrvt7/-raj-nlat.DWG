@@ -390,6 +390,272 @@ def not_available_paragraph(S, section_name=""):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# BUILD LITE PDF — 5 oldalas Szint 1 diagnózis
+# ═══════════════════════════════════════════════════════════════════════
+
+def build_lite_pdf(data, output_path):
+    """Szint 1: 5 oldalas gyorsdiagnózis PDF — csak nyilvános adatok alapján."""
+    S = styles()
+    story = []
+
+    # JSON validáció szint1-re
+    missing, warnings = validate_json(data, level="szint1")
+    if warnings:
+        print("\n".join(warnings))
+        print(f"\n{len(missing)} hiányzó mező — a PDF ezeket 'Nem elérhető' felirattal generálja.\n")
+
+    brand = data.get('brand_name', data.get('domain', 'N/A'))
+    domain = data.get('domain', '')
+    date = data.get('date', datetime.now().strftime('%Y. %B %d.'))
+    geo_s = data.get('geo_score', 0)
+    mkt_s = data.get('marketing_score', 0)
+
+    # ═══════════ 1. OLDAL: CÍMLAP ═══════════
+    cover = []
+    cover.append(Spacer(1, 30*mm))
+    cover.append(Paragraph("WEBOLDAL GYORSDIAGNÓZIS", ParagraphStyle('CT',
+        fontName=FONT, fontSize=11, textColor=colors.HexColor("#64748B"),
+        alignment=TA_LEFT, spaceAfter=3*mm, tracking=3)))
+    cover.append(Spacer(1, 4*mm))
+    cover.append(Paragraph(brand, S['H0']))
+    cover.append(Paragraph(domain, S['H0sub']))
+    cover.append(Spacer(1, 3*mm))
+    cover.append(Paragraph(date, S['H0sub']))
+    cover.append(Spacer(1, 25*mm))
+
+    # 2 gauge (GEO + Marketing, NEM 3)
+    gauges = [draw_gauge(s, l) for l, s in [("GEO / SEO", geo_s), ("Marketing", mkt_s)]]
+    gt = Table([gauges], colWidths=[CW/2]*2)
+    gt.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BACKGROUND', (0,0), (-1,-1), NAVY),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+    ]))
+    cover.append(gt)
+    cover.append(Spacer(1, 15*mm))
+    cover.append(Paragraph("Gyorsdiagnózis — kizárólag nyilvános adatok alapján",
+        ParagraphStyle('CoverNote', fontName=FONT, fontSize=9,
+                       textColor=colors.HexColor("#94A3B8"), alignment=TA_CENTER)))
+
+    ct = Table([[cover]], colWidths=[CW], rowHeights=[PAGE_H - 2*MARGIN - 10*mm])
+    ct.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), NAVY),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 20*mm),
+        ('RIGHTPADDING', (0,0), (-1,-1), 20*mm),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('ROUNDEDCORNERS', [6,6,6,6]),
+    ]))
+    story.append(ct)
+
+    # ═══════════ 2. OLDAL: AMIT 2 PERCBEN TUDNIA KELL ═══════════
+    story.append(PageBreak())
+    story.append(SectionTitle("Amit 2 percben tudnia kell", BLUE))
+    story.append(Spacer(1, 6*mm))
+
+    # top3_layman ha van, különben findings első 5
+    top3 = data.get('top3_layman', [])
+    findings = data.get('findings', [])
+    if top3:
+        for item in top3[:5]:
+            tag = item.get('tag', '🔴')
+            problem = item.get('problem_simple', '')
+            analogy = item.get('analogy', '')
+            impact = item.get('impact', item.get('monthly_loss', ''))
+
+            left_content = []
+            left_content.append(Paragraph(f'<b>{tag} {problem}</b>', S['Blay11']))
+            if analogy:
+                left_content.append(Paragraph(f'<i>{analogy}</i>', S['BlayIt']))
+
+            right_content = []
+            if impact:
+                right_content.append(Paragraph(
+                    f'<font color="{BLUE.hexval()}"><b>{impact}</b></font>', S['Blay11']))
+
+            card_data = [[left_content, right_content]]
+            card_table = Table(card_data, colWidths=[CW * 0.7, CW * 0.3])
+            card_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), CARD_BG),
+                ('ROUNDEDCORNERS', [4,4,4,4]),
+                ('TOPPADDING', (0,0), (-1,-1), 8),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+                ('LEFTPADDING', (0,0), (0,-1), 12),
+                ('RIGHTPADDING', (-1,0), (-1,-1), 12),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ]))
+            story.append(KeepTogether([card_table, Spacer(1, 3*mm)]))
+    elif findings:
+        for f in findings[:5]:
+            sev = f.get('severity', 'medium')
+            tag = '🔴' if sev in ('critical', 'high') else '🟡'
+            title = f.get('title', '')
+            desc = f.get('description', '')
+            analogy = find_layman_analogy(title, desc)
+
+            left_content = [Paragraph(f'<b>{tag} {title}</b>', S['Blay11'])]
+            if analogy:
+                left_content.append(Paragraph(f'<i>{analogy}</i>', S['BlayIt']))
+            else:
+                left_content.append(Paragraph(f'<i>{desc[:120]}</i>', S['BlayIt']))
+
+            card_data = [[left_content]]
+            card_table = Table(card_data, colWidths=[CW])
+            card_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), CARD_BG),
+                ('ROUNDEDCORNERS', [4,4,4,4]),
+                ('TOPPADDING', (0,0), (-1,-1), 8),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+                ('LEFTPADDING', (0,0), (-1,-1), 12),
+                ('RIGHTPADDING', (0,0), (-1,-1), 12),
+            ]))
+            story.append(KeepTogether([card_table, Spacer(1, 3*mm)]))
+    else:
+        story.append(not_available_paragraph(S, "Feltárt problémák"))
+
+    # ═══════════ 3. OLDAL: 3 AZONNALI TEENDŐ ═══════════
+    story.append(PageBreak())
+    story.append(SectionTitle("3 azonnali teendő", GREEN))
+    story.append(Spacer(1, 6*mm))
+
+    qw = data.get('quick_wins', [])
+    if qw:
+        for i, item in enumerate(qw[:3], 1):
+            if isinstance(item, dict):
+                what = item.get('what', item.get('title', ''))
+                who = item.get('who', '')
+                time_est = item.get('time', item.get('effort', ''))
+                cost = item.get('cost', '')
+                parts = [f'<b>{what}</b>']
+                if who: parts.append(f'Ki csinálja: {who}')
+                if time_est: parts.append(f'Idő: {time_est}')
+                if cost: parts.append(f'Költség: {cost}')
+                text = ' — '.join(parts)
+            else:
+                text = f'<b>{item}</b>'
+            story.append(Paragraph(
+                f'<font color="{GREEN.hexval()}"><b>{i}.</b></font>  {text}',
+                S['BlayNum']))
+            story.append(Spacer(1, 5*mm))
+    else:
+        story.append(not_available_paragraph(S, "Azonnali teendők"))
+
+    # ═══════════ 4. OLDAL: SCORECARD ═══════════
+    story.append(PageBreak())
+    story.append(SectionTitle("Scorecard", BLUE))
+    story.append(Spacer(1, 6*mm))
+
+    # GEO kategóriák
+    geo_cats = data.get('geo_categories', {})
+    if geo_cats:
+        story.append(Paragraph("<b>GEO / SEO Kategóriák</b>", S['H2']))
+        story.append(Spacer(1, 2*mm))
+        for label, score in geo_cats.items():
+            story.append(draw_bar(label, score, CW))
+        story.append(Spacer(1, 5*mm))
+
+    # Marketing kategóriák
+    mkt_cats = data.get('marketing_categories', {})
+    if mkt_cats:
+        story.append(Paragraph("<b>Marketing Kategóriák</b>", S['H2']))
+        story.append(Spacer(1, 2*mm))
+        for label, score in mkt_cats.items():
+            story.append(draw_bar(label, score, CW))
+        story.append(Spacer(1, 5*mm))
+
+    # AI Crawler hozzáférés
+    crawlers = data.get('geo_crawler_access', {})
+    if crawlers:
+        story.append(Paragraph("<b>AI Crawler Hozzáférés</b>", S['H2']))
+        story.append(Spacer(1, 2*mm))
+        cr_rows = [[Paragraph('<b>Crawler</b>', S['TH']),
+                     Paragraph('<b>Platform</b>', S['TH']),
+                     Paragraph('<b>Státusz</b>', S['TH'])]]
+        for name, info in crawlers.items():
+            status = info.get('status', 'N/A')
+            c = GREEN if 'allow' in status.lower() else RED if 'block' in status.lower() else AMBER
+            cr_rows.append([
+                Paragraph(name, S['TD']),
+                Paragraph(info.get('platform', ''), S['TD']),
+                Paragraph(f'<font color="{c.hexval()}"><b>{status}</b></font>', S['TDB']),
+            ])
+        story.append(stbl(cr_rows, [50*mm, 50*mm, CW - 100*mm]))
+
+    if not geo_cats and not mkt_cats and not crawlers:
+        story.append(not_available_paragraph(S, "Scorecard"))
+
+    # ═══════════ 5. OLDAL: KÖVETKEZŐ LÉPÉS ═══════════
+    story.append(PageBreak())
+    story.append(SectionTitle("Következő lépés", PURPLE))
+    story.append(Spacer(1, 8*mm))
+
+    story.append(Paragraph(
+        "Ez a diagnózis a weboldal nyilvánosan elérhető adataiból készült.",
+        S['Blay']))
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(
+        "<b>Részletesebb elemzéshez szükséges:</b>", S['Blay11']))
+    for item in ["Google Analytics hozzáférés", "Google Cégprofil adatok",
+                 "Forgalmi és bevételi adatok", "15 perces konzultáció"]:
+        story.append(Paragraph(f"•  {item}", S['Blay11']))
+    story.append(Spacer(1, 6*mm))
+
+    # Kész megoldások ha vannak
+    schema_code = data.get('schema_code', '')
+    llms_txt = data.get('llms_txt', '')
+    if schema_code or llms_txt:
+        story.append(Paragraph("<b>Kész megoldások ebben a diagnózisban:</b>", S['H2']))
+        story.append(Spacer(1, 3*mm))
+        if schema_code:
+            story.append(Paragraph("✅  <b>Schema markup (JSON-LD)</b> — kész, beilleszthető a weboldalba", S['Blay11']))
+        if llms_txt:
+            story.append(Paragraph("✅  <b>llms.txt</b> — kész, feltölthető a domain gyökerébe", S['Blay11']))
+        story.append(Spacer(1, 6*mm))
+
+    # Elérhetőség
+    story.append(Spacer(1, 4*mm))
+    story.append(Paragraph(
+        "<b>Kérje a részletes auditot:</b>", S['Blay']))
+    story.append(Spacer(1, 3*mm))
+
+    contact_email = data.get('contact_email', '')
+    contact_phone = data.get('contact_phone', '')
+    contact_website = data.get('contact_website', '')
+    if contact_email:
+        story.append(Paragraph(f"📧  {contact_email}", S['Blay11']))
+    if contact_phone:
+        story.append(Paragraph(f"📞  {contact_phone}", S['Blay11']))
+    if contact_website:
+        story.append(Paragraph(f"🌐  {contact_website}", S['Blay11']))
+
+    # Disclaimer
+    story.append(Spacer(1, 10*mm))
+    story.append(Paragraph(
+        "Ez a riport AI-támogatott elemzési rendszerrel készült, kizárólag nyilvánosan elérhető adatok alapján. "
+        "Az eredmények tájékoztató jellegűek és nem helyettesítik a szakmai tanácsadást.",
+        S['Bxs']))
+
+    # ═══════════ BUILD ═══════════
+    def footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont(FONT, 7)
+        canvas.setFillColor(GRAY)
+        canvas.drawCentredString(PAGE_W/2, 10*mm,
+            f"{brand}  •  Gyorsdiagnózis  •  {doc.page}. oldal")
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(output_path, pagesize=A4,
+        leftMargin=MARGIN, rightMargin=MARGIN,
+        topMargin=16*mm, bottomMargin=18*mm,
+        title=f"Gyorsdiagnózis — {brand}", author="AI Audit Pipeline")
+    doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=footer)
+    return output_path
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # BUILD PDF — 9 szekciós prémium struktúra
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -1193,18 +1459,33 @@ def demo_data():
 # ═══════════════════════════════════════════════════════════════════════
 
 if __name__ == '__main__':
-    if len(sys.argv) >= 3:
-        with open(sys.argv[1], 'r', encoding='utf-8') as f:
+    lite_mode = '--lite' in sys.argv
+    args = [a for a in sys.argv[1:] if a != '--lite']
+
+    if len(args) >= 2:
+        with open(args[0], 'r', encoding='utf-8') as f:
             data = json.load(f)
-        out = sys.argv[2]
-    elif len(sys.argv) == 1:
+        out = args[1]
+    elif len(args) == 1 and args[0] == 'demo':
         print("Demo mód...")
         data = demo_data()
-        out = "AUDIT-RIPORT-demo.pdf"
+        out = "AUDIT-DIAGNOZIS-demo.pdf" if lite_mode else "AUDIT-RIPORT-demo.pdf"
+    elif len(args) == 0:
+        print("Demo mód...")
+        data = demo_data()
+        out = "AUDIT-DIAGNOZIS-demo.pdf" if lite_mode else "AUDIT-RIPORT-demo.pdf"
     else:
-        print("Használat: python3 generate_full_audit_pdf.py <input.json> <output.pdf>")
+        print("Használat:")
+        print("  python3 generate_full_audit_pdf.py <input.json> <output.pdf>          # Szint 2 (teljes)")
+        print("  python3 generate_full_audit_pdf.py <input.json> <output.pdf> --lite    # Szint 1 (diagnózis)")
+        print("  python3 generate_full_audit_pdf.py demo                                # Demo Szint 2")
+        print("  python3 generate_full_audit_pdf.py demo --lite                         # Demo Szint 1")
         sys.exit(1)
 
-    result = build_pdf(data, out)
+    if lite_mode or data.get('audit_level') == 'szint1':
+        result = build_lite_pdf(data, out)
+    else:
+        result = build_pdf(data, out)
+
     size_kb = os.path.getsize(result) / 1024
     print(f"PDF generálva: {result} ({size_kb:.0f} KB)")
