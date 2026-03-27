@@ -261,6 +261,101 @@ export async function loadTradeSubscriptionsRemote() {
   return result
 }
 
+// ── Quote Shares (client-facing portal) ─────────────────────────────────────
+
+/**
+ * Creates a shareable link token for a quote.
+ * Stores a snapshot of the quote + company data so the link stays valid
+ * even if the original quote is edited later.
+ *
+ * @param {object} quote        — Full quote object
+ * @param {object} companyData  — { name, email, phone } from settings
+ * @returns {string} The public share token (32-char hex)
+ */
+export async function createQuoteShare(quote, companyData = {}) {
+  requireConfig('createQuoteShare')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Nem vagy bejelentkezve.')
+
+  // Check if a share already exists for this quote
+  const { data: existing } = await supabase
+    .from('quote_shares')
+    .select('token, status')
+    .eq('quote_id', quote.id)
+    .eq('user_id', user.id)
+    .neq('status', 'expired')
+    .maybeSingle()
+
+  if (existing) return existing.token
+
+  const { data, error } = await supabase
+    .from('quote_shares')
+    .insert({
+      quote_id: quote.id,
+      user_id: user.id,
+      quote_data: quote,
+      company_data: companyData,
+    })
+    .select('token')
+    .single()
+
+  if (error) throw error
+  return data.token
+}
+
+/**
+ * Loads a quote share by its public token.
+ * No authentication required — used by the client portal.
+ *
+ * @param {string} token
+ * @returns {{ quote_data, company_data, status, expires_at, accepted_by_name } | null}
+ */
+export async function loadQuoteByToken(token) {
+  if (!supabaseConfigured) return null
+  const { data, error } = await supabase
+    .from('quote_shares')
+    .select('quote_data, company_data, status, expires_at, accepted_by_name, accepted_at')
+    .eq('token', token)
+    .single()
+  if (error) return null
+  return data
+}
+
+/**
+ * Marks a quote share as accepted by the client.
+ * No authentication required — uses the public RLS policy.
+ * After acceptance, fires a best-effort notification to the contractor.
+ *
+ * @param {string} token
+ * @param {string} acceptedByName — Client's name
+ */
+export async function acceptQuoteShare(token, acceptedByName) {
+  if (!supabaseConfigured) throw new Error('Supabase nincs konfigurálva.')
+  const { error } = await supabase
+    .from('quote_shares')
+    .update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+      accepted_by_name: acceptedByName,
+    })
+    .eq('token', token)
+    .eq('status', 'pending')
+  if (error) throw error
+
+  // Best-effort email notification to contractor — errors are silently ignored
+  // so the acceptance flow is never blocked by a missing email config.
+  try {
+    const apiBase = import.meta.env.VITE_API_URL || window.location.origin
+    await fetch(`${apiBase}/api/notify-quote-accepted`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ token }),
+    })
+  } catch {
+    // Non-critical — acceptance already recorded above
+  }
+}
+
 /**
  * Trade aktiválása/deaktiválása
  */

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -199,6 +199,28 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const net = newSubtotal + newMarkupAmount
   // (Per-component gross values are provided by quoteDisplayTotals below,
   //  with proportional ÁFA allocation so they always sum to displayGross.)
+
+  // ── Share link handler ─────────────────────────────────────────────────────
+  const [shareLabel, setShareLabel] = useState('Link megosztása')
+  const handleShare = async () => {
+    if (!session) { toast.show('Bejelentkezés szükséges a link megosztáshoz.', 'error'); return }
+    try {
+      setShareLabel('Link generálása…')
+      const companyData = {
+        name: settings?.company?.name || '',
+        email: settings?.company?.email || '',
+        phone: settings?.company?.phone || '',
+      }
+      const token = await createQuoteShare(quote, companyData)
+      const url = `${window.location.origin}/q/${token}`
+      await navigator.clipboard.writeText(url)
+      setShareLabel('✓ Link másolva')
+      setTimeout(() => setShareLabel('Link megosztása'), 2200)
+    } catch (err) {
+      toast.show('Link generálás sikertelen: ' + err.message, 'error')
+      setShareLabel('Link megosztása')
+    }
+  }
 
   // ── Save handler: build updated quote, persist ─────────────────────────────
   const handleMetaSave = () => {
@@ -987,6 +1009,12 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               ...actionBase, width: '100%', background: '#B07CFF', cursor: 'pointer',
             }}>
               PDF előnézet
+            </button>
+            <button onClick={handleShare} style={{
+              ...actionBase, width: '100%', cursor: 'pointer',
+              background: 'transparent', border: `1px solid ${C.accent}60`, color: C.accent,
+            }}>
+              🔗 {shareLabel}
             </button>
           </div>
 
