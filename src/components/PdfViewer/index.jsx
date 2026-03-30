@@ -4,6 +4,7 @@ import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
+import { toGray, buildSAT, matchTemplate, nonMaxSuppression, renderPageImageData } from '../../utils/templateMatching.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -146,6 +147,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [renderTick, setRenderTick] = useState(0)
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
   const hydratedRef = useRef(false) // true after annotation restore completes — guards auto-save
+
+  // ── Auto Symbol POC state ──
+  const [autoSymbolActive, setAutoSymbolActive] = useState(false)
+  const [autoSymbolPhase, setAutoSymbolPhase] = useState('idle') // idle | picking | searching | done
+  const [autoSymbolRect, setAutoSymbolRect] = useState(null) // {x1,y1,x2,y2} in screen coords during pick
+  const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score}] in PDF doc coords
+  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.55)
+  const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
+  const autoSymbolTemplateRef = useRef(null) // { gray, w, h } cropped template
+  const autoSymbolStartRef = useRef(null) // mouse down position during picking
 
   // ── Dirty state tracking (unsaved local changes) ──
   const dirtyRef = useRef(false)
@@ -627,7 +638,40 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       ctx.moveTo(0, s.y); ctx.lineTo(cw, s.y)
       ctx.stroke()
     }
-  }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes])
+
+    // ── Auto Symbol: selection rectangle ──
+    if (autoSymbolRect && autoSymbolPhase === 'picking') {
+      const r = autoSymbolRect
+      ctx.strokeStyle = '#FF8C42'
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 4])
+      ctx.strokeRect(Math.min(r.x1, r.x2), Math.min(r.y1, r.y2), Math.abs(r.x2 - r.x1), Math.abs(r.y2 - r.y1))
+      ctx.setLineDash([])
+    }
+
+    // ── Auto Symbol: result markers ──
+    if (autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
+      const tpl = autoSymbolTemplateRef.current
+      for (const hit of autoSymbolResults) {
+        const s = proj(hit.x, hit.y)
+        const halfW = (tpl.w / 2) * v.zoom
+        const halfH = (tpl.h / 2) * v.zoom
+        // Rectangle around match
+        ctx.strokeStyle = '#FF8C42'
+        ctx.lineWidth = 2
+        ctx.strokeRect(s.x - halfW, s.y - halfH, halfW * 2, halfH * 2)
+        // Center dot
+        ctx.fillStyle = '#FF8C42'
+        ctx.beginPath()
+        ctx.arc(s.x, s.y, 3, 0, Math.PI * 2)
+        ctx.fill()
+        // Score label
+        ctx.font = '10px "DM Mono"'
+        ctx.fillStyle = '#FF8C42'
+        ctx.fillText((hit.score * 100).toFixed(0) + '%', s.x + halfW + 3, s.y - halfH + 10)
+      }
+    }
+  }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes, autoSymbolRect, autoSymbolPhase, autoSymbolResults])
 
   // ── Mouse handlers ──
   const handleMouseDown = useCallback((e) => {
@@ -636,6 +680,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const sx = e.clientX - rect.left
     const sy = e.clientY - rect.top
     const pdf = screenToPdf(sx, sy)
+
+    if (activeTool === 'auto-symbol' && autoSymbolPhase === 'picking') {
+      autoSymbolStartRef.current = { sx, sy }
+      setAutoSymbolRect({ x1: sx, y1: sy, x2: sx, y2: sy })
+      return
+    }
 
     if (!activeTool || e.button === 1) {
       // Pan mode when no tool active or middle mouse
@@ -707,6 +757,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const sx = e.clientX - rect.left
     const sy = e.clientY - rect.top
 
+    // Auto-symbol rectangle drag
+    if (autoSymbolStartRef.current && autoSymbolPhase === 'picking') {
+      setAutoSymbolRect({ x1: autoSymbolStartRef.current.sx, y1: autoSymbolStartRef.current.sy, x2: sx, y2: sy })
+      drawOverlay()
+      return
+    }
+
     if (dragRef.current.dragging) {
       const dx = e.clientX - dragRef.current.startX
       const dy = e.clientY - dragRef.current.startY
@@ -720,9 +777,52 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (activeTool) drawOverlay()
   }, [activeTool, screenToPdf, drawOverlay])
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback(async () => {
+    // Auto-symbol: finish rectangle pick → crop template → search
+    if (autoSymbolStartRef.current && autoSymbolPhase === 'picking') {
+      const r = autoSymbolRect
+      autoSymbolStartRef.current = null
+      if (!r || !pdfCanvasRef.current) { setAutoSymbolRect(null); return }
+      const x1 = Math.min(r.x1, r.x2), y1 = Math.min(r.y1, r.y2)
+      const x2 = Math.max(r.x1, r.x2), y2 = Math.max(r.y1, r.y2)
+      const w = x2 - x1, h = y2 - y1
+      if (w < 8 || h < 8) { setAutoSymbolRect(null); return } // too small
+      // Convert screen coords to PDF canvas coords (scale=2 render)
+      const v = viewRef.current
+      const cx1 = (x1 - v.offsetX) / v.zoom * 2
+      const cy1 = (y1 - v.offsetY) / v.zoom * 2
+      const cw = w / v.zoom * 2
+      const ch = h / v.zoom * 2
+      // Crop from PDF render canvas
+      try {
+        const ctx = pdfCanvasRef.current.getContext('2d')
+        const cropData = ctx.getImageData(Math.round(cx1), Math.round(cy1), Math.round(cw), Math.round(ch))
+        // Scale to match search scale (scale=1 means half the render canvas which is scale=2)
+        const tW = Math.round(cw / 2), tH = Math.round(ch / 2)
+        if (tW < 4 || tH < 4) { setAutoSymbolRect(null); return }
+        const tmpCanvas = document.createElement('canvas')
+        tmpCanvas.width = tW; tmpCanvas.height = tH
+        const tmpCtx = tmpCanvas.getContext('2d')
+        // Draw cropData into temp canvas at half size
+        const cropCanvas = document.createElement('canvas')
+        cropCanvas.width = cropData.width; cropCanvas.height = cropData.height
+        cropCanvas.getContext('2d').putImageData(cropData, 0, 0)
+        tmpCtx.drawImage(cropCanvas, 0, 0, tW, tH)
+        const scaledData = tmpCtx.getImageData(0, 0, tW, tH)
+        const gray = toGray(scaledData)
+        autoSymbolTemplateRef.current = { gray, w: tW, h: tH }
+        setAutoSymbolRect(null)
+        setAutoSymbolPhase('searching')
+        await runAutoSymbolSearch(autoSymbolThreshold)
+      } catch (err) {
+        console.error('[AutoSymbol] crop failed:', err)
+        setAutoSymbolRect(null)
+        setAutoSymbolPhase('picking')
+      }
+      return
+    }
     dragRef.current.dragging = false
-  }, [])
+  }, [autoSymbolPhase, autoSymbolRect, autoSymbolThreshold, runAutoSymbolSearch])
 
   const handleWheel = useCallback((e) => {
     e.preventDefault()
@@ -739,6 +839,42 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.zoom = newZoom
     drawOverlay()
   }, [drawOverlay])
+
+  // ── Auto Symbol POC: run template match on current page ──
+  const runAutoSymbolSearch = useCallback(async (threshold) => {
+    if (!autoSymbolTemplateRef.current || !pdfDoc) return
+    setAutoSymbolSearching(true)
+    setAutoSymbolResults([])
+    try {
+      const page = await pdfDoc.getPage(pageNum)
+      const { imageData, width, height } = await renderPageImageData(page, 1)
+      const imgGray = toGray(imageData)
+      const sat = buildSAT(imgGray, width, height)
+      const { gray: tplGray, w: tW, h: tH } = autoSymbolTemplateRef.current
+      const rawHits = matchTemplate(imgGray, width, height, tplGray, tW, tH, sat, threshold, 2)
+      const filtered = nonMaxSuppression(rawHits, tW, tH, 0.3)
+      // Convert to doc coords (center of each match)
+      const d = unrotatedDimsRef.current
+      const results = filtered.map(h => {
+        // template matching runs at scale=1, which matches unrotated doc coords directly
+        return { x: h.x + tW / 2, y: h.y + tH / 2, score: h.score }
+      })
+      setAutoSymbolResults(results)
+      setAutoSymbolPhase('done')
+    } catch (err) {
+      console.error('[AutoSymbol] search failed:', err)
+      setAutoSymbolPhase('idle')
+    } finally {
+      setAutoSymbolSearching(false)
+    }
+  }, [pdfDoc, pageNum])
+
+  // Re-search when threshold changes (debounced)
+  useEffect(() => {
+    if (autoSymbolPhase !== 'done' || !autoSymbolTemplateRef.current) return
+    const t = setTimeout(() => runAutoSymbolSearch(autoSymbolThreshold), 300)
+    return () => clearTimeout(t)
+  }, [autoSymbolThreshold]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -941,10 +1077,39 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         onRotateLeft={() => setRotation(r => (r - 90 + 360) % 360)}
         onRotateRight={() => setRotation(r => (r + 90) % 360)}
         assemblies={assembliesProp}
+        autoSymbolActive={autoSymbolActive}
+        autoSymbolPhase={autoSymbolPhase}
+        autoSymbolCount={autoSymbolResults.length}
+        autoSymbolSearching={autoSymbolSearching}
+        autoSymbolThreshold={autoSymbolThreshold}
+        onAutoSymbolToggle={() => {
+          if (autoSymbolActive) {
+            // Reset
+            setAutoSymbolActive(false)
+            setAutoSymbolPhase('idle')
+            setAutoSymbolResults([])
+            setAutoSymbolRect(null)
+            autoSymbolTemplateRef.current = null
+            setActiveTool(null)
+            drawOverlay()
+          } else {
+            setAutoSymbolActive(true)
+            setAutoSymbolPhase('picking')
+            setAutoSymbolResults([])
+            setActiveTool('auto-symbol')
+          }
+        }}
+        onAutoSymbolThresholdChange={v => setAutoSymbolThreshold(v)}
+        onAutoSymbolClear={() => {
+          setAutoSymbolResults([])
+          setAutoSymbolPhase('picking')
+          autoSymbolTemplateRef.current = null
+          drawOverlay()
+        }}
       />
 
       {/* Main area */}
-      <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden', borderRadius: '0 0 10px 10px', cursor: activeTool ? 'crosshair' : 'grab' }}>
+      <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden', borderRadius: '0 0 10px 10px', cursor: activeTool === 'auto-symbol' ? 'cell' : activeTool ? 'crosshair' : 'grab' }}>
         {/* Hidden PDF render canvas */}
         <canvas ref={pdfCanvasRef} style={{ display: 'none' }} />
 
@@ -1208,6 +1373,8 @@ function PdfToolbar({
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
   assemblies,
+  autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolSearching,
+  autoSymbolThreshold, onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear,
 }) {
   const TOOLS = [
     { id: 'count', label: 'Számlálás', key: 'C' },
@@ -1259,6 +1426,41 @@ function PdfToolbar({
       {activeTool === 'measure' && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
+
+      {/* ── Auto Symbol POC ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8, borderLeft: `1px solid ${C.border}`, paddingLeft: 8 }}>
+        <button onClick={onAutoSymbolToggle} title="Auto szimbólum keresés (BETA)" style={{
+          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: 5,
+          background: autoSymbolActive ? 'rgba(255,140,66,0.12)' : 'transparent',
+          border: `1px solid ${autoSymbolActive ? 'rgba(255,140,66,0.3)' : 'transparent'}`,
+          color: autoSymbolActive ? '#FF8C42' : C.text, transition: 'all 0.12s',
+        }}>
+          ⚡ Auto
+          {autoSymbolCount > 0 && <span style={{ background: '#FF8C42', color: '#09090B', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{autoSymbolCount}</span>}
+        </button>
+        {autoSymbolActive && autoSymbolPhase === 'picking' && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>Jelölj ki mintát ↓</span>
+        )}
+        {autoSymbolSearching && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>Keresés…</span>
+        )}
+        {autoSymbolPhase === 'done' && (
+          <>
+            <label style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
+              Küszöb
+              <input type="range" min="0.3" max="0.9" step="0.05" value={autoSymbolThreshold}
+                onChange={e => onAutoSymbolThresholdChange(parseFloat(e.target.value))}
+                style={{ width: 60, accentColor: '#FF8C42' }} />
+              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#FF8C42', width: 28 }}>{(autoSymbolThreshold * 100).toFixed(0)}%</span>
+            </label>
+            <button onClick={onAutoSymbolClear} title="Új minta kijelölése" style={{
+              padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono',
+              background: 'transparent', border: `1px solid ${C.border}`, color: C.muted,
+            }}>Új minta</button>
+          </>
+        )}
+      </div>
 
       <div style={{ flex: 1 }} />
 
