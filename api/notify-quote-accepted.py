@@ -15,12 +15,12 @@ Szükséges Vercel environment variables:
 
 from http.server import BaseHTTPRequestHandler
 import json, os, re, urllib.request
+from _security import send_cors_headers, check_origin, check_rate_limit, rate_limit_response
 
 SUPABASE_URL         = os.environ.get('SUPABASE_URL') or os.environ.get('VITE_SUPABASE_URL', '')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
 RESEND_API_KEY       = os.environ.get('RESEND_API_KEY', '')
 NOTIFY_FROM_EMAIL    = os.environ.get('NOTIFY_FROM_EMAIL', 'no-reply@takeoffpro.app')
-ALLOWED_ORIGIN       = os.environ.get('ALLOWED_ORIGIN', '*')
 
 TOKEN_RE = re.compile(r'^[a-f0-9]{64}$')
 
@@ -124,17 +124,14 @@ def build_email_html(quote_data, company_data, accepted_by_name, accepted_at):
 
 class handler(BaseHTTPRequestHandler):
 
-    def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-
     def do_OPTIONS(self):
         self.send_response(204)
-        self._cors()
+        send_cors_headers(self)
         self.end_headers()
 
     def do_POST(self):
+        if not check_origin(self): return
+        if not check_rate_limit(self, limit=10): return rate_limit_response(self)
         # ── Parse body ────────────────────────────────────────────────────────
         length = int(self.headers.get('Content-Length', 0))
         body   = json.loads(self.rfile.read(length) or b'{}') if length else {}
@@ -143,7 +140,7 @@ class handler(BaseHTTPRequestHandler):
         def respond(status, payload):
             data = json.dumps(payload).encode()
             self.send_response(status)
-            self._cors()
+            send_cors_headers(self)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', len(data))
             self.end_headers()

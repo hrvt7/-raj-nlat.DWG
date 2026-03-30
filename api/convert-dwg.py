@@ -1,10 +1,9 @@
 from http.server import BaseHTTPRequestHandler
-import json, traceback, os
+import json, traceback, os, sys
 from urllib.request import urlopen, Request
+from _security import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
 
-# CloudConvert API key — set as Vercel env var CLOUDCONVERT_API_KEY
 CLOUDCONVERT_API_KEY = os.environ.get('CLOUDCONVERT_API_KEY', '')
-ALLOWED_ORIGIN      = os.environ.get('ALLOWED_ORIGIN', '*')
 
 
 def create_job(filename):
@@ -104,10 +103,13 @@ class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self._cors()
+        send_cors_headers(self)
         self.end_headers()
 
     def do_POST(self):
+        if not check_origin(self): return
+        if not check_rate_limit(self): return rate_limit_response(self)
+        if not check_required_env(self, 'CLOUDCONVERT_API_KEY'): return
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length)
@@ -127,22 +129,13 @@ class handler(BaseHTTPRequestHandler):
                 raise Exception("Érvénytelen kérés: 'filename' (create) vagy 'jobId' (poll) megadása kötelező.")
 
         except Exception as e:
-            self._respond(500, {
-                'success': False,
-                'error': str(e),
-                'trace': traceback.format_exc()
-            })
+            safe_error_response(self, 500, 'DWG konverzió sikertelen', exc=e)
 
     def _respond(self, code, data):
         self.send_response(code)
-        self._cors()
+        send_cors_headers(self)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
-
-    def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
     def log_message(self, *a): pass

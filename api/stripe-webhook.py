@@ -13,10 +13,10 @@ Figyelendő events:
 """
 
 from http.server import BaseHTTPRequestHandler
-import json, os, hashlib, hmac, urllib.request, time
+import json, os, sys, hashlib, hmac, urllib.request, time
+from _security import IS_PRODUCTION, IS_LOCAL_DEV
 
 STRIPE_WEBHOOK_SECRET  = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
-ALLOWED_ORIGIN         = os.environ.get('ALLOWED_ORIGIN', '*')
 SUPABASE_URL           = os.environ.get('VITE_SUPABASE_URL', 'https://pprlbtsqfyrbfhbqjpai.supabase.co')
 SUPABASE_SERVICE_KEY   = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
 
@@ -82,10 +82,14 @@ class handler(BaseHTTPRequestHandler):
         payload = self.rfile.read(length).decode('utf-8')
         sig     = self.headers.get('Stripe-Signature', '')
 
-        # Aláírás ellenőrzés
-        if STRIPE_WEBHOOK_SECRET and sig:
-            if not verify_stripe_signature(payload, sig, STRIPE_WEBHOOK_SECRET):
+        # Aláírás ellenőrzés — kötelező productionben
+        if STRIPE_WEBHOOK_SECRET:
+            if not sig or not verify_stripe_signature(payload, sig, STRIPE_WEBHOOK_SECRET):
                 return self._respond(400, {'error': 'Invalid signature'})
+        elif not IS_LOCAL_DEV:
+            # Production/preview: signature secret hiányzik → fail-closed
+            print("[SECURITY] STRIPE_WEBHOOK_SECRET not set on remote env — rejecting", file=sys.stderr)
+            return self._respond(503, {'error': 'Webhook not configured'})
 
         try:
             event = json.loads(payload)
@@ -177,6 +181,5 @@ class handler(BaseHTTPRequestHandler):
     def _respond(self, code, body):
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.end_headers()
         self.wfile.write(json.dumps(body).encode())

@@ -5,10 +5,9 @@ Villamos szimbólumok számlálása szín és méret alapján.
 Kábelvonalak hossza réteg/szín alapján, léptékkel korrigálva.
 """
 from http.server import BaseHTTPRequestHandler
-import json, base64, traceback, io, math, os
+import json, base64, traceback, io, math, os, sys
 from collections import defaultdict
-
-ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '*')
+from _security import send_cors_headers, check_origin, check_rate_limit, safe_error_response, rate_limit_response
 MAX_UPLOAD_MB  = int(os.environ.get('MAX_UPLOAD_MB', '20'))
 
 def classify_color(c, threshold_r=0.75):
@@ -307,10 +306,12 @@ class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self._cors()
+        send_cors_headers(self)
         self.end_headers()
 
     def do_POST(self):
+        if not check_origin(self): return
+        if not check_rate_limit(self): return rate_limit_response(self)
         try:
             length = int(self.headers.get('Content-Length', 0))
             max_bytes = MAX_UPLOAD_MB * 1024 * 1024
@@ -345,22 +346,13 @@ class handler(BaseHTTPRequestHandler):
             self._respond(200, result)
 
         except Exception as e:
-            self._respond(500, {
-                'success': False,
-                'error': str(e),
-                'trace': traceback.format_exc()
-            })
+            safe_error_response(self, 500, 'PDF vektor elemzés sikertelen', exc=e)
 
     def _respond(self, code, data):
         self.send_response(code)
-        self._cors()
+        send_cors_headers(self)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
-
-    def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
     def log_message(self, *a): pass
