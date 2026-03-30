@@ -6,7 +6,7 @@ The OpenAI API key lives server-side only — never exposed to the client bundle
 from http.server import BaseHTTPRequestHandler
 import json, os, sys, urllib.request, urllib.error
 from _security import (
-    send_cors_headers, check_api_secret, check_rate_limit,
+    send_cors_headers, check_origin, check_rate_limit,
     check_required_env, safe_error_response, rate_limit_response
 )
 
@@ -163,8 +163,8 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if not check_origin(self): return
         if not check_rate_limit(self): return rate_limit_response(self)
-        if not check_api_secret(self): return
         if not check_required_env(self, 'OPENAI_API_KEY'): return
         try:
             # ── Validate Content-Length ──

@@ -1,7 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json, traceback, os, sys, urllib.request, urllib.error, base64
 from _security import (
-    send_cors_headers, check_body_size, check_api_secret, check_rate_limit,
+    send_cors_headers, check_body_size, check_origin, check_rate_limit,
     safe_error_response, rate_limit_response
 )
 
@@ -204,9 +204,9 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if not check_origin(self): return
         if not check_rate_limit(self): return rate_limit_response(self)
         if not check_body_size(self): return
-        if not check_api_secret(self): return
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length)

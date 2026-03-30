@@ -1,7 +1,11 @@
 """
 Shared security utilities for TakeoffPro API endpoints.
 
-Provides: origin validation, request size guard, API key auth, and safe error responses.
+Provides: origin validation (fail-closed in production), request size guard,
+rate limiting, required env checks, and safe error responses.
+
+NO browser-sent shared secrets — origin restriction + rate limiting + fail-closed
+config is the real protection layer for a public SPA.
 """
 
 import os
@@ -10,31 +14,33 @@ import json
 import time
 import traceback
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# ── Environment detection ────────────────────────────────────────────────────
+# Vercel sets VERCEL_ENV to 'production', 'preview', or 'development'.
+# If not on Vercel, fall back to NODE_ENV or assume development.
+_VERCEL_ENV = os.environ.get('VERCEL_ENV', '')
+_NODE_ENV = os.environ.get('NODE_ENV', '')
+IS_PRODUCTION = _VERCEL_ENV == 'production' or _NODE_ENV == 'production'
 
-# Comma-separated allowed origins. Default: production domain only.
+# ── CORS origin configuration ────────────────────────────────────────────────
+# In production: ONLY allow configured origins. No fallback to '*'.
+# In development: also allow localhost.
 _ALLOWED_ORIGINS_RAW = os.environ.get(
     'ALLOWED_ORIGINS',
     'https://raj-nlat-dwg.vercel.app,https://takeoffpro.hu,https://www.takeoffpro.hu'
 )
 ALLOWED_ORIGINS = [o.strip() for o in _ALLOWED_ORIGINS_RAW.split(',') if o.strip()]
 
-# Optional API key for endpoint protection (Bearer token).
-# If set, all protected endpoints require: Authorization: Bearer <key>
-API_SECRET = os.environ.get('API_SECRET', '')
-
 # Default max request body size: 5 MB
 DEFAULT_MAX_BODY = 5 * 1024 * 1024
 
 # ── Simple in-memory rate limiter ────────────────────────────────────────────
-# Per-IP, per-minute. Resets each minute. Lightweight for serverless.
 _RATE_WINDOW = 60  # seconds
 _RATE_LIMIT = 30   # requests per window per IP
-_rate_store = {}   # { ip: (window_start, count) }
+_rate_store = {}
 
 
 def _get_client_ip(handler):
-    """Extract client IP from request headers (Vercel forwards via x-forwarded-for)."""
+    """Extract client IP (Vercel forwards via x-forwarded-for)."""
     forwarded = handler.headers.get('x-forwarded-for', '')
     if forwarded:
         return forwarded.split(',')[0].strip()
@@ -42,13 +48,12 @@ def _get_client_ip(handler):
 
 
 def check_rate_limit(handler, limit=_RATE_LIMIT):
-    """Returns True if request is within rate limit, False if exceeded."""
+    """Returns True if within rate limit, False if exceeded."""
     ip = _get_client_ip(handler)
     now = time.time()
     window_start, count = _rate_store.get(ip, (now, 0))
 
     if now - window_start > _RATE_WINDOW:
-        # New window
         _rate_store[ip] = (now, 1)
         return True
 
@@ -59,29 +64,44 @@ def check_rate_limit(handler, limit=_RATE_LIMIT):
     return True
 
 
-# ── Origin validation ────────────────────────────────────────────────────────
+# ── Origin validation (fail-closed in production) ───────────────────────────
 
-def get_cors_origin(handler):
+def _is_allowed_origin(origin):
+    """Check if origin is in the allowed list or is a dev origin."""
+    if not origin:
+        return True  # No Origin header = same-origin or non-browser (curl, etc.)
+    # Always allow localhost in non-production
+    if not IS_PRODUCTION and ('localhost' in origin or '127.0.0.1' in origin):
+        return True
+    return origin in ALLOWED_ORIGINS
+
+
+def check_origin(handler):
     """
-    Returns the Access-Control-Allow-Origin value.
-    In development (localhost), allows the request origin.
-    In production, only allows configured origins.
+    Validate request origin. In production, reject unknown origins with 403.
+    Returns True if OK, sends 403 if not.
     """
     origin = handler.headers.get('Origin', '')
+    if _is_allowed_origin(origin):
+        return True
 
-    # Allow localhost for development
-    if origin and ('localhost' in origin or '127.0.0.1' in origin):
+    # Production: fail-closed — reject unknown origins
+    handler.send_response(403)
+    handler.send_header('Content-Type', 'application/json')
+    handler.end_headers()
+    handler.wfile.write(json.dumps({
+        'success': False,
+        'error': 'Origin not allowed'
+    }).encode())
+    print(f"[SECURITY] Rejected origin: {origin}", file=sys.stderr)
+    return False
+
+
+def get_cors_origin(handler):
+    """Returns the Access-Control-Allow-Origin value for response headers."""
+    origin = handler.headers.get('Origin', '')
+    if _is_allowed_origin(origin) and origin:
         return origin
-
-    # Check against allowed origins
-    if origin in ALLOWED_ORIGINS:
-        return origin
-
-    # If no origin header (same-origin request, curl, etc.) — allow
-    if not origin:
-        return ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else '*'
-
-    # Origin not allowed — return first allowed origin (browser will block)
     return ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else 'null'
 
 
@@ -91,22 +111,11 @@ def send_cors_headers(handler, origin=None):
         origin = get_cors_origin(handler)
     handler.send_header('Access-Control-Allow-Origin', origin)
     handler.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    handler.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    handler.send_header('Access-Control-Allow-Headers', 'Content-Type')
     handler.send_header('Access-Control-Max-Age', '86400')
 
 
 # ── Request guards ───────────────────────────────────────────────────────────
-
-def check_method(handler, allowed=('POST',)):
-    """Verify HTTP method. Returns True if OK, sends 405 if not."""
-    if handler.command not in allowed and handler.command != 'OPTIONS':
-        handler.send_response(405)
-        handler.send_header('Content-Type', 'application/json')
-        handler.end_headers()
-        handler.wfile.write(json.dumps({'success': False, 'error': 'Method not allowed'}).encode())
-        return False
-    return True
-
 
 def check_body_size(handler, max_bytes=DEFAULT_MAX_BODY):
     """Check Content-Length. Returns True if OK, sends 413 if too large."""
@@ -121,41 +130,6 @@ def check_body_size(handler, max_bytes=DEFAULT_MAX_BODY):
             'error': f'Request too large ({content_length} bytes, max {max_bytes})'
         }).encode())
         return False
-    return True
-
-
-def check_api_secret(handler):
-    """
-    If API_SECRET is configured, require Bearer token.
-    Returns True if OK or if API_SECRET is not set (open mode for dev).
-    Sends 401 if token is missing/invalid.
-    """
-    if not API_SECRET:
-        # No secret configured — allow (development / unconfigured production)
-        return True
-
-    auth = handler.headers.get('Authorization', '')
-    if not auth.startswith('Bearer '):
-        handler.send_response(401)
-        handler.send_header('Content-Type', 'application/json')
-        send_cors_headers(handler)
-        handler.end_headers()
-        handler.wfile.write(json.dumps({
-            'success': False, 'error': 'Missing Authorization header'
-        }).encode())
-        return False
-
-    token = auth[7:]
-    if token != API_SECRET:
-        handler.send_response(401)
-        handler.send_header('Content-Type', 'application/json')
-        send_cors_headers(handler)
-        handler.end_headers()
-        handler.wfile.write(json.dumps({
-            'success': False, 'error': 'Invalid API key'
-        }).encode())
-        return False
-
     return True
 
 
@@ -181,10 +155,9 @@ def check_required_env(handler, *env_vars):
 # ── Safe error response ──────────────────────────────────────────────────────
 
 def safe_error_response(handler, status_code, error_msg, exc=None):
-    """Send error response WITHOUT exposing stack traces. Logs trace to stderr."""
+    """Send error response WITHOUT exposing stack traces. Logs to stderr."""
     if exc:
         print(f"[API ERROR] {error_msg}: {traceback.format_exc()}", file=sys.stderr)
-
     handler.send_response(status_code)
     handler.send_header('Content-Type', 'application/json')
     send_cors_headers(handler)

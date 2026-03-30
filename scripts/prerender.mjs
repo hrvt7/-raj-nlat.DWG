@@ -13,10 +13,27 @@
  * The React app still hydrates normally for interactive users.
  */
 
-import { chromium } from 'playwright'
 import { createServer } from 'http'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join, extname } from 'path'
+import { execSync } from 'child_process'
+
+let chromium
+try {
+  const pw = await import('playwright')
+  chromium = pw.chromium
+} catch {
+  console.warn('[prerender] Playwright not installed — attempting install...')
+  try {
+    execSync('npx playwright install chromium --with-deps', { stdio: 'inherit', timeout: 120000 })
+    const pw = await import('playwright')
+    chromium = pw.chromium
+  } catch (e) {
+    console.warn('[prerender] Playwright unavailable — skipping prerender.')
+    console.warn('[prerender] The build output will use client-side rendering only.')
+    process.exit(0)
+  }
+}
 
 const DIST = join(process.cwd(), 'dist')
 const PORT = 4399

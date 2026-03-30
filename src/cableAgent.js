@@ -2,7 +2,6 @@
 // Sends geometry + DXF screenshot to n8n Vision agent, gets cable estimate back.
 
 import { INSUNITS_MAP, resolveUnits } from './utils/dxfUnits.js'
-import { getApiHeaders } from './utils/apiHeaders.js'
 
 /**
  * Extracts full geometry from parsed DXF tokens including INSERT coordinates.
@@ -195,7 +194,7 @@ function isWallLayer(layer) {
 export async function runCableAgent({ geometry, screenshotBase64, apiBase = '' }) {
   const res = await fetch(`${apiBase}/api/cable-agent`, {
     method: 'POST',
-    headers: getApiHeaders(),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       geometry,
       screenshot_base64: screenshotBase64,
