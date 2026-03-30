@@ -1946,6 +1946,8 @@ function routeFromLocation() {
   const hash = window.location.hash
   if (path === '/success' || hash === '#success') return 'success'
   if (hash === '#app') return 'app'
+  if (hash === '#privacy') return 'privacy'
+  if (hash === '#terms') return 'terms'
   return 'landing'
 }
 
@@ -1965,5 +1967,7 @@ export default function App() {
 
   if (route === 'success') return <SuccessPage />
   if (route === 'app') return <SaaSShell />
+  if (route === 'privacy') return <Landing page="privacy" onStart={() => { window.location.hash = '#app'; setRoute('app') }} />
+  if (route === 'terms') return <Landing page="terms" onStart={() => { window.location.hash = '#app'; setRoute('app') }} />
   return <Landing onStart={() => { window.location.hash = '#app'; setRoute('app') }} />
 }

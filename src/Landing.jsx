@@ -2342,12 +2342,169 @@ function Footer() {
         </div>
         <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 15, color: '#F0F0F0' }}>Takeoff<span style={{ color: '#00E5A0' }}>Pro</span></span>
       </div>
-      <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444' }}>© 2026 TakeoffPro · Villamossági árajánlat rendszer</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <a href="#privacy" style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#555', textDecoration: 'none', transition: 'color 0.15s' }} onMouseEnter={e => e.target.style.color = '#00E5A0'} onMouseLeave={e => e.target.style.color = '#555'}>Adatvédelem</a>
+        <a href="#terms" style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#555', textDecoration: 'none', transition: 'color 0.15s' }} onMouseEnter={e => e.target.style.color = '#00E5A0'} onMouseLeave={e => e.target.style.color = '#555'}>ÁSZF</a>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#333' }}>·</span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#444' }}>© 2026 TakeoffPro</span>
+      </div>
     </footer>
   )
 }
 
-export default function Landing({ onStart }) {
+// ─── Cookie Consent Banner ──────────────────────────────────────────────────
+function CookieConsent() {
+  const [visible, setVisible] = useState(() => {
+    try { return !localStorage.getItem('takeoffpro_cookie_consent') } catch { return true }
+  })
+  if (!visible) return null
+  const accept = () => {
+    try { localStorage.setItem('takeoffpro_cookie_consent', 'accepted') } catch {}
+    setVisible(false)
+  }
+  return (
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999,
+      background: '#141414', borderTop: '1px solid #222',
+      padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap: 16, flexWrap: 'wrap',
+    }}>
+      <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#AAA', maxWidth: 600 }}>
+        Ez az oldal sütiket használ a működéshez és a felhasználói élmény javításához.
+        Részletek: <a href="#privacy" style={{ color: '#00E5A0', textDecoration: 'underline' }}>Adatvédelmi tájékoztató</a>
+      </span>
+      <button onClick={accept} style={{
+        padding: '8px 20px', borderRadius: 6, border: 'none', cursor: 'pointer',
+        background: '#00E5A0', color: '#09090B', fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+        flexShrink: 0,
+      }}>Elfogadom</button>
+    </div>
+  )
+}
+
+// ─── Legal Page Shell ───────────────────────────────────────────────────────
+function LegalPage({ title, children }) {
+  return (
+    <div style={{ background: '#0A0A0A', color: '#F0F0F0', minHeight: '100vh' }}>
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '40px 24px 80px' }}>
+        <a href="/" style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 15, color: '#F0F0F0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+          <span style={{ color: '#00E5A0' }}>←</span> TakeoffPro
+        </a>
+        <h1 style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 28, color: '#F0F0F0', marginBottom: 8 }}>{title}</h1>
+        <p style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#666', marginBottom: 32 }}>Utolsó frissítés: 2026. március 30.</p>
+        <div style={{ fontFamily: 'Inter, system-ui, sans-serif', fontSize: 14, color: '#CCC', lineHeight: 1.8 }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Privacy Policy ─────────────────────────────────────────────────────────
+function PrivacyPage() {
+  const h2 = { fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: '#F0F0F0', margin: '32px 0 12px' }
+  const h3 = { fontFamily: 'Syne', fontWeight: 600, fontSize: 15, color: '#DDD', margin: '20px 0 8px' }
+  const p = { marginBottom: 12 }
+  return (
+    <LegalPage title="Adatvédelmi Tájékoztató">
+      <h2 style={h2}>1. Az adatkezelő</h2>
+      <p style={p}>Név: TakeoffPro<br/>Kapcsolat: +36 30 525 2336<br/>Weboldal: https://raj-nlat-dwg.vercel.app/</p>
+
+      <h2 style={h2}>2. Milyen adatokat kezelünk?</h2>
+      <h3 style={h3}>2.1 A szoftver használata során</h3>
+      <p style={p}>A TakeoffPro alapvetően <strong>local-first alkalmazás</strong>: a feltöltött tervrajzok, kalkulációk, ajánlatok és beállítások a felhasználó saját böngészőjében (localStorage és IndexedDB) tárolódnak. Ezeket az adatokat nem továbbítjuk szerverünkre, kivéve ha a felhasználó kifejezetten bejelentkezik a felhő szinkronizáció használatához.</p>
+      <h3 style={h3}>2.2 Felhő szinkronizáció (opcionális)</h3>
+      <p style={p}>Amennyiben a felhasználó Supabase fiókkal bejelentkezik, az alábbi adatok szinkronizálódnak a felhőbe biztonsági mentés céljából: tervrajz fájlok, annotációk, ajánlatok, beállítások, projekt metaadatok. A szinkronizáció opcionális — az alkalmazás teljes mértékben működik felhő nélkül.</p>
+      <h3 style={h3}>2.3 DWG/PDF feldolgozás</h3>
+      <p style={p}>DWG konverzió és PDF feldolgozás esetén a feltöltött fájlok ideiglenesen feldolgozásra kerülnek a Vercel szervereinkre. A feldolgozás után a fájlok automatikusan törlődnek, nem tároljuk őket tartósan.</p>
+      <h3 style={h3}>2.4 Sütik (cookie-k)</h3>
+      <p style={p}>Az oldal kizárólag <strong>technikai sütiket</strong> használ a működéshez (bejelentkezési munkamenet, cookie consent állapot). Nem használunk marketing, analitikai vagy harmadik fél sütiket. Nyomkövető technológiát nem alkalmazunk.</p>
+
+      <h2 style={h2}>3. Az adatkezelés jogalapja</h2>
+      <p style={p}>A helyi adattárolás a szolgáltatás működéséhez szükséges (GDPR 6. cikk (1) b) pont). Az opcionális felhő szinkronizáció a felhasználó hozzájárulásán alapul (GDPR 6. cikk (1) a) pont).</p>
+
+      <h2 style={h2}>4. Adatmegőrzés</h2>
+      <p style={p}>A helyi adatok a felhasználó böngészőjében maradnak, amíg a felhasználó nem törli azokat. Felhőbe szinkronizált adatok a felhasználó fiókjának törléséig megmaradnak. DWG/PDF feldolgozás során feltöltött fájlok a feldolgozás befejezése után azonnal törlődnek.</p>
+
+      <h2 style={h2}>5. Az Ön jogai</h2>
+      <p style={p}>A GDPR alapján Ön jogosult:</p>
+      <ul style={{ paddingLeft: 20, marginBottom: 12 }}>
+        <li>Hozzáférni a kezelt személyes adataihoz</li>
+        <li>Kérni azok helyesbítését vagy törlését</li>
+        <li>Visszavonni a hozzájárulását bármikor</li>
+        <li>Hordozható formátumban megkapni az adatait (a Beállítások → Biztonsági mentés funkcióval)</li>
+        <li>Panaszt tenni a Nemzeti Adatvédelmi és Információszabadság Hatóságnál (NAIH)</li>
+      </ul>
+
+      <h2 style={h2}>6. Adatbiztonság</h2>
+      <p style={p}>Az adatátvitel HTTPS titkosítással történik. A felhő szinkronizáció Supabase platformon keresztül valósul meg, amely SOC 2 Type II tanúsítvánnyal rendelkezik. A helyi adatok a böngésző beépített biztonsági mechanizmusaival védettek.</p>
+
+      <h2 style={h2}>7. Harmadik felek</h2>
+      <p style={p}>Az alábbi harmadik fél szolgáltatókat használjuk:</p>
+      <ul style={{ paddingLeft: 20, marginBottom: 12 }}>
+        <li><strong>Vercel</strong> — hosting és szerverfunkciók (USA/EU)</li>
+        <li><strong>Supabase</strong> — opcionális felhő szinkronizáció (EU régió)</li>
+        <li><strong>Stripe</strong> — fizetés feldolgozás (ha alkalmazható)</li>
+        <li><strong>Google Fonts</strong> — betűtípusok betöltése</li>
+      </ul>
+
+      <h2 style={h2}>8. Kapcsolat</h2>
+      <p style={p}>Adatvédelmi kérdésekkel kapcsolatban keressen minket: +36 30 525 2336, hétfő-péntek 8:00-17:00.</p>
+    </LegalPage>
+  )
+}
+
+// ─── Terms of Service (ÁSZF) ────────────────────────────────────────────────
+function TermsPage() {
+  const h2 = { fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: '#F0F0F0', margin: '32px 0 12px' }
+  const p = { marginBottom: 12 }
+  return (
+    <LegalPage title="Általános Szerződési Feltételek (ÁSZF)">
+      <h2 style={h2}>1. A szolgáltatás</h2>
+      <p style={p}>A TakeoffPro egy webalapú szoftver (SaaS), amely villamos kivitelezők számára nyújt tervrajz-alapú mennyiségkimutatást és árajánlat-készítést. A szolgáltatás a https://raj-nlat-dwg.vercel.app/ címen érhető el.</p>
+
+      <h2 style={h2}>2. A szolgáltató</h2>
+      <p style={p}>Név: TakeoffPro<br/>Kapcsolat: +36 30 525 2336<br/>Hétfő-Péntek 8:00-17:00</p>
+
+      <h2 style={h2}>3. A szolgáltatás igénybevétele</h2>
+      <p style={p}>A TakeoffPro használatához nem szükséges regisztráció vagy bejelentkezés. Az alkalmazás alapfunkciói ingyenesen, regisztráció nélkül elérhetők. Az opcionális felhő szinkronizáció és egyes prémium funkciók bejelentkezéshez köthetők.</p>
+
+      <h2 style={h2}>4. Próbaidőszak</h2>
+      <p style={p}>A szolgáltatás 14 napos ingyenes próbaidőszakot biztosít. A próbaidőszak alatt nincs szükség bankkártya megadására. A próbaidőszak lejárta után a felhasználó szabadon dönthet az előfizetés megkezdéséről vagy a szolgáltatás abbahagyásáról.</p>
+
+      <h2 style={h2}>5. Felhasználói tartalom és felelősség</h2>
+      <p style={p}>A felhasználó által feltöltött tervrajzok, kalkulációk és ajánlatok a felhasználó tulajdonát képezik. A TakeoffPro nem vizsgálja a feltöltött tartalmak jogszerűségét. A felhasználó felelős azért, hogy a feltöltött tervrajzokhoz megfelelő felhasználási jogosultsággal rendelkezik.</p>
+
+      <h2 style={h2}>6. A kalkuláció pontossága</h2>
+      <p style={p}>A TakeoffPro automatikus mennyiségkimutatása a feltöltött tervrajz minőségétől és strukturáltságától függ. Az alkalmazás által generált számítások és árajánlatok <strong>tájékoztató jellegűek</strong> — a felhasználó felelőssége az eredmények ellenőrzése és jóváhagyása a végső ajánlat benyújtása előtt.</p>
+
+      <h2 style={h2}>7. Adatkezelés</h2>
+      <p style={p}>Az adatkezelésre vonatkozó részletes szabályokat az <a href="#privacy" style={{ color: '#00E5A0' }}>Adatvédelmi Tájékoztató</a> tartalmazza.</p>
+
+      <h2 style={h2}>8. Rendelkezésre állás</h2>
+      <p style={p}>A szolgáltató törekszik a folyamatos rendelkezésre állásra, de nem vállal garanciát a megszakítás nélküli működésre. Karbantartási szünetek előzetes értesítés nélkül is előfordulhatnak.</p>
+
+      <h2 style={h2}>9. Felelősség korlátozása</h2>
+      <p style={p}>A TakeoffPro alkalmazás „ahogy van" (as is) alapon biztosított. A szolgáltató nem vállal felelősséget a kalkulációs eredmények pontosságáért, az adatvesztésért (a helyi tárolás a felhasználó felelőssége), vagy bármilyen közvetett kárért, amely a szolgáltatás használatából ered.</p>
+
+      <h2 style={h2}>10. Szellemi tulajdon</h2>
+      <p style={p}>A TakeoffPro szoftver, annak forráskódja, designja és tartalma a szolgáltató szellemi tulajdonát képezi. A felhasználó a szoftvert kizárólag a szolgáltatás rendeltetésszerű használatára jogosult.</p>
+
+      <h2 style={h2}>11. Módosítás</h2>
+      <p style={p}>A szolgáltató fenntartja a jogot az ÁSZF módosítására. Lényeges változásokról a felhasználókat előzetesen értesítjük az alkalmazáson keresztül.</p>
+
+      <h2 style={h2}>12. Alkalmazandó jog és jogviták</h2>
+      <p style={p}>Jelen ÁSZF-re a magyar jog az irányadó. Jogviták esetén a felek elsődlegesen békés megoldásra törekednek.</p>
+
+      <h2 style={h2}>13. Kapcsolat</h2>
+      <p style={p}>Kérdések vagy észrevételek esetén: +36 30 525 2336, hétfő-péntek 8:00-17:00.</p>
+    </LegalPage>
+  )
+}
+
+export default function Landing({ onStart, page }) {
+  if (page === 'privacy') return <PrivacyPage />
+  if (page === 'terms') return <TermsPage />
   return (
     <div className="landing-root" style={{ background: '#0A0A0A', color: '#F0F0F0', minHeight: '100vh', position: 'relative' }}>
       <style>{`
@@ -2576,6 +2733,7 @@ export default function Landing({ onStart }) {
       <GradientSeparator />
       <CTASection onStart={onStart} />
       <Footer />
+      <CookieConsent />
     </div>
   )
 }
