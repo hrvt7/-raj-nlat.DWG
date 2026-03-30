@@ -3,6 +3,7 @@
 
 import { INSUNITS_MAP, resolveUnits } from './utils/dxfUnits.js'
 import { getAuthHeaders } from './supabase.js'
+import { parseApiError } from './utils/apiError.js'
 
 /**
  * Extracts full geometry from parsed DXF tokens including INSERT coordinates.
@@ -202,8 +203,8 @@ export async function runCableAgent({ geometry, screenshotBase64, apiBase = '' }
     }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Cable agent hiba: ${res.status}`)
+    const err = await parseApiError(res, 'Kábelbecslés AI')
+    throw new Error(err.message)
   }
   return await res.json()
 }

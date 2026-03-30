@@ -72,9 +72,8 @@ class handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
 
     def do_OPTIONS(self):
-        """CORS preflight — Stripe CLI teszteléshez és browser fetch-hez."""
+        """Stripe webhook is server-to-server — no CORS needed, but respond to OPTIONS."""
         self.send_response(200)
-        self._cors()
         self.end_headers()
 
     def do_POST(self):

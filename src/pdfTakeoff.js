@@ -6,6 +6,7 @@
 // This replaces the old "no-op" PDF path and the per-device cable multipliers.
 // ──────────────────────────────────────────────────────────────────────────────
 import { getAuthHeaders } from './supabase.js'
+import { parseApiError } from './utils/apiError.js'
 
 
 // ── Schema validation helpers ─────────────────────────────────────────────────
@@ -367,8 +368,12 @@ export async function callPdfApi(file, onProgress) {
     })
     if (vectorRes.ok) {
       vector = await vectorRes.json()
+    } else {
+      const err = await parseApiError(vectorRes, 'PDF vektor elemzés')
+      console.warn('[pdfTakeoff] vector analysis failed:', err.message)
     }
-  } catch {
+  } catch (e) {
+    console.warn('[pdfTakeoff] vector fetch error:', e.message)
     vector = null
   }
   onProgress?.(30)
@@ -392,8 +397,12 @@ export async function callPdfApi(file, onProgress) {
       })
       if (visionRes.ok) {
         vision = await visionRes.json()
+      } else {
+        const err = await parseApiError(visionRes, 'PDF Vision elemzés')
+        console.warn('[pdfTakeoff] vision analysis failed:', err.message)
       }
-    } catch {
+    } catch (e) {
+      console.warn('[pdfTakeoff] vision fetch error:', e.message)
       vision = null
     }
     onProgress?.(50)

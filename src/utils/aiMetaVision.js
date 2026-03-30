@@ -9,6 +9,7 @@
 // Isolated module — no side effects, no state, easy to test or swap backend.
 // ─────────────────────────────────────────────────────────────────────────────
 import { getAuthHeaders } from '../supabase.js'
+import { parseApiError } from './apiError.js'
 
 const MAX_IMAGE_DIMENSION = 1024      // scale down if larger
 
@@ -39,16 +40,8 @@ export async function callAiMetaVision(imageBase64, existingMeta = null) {
   })
 
   if (!res.ok) {
-    let errMsg = `Backend hiba (${res.status})`
-    try {
-      const errData = await res.json()
-      if (errData.error) errMsg = errData.error
-    } catch { /* ignore parse error */ }
-
-    if (res.status === 404) throw new Error('Az /api/meta-vision végpont nem elérhető.')
-    if (res.status === 413) throw new Error('A kép túl nagy. Próbálj kisebb felbontást.')
-    if (res.status === 429) throw new Error('Túl sok kérés — próbáld újra később.')
-    throw new Error(errMsg)
+    const err = await parseApiError(res, 'AI Vision metaadat elemzés')
+    throw new Error(err.message)
   }
 
   const data = await res.json()
