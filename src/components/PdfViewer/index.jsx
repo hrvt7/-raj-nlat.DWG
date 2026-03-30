@@ -4,7 +4,8 @@ import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
-import { toGray, buildSAT, matchTemplate, nonMaxSuppression, renderPageImageData } from '../../utils/templateMatching.js'
+import { renderPageImageData } from '../../utils/templateMatching.js'
+import templateMatchWorkerUrl from '../../workers/templateMatch.worker.js?url'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 const C = {
@@ -150,13 +151,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
   // ── Auto Symbol POC state ──
   const [autoSymbolActive, setAutoSymbolActive] = useState(false)
-  const [autoSymbolPhase, setAutoSymbolPhase] = useState('idle') // idle | picking | searching | done
+  const [autoSymbolPhase, setAutoSymbolPhase] = useState('idle') // idle | picking | areaSelect | searching | done
   const [autoSymbolRect, setAutoSymbolRect] = useState(null) // {x1,y1,x2,y2} in screen coords during pick
   const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score}] in PDF doc coords
   const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.55)
   const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
-  const autoSymbolTemplateRef = useRef(null) // { gray, w, h } cropped template
+  const [autoSymbolSearchArea, setAutoSymbolSearchArea] = useState(null) // {x,y,w,h} in PDF doc coords or null (full page)
+  const [autoSymbolAreaRect, setAutoSymbolAreaRect] = useState(null) // screen coords during area selection
+  const autoSymbolTemplateRef = useRef(null) // { cropData, w, h } cropped template RGBA
   const autoSymbolStartRef = useRef(null) // mouse down position during picking
+  const autoSymbolWorkerRef = useRef(null) // Web Worker instance
 
   // ── Dirty state tracking (unsaved local changes) ──
   const dirtyRef = useRef(false)
@@ -639,13 +643,35 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       ctx.stroke()
     }
 
-    // ── Auto Symbol: selection rectangle ──
+    // ── Auto Symbol: sample selection rectangle ──
     if (autoSymbolRect && autoSymbolPhase === 'picking') {
       const r = autoSymbolRect
       ctx.strokeStyle = '#FF8C42'
       ctx.lineWidth = 2
       ctx.setLineDash([6, 4])
       ctx.strokeRect(Math.min(r.x1, r.x2), Math.min(r.y1, r.y2), Math.abs(r.x2 - r.x1), Math.abs(r.y2 - r.y1))
+      ctx.setLineDash([])
+    }
+
+    // ── Auto Symbol: search area rectangle (being drawn) ──
+    if (autoSymbolAreaRect && autoSymbolPhase === 'areaSelect') {
+      const r = autoSymbolAreaRect
+      ctx.strokeStyle = '#4CC9F0'
+      ctx.lineWidth = 2
+      ctx.setLineDash([8, 4])
+      ctx.strokeRect(Math.min(r.x1, r.x2), Math.min(r.y1, r.y2), Math.abs(r.x2 - r.x1), Math.abs(r.y2 - r.y1))
+      ctx.setLineDash([])
+    }
+
+    // ── Auto Symbol: committed search area (during/after search) ──
+    if (autoSymbolSearchArea && (autoSymbolPhase === 'done' || autoSymbolPhase === 'searching')) {
+      const a = autoSymbolSearchArea
+      const tl = proj(a.x, a.y)
+      const br = proj(a.x + a.w, a.y + a.h)
+      ctx.strokeStyle = 'rgba(76,201,240,0.4)'
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([6, 3])
+      ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
       ctx.setLineDash([])
     }
 
@@ -671,7 +697,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         ctx.fillText((hit.score * 100).toFixed(0) + '%', s.x + halfW + 3, s.y - halfH + 10)
       }
     }
-  }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes, autoSymbolRect, autoSymbolPhase, autoSymbolResults])
+  }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes, autoSymbolRect, autoSymbolPhase, autoSymbolResults, autoSymbolAreaRect, autoSymbolSearchArea])
 
   // ── Mouse handlers ──
   const handleMouseDown = useCallback((e) => {
@@ -681,9 +707,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const sy = e.clientY - rect.top
     const pdf = screenToPdf(sx, sy)
 
-    if (activeTool === 'auto-symbol' && autoSymbolPhase === 'picking') {
+    if (activeTool === 'auto-symbol' && (autoSymbolPhase === 'picking' || autoSymbolPhase === 'areaSelect')) {
       autoSymbolStartRef.current = { sx, sy }
-      setAutoSymbolRect({ x1: sx, y1: sy, x2: sx, y2: sy })
+      if (autoSymbolPhase === 'picking') {
+        setAutoSymbolRect({ x1: sx, y1: sy, x2: sx, y2: sy })
+      } else {
+        setAutoSymbolAreaRect({ x1: sx, y1: sy, x2: sx, y2: sy })
+      }
       return
     }
 
@@ -757,9 +787,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const sx = e.clientX - rect.left
     const sy = e.clientY - rect.top
 
-    // Auto-symbol rectangle drag
-    if (autoSymbolStartRef.current && autoSymbolPhase === 'picking') {
-      setAutoSymbolRect({ x1: autoSymbolStartRef.current.sx, y1: autoSymbolStartRef.current.sy, x2: sx, y2: sy })
+    // Auto-symbol rectangle drag (sample or area)
+    if (autoSymbolStartRef.current && (autoSymbolPhase === 'picking' || autoSymbolPhase === 'areaSelect')) {
+      const r = { x1: autoSymbolStartRef.current.sx, y1: autoSymbolStartRef.current.sy, x2: sx, y2: sy }
+      if (autoSymbolPhase === 'picking') setAutoSymbolRect(r)
+      else setAutoSymbolAreaRect(r)
       drawOverlay()
       return
     }
@@ -797,23 +829,23 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       try {
         const ctx = pdfCanvasRef.current.getContext('2d')
         const cropData = ctx.getImageData(Math.round(cx1), Math.round(cy1), Math.round(cw), Math.round(ch))
-        // Scale to match search scale (scale=1 means half the render canvas which is scale=2)
+        // Scale to match search scale (scale=1 = half the render canvas which is scale=2)
         const tW = Math.round(cw / 2), tH = Math.round(ch / 2)
         if (tW < 4 || tH < 4) { setAutoSymbolRect(null); return }
         const tmpCanvas = document.createElement('canvas')
         tmpCanvas.width = tW; tmpCanvas.height = tH
         const tmpCtx = tmpCanvas.getContext('2d')
-        // Draw cropData into temp canvas at half size
         const cropCanvas = document.createElement('canvas')
         cropCanvas.width = cropData.width; cropCanvas.height = cropData.height
         cropCanvas.getContext('2d').putImageData(cropData, 0, 0)
         tmpCtx.drawImage(cropCanvas, 0, 0, tW, tH)
         const scaledData = tmpCtx.getImageData(0, 0, tW, tH)
-        const gray = toGray(scaledData)
-        autoSymbolTemplateRef.current = { gray, w: tW, h: tH }
+        // Store raw RGBA for worker (worker does its own toGray)
+        autoSymbolTemplateRef.current = { cropData: scaledData.data, w: tW, h: tH }
         setAutoSymbolRect(null)
-        setAutoSymbolPhase('searching')
-        await runAutoSymbolSearch(autoSymbolThreshold)
+        // Go to area selection phase
+        setAutoSymbolPhase('areaSelect')
+        setAutoSymbolSearchArea(null)
       } catch (err) {
         console.error('[AutoSymbol] crop failed:', err)
         setAutoSymbolRect(null)
@@ -821,8 +853,30 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       }
       return
     }
+    // Area selection complete → run search
+    if (autoSymbolStartRef.current && autoSymbolPhase === 'areaSelect') {
+      const r = autoSymbolAreaRect
+      autoSymbolStartRef.current = null
+      if (r) {
+        const x1s = Math.min(r.x1, r.x2), y1s = Math.min(r.y1, r.y2)
+        const x2s = Math.max(r.x1, r.x2), y2s = Math.max(r.y1, r.y2)
+        // Convert screen coords to PDF doc coords
+        const p1 = screenToPdf(x1s, y1s)
+        const p2 = screenToPdf(x2s, y2s)
+        const area = { x: Math.round(Math.min(p1.x, p2.x)), y: Math.round(Math.min(p1.y, p2.y)), w: Math.round(Math.abs(p2.x - p1.x)), h: Math.round(Math.abs(p2.y - p1.y)) }
+        if (area.w > 10 && area.h > 10) {
+          setAutoSymbolSearchArea(area)
+          setAutoSymbolAreaRect(null)
+          setAutoSymbolPhase('searching')
+          runAutoSymbolSearch(autoSymbolThreshold, area)
+          return
+        }
+      }
+      setAutoSymbolAreaRect(null)
+      return
+    }
     dragRef.current.dragging = false
-  }, [autoSymbolPhase, autoSymbolRect, autoSymbolThreshold, runAutoSymbolSearch])
+  }, [autoSymbolPhase, autoSymbolRect, autoSymbolAreaRect, autoSymbolThreshold, runAutoSymbolSearch, screenToPdf])
 
   const handleWheel = useCallback((e) => {
     e.preventDefault()
@@ -840,30 +894,45 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     drawOverlay()
   }, [drawOverlay])
 
-  // ── Auto Symbol POC: run template match on current page ──
-  const runAutoSymbolSearch = useCallback(async (threshold) => {
+  // ── Auto Symbol POC: run template match via Web Worker ──
+  const runAutoSymbolSearch = useCallback(async (threshold, searchArea) => {
     if (!autoSymbolTemplateRef.current || !pdfDoc) return
     setAutoSymbolSearching(true)
     setAutoSymbolResults([])
     try {
       const page = await pdfDoc.getPage(pageNum)
       const { imageData, width, height } = await renderPageImageData(page, 1)
-      const imgGray = toGray(imageData)
-      const sat = buildSAT(imgGray, width, height)
-      const { gray: tplGray, w: tW, h: tH } = autoSymbolTemplateRef.current
-      const rawHits = matchTemplate(imgGray, width, height, tplGray, tW, tH, sat, threshold, 2)
-      const filtered = nonMaxSuppression(rawHits, tW, tH, 0.3)
-      // Convert to doc coords (center of each match)
-      const d = unrotatedDimsRef.current
-      const results = filtered.map(h => {
-        // template matching runs at scale=1, which matches unrotated doc coords directly
-        return { x: h.x + tW / 2, y: h.y + tH / 2, score: h.score }
+      const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
+
+      // Create worker (reuse if already alive)
+      if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
+      const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
+      autoSymbolWorkerRef.current = worker
+
+      const result = await new Promise((resolve, reject) => {
+        worker.onmessage = (e) => {
+          if (e.data.type === 'result') resolve(e.data.hits)
+          else reject(new Error(e.data.message || 'Worker error'))
+        }
+        worker.onerror = (e) => reject(new Error(e.message || 'Worker crash'))
+        worker.postMessage({
+          imgData: imageData.data,
+          imgW: width, imgH: height,
+          tplData: cropData,
+          tplW: tW, tplH: tH,
+          threshold,
+          searchArea: searchArea || null,
+        })
       })
+
+      const results = result.map(h => ({
+        x: h.x + tW / 2, y: h.y + tH / 2, score: h.score,
+      }))
       setAutoSymbolResults(results)
       setAutoSymbolPhase('done')
     } catch (err) {
-      console.error('[AutoSymbol] search failed:', err)
-      setAutoSymbolPhase('idle')
+      console.error('[AutoSymbol] worker search failed:', err)
+      setAutoSymbolPhase('done') // stay in done so user can retry
     } finally {
       setAutoSymbolSearching(false)
     }
@@ -872,9 +941,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   // Re-search when threshold changes (debounced)
   useEffect(() => {
     if (autoSymbolPhase !== 'done' || !autoSymbolTemplateRef.current) return
-    const t = setTimeout(() => runAutoSymbolSearch(autoSymbolThreshold), 300)
+    const t = setTimeout(() => runAutoSymbolSearch(autoSymbolThreshold, autoSymbolSearchArea), 300)
     return () => clearTimeout(t)
   }, [autoSymbolThreshold]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup worker on unmount
+  useEffect(() => () => { autoSymbolWorkerRef.current?.terminate() }, [])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -1084,18 +1156,21 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         autoSymbolThreshold={autoSymbolThreshold}
         onAutoSymbolToggle={() => {
           if (autoSymbolActive) {
-            // Reset
             setAutoSymbolActive(false)
             setAutoSymbolPhase('idle')
             setAutoSymbolResults([])
             setAutoSymbolRect(null)
+            setAutoSymbolAreaRect(null)
+            setAutoSymbolSearchArea(null)
             autoSymbolTemplateRef.current = null
+            autoSymbolWorkerRef.current?.terminate()
             setActiveTool(null)
             drawOverlay()
           } else {
             setAutoSymbolActive(true)
             setAutoSymbolPhase('picking')
             setAutoSymbolResults([])
+            setAutoSymbolSearchArea(null)
             setActiveTool('auto-symbol')
           }
         }}
@@ -1103,8 +1178,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         onAutoSymbolClear={() => {
           setAutoSymbolResults([])
           setAutoSymbolPhase('picking')
+          setAutoSymbolSearchArea(null)
+          setAutoSymbolAreaRect(null)
           autoSymbolTemplateRef.current = null
           drawOverlay()
+        }}
+        onAutoSymbolSearchFull={() => {
+          setAutoSymbolPhase('searching')
+          runAutoSymbolSearch(autoSymbolThreshold, null)
         }}
       />
 
@@ -1374,7 +1455,7 @@ function PdfToolbar({
   rotation, onRotateLeft, onRotateRight,
   assemblies,
   autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolSearching,
-  autoSymbolThreshold, onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear,
+  autoSymbolThreshold, onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
 }) {
   const TOOLS = [
     { id: 'count', label: 'Számlálás', key: 'C' },
@@ -1440,7 +1521,16 @@ function PdfToolbar({
           {autoSymbolCount > 0 && <span style={{ background: '#FF8C42', color: '#09090B', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{autoSymbolCount}</span>}
         </button>
         {autoSymbolActive && autoSymbolPhase === 'picking' && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>Jelölj ki mintát ↓</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>① Jelölj ki mintát ↓</span>
+        )}
+        {autoSymbolActive && autoSymbolPhase === 'areaSelect' && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#4CC9F0' }}>② Keresési terület (opcionális) ↓</span>
+        )}
+        {autoSymbolActive && autoSymbolPhase === 'areaSelect' && (
+          <button onClick={onAutoSymbolSearchFull}
+            style={{ padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono', background: '#FF8C42', border: 'none', color: '#09090B', fontWeight: 700 }}>
+            Keresés teljes oldalon →
+          </button>
         )}
         {autoSymbolSearching && (
           <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>Keresés…</span>
