@@ -297,7 +297,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       await generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy, fileHandle)
     } catch (err) {
       console.error('PDF generation failed:', err)
-      alert('PDF generálás sikertelen. Kérjük próbáld újra.')
+      toast.show('PDF generálás sikertelen. Kérjük próbáld újra.', 'error')
     } finally {
       setPdfGenerating(false)
     }
@@ -430,6 +430,27 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* ── Unsaved changes bar ──────────────────────────────────────────── */}
+      {isDirty && (
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 50,
+          background: `${C.accent}12`, backdropFilter: 'blur(12px)',
+          border: `1px solid ${C.accent}40`, borderRadius: 10,
+          padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.accent }}>
+            Nem mentett módosítások
+          </span>
+          <button onClick={handleMetaSave} style={{
+            padding: '6px 16px', borderRadius: 7, border: 'none', cursor: 'pointer',
+            background: C.accent, color: '#09090B',
+            fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
+          }}>
+            Mentés
+          </button>
+        </div>
+      )}
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
@@ -970,52 +991,72 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
           </div>
 
           {/* ── Sidebar action buttons ─────────────────────────────────── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button onClick={handlePrint} style={{
-              ...actionBase, width: '100%', background: C.red, cursor: 'pointer',
-            }}>
-              PDF nyomtatása
-            </button>
-            <button onClick={handleEmail} style={{
-              ...actionBase, width: '100%', background: C.blue, cursor: 'pointer',
-            }}>
-              Email küldése
-            </button>
-            {quote.status !== 'sent' && quote.status !== 'won' && quote.status !== 'lost' && (
-              <button onClick={markAsSent} style={{
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Export group */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Export</span>
+              <button onClick={handlePreview} style={{
                 ...actionBase, width: '100%', cursor: 'pointer',
-                background: 'transparent', border: `1px solid ${C.blue}`, color: C.blue,
+                background: 'transparent', border: `1px solid ${C.border}`, color: C.textSub,
               }}>
-                ✓ Megjelölés elküldöttként
+                PDF előnézet
               </button>
-            )}
-            {quote.status === 'sent' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <button onClick={markAsWon} style={{
-                  ...actionBase, cursor: 'pointer',
-                  background: 'transparent', border: `1px solid ${C.accent}`, color: C.accent,
-                }}>
-                  ✓ Nyertes
-                </button>
-                <button onClick={markAsLost} style={{
-                  ...actionBase, cursor: 'pointer',
-                  background: 'transparent', border: `1px solid ${C.red}`, color: C.red,
-                }}>
-                  ✗ Elveszett
-                </button>
+              <button onClick={handlePrint} style={{
+                ...actionBase, width: '100%', cursor: 'pointer',
+                background: 'transparent', border: `1px solid ${C.border}`, color: C.textSub,
+              }}>
+                PDF nyomtatása
+              </button>
+            </div>
+
+            {/* Send group */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Küldés</span>
+              <button onClick={handleEmail} style={{
+                ...actionBase, width: '100%', background: C.blue, cursor: 'pointer',
+              }}>
+                Email küldése
+              </button>
+              <button onClick={handleShare} style={{
+                ...actionBase, width: '100%', cursor: 'pointer',
+                background: 'transparent', border: `1px solid ${C.accent}60`, color: C.accent,
+              }}>
+                Link megosztása
+              </button>
+            </div>
+
+            {/* Status group — contextual */}
+            {(quote.status !== 'won' && quote.status !== 'lost') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Státusz</span>
+                {quote.status !== 'sent' && (
+                  <button onClick={markAsSent} style={{
+                    ...actionBase, width: '100%', cursor: 'pointer',
+                    background: 'transparent', border: `1px solid ${C.blue}`, color: C.blue,
+                  }}>
+                    Megjelölés elküldöttként
+                  </button>
+                )}
+                {quote.status === 'sent' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <button onClick={markAsWon} style={{
+                      ...actionBase, cursor: 'pointer',
+                      background: 'transparent', border: `1px solid ${C.accent}`, color: C.accent,
+                    }}>
+                      Nyertes
+                    </button>
+                    <button onClick={markAsLost} style={{
+                      ...actionBase, cursor: 'pointer',
+                      background: 'transparent', border: `1px solid ${C.red}`, color: C.red,
+                    }}>
+                      Elveszett
+                    </button>
+                  </div>
+                )}
               </div>
             )}
-            <button onClick={handlePreview} style={{
-              ...actionBase, width: '100%', background: '#B07CFF', cursor: 'pointer',
-            }}>
-              PDF előnézet
-            </button>
-            <button onClick={handleShare} style={{
-              ...actionBase, width: '100%', cursor: 'pointer',
-              background: 'transparent', border: `1px solid ${C.accent}60`, color: C.accent,
-            }}>
-              🔗 {shareLabel}
-            </button>
+
           </div>
 
         </div>
