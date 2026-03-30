@@ -1,0 +1,38 @@
+# TakeoffPro
+
+> Villamos kivitelezok ajanlatekszito szoftvere. DXF/DWG/PDF tervrajzbol automatikus mennyisegkimutatas es arajanlat generalas.
+
+## Alapadatok
+- Nev: TakeoffPro
+- Tipus: Web-alapu SaaS (bongeszos, nem kell telepiteni)
+- Nyelv: Magyar
+- Celcsoport: Villamos kivitelezok, villamossagi vallalkozok
+- Weboldal: https://raj-nlat-dwg.vercel.app/
+
+## Fo funkciok
+- DXF fajl feldolgozas (nativ, korlatlan meret)
+- DWG fajl direkt binaras elemzese (nem kell konvertalas)
+- PDF tervrajz feldolgozas
+- Automatikus mennyisegkimutatas (95%+ pontossag DXF eseten)
+- 60+ villamos szerelesi normaido-tetel (magyar szabvanyok)
+- Normaido-adatbazis: dugalj, kapcsolo, lampa, kismegszakito, kabelalca, kabel fektetes
+- Falanyag szorzo (GK / Ytong / Tegla / Beton) tetelenkent allithato
+- Projekt szintu szorzok: hozzaferhetoseg, magassag, projekt tipus
+- Arajanlat PDF generalas (profi megjelenes)
+- CSV/PDF export
+- Kabelhossz kalkualcio (reteg-alapu + MST + eszkozszam fallback)
+- Assembly szerkeszto (osszetett munkacsoportok)
+
+## Gyakori kerdesek
+- Milyen fajlformatumokat fogad el? DXF (nativ), DWG (direkt elemzes), PDF
+- Kell AutoCAD? Nem, az app bongeszboben fut
+- Mennyire pontos? DXF eseten 95%+, DWG eseten a terv strukturajatol fugg
+- Mennyit sporolok? Atlagos projekt: 3-8 munkaora → 15-30 perc
+- Biztonsgos? Titkositott csatornan tortenik a fajlfeldolgozas
+
+## Technikai reszletek
+- Frontend: React 18 + Vite
+- Hosting: Vercel
+- Adattarolas: localStorage + IndexedDB (local-first), opcionalis Supabase szinkron
+- Backend: Python serverless functions (Vercel)
+- Fajlformatumok: DXF, DWG, PDF

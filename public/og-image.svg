@@ -1,0 +1,10 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#0A0A0A"/>
+  <rect x="0" y="0" width="1200" height="4" fill="#00E5A0"/>
+  <text x="80" y="220" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="800" fill="#F0F0F0">TakeoffPro</text>
+  <text x="80" y="300" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="400" fill="#00E5A0">Villamos Ajanlatkeszito</text>
+  <text x="80" y="380" font-family="monospace" font-size="22" fill="#888888">DXF/DWG/PDF tervrajzbol automatikus</text>
+  <text x="80" y="415" font-family="monospace" font-size="22" fill="#888888">mennyisegkimutatas es arajanlat generalas</text>
+  <line x1="80" y1="460" x2="400" y2="460" stroke="#00E5A0" stroke-width="2" opacity="0.4"/>
+  <text x="80" y="510" font-family="monospace" font-size="18" fill="#555555">60+ normaido  |  95%+ pontossag  |  14 nap ingyen</text>
+</svg>

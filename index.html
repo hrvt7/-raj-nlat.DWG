@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TakeoffPro – Villamos Ajánlatkészítő | DXF/DWG/PDF Mennyiségkimutatás</title>
+    <title>TakeoffPro – Villamos Ajánlatkészítő Szoftver</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="description" content="TakeoffPro — villamos kivitelezők ajánlatkészítő szoftvere. DXF/DWG/PDF tervrajzból automatikus mennyiségkimutatás, 60+ normaidő-tétel, árajánlat generálás percek alatt. 14 nap ingyenes próba." />
     <link rel="canonical" href="https://raj-nlat-dwg.vercel.app/" />
 
@@ -14,11 +16,41 @@
     <meta property="og:description" content="DXF/DWG/PDF tervrajzból automatikus mennyiségkimutatás és árajánlat generálás villamos kivitelezőknek. 60+ normaidő-tétel, 80% időmegtakarítás." />
     <meta property="og:locale" content="hu_HU" />
     <meta property="og:site_name" content="TakeoffPro" />
+    <meta property="og:image" content="https://raj-nlat-dwg.vercel.app/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="TakeoffPro – Villamos Ajánlatkészítő" />
     <meta name="twitter:description" content="DXF/DWG/PDF tervrajzból automatikus mennyiségkimutatás és árajánlat. 60+ normaidő, 14 nap ingyen." />
+    <meta name="twitter:image" content="https://raj-nlat-dwg.vercel.app/og-image.svg" />
+
+    <!-- Schema.org JSON-LD: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "TakeoffPro",
+      "url": "https://raj-nlat-dwg.vercel.app/",
+      "logo": "https://raj-nlat-dwg.vercel.app/favicon.svg",
+      "description": "Villamos kivitelezők ajánlatkészítő szoftvere. DXF/DWG/PDF tervrajzból automatikus mennyiségkimutatás és árajánlat generálás.",
+      "foundingDate": "2024",
+      "sameAs": [
+        "https://www.linkedin.com/company/takeoffpro/"
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer support",
+        "telephone": "+36305252336",
+        "availableLanguage": "hu"
+      },
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "HU"
+      }
+    }
+    </script>
 
     <!-- Schema.org JSON-LD: SoftwareApplication -->
     <script type="application/ld+json">
@@ -27,14 +59,23 @@
       "@type": "SoftwareApplication",
       "name": "TakeoffPro",
       "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "Construction Estimating Software",
       "operatingSystem": "Web",
       "description": "Villamos kivitelezők ajánlatkészítő szoftvere. DXF/DWG/PDF tervrajzból automatikus mennyiségkimutatás, normaidő-kalkuláció és árajánlat generálás.",
       "url": "https://raj-nlat-dwg.vercel.app/",
+      "image": "https://raj-nlat-dwg.vercel.app/og-image.svg",
+      "screenshot": "https://raj-nlat-dwg.vercel.app/og-image.svg",
       "inLanguage": "hu",
+      "creator": {
+        "@type": "Organization",
+        "name": "TakeoffPro",
+        "url": "https://raj-nlat-dwg.vercel.app/"
+      },
       "offers": {
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "HUF",
+        "availability": "https://schema.org/InStock",
         "description": "14 napos ingyenes próba"
       },
       "featureList": [
@@ -42,7 +83,9 @@
         "Automatikus mennyiségkimutatás",
         "60+ villamos normaidő-tétel",
         "Árajánlat PDF generálás",
-        "Magyar nyelvű felület"
+        "Magyar nyelvű felület",
+        "Kábelhossz kalkuláció",
+        "CSV/PDF export"
       ]
     }
     </script>
@@ -112,5 +155,52 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <noscript>
+      <div style="max-width:800px;margin:0 auto;padding:40px 20px;font-family:system-ui,sans-serif;color:#F0F0F0;background:#0A0A0A;min-height:100vh">
+        <h1>TakeoffPro – Villamos Ajánlatkészítő Szoftver</h1>
+        <p>DXF/DWG/PDF tervrajzból automatikus mennyiségkimutatás és árajánlat generálás villamos kivitelezőknek.</p>
+
+        <h2>Funkciók</h2>
+        <ul>
+          <li><strong>DXF &amp; DWG Import</strong> – DXF natívan, korlátlan méretben. DWG direkt elemzéssel, nem kell konvertálni.</li>
+          <li><strong>Automatikus mennyiségkimutatás</strong> – 95%+ pontosság DXF esetén. A blokkok és vonalak gépi precizitással számolhatók.</li>
+          <li><strong>60+ villamos normaidő-tétel</strong> – Magyar szabványok alapján: dugalj, kapcsoló, lámpa, kismegszakító, kábeltálca, kábel fektetés. Falanyag (GK/Ytong/Tégla/Beton) tételenként állítható.</li>
+          <li><strong>PDF tervrajz feldolgozás</strong> – PDF alaprajzok feltöltése és elemzése.</li>
+          <li><strong>Profi PDF árajánlat</strong> – Céges logóval, részletes tételsorokkal, anyag+munkadíj bontással.</li>
+          <li><strong>Assembly szerkesztő</strong> – Összetett munkacsoportok: anyag + munkadíj + normaidő egy csomagban.</li>
+          <li><strong>Kábelhossz kalkuláció</strong> – Réteg-alapú, MST és eszközszám fallback módszerek.</li>
+          <li><strong>CSV/PDF export</strong> – Anyagjegyzék és árajánlat exportálás.</li>
+        </ul>
+
+        <h2>Hogyan működik?</h2>
+        <ol>
+          <li>Töltsd fel a DXF/DWG/PDF tervrajzot</li>
+          <li>Az app automatikusan azonosítja a rétegeket és blokkokat</li>
+          <li>Ellenőrizd és finomítsd a mennyiségkimutatást</li>
+          <li>Generálj profi PDF árajánlatot percek alatt</li>
+        </ol>
+
+        <h2>Gyakori kérdések</h2>
+        <dl>
+          <dt>Milyen fájlformátumokat fogad el?</dt>
+          <dd>DXF natívan, korlátlan méretben. DWG direkt elemzéssel – nem kell konvertálni. PDF tervrajzok feldolgozása is támogatott.</dd>
+          <dt>Mennyire pontos a mennyiségkimutatás?</dt>
+          <dd>DXF esetén 95%+ pontosság. DWG esetén az adatok kinyerése a bináris formátumból közvetlen. Minden esetben van review lépés.</dd>
+          <dt>Kell AutoCAD a használathoz?</dt>
+          <dd>Nem. Az app böngészőben fut, nem kell semmit telepíteni.</dd>
+          <dt>Mi van a normaidő-adatbázisban?</dt>
+          <dd>60+ villamos szerelési normaidő-tétel, magyar szabványok alapján. Az adatbázis szerkeszthető és bővíthető.</dd>
+          <dt>Mennyit spórolok egy ajánlaton?</dt>
+          <dd>Egy átlagos projekt ajánlata manuálisan 3-8 munkaóra. Az appban ugyanez 15-30 perc.</dd>
+          <dt>Biztonságos a fájlfeltöltés?</dt>
+          <dd>A feltöltött terveket kizárólag az aktuális kalkulációhoz használjuk. Titkosított csatornán kerülnek feldolgozásra.</dd>
+        </dl>
+
+        <h2>Árazás</h2>
+        <p>14 napos ingyenes próba. Nincs bankkártya, nincs elköteleződés, azonnal lemondható.</p>
+
+        <p><strong>TakeoffPro</strong> – Az első profi árajálatod 2 percre van. <a href="/#app" style="color:#00E5A0">Kipróbálom ingyen →</a></p>
+      </div>
+    </noscript>
   </body>
 </html>
