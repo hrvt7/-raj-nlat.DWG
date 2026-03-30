@@ -904,7 +904,7 @@ function HeroSection({ onStart }) {
       <FloatingDecor top="45%" left="90%" size={7} delay={2} />
 
       {/* Hero content */}
-      <div style={{ position: 'relative', zIndex: 2, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '100px 48px 140px' }}>
+      <div className="hero-content" style={{ position: 'relative', zIndex: 2, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '100px 48px 140px' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', width: '100%', textAlign: 'center' }}>
 
           <h1 style={{ fontFamily: 'Syne', fontWeight: 900, lineHeight: 1.05, fontSize: 'clamp(28px, 4vw, 52px)', color: '#F0F0F0', marginBottom: 16, letterSpacing: '-0.03em' }}>
@@ -933,7 +933,7 @@ function HeroSection({ onStart }) {
                 onMouseLeave={e => e.target.style.transform = 'none'}>
                 Próbáld ki 14 napig →
               </button>
-              <a href="#how" style={{ padding: '18px 28px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 14, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
+              <a href="#how" className="hero-secondary-cta" style={{ padding: '18px 28px', background: 'transparent', border: '1px solid #252525', color: '#999', borderRadius: 10, fontFamily: 'DM Mono', fontSize: 14, textDecoration: 'none', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = '#444'; e.currentTarget.style.color = '#CCC' }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#252525'; e.currentTarget.style.color = '#999' }}>
                 Hogyan működik?
@@ -2534,8 +2534,13 @@ export default function Landing({ onStart, page }) {
           .hero-ctas > * { width: 100% !important; justify-content: center !important; text-align: center !important; }
           .hero-main-cta { padding: 16px 24px !important; font-size: 15px !important; }
         }
+        @media (max-width: 375px) {
+          .hero-main-cta { padding: 14px 20px !important; font-size: 14px !important; }
+          .hero-secondary-cta { padding: 12px 18px !important; font-size: 12px !important; }
+        }
         @media (max-width: 360px) {
-          .hero-main-cta { padding: 14px 18px !important; font-size: 14px !important; }
+          .hero-main-cta { padding: 12px 16px !important; font-size: 13px !important; }
+          .hero-secondary-cta { padding: 10px 14px !important; font-size: 11px !important; }
         }
 
         /* ─ SECTION padding ─ */
@@ -2544,6 +2549,29 @@ export default function Landing({ onStart, page }) {
         }
         @media (max-width: 640px) {
           .sec-100 { padding: 56px 16px !important; }
+        }
+        @media (max-width: 375px) {
+          .sec-100 { padding: 40px 14px !important; }
+        }
+
+        /* ─ HERO content responsive padding ─ */
+        @media (max-width: 640px) {
+          .hero-content { padding: 80px 20px 80px !important; }
+        }
+        @media (max-width: 375px) {
+          .hero-content { padding: 70px 16px 60px !important; }
+        }
+
+        /* ─ PRICING card responsive ─ */
+        @media (max-width: 375px) {
+          .pricing-card { padding: 28px 16px 24px !important; max-width: 100% !important; border-radius: 14px !important; }
+          .pricing-badge { font-size: 9px !important; padding: 4px 14px !important; }
+          .pricing-phone-cta { padding: 14px 20px !important; font-size: 14px !important; width: 100% !important; justify-content: center !important; }
+        }
+
+        /* ─ NAV 375px ─ */
+        @media (max-width: 375px) {
+          .nav-root { padding: 10px 14px !important; }
         }
 
         /* ─ HERO animation: mobile = portrait SVG ─ */
