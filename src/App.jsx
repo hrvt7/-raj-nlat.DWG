@@ -689,7 +689,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {quote.assemblySummary.map((a, i) => {
+                  {(quote.assemblySummary || []).map((a, i) => {
                     const matCost   = Math.round(a.materialCost || 0)
                     const laborCost = Math.round(a.laborCost || (a.totalPrice || 0) - matCost)
                     return (

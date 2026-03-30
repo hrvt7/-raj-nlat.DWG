@@ -154,11 +154,16 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
                   )}
                   {!isDemoSeeded() && !onTryDemo && (
                     <Button variant="ghost" onClick={() => {
-                      const { seeded } = seedDemoData()
-                      if (seeded) {
-                        setDemoLoaded(true)
-                        toast.show('Mintaadatok betöltve', 'success')
-                        if (onRefresh) onRefresh()
+                      try {
+                        const { seeded } = seedDemoData()
+                        if (seeded) {
+                          setDemoLoaded(true)
+                          toast.show('Mintaadatok betöltve', 'success')
+                          if (onRefresh) onRefresh()
+                        }
+                      } catch (err) {
+                        console.error('[Dashboard] demo seed failed:', err)
+                        toast.show('Mintaadatok betöltése sikertelen', 'error')
                       }
                     }}>Mintaadatok betöltése</Button>
                   )}

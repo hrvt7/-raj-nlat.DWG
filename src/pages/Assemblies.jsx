@@ -148,13 +148,14 @@ export default function AssembliesPage({ activeTrade, session }) {
       }}>
         <span style={{ fontSize: 18, flexShrink: 0 }}>✦</span>
         <input
-          value={aiPrompt}
-          onChange={e => setAiPrompt(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleAiSubmit() }}
-          placeholder="AI Assembly Builder (hamarosan)..."
+          value=""
+          readOnly
+          disabled
+          placeholder="AI Assembly Builder (hamarosan elérhető)..."
           style={{
             flex: 1, background: 'transparent', border: 'none',
             fontFamily: 'DM Mono', fontSize: 12, color: C.textMuted, outline: 'none',
+            cursor: 'default',
           }}
         />
         <button

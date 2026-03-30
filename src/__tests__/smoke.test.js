@@ -962,7 +962,6 @@ describe('Demo Seed — data shape & idempotency', () => {
 // Fixed: uses useToast() hook instead.  This test catches accidental revert.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
 describe('QuoteView email fallback — no bare showToast', () => {
