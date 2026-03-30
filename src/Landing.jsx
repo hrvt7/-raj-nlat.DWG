@@ -2408,7 +2408,7 @@ function PrivacyPage() {
   return (
     <LegalPage title="Adatvédelmi Tájékoztató">
       <h2 style={h2}>1. Az adatkezelő</h2>
-      <p style={p}>Név: TakeoffPro<br/>Kapcsolat: +36 30 525 2336<br/>Weboldal: https://raj-nlat-dwg.vercel.app/</p>
+      <p style={p}>Név: TakeoffPro<br/>Kapcsolat: +36 30 525 2336<br/>Weboldal: https://takeoffpro.vercel.app/</p>
 
       <h2 style={h2}>2. Milyen adatokat kezelünk?</h2>
       <h3 style={h3}>2.1 A szoftver használata során</h3>
@@ -2461,7 +2461,7 @@ function TermsPage() {
   return (
     <LegalPage title="Általános Szerződési Feltételek (ÁSZF)">
       <h2 style={h2}>1. A szolgáltatás</h2>
-      <p style={p}>A TakeoffPro egy webalapú szoftver (SaaS), amely villamos kivitelezők számára nyújt tervrajz-alapú mennyiségkimutatást és árajánlat-készítést. A szolgáltatás a https://raj-nlat-dwg.vercel.app/ címen érhető el.</p>
+      <p style={p}>A TakeoffPro egy webalapú szoftver (SaaS), amely villamos kivitelezők számára nyújt tervrajz-alapú mennyiségkimutatást és árajánlat-készítést. A szolgáltatás a https://takeoffpro.vercel.app/ címen érhető el.</p>
 
       <h2 style={h2}>2. A szolgáltató</h2>
       <p style={p}>Név: TakeoffPro<br/>Kapcsolat: +36 30 525 2336<br/>Hétfő-Péntek 8:00-17:00</p>
