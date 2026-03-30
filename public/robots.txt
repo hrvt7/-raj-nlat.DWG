@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://raj-nlat-dwg.vercel.app/sitemap.xml
