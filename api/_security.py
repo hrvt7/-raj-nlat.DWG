@@ -20,6 +20,9 @@ import traceback
 _VERCEL_ENV = os.environ.get('VERCEL_ENV', '')
 _NODE_ENV = os.environ.get('NODE_ENV', '')
 IS_PRODUCTION = _VERCEL_ENV == 'production' or _NODE_ENV == 'production'
+# Any Vercel deploy (production OR preview) is a remote environment.
+# Dev-only fallbacks are ONLY allowed when running locally (no VERCEL_ENV set).
+IS_LOCAL_DEV = not _VERCEL_ENV and _NODE_ENV != 'production'
 
 # ── CORS origin configuration ────────────────────────────────────────────────
 _ALLOWED_ORIGINS_RAW = os.environ.get(
@@ -70,9 +73,9 @@ def check_rate_limit(handler, limit=_RATE_LIMIT):
 def _is_allowed_origin(origin):
     if not origin:
         # No Origin header: same-origin or non-browser.
-        # In dev: allow. In production: handled per-endpoint.
-        return not IS_PRODUCTION
-    if not IS_PRODUCTION and ('localhost' in origin or '127.0.0.1' in origin):
+        # Only allow in local dev. Block on any remote deploy (preview + production).
+        return IS_LOCAL_DEV
+    if IS_LOCAL_DEV and ('localhost' in origin or '127.0.0.1' in origin):
         return True
     return origin in ALLOWED_ORIGINS
 
@@ -118,8 +121,8 @@ def verify_supabase_token(handler):
     Supabase validates the token server-side (signing-key-agnostic).
     Returns user dict (with 'id' = user UUID) if valid, None otherwise.
 
-    Fail-closed: in production without SUPABASE_URL, blocks all requests.
-    Dev mode without SUPABASE_URL: allows with warning (for local-first dev).
+    Fail-closed on any remote deploy (production + preview) without Supabase config.
+    Synthetic dev-user ONLY on localhost (IS_LOCAL_DEV).
     """
     auth = handler.headers.get('Authorization', '')
 
@@ -129,11 +132,12 @@ def verify_supabase_token(handler):
     token = auth[7:]
 
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        if IS_PRODUCTION:
-            print("[SECURITY] SUPABASE_URL/ANON_KEY not set in production — blocking", file=sys.stderr)
+        if not IS_LOCAL_DEV:
+            # Any remote environment (production, preview, staging) — fail-closed
+            print(f"[SECURITY] Supabase not configured on remote env (VERCEL_ENV={_VERCEL_ENV!r}) — blocking", file=sys.stderr)
             return None
-        # Dev mode: no Supabase configured, allow request with synthetic user
-        print("[SECURITY] Supabase not configured — allowing in dev mode", file=sys.stderr)
+        # Strictly local dev only — allow with synthetic user
+        print("[SECURITY] Supabase not configured — allowing in local dev only", file=sys.stderr)
         return {'id': 'dev-user', 'email': 'dev@localhost'}
 
     try:
