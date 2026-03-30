@@ -163,6 +163,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const autoSymbolTemplateRef = useRef(null) // { cropData, w, h } cropped template RGBA
   const autoSymbolStartRef = useRef(null) // mouse down position during picking
   const autoSymbolWorkerRef = useRef(null) // Web Worker instance
+  const autoSymbolSearchIdRef = useRef(0) // monotonic counter to detect stale results
+  const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
 
   // ── Dirty state tracking (unsaved local changes) ──
   const dirtyRef = useRef(false)
@@ -851,7 +853,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const x1 = Math.min(r.x1, r.x2), y1 = Math.min(r.y1, r.y2)
       const x2 = Math.max(r.x1, r.x2), y2 = Math.max(r.y1, r.y2)
       const w = x2 - x1, h = y2 - y1
-      if (w < 8 || h < 8) { setAutoSymbolRect(null); return } // too small
+      if (w < 8 || h < 8) { setAutoSymbolRect(null); setAutoSymbolError('A kijelölés túl kicsi.'); return }
       // Convert screen coords to PDF canvas coords (scale=2 render)
       const v = viewRef.current
       const cx1 = (x1 - v.offsetX) / v.zoom * 2
@@ -864,7 +866,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         const cropData = ctx.getImageData(Math.round(cx1), Math.round(cy1), Math.round(cw), Math.round(ch))
         // Scale to match search scale (scale=1 = half the render canvas which is scale=2)
         const tW = Math.round(cw / 2), tH = Math.round(ch / 2)
-        if (tW < 4 || tH < 4) { setAutoSymbolRect(null); return }
+        if (tW < 4 || tH < 4) { setAutoSymbolRect(null); setAutoSymbolError('A minta túl kicsi — jelölj ki nagyobb területet.'); return }
         const tmpCanvas = document.createElement('canvas')
         tmpCanvas.width = tW; tmpCanvas.height = tH
         const tmpCtx = tmpCanvas.getContext('2d')
@@ -927,17 +929,19 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     drawOverlay()
   }, [drawOverlay])
 
-  // ── Auto Symbol POC: run template match via Web Worker ──
+  // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
   const runAutoSymbolSearch = useCallback(async (threshold, searchArea) => {
     if (!autoSymbolTemplateRef.current || !pdfDoc) return
+    const mySearchId = ++autoSymbolSearchIdRef.current
     setAutoSymbolSearching(true)
+    setAutoSymbolError(null)
     setAutoSymbolResults([])
     try {
       const page = await pdfDoc.getPage(pageNum)
       const { imageData, width, height } = await renderPageImageData(page, 1)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
 
-      // Create worker (reuse if already alive)
+      // Abort any previous worker
       if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
       const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
       autoSymbolWorkerRef.current = worker
@@ -945,9 +949,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const result = await new Promise((resolve, reject) => {
         worker.onmessage = (e) => {
           if (e.data.type === 'result') resolve(e.data.hits)
-          else reject(new Error(e.data.message || 'Worker error'))
+          else reject(new Error(e.data.message || 'Worker hiba'))
         }
-        worker.onerror = (e) => reject(new Error(e.message || 'Worker crash'))
+        worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
         worker.postMessage({
           imgData: imageData.data,
           imgW: width, imgH: height,
@@ -958,16 +962,22 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         })
       })
 
+      // Stale result guard — if a newer search was started, discard this result
+      if (autoSymbolSearchIdRef.current !== mySearchId) return
+
       const results = result.map((h, i) => ({
         x: h.x + tW / 2, y: h.y + tH / 2, score: h.score, accepted: true, idx: i,
       }))
       setAutoSymbolResults(results)
       setAutoSymbolPhase('done')
+      if (results.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken.')
     } catch (err) {
+      if (autoSymbolSearchIdRef.current !== mySearchId) return // stale
       console.error('[AutoSymbol] worker search failed:', err)
-      setAutoSymbolPhase('done') // stay in done so user can retry
+      setAutoSymbolError('Keresés sikertelen: ' + (err.message || 'ismeretlen hiba'))
+      setAutoSymbolPhase('done')
     } finally {
-      setAutoSymbolSearching(false)
+      if (autoSymbolSearchIdRef.current === mySearchId) setAutoSymbolSearching(false)
     }
   }, [pdfDoc, pageNum])
 
@@ -1187,6 +1197,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         autoSymbolCount={autoSymbolResults.length}
         autoSymbolAcceptedCount={autoSymbolResults.filter(r => r.accepted).length}
         autoSymbolSearching={autoSymbolSearching}
+        autoSymbolError={autoSymbolError}
         autoSymbolThreshold={autoSymbolThreshold}
         autoSymbolCategory={autoSymbolCategory}
         autoSymbolLabel={autoSymbolLabel}
@@ -1198,6 +1209,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
             setAutoSymbolRect(null)
             setAutoSymbolAreaRect(null)
             setAutoSymbolSearchArea(null)
+            setAutoSymbolError(null)
             autoSymbolTemplateRef.current = null
             autoSymbolWorkerRef.current?.terminate()
             setActiveTool(null)
@@ -1207,6 +1219,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
             setAutoSymbolPhase('picking')
             setAutoSymbolResults([])
             setAutoSymbolSearchArea(null)
+            setAutoSymbolError(null)
             setActiveTool('auto-symbol')
           }
         }}
@@ -1216,7 +1229,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           setAutoSymbolPhase('picking')
           setAutoSymbolSearchArea(null)
           setAutoSymbolAreaRect(null)
+          setAutoSymbolError(null)
           autoSymbolTemplateRef.current = null
+          autoSymbolWorkerRef.current?.terminate()
           setAutoSymbolLabel('')
           drawOverlay()
         }}
@@ -1534,7 +1549,7 @@ function PdfToolbar({
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
   assemblies,
-  autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolAcceptedCount, autoSymbolSearching,
+  autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolAcceptedCount, autoSymbolSearching, autoSymbolError,
   autoSymbolThreshold, autoSymbolCategory, autoSymbolLabel,
   onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
   onAutoSymbolAcceptAll, onAutoSymbolRejectAll, onAutoSymbolCategoryChange, onAutoSymbolLabelChange, onAutoSymbolFinalize,
@@ -1617,6 +1632,9 @@ function PdfToolbar({
         {autoSymbolSearching && (
           <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>Keresés…</span>
         )}
+        {autoSymbolError && !autoSymbolSearching && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: autoSymbolCount === 0 ? '#FF8C42' : '#FF6B6B' }}>{autoSymbolError}</span>
+        )}
         {autoSymbolPhase === 'done' && (
           <>
             <label style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1645,10 +1663,10 @@ function PdfToolbar({
             </select>
             <input value={autoSymbolLabel} onChange={e => onAutoSymbolLabelChange(e.target.value)}
               placeholder="Címke…" style={{ width: 80, padding: '2px 6px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono', background: C.bg, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={onAutoSymbolFinalize} disabled={autoSymbolAcceptedCount === 0} title="Elfogadott találatok hozzáadása a takeoff-hoz" style={{
-              padding: '3px 10px', borderRadius: 5, cursor: autoSymbolAcceptedCount > 0 ? 'pointer' : 'default', fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
-              background: autoSymbolAcceptedCount > 0 ? '#FF8C42' : C.bgCard, border: 'none', color: autoSymbolAcceptedCount > 0 ? '#09090B' : C.muted,
-              opacity: autoSymbolAcceptedCount > 0 ? 1 : 0.5,
+            <button onClick={onAutoSymbolFinalize} disabled={autoSymbolAcceptedCount === 0 || autoSymbolSearching} title="Elfogadott találatok hozzáadása a takeoff-hoz" style={{
+              padding: '3px 10px', borderRadius: 5, cursor: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? 'pointer' : 'default', fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
+              background: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? '#FF8C42' : C.bgCard, border: 'none', color: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? '#09090B' : C.muted,
+              opacity: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? 1 : 0.5,
             }}>+ Takeoff ({autoSymbolAcceptedCount})</button>
             <button onClick={onAutoSymbolClear} title="Új minta" style={{
               padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
