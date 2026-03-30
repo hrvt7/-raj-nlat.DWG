@@ -93,8 +93,8 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
         />
         <StatCard
           label="Nyertes összérték"
-          value={stats.wonTotal > 0 ? `${fmt(stats.wonTotal / 1000000)} M` : '–'}
-          sub="Ft (nettó)"
+          value={stats.wonTotal > 0 ? `${fmt(stats.wonTotal / 1000000)} M Ft` : '–'}
+          sub="nettó összérték"
           color={C.blue}
         />
       </div>
@@ -229,8 +229,8 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
               <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub, lineHeight: 1.6, marginBottom: 12 }}>
                 Töltsd ki a cégnevét és adatait az ajánlatokhoz.
               </div>
-              <Button variant="ghost" size="sm" onClick={() => onNavigate('settings')} style={{ width: '100%', justifyContent: 'center' }}>
-                Beállítások →
+              <Button size="sm" onClick={() => onNavigate('settings')} style={{ width: '100%', justifyContent: 'center', background: C.yellow, color: '#09090B', border: 'none' }}>
+                Céges adatok kitöltése →
               </Button>
             </Card>
           )}
@@ -244,7 +244,7 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
               {[
                 { num: '1', label: 'Projekt létrehozása', desc: 'Felmérés menüpont', page: 'felmeres' },
                 { num: '2', label: 'Tervrajz feltöltése', desc: 'DXF/DWG/PDF fájl', page: 'felmeres' },
-                { num: '3', label: 'Kalkuláció készítése', desc: 'Automatikus mennyiségkimutatás', page: null },
+                { num: '3', label: 'Kalkuláció készítése', desc: 'Automatikus mennyiségkimutatás (a tervrajzból)', page: null, disabled: true },
                 { num: '4', label: 'Ajánlat generálása', desc: 'PDF export a megrendelőnek', page: 'quotes' },
               ].map((step, i) => (
                 <div key={i}
@@ -252,17 +252,20 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
                   style={{
                     display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 0',
                     cursor: step.page ? 'pointer' : 'default',
+                    opacity: step.disabled ? 0.5 : 1,
                     borderBottom: i < 3 ? `1px solid ${C.border}` : 'none',
                   }}
                 >
                   <div style={{
                     width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                    background: 'rgba(0,229,160,0.12)', border: '1px solid rgba(0,229,160,0.25)',
+                    background: step.disabled ? `${C.border}40` : 'rgba(0,229,160,0.12)',
+                    border: step.disabled ? `1px solid ${C.border}` : '1px solid rgba(0,229,160,0.25)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: 'DM Mono', fontSize: 10, fontWeight: 700, color: C.accent,
+                    fontFamily: 'DM Mono', fontSize: 10, fontWeight: 700,
+                    color: step.disabled ? C.textMuted : C.accent,
                   }}>{step.num}</div>
                   <div>
-                    <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>{step.label}</div>
+                    <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: step.disabled ? C.textMuted : C.text }}>{step.label}</div>
                     <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textMuted }}>{step.desc}</div>
                   </div>
                 </div>
@@ -282,10 +285,10 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
                   toast.show(`Mintaadatok törölve (${result.removedProjects + result.removedPlans + result.removedQuotes} elem)`, 'success')
                   if (onRefresh) onRefresh()
                 }} style={{
-                  background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6,
-                  padding: '4px 10px', fontFamily: 'DM Mono', fontSize: 10, color: C.textSub,
+                  background: 'rgba(255,99,99,0.1)', border: '1px solid rgba(255,99,99,0.25)', borderRadius: 6,
+                  padding: '4px 10px', fontFamily: 'DM Mono', fontSize: 10, color: '#ff6363',
                   cursor: 'pointer',
-                }}>Törlés</button>
+                }}>Mintaadatok törlése</button>
               </div>
             </Card>
           )}
