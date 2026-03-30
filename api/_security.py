@@ -1,11 +1,13 @@
 """
 Shared security utilities for TakeoffPro API endpoints.
 
-Provides: origin validation (fail-closed in production), request size guard,
-rate limiting, required env checks, and safe error responses.
-
-NO browser-sent shared secrets — origin restriction + rate limiting + fail-closed
-config is the real protection layer for a public SPA.
+Layers:
+1. Origin validation (fail-closed in production, blocks cross-origin browser abuse)
+2. Supabase JWT verification (real auth — blocks unauthenticated access to costly endpoints)
+3. Rate limiting (per-IP abuse guard)
+4. Request size limits
+5. Required env checks (fail-closed)
+6. Safe error responses (no stack traces)
 """
 
 import os
@@ -15,32 +17,30 @@ import time
 import traceback
 
 # ── Environment detection ────────────────────────────────────────────────────
-# Vercel sets VERCEL_ENV to 'production', 'preview', or 'development'.
-# If not on Vercel, fall back to NODE_ENV or assume development.
 _VERCEL_ENV = os.environ.get('VERCEL_ENV', '')
 _NODE_ENV = os.environ.get('NODE_ENV', '')
 IS_PRODUCTION = _VERCEL_ENV == 'production' or _NODE_ENV == 'production'
 
 # ── CORS origin configuration ────────────────────────────────────────────────
-# In production: ONLY allow configured origins. No fallback to '*'.
-# In development: also allow localhost.
 _ALLOWED_ORIGINS_RAW = os.environ.get(
     'ALLOWED_ORIGINS',
     'https://raj-nlat-dwg.vercel.app,https://takeoffpro.hu,https://www.takeoffpro.hu'
 )
 ALLOWED_ORIGINS = [o.strip() for o in _ALLOWED_ORIGINS_RAW.split(',') if o.strip()]
 
+# ── Supabase JWT config ──────────────────────────────────────────────────────
+SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET', '')
+
 # Default max request body size: 5 MB
 DEFAULT_MAX_BODY = 5 * 1024 * 1024
 
 # ── Simple in-memory rate limiter ────────────────────────────────────────────
-_RATE_WINDOW = 60  # seconds
-_RATE_LIMIT = 30   # requests per window per IP
+_RATE_WINDOW = 60
+_RATE_LIMIT = 30
 _rate_store = {}
 
 
 def _get_client_ip(handler):
-    """Extract client IP (Vercel forwards via x-forwarded-for)."""
     forwarded = handler.headers.get('x-forwarded-for', '')
     if forwarded:
         return forwarded.split(',')[0].strip()
@@ -48,77 +48,128 @@ def _get_client_ip(handler):
 
 
 def check_rate_limit(handler, limit=_RATE_LIMIT):
-    """Returns True if within rate limit, False if exceeded."""
     ip = _get_client_ip(handler)
     now = time.time()
     window_start, count = _rate_store.get(ip, (now, 0))
-
     if now - window_start > _RATE_WINDOW:
         _rate_store[ip] = (now, 1)
         return True
-
     if count >= limit:
         return False
-
     _rate_store[ip] = (window_start, count + 1)
     return True
 
 
-# ── Origin validation (fail-closed in production) ───────────────────────────
+# ── Origin validation ────────────────────────────────────────────────────────
 
 def _is_allowed_origin(origin):
-    """Check if origin is in the allowed list or is a dev origin."""
     if not origin:
-        return True  # No Origin header = same-origin or non-browser (curl, etc.)
-    # Always allow localhost in non-production
+        # No Origin header: same-origin or non-browser.
+        # In dev: allow. In production: handled per-endpoint.
+        return not IS_PRODUCTION
     if not IS_PRODUCTION and ('localhost' in origin or '127.0.0.1' in origin):
         return True
     return origin in ALLOWED_ORIGINS
 
 
 def check_origin(handler):
-    """
-    Validate request origin. In production, reject unknown origins with 403.
-    Returns True if OK, sends 403 if not.
-    """
     origin = handler.headers.get('Origin', '')
     if _is_allowed_origin(origin):
         return True
-
-    # Production: fail-closed — reject unknown origins
     handler.send_response(403)
     handler.send_header('Content-Type', 'application/json')
     handler.end_headers()
     handler.wfile.write(json.dumps({
-        'success': False,
-        'error': 'Origin not allowed'
+        'success': False, 'error': 'Origin not allowed'
     }).encode())
-    print(f"[SECURITY] Rejected origin: {origin}", file=sys.stderr)
+    print(f"[SECURITY] Rejected origin: {origin!r} (production={IS_PRODUCTION})", file=sys.stderr)
     return False
 
 
 def get_cors_origin(handler):
-    """Returns the Access-Control-Allow-Origin value for response headers."""
     origin = handler.headers.get('Origin', '')
-    if _is_allowed_origin(origin) and origin:
+    if origin and (origin in ALLOWED_ORIGINS or
+                   (not IS_PRODUCTION and ('localhost' in origin or '127.0.0.1' in origin))):
         return origin
     return ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else 'null'
 
 
 def send_cors_headers(handler, origin=None):
-    """Send standard CORS headers."""
     if origin is None:
         origin = get_cors_origin(handler)
     handler.send_header('Access-Control-Allow-Origin', origin)
     handler.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    handler.send_header('Access-Control-Allow-Headers', 'Content-Type')
+    handler.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     handler.send_header('Access-Control-Max-Age', '86400')
+
+
+# ── Supabase JWT verification ────────────────────────────────────────────────
+
+def verify_supabase_token(handler):
+    """
+    Verify Supabase access token from Authorization: Bearer header.
+    Returns the decoded payload (with 'sub' = user UUID) if valid.
+    Returns None if missing/invalid.
+
+    In development without SUPABASE_JWT_SECRET: logs warning, allows request.
+    In production without SUPABASE_JWT_SECRET: blocks request (fail-closed).
+    """
+    auth = handler.headers.get('Authorization', '')
+
+    if not auth.startswith('Bearer ') or len(auth) < 20:
+        return None
+
+    token = auth[7:]
+
+    if not SUPABASE_JWT_SECRET:
+        if IS_PRODUCTION:
+            print("[SECURITY] SUPABASE_JWT_SECRET not set in production — blocking", file=sys.stderr)
+            return None
+        # Dev mode: decode without verification to extract user info
+        print("[SECURITY] SUPABASE_JWT_SECRET not set — skipping verification (dev mode)", file=sys.stderr)
+        try:
+            import jwt
+            return jwt.decode(token, options={"verify_signature": False})
+        except Exception:
+            return None
+
+    try:
+        import jwt
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=['HS256'],
+            options={'verify_aud': False}
+        )
+        return payload
+    except Exception as e:
+        print(f"[SECURITY] JWT verification failed: {e}", file=sys.stderr)
+        return None
+
+
+def require_auth(handler):
+    """
+    Require valid Supabase session for costly AI endpoints.
+    Returns user payload if OK, sends 401 if not.
+    """
+    payload = verify_supabase_token(handler)
+    if payload:
+        return payload
+
+    handler.send_response(401)
+    handler.send_header('Content-Type', 'application/json')
+    send_cors_headers(handler)
+    handler.end_headers()
+    handler.wfile.write(json.dumps({
+        'success': False,
+        'error': 'Bejelentkezés szükséges az AI funkciók használatához.'
+    }).encode())
+    return None
 
 
 # ── Request guards ───────────────────────────────────────────────────────────
 
 def check_body_size(handler, max_bytes=DEFAULT_MAX_BODY):
-    """Check Content-Length. Returns True if OK, sends 413 if too large."""
     content_length = int(handler.headers.get('Content-Length', 0))
     if content_length > max_bytes:
         handler.send_response(413)
@@ -134,10 +185,6 @@ def check_body_size(handler, max_bytes=DEFAULT_MAX_BODY):
 
 
 def check_required_env(handler, *env_vars):
-    """
-    Fail-closed: if any required env var is missing/empty, return 503.
-    Returns True if all present, sends 503 if not.
-    """
     missing = [v for v in env_vars if not os.environ.get(v)]
     if missing:
         handler.send_response(503)
@@ -155,7 +202,6 @@ def check_required_env(handler, *env_vars):
 # ── Safe error response ──────────────────────────────────────────────────────
 
 def safe_error_response(handler, status_code, error_msg, exc=None):
-    """Send error response WITHOUT exposing stack traces. Logs to stderr."""
     if exc:
         print(f"[API ERROR] {error_msg}: {traceback.format_exc()}", file=sys.stderr)
     handler.send_response(status_code)
@@ -163,19 +209,16 @@ def safe_error_response(handler, status_code, error_msg, exc=None):
     send_cors_headers(handler)
     handler.end_headers()
     handler.wfile.write(json.dumps({
-        'success': False,
-        'error': error_msg
+        'success': False, 'error': error_msg
     }).encode())
 
 
 def rate_limit_response(handler):
-    """Send 429 Too Many Requests."""
     handler.send_response(429)
     handler.send_header('Content-Type', 'application/json')
     handler.send_header('Retry-After', '60')
     send_cors_headers(handler)
     handler.end_headers()
     handler.wfile.write(json.dumps({
-        'success': False,
-        'error': 'Too many requests. Please try again later.'
+        'success': False, 'error': 'Too many requests. Please try again later.'
     }).encode())

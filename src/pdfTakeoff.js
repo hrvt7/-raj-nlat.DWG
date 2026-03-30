@@ -5,6 +5,7 @@
 //
 // This replaces the old "no-op" PDF path and the per-device cable multipliers.
 // ──────────────────────────────────────────────────────────────────────────────
+import { getAuthHeaders } from './supabase.js'
 
 
 // ── Schema validation helpers ─────────────────────────────────────────────────
@@ -356,11 +357,12 @@ export async function callPdfApi(file, onProgress) {
 
   // ── Step 1: Vector analysis (deterministic, fast, no AI cost) ──────────────
   onProgress?.(15)
+  const authHeaders = await getAuthHeaders()
   let vector = null
   try {
     const vectorRes = await fetch(`${apiUrl}/api/parse-pdf-vectors`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: payload,
     })
     if (vectorRes.ok) {
@@ -385,7 +387,7 @@ export async function callPdfApi(file, onProgress) {
     try {
       const visionRes = await fetch(`${apiUrl}/api/parse-pdf`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: payload,
       })
       if (visionRes.ok) {

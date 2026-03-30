@@ -63,6 +63,21 @@ export function onAuthChange(cb) {
   return supabase.auth.onAuthStateChange((_e, session) => cb(session))
 }
 
+/**
+ * Build headers for authenticated API calls.
+ * Includes Supabase access_token as Bearer if session exists.
+ */
+export async function getAuthHeaders(contentType = 'application/json') {
+  const headers = { 'Content-Type': contentType }
+  try {
+    const session = await getSession()
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`
+    }
+  } catch { /* no session available — headers without auth */ }
+  return headers
+}
+
 // ── Profile ────────────────────────────────────────────────────────────────────
 export async function getProfile() {
   requireConfig('getProfile')

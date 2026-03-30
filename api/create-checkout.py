@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler
 import json, os, sys, urllib.request, urllib.error, urllib.parse
 from _security import (
     send_cors_headers, check_body_size, check_origin, check_rate_limit,
-    check_required_env, safe_error_response, rate_limit_response
+    check_required_env, require_auth, safe_error_response, rate_limit_response
 )
 
 STRIPE_SECRET_KEY      = os.environ.get('STRIPE_SECRET_KEY', '')
@@ -47,6 +47,7 @@ class handler(BaseHTTPRequestHandler):
         if not check_origin(self): return
         if not check_rate_limit(self, limit=10): return rate_limit_response(self)
         if not check_body_size(self, max_bytes=64 * 1024): return
+        if not require_auth(self): return
         if not check_required_env(self, 'STRIPE_SECRET_KEY'): return
         try:
             body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))))
