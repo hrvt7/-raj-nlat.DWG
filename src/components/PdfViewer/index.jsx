@@ -153,7 +153,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [autoSymbolActive, setAutoSymbolActive] = useState(false)
   const [autoSymbolPhase, setAutoSymbolPhase] = useState('idle') // idle | picking | areaSelect | searching | done
   const [autoSymbolRect, setAutoSymbolRect] = useState(null) // {x1,y1,x2,y2} in screen coords during pick
-  const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score}] in PDF doc coords
+  const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score,accepted}] in PDF doc coords
+  const [autoSymbolLabel, setAutoSymbolLabel] = useState('') // user label for finalization
+  const [autoSymbolCategory, setAutoSymbolCategory] = useState('other') // category key for finalization
   const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.55)
   const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
   const [autoSymbolSearchArea, setAutoSymbolSearchArea] = useState(null) // {x,y,w,h} in PDF doc coords or null (full page)
@@ -675,26 +677,37 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       ctx.setLineDash([])
     }
 
-    // ── Auto Symbol: result markers ──
+    // ── Auto Symbol: result markers (accepted = orange, rejected = dimmed red) ──
     if (autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
       for (const hit of autoSymbolResults) {
         const s = proj(hit.x, hit.y)
         const halfW = (tpl.w / 2) * v.zoom
         const halfH = (tpl.h / 2) * v.zoom
+        const color = hit.accepted ? '#FF8C42' : '#FF6B6B'
+        const alpha = hit.accepted ? 1 : 0.3
+        ctx.globalAlpha = alpha
         // Rectangle around match
-        ctx.strokeStyle = '#FF8C42'
-        ctx.lineWidth = 2
+        ctx.strokeStyle = color
+        ctx.lineWidth = hit.accepted ? 2 : 1
         ctx.strokeRect(s.x - halfW, s.y - halfH, halfW * 2, halfH * 2)
         // Center dot
-        ctx.fillStyle = '#FF8C42'
+        ctx.fillStyle = color
         ctx.beginPath()
         ctx.arc(s.x, s.y, 3, 0, Math.PI * 2)
         ctx.fill()
         // Score label
         ctx.font = '10px "DM Mono"'
-        ctx.fillStyle = '#FF8C42'
         ctx.fillText((hit.score * 100).toFixed(0) + '%', s.x + halfW + 3, s.y - halfH + 10)
+        // X mark for rejected
+        if (!hit.accepted) {
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(s.x - 5, s.y - 5); ctx.lineTo(s.x + 5, s.y + 5)
+          ctx.moveTo(s.x + 5, s.y - 5); ctx.lineTo(s.x - 5, s.y + 5)
+          ctx.stroke()
+        }
+        ctx.globalAlpha = 1
       }
     }
   }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes, autoSymbolRect, autoSymbolPhase, autoSymbolResults, autoSymbolAreaRect, autoSymbolSearchArea])
@@ -706,6 +719,26 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const sx = e.clientX - rect.left
     const sy = e.clientY - rect.top
     const pdf = screenToPdf(sx, sy)
+
+    // Auto-symbol done phase: click on a result to toggle accepted/rejected
+    if (activeTool === 'auto-symbol' && autoSymbolPhase === 'done' && autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
+      const tpl = autoSymbolTemplateRef.current
+      const halfW = tpl.w / 2, halfH = tpl.h / 2
+      // Check if click is inside any result rectangle
+      for (let i = 0; i < autoSymbolResults.length; i++) {
+        const hit = autoSymbolResults[i]
+        const s = pdfToScreen(hit.x, hit.y)
+        const hw = halfW * viewRef.current.zoom, hh = halfH * viewRef.current.zoom
+        if (sx >= s.x - hw && sx <= s.x + hw && sy >= s.y - hh && sy <= s.y + hh) {
+          setAutoSymbolResults(prev => prev.map((r, j) => j === i ? { ...r, accepted: !r.accepted } : r))
+          drawOverlay()
+          return
+        }
+      }
+      // Click outside results in done phase — just pan
+      dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, startOX: viewRef.current.offsetX, startOY: viewRef.current.offsetY }
+      return
+    }
 
     if (activeTool === 'auto-symbol' && (autoSymbolPhase === 'picking' || autoSymbolPhase === 'areaSelect')) {
       autoSymbolStartRef.current = { sx, sy }
@@ -925,8 +958,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         })
       })
 
-      const results = result.map(h => ({
-        x: h.x + tW / 2, y: h.y + tH / 2, score: h.score,
+      const results = result.map((h, i) => ({
+        x: h.x + tW / 2, y: h.y + tH / 2, score: h.score, accepted: true, idx: i,
       }))
       setAutoSymbolResults(results)
       setAutoSymbolPhase('done')
@@ -1152,8 +1185,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         autoSymbolActive={autoSymbolActive}
         autoSymbolPhase={autoSymbolPhase}
         autoSymbolCount={autoSymbolResults.length}
+        autoSymbolAcceptedCount={autoSymbolResults.filter(r => r.accepted).length}
         autoSymbolSearching={autoSymbolSearching}
         autoSymbolThreshold={autoSymbolThreshold}
+        autoSymbolCategory={autoSymbolCategory}
+        autoSymbolLabel={autoSymbolLabel}
         onAutoSymbolToggle={() => {
           if (autoSymbolActive) {
             setAutoSymbolActive(false)
@@ -1181,11 +1217,55 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           setAutoSymbolSearchArea(null)
           setAutoSymbolAreaRect(null)
           autoSymbolTemplateRef.current = null
+          setAutoSymbolLabel('')
           drawOverlay()
         }}
         onAutoSymbolSearchFull={() => {
           setAutoSymbolPhase('searching')
           runAutoSymbolSearch(autoSymbolThreshold, null)
+        }}
+        onAutoSymbolAcceptAll={() => {
+          setAutoSymbolResults(prev => prev.map(r => ({ ...r, accepted: true })))
+          drawOverlay()
+        }}
+        onAutoSymbolRejectAll={() => {
+          setAutoSymbolResults(prev => prev.map(r => ({ ...r, accepted: false })))
+          drawOverlay()
+        }}
+        onAutoSymbolCategoryChange={setAutoSymbolCategory}
+        onAutoSymbolLabelChange={setAutoSymbolLabel}
+        onAutoSymbolFinalize={() => {
+          // Finalize: add accepted results as markers to the existing PDF takeoff flow
+          const accepted = autoSymbolResults.filter(r => r.accepted)
+          if (accepted.length === 0) return
+          const cat = COUNT_CATEGORIES.find(c => c.key === autoSymbolCategory) || COUNT_CATEGORIES.find(c => c.key === 'other')
+          const color = cat?.color || '#71717A'
+          const label = autoSymbolLabel.trim() || cat?.label || 'Auto szimbólum'
+          for (const hit of accepted) {
+            markersRef.current.push(createMarker({
+              x: hit.x, y: hit.y,
+              category: autoSymbolCategory,
+              color,
+              source: 'detection',
+              confidence: hit.score,
+              label,
+            }))
+          }
+          markDirty()
+          setRenderTick(t => t + 1)
+          if (onMarkersChange) onMarkersChange([...markersRef.current])
+          // Reset auto symbol
+          setAutoSymbolActive(false)
+          setAutoSymbolPhase('idle')
+          setAutoSymbolResults([])
+          setAutoSymbolRect(null)
+          setAutoSymbolAreaRect(null)
+          setAutoSymbolSearchArea(null)
+          autoSymbolTemplateRef.current = null
+          autoSymbolWorkerRef.current?.terminate()
+          setActiveTool(null)
+          setAutoSymbolLabel('')
+          drawOverlay()
         }}
       />
 
@@ -1454,8 +1534,10 @@ function PdfToolbar({
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
   assemblies,
-  autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolSearching,
-  autoSymbolThreshold, onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
+  autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolAcceptedCount, autoSymbolSearching,
+  autoSymbolThreshold, autoSymbolCategory, autoSymbolLabel,
+  onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
+  onAutoSymbolAcceptAll, onAutoSymbolRejectAll, onAutoSymbolCategoryChange, onAutoSymbolLabelChange, onAutoSymbolFinalize,
 }) {
   const TOOLS = [
     { id: 'count', label: 'Számlálás', key: 'C' },
@@ -1541,11 +1623,35 @@ function PdfToolbar({
               Küszöb
               <input type="range" min="0.3" max="0.9" step="0.05" value={autoSymbolThreshold}
                 onChange={e => onAutoSymbolThresholdChange(parseFloat(e.target.value))}
-                style={{ width: 60, accentColor: '#FF8C42' }} />
+                style={{ width: 50, accentColor: '#FF8C42' }} />
               <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#FF8C42', width: 28 }}>{(autoSymbolThreshold * 100).toFixed(0)}%</span>
             </label>
-            <button onClick={onAutoSymbolClear} title="Új minta kijelölése" style={{
-              padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono',
+            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent }}>
+              {autoSymbolAcceptedCount}/{autoSymbolCount}
+            </span>
+            <button onClick={onAutoSymbolAcceptAll} title="Összes elfogadása" style={{
+              padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
+              background: 'rgba(0,229,160,0.1)', border: '1px solid rgba(0,229,160,0.3)', color: C.accent,
+            }}>✓ Mind</button>
+            <button onClick={onAutoSymbolRejectAll} title="Összes kizárása" style={{
+              padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
+              background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#FF6B6B',
+            }}>✕ Mind</button>
+            <select value={autoSymbolCategory} onChange={e => onAutoSymbolCategoryChange(e.target.value)}
+              style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono', background: C.bg, border: `1px solid ${C.border}`, color: C.text }}>
+              {COUNT_CATEGORIES.filter(c => !c.isCableTray).map(c => (
+                <option key={c.key} value={c.key}>{c.label}</option>
+              ))}
+            </select>
+            <input value={autoSymbolLabel} onChange={e => onAutoSymbolLabelChange(e.target.value)}
+              placeholder="Címke…" style={{ width: 80, padding: '2px 6px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono', background: C.bg, border: `1px solid ${C.border}`, color: C.text }} />
+            <button onClick={onAutoSymbolFinalize} disabled={autoSymbolAcceptedCount === 0} title="Elfogadott találatok hozzáadása a takeoff-hoz" style={{
+              padding: '3px 10px', borderRadius: 5, cursor: autoSymbolAcceptedCount > 0 ? 'pointer' : 'default', fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
+              background: autoSymbolAcceptedCount > 0 ? '#FF8C42' : C.bgCard, border: 'none', color: autoSymbolAcceptedCount > 0 ? '#09090B' : C.muted,
+              opacity: autoSymbolAcceptedCount > 0 ? 1 : 0.5,
+            }}>+ Takeoff ({autoSymbolAcceptedCount})</button>
+            <button onClick={onAutoSymbolClear} title="Új minta" style={{
+              padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
               background: 'transparent', border: `1px solid ${C.border}`, color: C.muted,
             }}>Új minta</button>
           </>
