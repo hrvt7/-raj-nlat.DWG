@@ -3,7 +3,7 @@ api/stripe-webhook.py
 Stripe webhook kezelő — subscription életciklus → Supabase profiles.plan frissítés.
 
 Stripe Dashboard → Webhooks → Endpoint URL:
-  https://takeoffpro.vercel.app/api/stripe-webhook
+  https://raj-nlat-dwg.vercel.app/api/stripe-webhook
 
 Figyelendő events:
   - checkout.session.completed       → trial_active beállítás

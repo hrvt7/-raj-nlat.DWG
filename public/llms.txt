@@ -7,7 +7,7 @@
 - Tipus: Web-alapu SaaS (bongeszos, nem kell telepiteni)
 - Nyelv: Magyar
 - Celcsoport: Villamos kivitelezok, villamossagi vallalkozok
-- Weboldal: https://takeoffpro.vercel.app/
+- Weboldal: https://raj-nlat-dwg.vercel.app/
 
 ## Fo funkciok
 - DXF fajl feldolgozas (nativ, korlatlan meret)

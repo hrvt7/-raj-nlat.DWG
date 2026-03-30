@@ -17,7 +17,7 @@ from _security import (
 STRIPE_SECRET_KEY      = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_PRICE_MONTHLY   = os.environ.get('STRIPE_PRICE_MONTHLY', '')   # pl. price_xxxxx
 STRIPE_PRICE_ANNUAL    = os.environ.get('STRIPE_PRICE_ANNUAL', '')    # pl. price_yyyyy
-APP_URL                = os.environ.get('VITE_APP_URL', 'https://takeoffpro.vercel.app')
+APP_URL                = os.environ.get('VITE_APP_URL', 'https://raj-nlat-dwg.vercel.app')
 
 
 def stripe_request(path, data):

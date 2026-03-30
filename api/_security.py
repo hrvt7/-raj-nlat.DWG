@@ -27,7 +27,7 @@ IS_LOCAL_DEV = not _VERCEL_ENV and _NODE_ENV != 'production'
 # ── CORS origin configuration ────────────────────────────────────────────────
 _ALLOWED_ORIGINS_RAW = os.environ.get(
     'ALLOWED_ORIGINS',
-    'https://takeoffpro.vercel.app,https://takeoffpro.hu,https://www.takeoffpro.hu'
+    'https://raj-nlat-dwg.vercel.app,https://takeoffpro.hu,https://www.takeoffpro.hu'
 )
 ALLOWED_ORIGINS = [o.strip() for o in _ALLOWED_ORIGINS_RAW.split(',') if o.strip()]
 
