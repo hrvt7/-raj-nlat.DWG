@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    minify: false,
+    minify: 'terser',
     rollupOptions: {
       output: {
         manualChunks(id) {

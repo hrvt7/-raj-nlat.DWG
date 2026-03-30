@@ -844,6 +844,59 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (activeTool) drawOverlay()
   }, [activeTool, screenToPdf, drawOverlay])
 
+  // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
+  // IMPORTANT: must be declared BEFORE handleMouseUp which references it
+  const runAutoSymbolSearch = useCallback(async (threshold, searchArea) => {
+    if (!autoSymbolTemplateRef.current || !pdfDoc) return
+    const mySearchId = ++autoSymbolSearchIdRef.current
+    setAutoSymbolSearching(true)
+    setAutoSymbolError(null)
+    setAutoSymbolResults([])
+    try {
+      const page = await pdfDoc.getPage(pageNum)
+      const { imageData, width, height } = await renderPageImageData(page, 1)
+      const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
+
+      // Abort any previous worker
+      if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
+      const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
+      autoSymbolWorkerRef.current = worker
+
+      const result = await new Promise((resolve, reject) => {
+        worker.onmessage = (e) => {
+          if (e.data.type === 'result') resolve(e.data.hits)
+          else reject(new Error(e.data.message || 'Worker hiba'))
+        }
+        worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
+        worker.postMessage({
+          imgData: imageData.data,
+          imgW: width, imgH: height,
+          tplData: cropData,
+          tplW: tW, tplH: tH,
+          threshold,
+          searchArea: searchArea || null,
+        })
+      })
+
+      // Stale result guard — if a newer search was started, discard this result
+      if (autoSymbolSearchIdRef.current !== mySearchId) return
+
+      const results = result.map((h, i) => ({
+        x: h.x + tW / 2, y: h.y + tH / 2, score: h.score, accepted: true, idx: i,
+      }))
+      setAutoSymbolResults(results)
+      setAutoSymbolPhase('done')
+      if (results.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken.')
+    } catch (err) {
+      if (autoSymbolSearchIdRef.current !== mySearchId) return // stale
+      console.error('[AutoSymbol] worker search failed:', err)
+      setAutoSymbolError('Keresés sikertelen: ' + (err.message || 'ismeretlen hiba'))
+      setAutoSymbolPhase('done')
+    } finally {
+      if (autoSymbolSearchIdRef.current === mySearchId) setAutoSymbolSearching(false)
+    }
+  }, [pdfDoc, pageNum])
+
   const handleMouseUp = useCallback(async () => {
     // Auto-symbol: finish rectangle pick → crop template → search
     if (autoSymbolStartRef.current && autoSymbolPhase === 'picking') {
@@ -928,58 +981,6 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.zoom = newZoom
     drawOverlay()
   }, [drawOverlay])
-
-  // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
-  const runAutoSymbolSearch = useCallback(async (threshold, searchArea) => {
-    if (!autoSymbolTemplateRef.current || !pdfDoc) return
-    const mySearchId = ++autoSymbolSearchIdRef.current
-    setAutoSymbolSearching(true)
-    setAutoSymbolError(null)
-    setAutoSymbolResults([])
-    try {
-      const page = await pdfDoc.getPage(pageNum)
-      const { imageData, width, height } = await renderPageImageData(page, 1)
-      const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
-
-      // Abort any previous worker
-      if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
-      const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
-      autoSymbolWorkerRef.current = worker
-
-      const result = await new Promise((resolve, reject) => {
-        worker.onmessage = (e) => {
-          if (e.data.type === 'result') resolve(e.data.hits)
-          else reject(new Error(e.data.message || 'Worker hiba'))
-        }
-        worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
-        worker.postMessage({
-          imgData: imageData.data,
-          imgW: width, imgH: height,
-          tplData: cropData,
-          tplW: tW, tplH: tH,
-          threshold,
-          searchArea: searchArea || null,
-        })
-      })
-
-      // Stale result guard — if a newer search was started, discard this result
-      if (autoSymbolSearchIdRef.current !== mySearchId) return
-
-      const results = result.map((h, i) => ({
-        x: h.x + tW / 2, y: h.y + tH / 2, score: h.score, accepted: true, idx: i,
-      }))
-      setAutoSymbolResults(results)
-      setAutoSymbolPhase('done')
-      if (results.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken.')
-    } catch (err) {
-      if (autoSymbolSearchIdRef.current !== mySearchId) return // stale
-      console.error('[AutoSymbol] worker search failed:', err)
-      setAutoSymbolError('Keresés sikertelen: ' + (err.message || 'ismeretlen hiba'))
-      setAutoSymbolPhase('done')
-    } finally {
-      if (autoSymbolSearchIdRef.current === mySearchId) setAutoSymbolSearching(false)
-    }
-  }, [pdfDoc, pageNum])
 
   // Re-search when threshold changes (debounced)
   useEffect(() => {
