@@ -4,12 +4,13 @@ Proxies PDF first-page images to OpenAI Vision API for metadata extraction.
 The OpenAI API key lives server-side only — never exposed to the client bundle.
 """
 from http.server import BaseHTTPRequestHandler
-import json, os, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
+from _security import (
+    send_cors_headers, check_api_secret, check_rate_limit,
+    check_required_env, safe_error_response, rate_limit_response
+)
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-# SECURITY: Set ALLOWED_ORIGIN to your production domain in Vercel env vars.
-# Default '*' is acceptable for development but should be restricted in production.
-ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '*')
 
 # Max request body: ~4 MB (base64-encoded JPEG of a plan page is typically 200-800 KB)
 MAX_BODY_BYTES = 4 * 1024 * 1024
@@ -158,10 +159,13 @@ class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self._cors()
+        send_cors_headers(self)
         self.end_headers()
 
     def do_POST(self):
+        if not check_rate_limit(self): return rate_limit_response(self)
+        if not check_api_secret(self): return
+        if not check_required_env(self, 'OPENAI_API_KEY'): return
         try:
             # ── Validate Content-Length ──
             length = int(self.headers.get('Content-Length', 0))
@@ -195,19 +199,14 @@ class handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._respond(400, {"error": "Érvénytelen JSON."})
         except Exception as e:
-            self._respond(500, {"error": str(e)})
+            safe_error_response(self, 500, 'Internal server error', exc=e)
 
     def _respond(self, code, data):
         self.send_response(code)
-        self._cors()
+        send_cors_headers(self)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
-
-    def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
     def log_message(self, *a):
         pass

@@ -8,10 +8,13 @@ Returns: { "url": "<stripe-checkout-url>" }
 """
 
 from http.server import BaseHTTPRequestHandler
-import json, os, urllib.request, urllib.error, urllib.parse
+import json, os, sys, urllib.request, urllib.error, urllib.parse
+from _security import (
+    send_cors_headers, check_body_size, check_api_secret, check_rate_limit,
+    check_required_env, safe_error_response, rate_limit_response
+)
 
 STRIPE_SECRET_KEY      = os.environ.get('STRIPE_SECRET_KEY', '')
-ALLOWED_ORIGIN         = os.environ.get('ALLOWED_ORIGIN', '*')
 STRIPE_PRICE_MONTHLY   = os.environ.get('STRIPE_PRICE_MONTHLY', '')   # pl. price_xxxxx
 STRIPE_PRICE_ANNUAL    = os.environ.get('STRIPE_PRICE_ANNUAL', '')    # pl. price_yyyyy
 APP_URL                = os.environ.get('VITE_APP_URL', 'https://raj-nlat-dwg.vercel.app')
@@ -37,21 +40,29 @@ class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self._cors()
+        send_cors_headers(self)
         self.end_headers()
 
     def do_POST(self):
+        if not check_rate_limit(self, limit=10): return rate_limit_response(self)
+        if not check_body_size(self, max_bytes=64 * 1024): return
+        if not check_api_secret(self): return
+        if not check_required_env(self, 'STRIPE_SECRET_KEY'): return
         try:
             body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))))
         except Exception:
             body = {}
 
-        plan     = body.get('plan', 'monthly')   # 'monthly' | 'annual'
+        plan     = body.get('plan', 'monthly')
+        if plan not in ('monthly', 'annual'):
+            return self._error(400, 'Invalid plan: must be "monthly" or "annual"')
         user_id  = body.get('user_id', '')
         email    = body.get('email', '')
+        if email and '@' not in email:
+            return self._error(400, 'Invalid email address')
 
         if not STRIPE_SECRET_KEY:
-            return self._error(500, 'STRIPE_SECRET_KEY nincs beállítva')
+            return self._error(503, 'Service temporarily unavailable')
 
         price_id = STRIPE_PRICE_ANNUAL if plan == 'annual' else STRIPE_PRICE_MONTHLY
         if not price_id:
@@ -76,22 +87,18 @@ class handler(BaseHTTPRequestHandler):
             err = json.loads(e.read())
             return self._error(400, err.get('error', {}).get('message', 'Stripe hiba'))
         except Exception as e:
-            return self._error(500, str(e))
+            safe_error_response(self, 500, 'Checkout creation failed', exc=e)
+            return
 
         self.send_response(200)
-        self._cors()
+        send_cors_headers(self)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps({'url': session['url']}).encode())
 
     def _error(self, code, msg):
         self.send_response(code)
-        self._cors()
+        send_cors_headers(self)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps({'error': msg}).encode())
-
-    def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')

@@ -8,6 +8,7 @@
 //
 // Isolated module — no side effects, no state, easy to test or swap backend.
 // ─────────────────────────────────────────────────────────────────────────────
+import { getApiHeaders } from './apiHeaders.js'
 
 const MAX_IMAGE_DIMENSION = 1024      // scale down if larger
 
@@ -33,7 +34,7 @@ export async function callAiMetaVision(imageBase64, existingMeta = null) {
 
   const res = await fetch(`${backendUrl}/api/meta-vision`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getApiHeaders(),
     body: JSON.stringify({ image: imageUrl, existingMeta }),
   })
 

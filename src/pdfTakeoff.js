@@ -3,6 +3,7 @@
 // Pipeline: PDF → server API (Vision/vector) → symbol positions → room clustering
 //   → MST cable routing → assembly mapping → recognizedItems format
 //
+import { getApiHeaders } from './utils/apiHeaders.js'
 // This replaces the old "no-op" PDF path and the per-device cable multipliers.
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -360,7 +361,7 @@ export async function callPdfApi(file, onProgress) {
   try {
     const vectorRes = await fetch(`${apiUrl}/api/parse-pdf-vectors`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getApiHeaders(),
       body: payload,
     })
     if (vectorRes.ok) {
@@ -385,7 +386,7 @@ export async function callPdfApi(file, onProgress) {
     try {
       const visionRes = await fetch(`${apiUrl}/api/parse-pdf`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(),
         body: payload,
       })
       if (visionRes.ok) {

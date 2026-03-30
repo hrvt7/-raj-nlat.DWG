@@ -1,9 +1,12 @@
 from http.server import BaseHTTPRequestHandler
-import json, traceback, os, urllib.request, urllib.error, base64
+import json, traceback, os, sys, urllib.request, urllib.error, base64
+from _security import (
+    send_cors_headers, check_body_size, check_api_secret, check_rate_limit,
+    safe_error_response, rate_limit_response
+)
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 OPENAI_API_KEY    = os.environ.get('OPENAI_API_KEY', '')
-ALLOWED_ORIGIN    = os.environ.get('ALLOWED_ORIGIN', '*')
 
 SYSTEM_PROMPT = """Te egy tapasztalt magyar villamos tervező mérnök AI asszisztens vagy.
 Kapsz egy DXF tervrajz képét és/vagy a belőle kinyert geometriai adatokat.
@@ -197,10 +200,13 @@ class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self._cors()
+        send_cors_headers(self)
         self.end_headers()
 
     def do_POST(self):
+        if not check_rate_limit(self): return rate_limit_response(self)
+        if not check_body_size(self): return
+        if not check_api_secret(self): return
         try:
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length)
@@ -241,22 +247,13 @@ class handler(BaseHTTPRequestHandler):
             self._respond(200, result)
 
         except Exception as e:
-            self._respond(500, {
-                'success': False,
-                'error': str(e),
-                'trace': traceback.format_exc()
-            })
+            safe_error_response(self, 500, 'Internal server error', exc=e)
 
     def _respond(self, code, data):
         self.send_response(code)
-        self._cors()
+        send_cors_headers(self)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
-
-    def _cors(self):
-        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
     def log_message(self, *a): pass
