@@ -168,8 +168,11 @@ self.onmessage = (e) => {
     // Step 4: Multi-scale matching (85% to 115% of template size, 5 steps)
     // This handles slight scale differences between the sample and
     // the actual symbols on the plan.
-    const SCALES = [0.85, 0.92, 1.0, 1.08, 1.15]
-    const stride = 3
+    // 3 scales only (±8%) — 5 was too slow for large templates
+    const SCALES = [0.92, 1.0, 1.08]
+    // Adaptive stride: larger templates can afford bigger steps
+    const tplArea = tplW * tplH
+    const stride = tplArea > 2500 ? 4 : 3 // 50×50+ → stride 4
     let allHits = []
 
     for (const s of SCALES) {
