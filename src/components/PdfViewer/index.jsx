@@ -156,7 +156,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score,accepted}] in PDF doc coords
   const [autoSymbolLabel, setAutoSymbolLabel] = useState('') // user label for finalization
   const [autoSymbolCategory, setAutoSymbolCategory] = useState('other') // category key for finalization
-  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.65)
+  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.55)
   const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
   const [autoSymbolSearchArea, setAutoSymbolSearchArea] = useState(null) // {x,y,w,h} in PDF doc coords or null (full page)
   const [autoSymbolAreaRect, setAutoSymbolAreaRect] = useState(null) // screen coords during area selection
@@ -698,11 +698,18 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
       const ANALYSIS_SCALE = 4
+      // Template size in doc coords (rotation-invariant)
+      // The template was cropped from the rotated raster, so for 90/270 rotation
+      // the doc-space width/height are swapped relative to the raster w/h
+      const docTplW = tpl.w / ANALYSIS_SCALE
+      const docTplH = tpl.h / ANALYSIS_SCALE
       for (const hit of autoSymbolResults) {
         const s = proj(hit.x, hit.y)
-        // tpl.w/h are in analysis-scale pixels; convert to doc-scale for display
-        const halfW = (tpl.w / ANALYSIS_SCALE / 2) * v.zoom
-        const halfH = (tpl.h / ANALYSIS_SCALE / 2) * v.zoom
+        // Project the template corners through the rotation to get correct screen size
+        const corner1 = proj(hit.x - docTplW / 2, hit.y - docTplH / 2)
+        const corner2 = proj(hit.x + docTplW / 2, hit.y + docTplH / 2)
+        const halfW = Math.abs(corner2.x - corner1.x) / 2
+        const halfH = Math.abs(corner2.y - corner1.y) / 2
         const color = hit.accepted ? '#FF8C42' : '#FF6B6B'
         const alpha = hit.accepted ? 1 : 0.3
         ctx.globalAlpha = alpha
@@ -743,12 +750,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (activeTool === 'auto-symbol' && autoSymbolPhase === 'done' && autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
       const ANALYSIS_SCALE = 4
-      const halfW = tpl.w / ANALYSIS_SCALE / 2, halfH = tpl.h / ANALYSIS_SCALE / 2
+      const docTplW = tpl.w / ANALYSIS_SCALE, docTplH = tpl.h / ANALYSIS_SCALE
       // Check if click is inside any result rectangle
       for (let i = 0; i < autoSymbolResults.length; i++) {
         const hit = autoSymbolResults[i]
         const s = pdfToScreen(hit.x, hit.y)
-        const hw = halfW * viewRef.current.zoom, hh = halfH * viewRef.current.zoom
+        const c1 = pdfToScreen(hit.x - docTplW / 2, hit.y - docTplH / 2)
+        const c2 = pdfToScreen(hit.x + docTplW / 2, hit.y + docTplH / 2)
+        const hw = Math.abs(c2.x - c1.x) / 2, hh = Math.abs(c2.y - c1.y) / 2
         if (sx >= s.x - hw && sx <= s.x + hw && sy >= s.y - hh && sy <= s.y + hh) {
           setAutoSymbolResults(prev => prev.map((r, j) => j === i ? { ...r, accepted: !r.accepted } : r))
           drawOverlay()

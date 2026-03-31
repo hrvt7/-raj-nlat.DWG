@@ -66,6 +66,22 @@ function toHue(rgba, width, height) {
   return hue
 }
 
+// ── Bilinear resize (grayscale Float32Array) ────────────────────────────────
+function resizeGray(src, srcW, srcH, dstW, dstH) {
+  const dst = new Float32Array(dstW * dstH)
+  const xR = srcW / dstW, yR = srcH / dstH
+  for (let dy = 0; dy < dstH; dy++) {
+    const sy = dy * yR, y0 = Math.floor(sy), y1 = Math.min(y0 + 1, srcH - 1), fy = sy - y0
+    for (let dx = 0; dx < dstW; dx++) {
+      const sx = dx * xR, x0 = Math.floor(sx), x1 = Math.min(x0 + 1, srcW - 1), fx = sx - x0
+      dst[dy * dstW + dx] =
+        src[y0 * srcW + x0] * (1-fx) * (1-fy) + src[y0 * srcW + x1] * fx * (1-fy) +
+        src[y1 * srcW + x0] * (1-fx) * fy + src[y1 * srcW + x1] * fx * fy
+    }
+  }
+  return dst
+}
+
 // ── Auto-trim on saturation foreground ──────────────────────────────────────
 function autoTrim(channel, w, h, padding, fgThreshold) {
   const thresh = fgThreshold || 0.08
@@ -233,7 +249,7 @@ function nonMaxSuppression(detections, tW, tH, overlapThreshold) {
 self.onmessage = (e) => {
   try {
     const { imgData, imgW, imgH, tplData, tplW, tplH, threshold, searchArea } = e.data
-    const effectiveThreshold = threshold || 0.65
+    const effectiveThreshold = threshold || 0.55
     const t0 = performance.now()
 
     // 1. Extract channels from RGBA
@@ -263,16 +279,38 @@ self.onmessage = (e) => {
     const tplArea = trimW * trimH
     const stride = tplArea > 2500 ? 4 : tplArea > 900 ? 3 : 2
 
-    // 5. Dual-channel matching
-    const rawHits = matchDualChannel(
-      imgGray, imgSat, imgW, imgH,
-      tGray, tSat, trimW, trimH,
-      satGray, satSatCh,
-      effectiveThreshold, stride, searchArea
-    )
+    // 5. Multi-scale dual-channel matching (±10%, 3 scales)
+    // PlanSwift uses "Scaled" mode — handles slight size differences
+    const SCALES = [0.90, 1.0, 1.10]
+    let allHits = []
 
-    // 6. NMS
-    const hits = nonMaxSuppression(rawHits, trimW, trimH, 0.5)
+    for (const scale of SCALES) {
+      let sGray = tGray, sSat = tSat, sW = trimW, sH = trimH
+
+      if (scale !== 1.0) {
+        sW = Math.round(trimW * scale)
+        sH = Math.round(trimH * scale)
+        if (sW < 4 || sH < 4 || sW >= imgW || sH >= imgH) continue
+        sGray = resizeGray(tGray, trimW, trimH, sW, sH)
+        sSat = resizeGray(tSat, trimW, trimH, sW, sH)
+      }
+
+      const scaleHits = matchDualChannel(
+        imgGray, imgSat, imgW, imgH,
+        sGray, sSat, sW, sH,
+        satGray, satSatCh,
+        effectiveThreshold, stride, searchArea
+      )
+
+      for (const h of scaleHits) {
+        // Adjust position: center of the match at this scale → center at original scale
+        allHits.push({ x: h.x + (sW - trimW) / 2, y: h.y + (sH - trimH) / 2, score: h.score })
+      }
+    }
+
+    // 6. Cross-scale NMS
+    allHits.sort((a, b) => b.score - a.score)
+    const hits = nonMaxSuppression(allHits, trimW, trimH, 0.5)
 
     // Adjust coords for trim offset
     for (const h of hits) {
@@ -282,7 +320,7 @@ self.onmessage = (e) => {
 
     const elapsed = Math.round(performance.now() - t0)
     const colorMode = tplSatStd > 0.03 ? 'color(60%)+gray(40%)' : 'gray-only'
-    console.log(`[TemplateMatch v5] ${rawHits.length} raw → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
+    console.log(`[TemplateMatch v6] ${allHits.length} raw (${SCALES.length} scales) → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
 
     self.postMessage({ type: 'result', hits })
   } catch (err) {
