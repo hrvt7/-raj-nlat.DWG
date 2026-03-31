@@ -1028,6 +1028,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     return () => clearTimeout(t)
   }, [autoSymbolThreshold]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Register wheel handler with { passive: false } so preventDefault works
+  // (React onWheel is passive by default in modern browsers → console errors)
+  useEffect(() => {
+    const el = overlayRef.current
+    if (!el) return
+    const handler = (e) => handleWheel(e)
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [handleWheel])
+
   // Cleanup worker on unmount
   useEffect(() => () => { autoSymbolWorkerRef.current?.terminate() }, [])
 
@@ -1338,7 +1348,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          onWheel={handleWheel}
+          /* wheel handled via useEffect with { passive: false } to allow preventDefault */
         />
 
         {/* Loading */}
