@@ -1045,16 +1045,35 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     e.preventDefault()
     const rect = overlayRef.current?.getBoundingClientRect()
     if (!rect) return
+    const v = viewRef.current
+
+    // Trackpad two-finger scroll = pan (no ctrlKey)
+    // Trackpad pinch-to-zoom = zoom (ctrlKey is set by the browser)
+    // Mouse wheel = zoom (no ctrlKey, but deltaX is 0)
+    const isTrackpadPan = !e.ctrlKey && (Math.abs(e.deltaX) > 0 || Math.abs(e.deltaY) > 0) && !e.metaKey
+    const isPinchZoom = e.ctrlKey // browser sets ctrlKey for trackpad pinch
+
+    if (isTrackpadPan && !isPinchZoom) {
+      // Two-finger trackpad scroll → pan
+      v.offsetX -= e.deltaX
+      v.offsetY -= e.deltaY
+      drawOverlay()
+      setRenderTick(t => t + 1) // update scrollbars
+      return
+    }
+
+    // Zoom (mouse wheel or trackpad pinch)
     const sx = e.clientX - rect.left
     const sy = e.clientY - rect.top
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    const v = viewRef.current
+    const delta = isPinchZoom
+      ? (e.deltaY > 0 ? 0.97 : 1.03) // finer steps for trackpad pinch
+      : (e.deltaY > 0 ? 0.9 : 1.1)   // larger steps for mouse wheel
     const newZoom = Math.max(0.1, Math.min(20, v.zoom * delta))
-    // Zoom towards cursor
     v.offsetX = sx - (sx - v.offsetX) * (newZoom / v.zoom)
     v.offsetY = sy - (sy - v.offsetY) * (newZoom / v.zoom)
     v.zoom = newZoom
     drawOverlay()
+    setRenderTick(t => t + 1) // update scrollbars
     // Schedule high-quality re-render after zoom settles
     if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current)
     zoomRerenderTimerRef.current = setTimeout(() => {
@@ -1267,8 +1286,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
-        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlay(); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
-        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlay(); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
+        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlay(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
+        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlay(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
         onUndo={handleUndo} onClearAll={handleClearAll}
         onToggleCountPanel={() => setCountPanelOpen(!countPanelOpen)}
         countPanelOpen={countPanelOpen}
