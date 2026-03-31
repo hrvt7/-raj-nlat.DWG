@@ -703,14 +703,19 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // the doc-space width/height are swapped relative to the raster w/h
       const docTplW = tpl.w / ANALYSIS_SCALE
       const docTplH = tpl.h / ANALYSIS_SCALE
+      // Determine display color from selected category/assembly
+      const _asm = (assembliesProp || []).find(a => a.id === autoSymbolCategory)
+      const _ASM_COLORS = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
+      const _catObj = COUNT_CATEGORIES.find(c => c.key === autoSymbolCategory)
+      const acceptedColor = _asm ? (_ASM_COLORS[_asm.category] || '#FF8C42') : (_catObj?.color || '#FF8C42')
+
       for (const hit of autoSymbolResults) {
         const s = proj(hit.x, hit.y)
-        // Project the template corners through the rotation to get correct screen size
         const corner1 = proj(hit.x - docTplW / 2, hit.y - docTplH / 2)
         const corner2 = proj(hit.x + docTplW / 2, hit.y + docTplH / 2)
         const halfW = Math.abs(corner2.x - corner1.x) / 2
         const halfH = Math.abs(corner2.y - corner1.y) / 2
-        const color = hit.accepted ? '#FF8C42' : '#FF6B6B'
+        const color = hit.accepted ? acceptedColor : '#FF6B6B'
         const alpha = hit.accepted ? 1 : 0.3
         ctx.globalAlpha = alpha
         // Rectangle around match
@@ -736,7 +741,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         ctx.globalAlpha = 1
       }
     }
-  }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes, autoSymbolRect, autoSymbolPhase, autoSymbolResults, autoSymbolAreaRect, autoSymbolSearchArea])
+  }, [activeTool, pdfToScreen, screenToPdf, showCableRoutes, autoSymbolRect, autoSymbolPhase, autoSymbolResults, autoSymbolAreaRect, autoSymbolSearchArea, autoSymbolCategory])
 
   // ── Mouse handlers ──
   const handleMouseDown = useCallback((e) => {
@@ -1319,11 +1324,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         }}
         onAutoSymbolAcceptAll={() => {
           setAutoSymbolResults(prev => prev.map(r => ({ ...r, accepted: true })))
-          drawOverlay()
+          setRenderTick(t => t + 1)
         }}
         onAutoSymbolRejectAll={() => {
           setAutoSymbolResults(prev => prev.map(r => ({ ...r, accepted: false })))
-          drawOverlay()
+          setRenderTick(t => t + 1)
         }}
         onAutoSymbolCategoryChange={setAutoSymbolCategory}
         onAutoSymbolLabelChange={setAutoSymbolLabel}
@@ -1331,14 +1336,19 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           // Finalize: add accepted results as markers to the existing PDF takeoff flow
           const accepted = autoSymbolResults.filter(r => r.accepted)
           if (accepted.length === 0) return
-          const cat = COUNT_CATEGORIES.find(c => c.key === autoSymbolCategory) || COUNT_CATEGORIES.find(c => c.key === 'other')
-          const color = cat?.color || '#71717A'
-          const label = autoSymbolLabel.trim() || cat?.label || 'Auto szimbólum'
+          // Resolve assembly or category
+          const asm = (assembliesProp || []).find(a => a.id === autoSymbolCategory)
+          const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
+          const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
+          const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[autoSymbolCategory] || COUNT_CATEGORIES.find(c => c.key === autoSymbolCategory)?.color || '#71717A')
+          const resolvedCategory = asm ? resolveCountCategory(asm.id, assembliesProp) : autoSymbolCategory
+          const label = autoSymbolLabel.trim() || asm?.name || COUNT_CATEGORIES.find(c => c.key === autoSymbolCategory)?.label || 'Auto szimbólum'
           for (const hit of accepted) {
             markersRef.current.push(createMarker({
               x: hit.x, y: hit.y,
-              category: autoSymbolCategory,
+              category: resolvedCategory,
               color,
+              asmId: asm ? asm.id : null,
               source: 'detection',
               confidence: hit.score,
               label,
@@ -1733,12 +1743,11 @@ function PdfToolbar({
               padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
               background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#FF6B6B',
             }}>✕ Mind</button>
-            <select value={autoSymbolCategory} onChange={e => onAutoSymbolCategoryChange(e.target.value)}
-              style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono', background: C.bg, border: `1px solid ${C.border}`, color: C.text }}>
-              {COUNT_CATEGORIES.filter(c => !c.isCableTray).map(c => (
-                <option key={c.key} value={c.key}>{c.label}</option>
-              ))}
-            </select>
+            {assemblies?.length > 0 ? (
+              <AssemblyDropdown activeCategory={autoSymbolCategory} onCategoryChange={onAutoSymbolCategoryChange} assemblies={assemblies} />
+            ) : (
+              <CategoryDropdown activeCategory={autoSymbolCategory} onCategoryChange={onAutoSymbolCategoryChange} />
+            )}
             <input value={autoSymbolLabel} onChange={e => onAutoSymbolLabelChange(e.target.value)}
               placeholder="Címke…" style={{ width: 80, padding: '2px 6px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono', background: C.bg, border: `1px solid ${C.border}`, color: C.text }} />
             <button onClick={onAutoSymbolFinalize} disabled={autoSymbolAcceptedCount === 0 || autoSymbolSearching} title="Elfogadott találatok hozzáadása a takeoff-hoz" style={{
