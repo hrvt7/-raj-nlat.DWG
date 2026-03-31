@@ -161,8 +161,8 @@ export function nonMaxSuppression(detections, tW, tH, overlapThreshold = 0.3) {
  * @param {number} scale   - render scale (1 = native PDF coordinates)
  * @returns {Promise<{imageData: ImageData, width: number, height: number}>}
  */
-export async function renderPageImageData(pdfPage, scale = 1) {
-  const viewport = pdfPage.getViewport({ scale })
+export async function renderPageImageData(pdfPage, scale = 1, rotation = 0) {
+  const viewport = pdfPage.getViewport({ scale, rotation })
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(viewport.width)
   canvas.height = Math.round(viewport.height)

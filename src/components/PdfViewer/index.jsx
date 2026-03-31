@@ -873,7 +873,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     try {
       const ANALYSIS_SCALE = 4 // ~300 DPI high-res raster for template matching
       const page = await pdfDoc.getPage(pageNum)
-      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE)
+      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE, rotationRef.current)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
 
       // Abort any previous worker
@@ -945,7 +945,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // Crop from on-demand high-res analysis raster (NOT the display canvas)
       try {
         const analysisPage = await pdfDoc.getPage(pageNum)
-        const { imageData: fullImg, width: fullW } = await renderPageImageData(analysisPage, ANALYSIS_SCALE)
+        const { imageData: fullImg, width: fullW } = await renderPageImageData(analysisPage, ANALYSIS_SCALE, rotationRef.current)
         // Extract template region from analysis raster
         const ax = Math.round(docX * ANALYSIS_SCALE), ay = Math.round(docY * ANALYSIS_SCALE)
         const tW = Math.round(docW * ANALYSIS_SCALE), tH = Math.round(docH * ANALYSIS_SCALE)
@@ -1239,8 +1239,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         showCableRoutes={showCableRoutes}
         onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlay, 50) }}
         rotation={rotation}
-        onRotateLeft={() => setRotation(r => (r - 90 + 360) % 360)}
-        onRotateRight={() => setRotation(r => (r + 90) % 360)}
+        onRotateLeft={() => { setRotation(r => (r - 90 + 360) % 360); if (autoSymbolActive) { setAutoSymbolResults([]); setAutoSymbolPhase('picking'); autoSymbolTemplateRef.current = null; setAutoSymbolError('Forgatás után válassz új mintát.') } }}
+        onRotateRight={() => { setRotation(r => (r + 90) % 360); if (autoSymbolActive) { setAutoSymbolResults([]); setAutoSymbolPhase('picking'); autoSymbolTemplateRef.current = null; setAutoSymbolError('Forgatás után válassz új mintát.') } }}
         assemblies={assembliesProp}
         autoSymbolActive={autoSymbolActive}
         autoSymbolPhase={autoSymbolPhase}
