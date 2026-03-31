@@ -887,13 +887,20 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           else reject(new Error(e.data.message || 'Worker hiba'))
         }
         worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
-        // Convert search area from doc coords to analysis-scale pixel coords
-        const scaledArea = searchArea ? {
-          x: Math.round(searchArea.x * ANALYSIS_SCALE),
-          y: Math.round(searchArea.y * ANALYSIS_SCALE),
-          w: Math.round(searchArea.w * ANALYSIS_SCALE),
-          h: Math.round(searchArea.h * ANALYSIS_SCALE),
-        } : null
+        // Convert search area from doc coords → rotated canvas coords → analysis pixels
+        let scaledArea = null
+        if (searchArea) {
+          const dd = unrotatedDimsRef.current
+          const rr = rotationRef.current
+          const sc1 = docToCanvas(searchArea.x, searchArea.y, rr, dd.w, dd.h)
+          const sc2 = docToCanvas(searchArea.x + searchArea.w, searchArea.y + searchArea.h, rr, dd.w, dd.h)
+          scaledArea = {
+            x: Math.round(Math.min(sc1.x, sc2.x) * ANALYSIS_SCALE),
+            y: Math.round(Math.min(sc1.y, sc2.y) * ANALYSIS_SCALE),
+            w: Math.round(Math.abs(sc2.x - sc1.x) * ANALYSIS_SCALE),
+            h: Math.round(Math.abs(sc2.y - sc1.y) * ANALYSIS_SCALE),
+          }
+        }
         worker.postMessage({
           imgData: imageData.data,
           imgW: width, imgH: height,
@@ -907,10 +914,17 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // Stale result guard — if a newer search was started, discard this result
       if (autoSymbolSearchIdRef.current !== mySearchId) return
 
-      // Convert from analysis-scale pixel coords back to doc coords (scale=1)
-      const results = result.map((h, i) => ({
-        x: (h.x + tW / 2) / ANALYSIS_SCALE, y: (h.y + tH / 2) / ANALYSIS_SCALE, score: h.score, accepted: true, idx: i,
-      }))
+      // Convert from analysis-scale rotated pixel coords → canvas coords → doc coords
+      const dd = unrotatedDimsRef.current
+      const rr = rotationRef.current
+      const results = result.map((h, i) => {
+        // hit coords are in rotated analysis-scale pixels → convert to canvas-scale
+        const cx = (h.x + tW / 2) / ANALYSIS_SCALE
+        const cy = (h.y + tH / 2) / ANALYSIS_SCALE
+        // canvas coords → doc coords (undo rotation)
+        const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
+        return { x: doc.x, y: doc.y, score: h.score, accepted: true, idx: i }
+      })
       setAutoSymbolResults(results)
       setAutoSymbolPhase('done')
       if (results.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken.')
@@ -937,18 +951,23 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // Convert screen coords to PDF doc coords, then render an on-demand analysis crop
       const ANALYSIS_SCALE = 4 // ~300 DPI — match the search raster
       const v = viewRef.current
-      // Screen → doc coords for the crop rectangle
+      // Screen → doc coords → rotated canvas coords for the crop rectangle
       const doc1 = screenToPdf(x1, y1)
       const doc2 = screenToPdf(x2, y2)
-      const docX = Math.min(doc1.x, doc2.x), docY = Math.min(doc1.y, doc2.y)
-      const docW = Math.abs(doc2.x - doc1.x), docH = Math.abs(doc2.y - doc1.y)
-      // Crop from on-demand high-res analysis raster (NOT the display canvas)
+      const d = unrotatedDimsRef.current
+      const rot = rotationRef.current
+      // Convert doc coords to canvas coords (handles rotation)
+      const c1 = docToCanvas(doc1.x, doc1.y, rot, d.w, d.h)
+      const c2 = docToCanvas(doc2.x, doc2.y, rot, d.w, d.h)
+      const canvasX = Math.min(c1.x, c2.x), canvasY = Math.min(c1.y, c2.y)
+      const canvasW = Math.abs(c2.x - c1.x), canvasH = Math.abs(c2.y - c1.y)
+      // Crop from on-demand high-res analysis raster (rendered WITH rotation)
       try {
         const analysisPage = await pdfDoc.getPage(pageNum)
-        const { imageData: fullImg, width: fullW } = await renderPageImageData(analysisPage, ANALYSIS_SCALE, rotationRef.current)
-        // Extract template region from analysis raster
-        const ax = Math.round(docX * ANALYSIS_SCALE), ay = Math.round(docY * ANALYSIS_SCALE)
-        const tW = Math.round(docW * ANALYSIS_SCALE), tH = Math.round(docH * ANALYSIS_SCALE)
+        const { imageData: fullImg, width: fullW } = await renderPageImageData(analysisPage, ANALYSIS_SCALE, rot)
+        // Scale canvas coords to analysis pixel coords
+        const ax = Math.round(canvasX * ANALYSIS_SCALE), ay = Math.round(canvasY * ANALYSIS_SCALE)
+        const tW = Math.round(canvasW * ANALYSIS_SCALE), tH = Math.round(canvasH * ANALYSIS_SCALE)
         if (tW < 4 || tH < 4) { setAutoSymbolRect(null); setAutoSymbolError('A minta túl kicsi — jelölj ki nagyobb területet.'); return }
         // Extract crop region from full analysis raster
         const cropCanvas = document.createElement('canvas')
