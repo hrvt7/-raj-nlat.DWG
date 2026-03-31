@@ -29,7 +29,7 @@ import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote } from '../data
 import { createQuote } from '../utils/createQuote.js'
 import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
-import { WALL_FACTORS, calcProductivityFactor } from '../data/workItemsDb.js'
+import { WALL_FACTORS, calcProductivityFactor, CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
 import { normalizeMarkers } from '../utils/markerModel.js'
@@ -2807,43 +2807,108 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               </div>
             )}
 
-            {/* ── CONTEXT TAB ─────────────────────────────────────────────── */}
+            {/* ── CONTEXT TAB (full productivity settings) ──────────────────── */}
             {rightTab === 'context' && (
               <div>
                 <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 16 }}>
                   Projekt körülmények
                 </div>
 
-                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginBottom: 14, padding: '8px 10px', background: C.bgCard, borderRadius: 7, border: `1px solid ${C.border}` }}>
-                  💡 A falanyag tételenként állítható a Felmérés fülön (GK / Ytong / Tégla / Beton). Az alábbi beállítások az egész projektre vonatkoznak.
+                {/* Combined multiplier header */}
+                {(() => {
+                  let combined = 1.0
+                  for (const [factorKey, factorDef] of Object.entries(CONTEXT_FACTORS)) {
+                    const selectedKey = context[factorKey] ?? factorDef.defaultKey
+                    const opt = factorDef.options.find(o => o.key === selectedKey)
+                    if (opt) combined *= opt.factor
+                  }
+                  const combinedPct = ((combined - 1) * 100).toFixed(1)
+                  const combinedColor = combined <= 1.0 ? C.accent : combined <= 1.3 ? C.yellow : C.red
+                  return (
+                    <div style={{ padding: '14px 16px', marginBottom: 16, borderRadius: 10,
+                      background: C.accentDim, border: `1px solid ${C.accentBorder}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          Kombinált projektszorzó
+                        </div>
+                        <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.textSub, lineHeight: 1.5, marginTop: 4 }}>
+                          1.00 = alap · &gt;1.00 = lassabb · &lt;1.00 = gyorsabb
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 28, color: combinedColor, lineHeight: 1 }}>
+                          ×{combined.toFixed(3)}
+                        </div>
+                        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginTop: 2 }}>
+                          {combined > 1 ? `+${combinedPct}%` : combinedPct + '%'}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, marginBottom: 14, padding: '6px 10px', background: C.bgCard, borderRadius: 6, border: `1px solid ${C.border}` }}>
+                  💡 A falanyag (GK / Ytong / Tégla / Beton) tételenként állítható a Felmérés fülön.
                 </div>
 
-                {[
-                  { key: 'access', label: 'Hozzáférhetőség', options: [['empty','Üres'],['occupied','Berendezett'],['restricted','Korl. hozzáférés']] },
-                  { key: 'project_type', label: 'Projekt típus', options: [['new_build','Új építés'],['renovation','Felújítás'],['industrial','Ipari']] },
-                  { key: 'height', label: 'Munkavégzési magasság', options: [['normal','Normál (≤2.5m)'],['ladder','Létra (2.5–4m)'],['scaffold','Állvány (4m+)']] },
-                ].map(({ key, label, options }) => (
-                  <div key={key} style={{ marginBottom: 14 }}>
-                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginBottom: 6 }}>{label}</div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {options.map(([val, lbl]) => (
-                        <button
-                          key={val}
-                          onClick={() => setContext(c => ({ ...c, [key]: val }))}
-                          style={{
-                            padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
-                            background: context[key] === val ? C.accentDim : C.bgCard,
-                            border: `1px solid ${context[key] === val ? C.accent : C.border}`,
-                            color: context[key] === val ? C.accent : C.textSub,
-                            fontFamily: 'Syne', fontWeight: 700, fontSize: 12, transition: 'all 0.15s',
-                          }}
-                        >
-                          {lbl}
-                        </button>
-                      ))}
+                {/* All CONTEXT_FACTORS grouped */}
+                {(() => {
+                  const groups = []
+                  const seen = new Set()
+                  for (const [, factorDef] of Object.entries(CONTEXT_FACTORS)) {
+                    if (!seen.has(factorDef.group)) {
+                      seen.add(factorDef.group)
+                      groups.push({ group: factorDef.group, groupLabel: factorDef.groupLabel })
+                    }
+                  }
+                  return groups.map(({ group, groupLabel }) => (
+                    <div key={group} style={{ padding: '12px 14px', marginBottom: 12, borderRadius: 8, background: C.bgCard, border: `1px solid ${C.border}` }}>
+                      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text, marginBottom: 12, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+                        {groupLabel}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {Object.entries(CONTEXT_FACTORS).filter(([, fd]) => fd.group === group).map(([factorKey, factorDef]) => {
+                          const selectedKey = context[factorKey] ?? factorDef.defaultKey
+                          const selectedOpt = factorDef.options.find(o => o.key === selectedKey) || factorDef.options[0]
+                          return (
+                            <div key={factorKey}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 11, color: C.text }}>{factorDef.label}</div>
+                                <div style={{ fontFamily: 'DM Mono', fontSize: 10,
+                                  color: selectedOpt.factor === 1.0 ? C.textSub : selectedOpt.factor < 1 ? C.accent : C.yellow,
+                                  background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: '2px 8px' }}>
+                                  ×{selectedOpt.factor.toFixed(2)}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {factorDef.options.map(opt => {
+                                  const active = opt.key === selectedKey
+                                  return (
+                                    <button key={opt.key}
+                                      onClick={() => setContext(c => ({ ...c, [factorKey]: opt.key }))}
+                                      style={{
+                                        flex: 1, minWidth: 80, padding: '6px 8px', borderRadius: 6, cursor: 'pointer',
+                                        textAlign: 'left', outline: 'none', transition: 'all 0.15s',
+                                        background: active ? C.accentDim : C.bg,
+                                        border: `1px solid ${active ? C.accent : C.border}`,
+                                      }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 1 }}>
+                                        <span style={{ fontSize: 11 }}>{opt.icon}</span>
+                                        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 10, color: active ? C.accent : C.text }}>{opt.label}</span>
+                                      </div>
+                                      <div style={{ fontFamily: 'DM Mono', fontSize: 8, color: C.textMuted }}>×{opt.factor.toFixed(2)}</div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                })()}
 
                 {/* ── Unit override ────────────────────────────────────── */}
                 {parsedDxf?.units && (

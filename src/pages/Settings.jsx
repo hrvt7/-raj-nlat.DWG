@@ -9,7 +9,7 @@ import { loadTemplates } from '../data/legendStore.js'
 const TABS = [
   { key: 'company',      label: 'Cégadatok' },
   { key: 'labor',        label: '⏱ Óradíjak' },
-  { key: 'productivity', label: '📊 Produktivitás' },
+  // Produktivitás moved to workspace Beállítás tab (per-plan)
   { key: 'materials',    label: 'Anyagárlista' },
   { key: 'overhead',     label: '🚗 Overhead' },
   { key: 'quote',        label: '📄 Ajánlat' },
@@ -65,9 +65,7 @@ export default function SettingsPage({ settings, onSettingsChange, materials, on
       {activeTab === 'materials' && (
         <MaterialsTab materials={materials} onMaterialsChange={onMaterialsChange} />
       )}
-      {activeTab === 'productivity' && (
-        <ProductivityTab settings={settings} update={updateSettings} />
-      )}
+      {/* Produktivitás tab moved to workspace */}
       {activeTab === 'overhead' && (
         <OverheadTab settings={settings} update={updateSettings} />
       )}
