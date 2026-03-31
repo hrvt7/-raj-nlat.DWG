@@ -383,11 +383,24 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     return () => { cancelled = true }
   }, [file])
 
-  // ── Render page (concurrency-safe: latest render wins) ──
+  // ── Render page (concurrency-safe: latest render wins, zoom-aware) ──
   const renderPageRef = useRef(null)   // current pdf.js RenderTask (for cancellation)
   const renderIdRef = useRef(0)        // monotonic sequence id — stale render detection
-  const renderPage = useCallback(async (doc, num) => {
+  const renderScaleRef = useRef(0)     // the scale actually rendered on pdfCanvasRef
+  const renderPage = useCallback(async (doc, num, opts = {}) => {
     if (!doc || !pdfCanvasRef.current) return
+
+    // Calculate effective render scale: match current zoom × devicePixelRatio
+    // so the backing bitmap has enough resolution for sharp display.
+    const dpr = window.devicePixelRatio || 1
+    const currentZoom = viewRef.current.zoom || 1
+    // Desired scale = zoom × dpr (each "CSS pixel" of the page = this many bitmap pixels)
+    // Capped to avoid excessive memory usage on extreme zoom
+    const MIN_SCALE = 2
+    const MAX_SCALE = 6
+    const desiredScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, currentZoom * dpr))
+    // If we already rendered at this scale (or higher) and this is a zoom-driven re-render, skip
+    if (opts.zoomDriven && renderScaleRef.current >= desiredScale * 0.85) return
 
     // Cancel any in-flight render before starting a new one
     if (renderPageRef.current) {
@@ -398,20 +411,19 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
     try {
       const page = await doc.getPage(num)
-      if (renderId !== renderIdRef.current) return // superseded while awaiting getPage
+      if (renderId !== renderIdRef.current) return
 
-      // Render at 3x for sharper display at high zoom levels (was 2x — visibly pixelated)
-      const RENDER_SCALE = 3
-      const viewport = page.getViewport({ scale: RENDER_SCALE, rotation: rotationRef.current })
-      // Store unrotated page dimensions for rotation-invariant coordinate conversion
-      const unrotVp = page.getViewport({ scale: RENDER_SCALE, rotation: 0 })
-      unrotatedDimsRef.current = { w: unrotVp.width / RENDER_SCALE, h: unrotVp.height / RENDER_SCALE }
+      const effectiveScale = desiredScale
+      const viewport = page.getViewport({ scale: effectiveScale, rotation: rotationRef.current })
+      const unrotVp = page.getViewport({ scale: effectiveScale, rotation: 0 })
+      unrotatedDimsRef.current = { w: unrotVp.width / effectiveScale, h: unrotVp.height / effectiveScale }
       const canvas = pdfCanvasRef.current
-      if (!canvas) return // unmounted during await
+      if (!canvas) return
       canvas.width = viewport.width
       canvas.height = viewport.height
-      viewRef.current.pageWidth = viewport.width / RENDER_SCALE
-      viewRef.current.pageHeight = viewport.height / RENDER_SCALE
+      viewRef.current.pageWidth = viewport.width / effectiveScale
+      viewRef.current.pageHeight = viewport.height / effectiveScale
+      renderScaleRef.current = effectiveScale
 
       const ctx = canvas.getContext('2d')
       const renderTask = page.render({ canvasContext: ctx, viewport })
@@ -419,14 +431,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       await renderTask.promise
       renderPageRef.current = null
 
-      if (renderId !== renderIdRef.current) return // superseded while rendering
+      if (renderId !== renderIdRef.current) return
 
-      // Fit view initially
-      if (containerRef.current) {
+      // Fit view initially (only on page/rotation change, not zoom-driven re-render)
+      if (!opts.zoomDriven && containerRef.current) {
         const cw = containerRef.current.clientWidth
         const ch = containerRef.current.clientHeight
-        const pw = viewport.width / RENDER_SCALE
-        const ph = viewport.height / RENDER_SCALE
+        const pw = viewport.width / effectiveScale
+        const ph = viewport.height / effectiveScale
         const zoom = Math.min(cw / pw, ch / ph) * 0.92
         viewRef.current.zoom = zoom
         viewRef.current.offsetX = (cw - pw * zoom) / 2
@@ -545,7 +557,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (pdfCanvasRef.current) {
       ctx.save()
       ctx.translate(v.offsetX, v.offsetY)
-      ctx.scale(v.zoom / 3, v.zoom / 3) // PDF rendered at 3x (RENDER_SCALE)
+      const rs = renderScaleRef.current || 3
+      ctx.scale(v.zoom / rs, v.zoom / rs) // PDF rendered at dynamic scale
       ctx.drawImage(pdfCanvasRef.current, 0, 0)
       ctx.restore()
     }
@@ -684,7 +697,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     // ── Auto Symbol: result markers (accepted = orange, rejected = dimmed red) ──
     if (autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
-      const ANALYSIS_SCALE = 3
+      const ANALYSIS_SCALE = 4
       for (const hit of autoSymbolResults) {
         const s = proj(hit.x, hit.y)
         // tpl.w/h are in analysis-scale pixels; convert to doc-scale for display
@@ -729,7 +742,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     // Auto-symbol done phase: click on a result to toggle accepted/rejected
     if (activeTool === 'auto-symbol' && autoSymbolPhase === 'done' && autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
-      const ANALYSIS_SCALE = 3
+      const ANALYSIS_SCALE = 4
       const halfW = tpl.w / ANALYSIS_SCALE / 2, halfH = tpl.h / ANALYSIS_SCALE / 2
       // Check if click is inside any result rectangle
       for (let i = 0; i < autoSymbolResults.length; i++) {
@@ -858,7 +871,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     setAutoSymbolError(null)
     setAutoSymbolResults([])
     try {
-      const ANALYSIS_SCALE = 3 // high-res raster for template matching
+      const ANALYSIS_SCALE = 4 // ~300 DPI high-res raster for template matching
       const page = await pdfDoc.getPage(pageNum)
       const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
@@ -921,31 +934,34 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const x2 = Math.max(r.x1, r.x2), y2 = Math.max(r.y1, r.y2)
       const w = x2 - x1, h = y2 - y1
       if (w < 8 || h < 8) { setAutoSymbolRect(null); setAutoSymbolError('A kijelölés túl kicsi.'); return }
-      // Convert screen coords to PDF canvas coords (scale=3 render)
-      const RENDER_SCALE = 3
-      const ANALYSIS_SCALE = 3 // match the search analysis render scale
+      // Convert screen coords to PDF doc coords, then render an on-demand analysis crop
+      const ANALYSIS_SCALE = 4 // ~300 DPI — match the search raster
       const v = viewRef.current
-      const cx1 = (x1 - v.offsetX) / v.zoom * RENDER_SCALE
-      const cy1 = (y1 - v.offsetY) / v.zoom * RENDER_SCALE
-      const cw = w / v.zoom * RENDER_SCALE
-      const ch = h / v.zoom * RENDER_SCALE
-      // Crop from PDF render canvas (3x resolution)
+      // Screen → doc coords for the crop rectangle
+      const doc1 = screenToPdf(x1, y1)
+      const doc2 = screenToPdf(x2, y2)
+      const docX = Math.min(doc1.x, doc2.x), docY = Math.min(doc1.y, doc2.y)
+      const docW = Math.abs(doc2.x - doc1.x), docH = Math.abs(doc2.y - doc1.y)
+      // Crop from on-demand high-res analysis raster (NOT the display canvas)
       try {
-        const ctx = pdfCanvasRef.current.getContext('2d')
-        const cropData = ctx.getImageData(Math.round(cx1), Math.round(cy1), Math.round(cw), Math.round(ch))
-        // Scale to match analysis scale (RENDER_SCALE → ANALYSIS_SCALE)
-        const tW = Math.round(cw / RENDER_SCALE * ANALYSIS_SCALE), tH = Math.round(ch / RENDER_SCALE * ANALYSIS_SCALE)
+        const analysisPage = await pdfDoc.getPage(pageNum)
+        const { imageData: fullImg, width: fullW } = await renderPageImageData(analysisPage, ANALYSIS_SCALE)
+        // Extract template region from analysis raster
+        const ax = Math.round(docX * ANALYSIS_SCALE), ay = Math.round(docY * ANALYSIS_SCALE)
+        const tW = Math.round(docW * ANALYSIS_SCALE), tH = Math.round(docH * ANALYSIS_SCALE)
         if (tW < 4 || tH < 4) { setAutoSymbolRect(null); setAutoSymbolError('A minta túl kicsi — jelölj ki nagyobb területet.'); return }
-        const tmpCanvas = document.createElement('canvas')
-        tmpCanvas.width = tW; tmpCanvas.height = tH
-        const tmpCtx = tmpCanvas.getContext('2d')
+        // Extract crop region from full analysis raster
         const cropCanvas = document.createElement('canvas')
-        cropCanvas.width = cropData.width; cropCanvas.height = cropData.height
-        cropCanvas.getContext('2d').putImageData(cropData, 0, 0)
-        tmpCtx.drawImage(cropCanvas, 0, 0, tW, tH)
-        const scaledData = tmpCtx.getImageData(0, 0, tW, tH)
+        cropCanvas.width = tW; cropCanvas.height = tH
+        const cropCtx = cropCanvas.getContext('2d')
+        // Put full image into temp canvas to use drawImage for cropping
+        const fullCanvas = document.createElement('canvas')
+        fullCanvas.width = fullImg.width; fullCanvas.height = fullImg.height
+        fullCanvas.getContext('2d').putImageData(fullImg, 0, 0)
+        cropCtx.drawImage(fullCanvas, ax, ay, tW, tH, 0, 0, tW, tH)
+        const croppedData = cropCtx.getImageData(0, 0, tW, tH)
         // Store raw RGBA for worker (worker does its own toGray)
-        autoSymbolTemplateRef.current = { cropData: scaledData.data, w: tW, h: tH }
+        autoSymbolTemplateRef.current = { cropData: croppedData.data, w: tW, h: tH }
         setAutoSymbolRect(null)
         // Go to area selection phase
         setAutoSymbolPhase('areaSelect')
@@ -982,6 +998,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     dragRef.current.dragging = false
   }, [autoSymbolPhase, autoSymbolRect, autoSymbolAreaRect, autoSymbolThreshold, runAutoSymbolSearch, screenToPdf])
 
+  // Debounced zoom-aware re-render (fires 400ms after zoom stops)
+  const zoomRerenderTimerRef = useRef(null)
   const handleWheel = useCallback((e) => {
     e.preventDefault()
     const rect = overlayRef.current?.getBoundingClientRect()
@@ -996,7 +1014,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.offsetY = sy - (sy - v.offsetY) * (newZoom / v.zoom)
     v.zoom = newZoom
     drawOverlay()
-  }, [drawOverlay])
+    // Schedule high-quality re-render after zoom settles
+    if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current)
+    zoomRerenderTimerRef.current = setTimeout(() => {
+      if (pdfDoc && pageNum > 0) renderPage(pdfDoc, pageNum, { zoomDriven: true })
+    }, 400)
+  }, [drawOverlay, pdfDoc, pageNum, renderPage])
 
   // Re-search when threshold changes (debounced)
   useEffect(() => {
@@ -1193,8 +1216,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
-        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlay() }}
-        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlay() }}
+        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlay(); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
+        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlay(); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
         onUndo={handleUndo} onClearAll={handleClearAll}
         onToggleCountPanel={() => setCountPanelOpen(!countPanelOpen)}
         countPanelOpen={countPanelOpen}
