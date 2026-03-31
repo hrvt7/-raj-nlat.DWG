@@ -233,7 +233,7 @@ function nonMaxSuppression(detections, tW, tH, overlapThreshold) {
 self.onmessage = (e) => {
   try {
     const { imgData, imgW, imgH, tplData, tplW, tplH, threshold, searchArea } = e.data
-    const effectiveThreshold = threshold || 0.75
+    const effectiveThreshold = threshold || 0.65
     const t0 = performance.now()
 
     // 1. Extract channels from RGBA

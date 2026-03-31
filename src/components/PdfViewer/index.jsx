@@ -156,7 +156,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score,accepted}] in PDF doc coords
   const [autoSymbolLabel, setAutoSymbolLabel] = useState('') // user label for finalization
   const [autoSymbolCategory, setAutoSymbolCategory] = useState('other') // category key for finalization
-  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.75)
+  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.65)
   const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
   const [autoSymbolSearchArea, setAutoSymbolSearchArea] = useState(null) // {x,y,w,h} in PDF doc coords or null (full page)
   const [autoSymbolAreaRect, setAutoSymbolAreaRect] = useState(null) // screen coords during area selection
@@ -1239,8 +1239,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         showCableRoutes={showCableRoutes}
         onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlay, 50) }}
         rotation={rotation}
-        onRotateLeft={() => { setRotation(r => (r - 90 + 360) % 360); if (autoSymbolActive) { setAutoSymbolResults([]); setAutoSymbolPhase('picking'); autoSymbolTemplateRef.current = null; setAutoSymbolError('Forgatás után válassz új mintát.') } }}
-        onRotateRight={() => { setRotation(r => (r + 90) % 360); if (autoSymbolActive) { setAutoSymbolResults([]); setAutoSymbolPhase('picking'); autoSymbolTemplateRef.current = null; setAutoSymbolError('Forgatás után válassz új mintát.') } }}
+        onRotateLeft={() => { setRotation(r => (r - 90 + 360) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
+        onRotateRight={() => { setRotation(r => (r + 90) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
         assemblies={assembliesProp}
         autoSymbolActive={autoSymbolActive}
         autoSymbolPhase={autoSymbolPhase}
@@ -1689,7 +1689,7 @@ function PdfToolbar({
           <>
             <label style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
               Küszöb
-              <input type="range" min="0.50" max="0.95" step="0.05" value={autoSymbolThreshold}
+              <input type="range" min="0.40" max="0.95" step="0.05" value={autoSymbolThreshold}
                 onChange={e => onAutoSymbolThresholdChange(parseFloat(e.target.value))}
                 style={{ width: 50, accentColor: '#FF8C42' }} />
               <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#FF8C42', width: 28 }}>{(autoSymbolThreshold * 100).toFixed(0)}%</span>
