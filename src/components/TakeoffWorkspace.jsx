@@ -2845,28 +2845,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   </div>
                 ))}
 
-                {/* ── Combined productivity multiplier ─────────────────── */}
-                {(() => {
-                  const factor = calcProductivityFactor(context || {})
-                  const pct = ((factor - 1) * 100).toFixed(0)
-                  const color = factor <= 1.0 ? C.accent : factor <= 1.3 ? C.yellow : C.red
-                  return (
-                    <div style={{
-                      padding: '10px 14px', marginBottom: 14, borderRadius: 8,
-                      background: C.bgCard, border: `1px solid ${C.border}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    }}>
-                      <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Kombinált szorzó</div>
-                      <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color }}>
-                        ×{factor.toFixed(2)}
-                        <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub, marginLeft: 6 }}>
-                          {factor > 1 ? `+${pct}%` : `${pct}%`}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })()}
-
                 {/* ── Unit override ────────────────────────────────────── */}
                 {parsedDxf?.units && (
                   <div style={{ marginBottom: 14 }}>
