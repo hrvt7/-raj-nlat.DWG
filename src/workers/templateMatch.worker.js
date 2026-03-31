@@ -66,6 +66,29 @@ function toHue(rgba, width, height) {
   return hue
 }
 
+// ── Rotate grayscale image 90° clockwise ────────────────────────────────────
+function rotate90(src, w, h) {
+  // 90° CW: new width = h, new height = w
+  const dst = new Float32Array(w * h)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      dst[x * h + (h - 1 - y)] = src[y * w + x]
+    }
+  }
+  return { data: dst, w: h, h: w }
+}
+
+// ── Mirror horizontally ─────────────────────────────────────────────────────
+function mirrorH(src, w, h) {
+  const dst = new Float32Array(w * h)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      dst[y * w + (w - 1 - x)] = src[y * w + x]
+    }
+  }
+  return dst
+}
+
 // ── Bilinear resize (grayscale Float32Array) ────────────────────────────────
 function resizeGray(src, srcW, srcH, dstW, dstH) {
   const dst = new Float32Array(dstW * dstH)
@@ -279,38 +302,44 @@ self.onmessage = (e) => {
     const tplArea = trimW * trimH
     const stride = tplArea > 2500 ? 4 : tplArea > 900 ? 3 : 2
 
-    // 5. Multi-scale dual-channel matching (±10%, 3 scales)
-    // PlanSwift uses "Scaled" mode — handles slight size differences
-    const SCALES = [0.90, 1.0, 1.10]
+    // 5. Multi-rotation matching (0°, 90°, 180°, 270° + mirror)
+    // Electrical symbols appear in multiple orientations on plans.
+    // This replaces multi-scale (rotation is more important than ±10% scale).
+    // Generate rotated + mirrored variants of the trimmed template
+    const variants = []
+    // 0° (original)
+    variants.push({ grayTpl: tGray, satTpl: tSat, w: trimW, h: trimH, label: '0°' })
+    // 90° CW
+    { const rg = rotate90(tGray, trimW, trimH); const rs = rotate90(tSat, trimW, trimH); variants.push({ grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, label: '90°' }) }
+    // 180°
+    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); variants.push({ grayTpl: rg2.data, satTpl: rs2.data, w: rg2.w, h: rg2.h, label: '180°' }) }
+    // 270° CW (= 90° CCW)
+    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rg3 = rotate90(rg2.data, rg2.w, rg2.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); const rs3 = rotate90(rs2.data, rs2.w, rs2.h); variants.push({ grayTpl: rg3.data, satTpl: rs3.data, w: rg3.w, h: rg3.h, label: '270°' }) }
+    // Mirror (horizontal flip of original)
+    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); variants.push({ grayTpl: mg, satTpl: ms, w: trimW, h: trimH, label: 'mirror' }) }
+    // Mirror + 90°
+    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); const rg = rotate90(mg, trimW, trimH); const rs = rotate90(ms, trimW, trimH); variants.push({ grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, label: 'mirror+90°' }) }
+
     let allHits = []
+    for (const variant of variants) {
+      if (variant.w < 4 || variant.h < 4 || variant.w >= imgW || variant.h >= imgH) continue
 
-    for (const scale of SCALES) {
-      let sGray = tGray, sSat = tSat, sW = trimW, sH = trimH
-
-      if (scale !== 1.0) {
-        sW = Math.round(trimW * scale)
-        sH = Math.round(trimH * scale)
-        if (sW < 4 || sH < 4 || sW >= imgW || sH >= imgH) continue
-        sGray = resizeGray(tGray, trimW, trimH, sW, sH)
-        sSat = resizeGray(tSat, trimW, trimH, sW, sH)
-      }
-
-      const scaleHits = matchDualChannel(
+      const variantHits = matchDualChannel(
         imgGray, imgSat, imgW, imgH,
-        sGray, sSat, sW, sH,
+        variant.grayTpl, variant.satTpl, variant.w, variant.h,
         satGray, satSatCh,
         effectiveThreshold, stride, searchArea
       )
 
-      for (const h of scaleHits) {
-        // Adjust position: center of the match at this scale → center at original scale
-        allHits.push({ x: h.x + (sW - trimW) / 2, y: h.y + (sH - trimH) / 2, score: h.score })
+      for (const h of variantHits) {
+        // Center the hit position to match the original template's center
+        allHits.push({ x: h.x + (variant.w - trimW) / 2, y: h.y + (variant.h - trimH) / 2, score: h.score })
       }
     }
 
-    // 6. Cross-scale NMS
+    // 6. Cross-rotation NMS — best-scoring hit wins per location
     allHits.sort((a, b) => b.score - a.score)
-    const hits = nonMaxSuppression(allHits, trimW, trimH, 0.5)
+    const hits = nonMaxSuppression(allHits, Math.max(trimW, trimH), Math.max(trimW, trimH), 0.5)
 
     // Adjust coords for trim offset
     for (const h of hits) {
@@ -320,7 +349,7 @@ self.onmessage = (e) => {
 
     const elapsed = Math.round(performance.now() - t0)
     const colorMode = tplSatStd > 0.03 ? 'color(60%)+gray(40%)' : 'gray-only'
-    console.log(`[TemplateMatch v6] ${allHits.length} raw (${SCALES.length} scales) → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
+    console.log(`[TemplateMatch v7] ${allHits.length} raw (${variants.length} orientations) → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
 
     self.postMessage({ type: 'result', hits })
   } catch (err) {
