@@ -16,7 +16,7 @@ export default function AssembliesPage({ activeTrade, session }) {
   const [catFilter, setCatFilter] = useState('all')
   const [hideVariants, setHideVariants] = useState(true) // Hide child variants by default
   const [tagFilter, setTagFilter] = useState(null)
-  const [aiPrompt, setAiPrompt] = useState('')
+  const [_aiPrompt, _setAiPrompt] = useState('') // reserved for future AI builder
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('tpro_asm_view') || 'grid')
   const [confirmState, setConfirmState] = useState(null)
   const toast = useToast()
@@ -136,40 +136,6 @@ export default function AssembliesPage({ activeTrade, session }) {
           <ViewToggle view={viewMode} onChange={v => { setViewMode(v); localStorage.setItem('tpro_asm_view', v) }} />
           <Button size="sm" onClick={handleCreate} icon="＋">Új assembly</Button>
         </div>
-      </div>
-
-      {/* AI Assembly Builder — not yet implemented */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(0,229,160,0.04) 0%, rgba(56,189,248,0.04) 100%)',
-        border: `1px solid rgba(0,229,160,0.10)`,
-        borderRadius: 12, padding: '12px 16px', marginBottom: 16,
-        display: 'flex', alignItems: 'center', gap: 12,
-        opacity: 0.6,
-      }}>
-        <span style={{ fontSize: 18, flexShrink: 0 }}>✦</span>
-        <input
-          value=""
-          readOnly
-          disabled
-          placeholder="AI Assembly Builder (hamarosan elérhető)..."
-          style={{
-            flex: 1, background: 'transparent', border: 'none',
-            fontFamily: 'DM Mono', fontSize: 12, color: C.textMuted, outline: 'none',
-            cursor: 'default',
-          }}
-        />
-        <button
-          onClick={handleAiSubmit}
-          disabled={!aiPrompt.trim()}
-          style={{
-            padding: '6px 14px', borderRadius: 8, cursor: aiPrompt.trim() ? 'pointer' : 'default',
-            background: aiPrompt.trim() ? C.accent : C.bgHover,
-            border: 'none', color: aiPrompt.trim() ? '#09090B' : C.textMuted,
-            fontFamily: 'Syne', fontWeight: 700, fontSize: 11,
-            opacity: aiPrompt.trim() ? 1 : 0.5,
-            transition: 'all 0.15s',
-          }}
-        >Generálás</button>
       </div>
 
       {/* Search + Filter */}
