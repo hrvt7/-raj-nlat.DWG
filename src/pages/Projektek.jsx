@@ -1159,22 +1159,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
           </div>
         )}
 
-        {plans.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: C.muted, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10 }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 12, opacity: 0.5 }}>
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-            <div style={{ fontSize: 14, fontFamily: 'Syne', fontWeight: 700, color: C.textSub, marginBottom: 6 }}>Még nincsenek tervrajzok</div>
-            <div style={{ fontSize: 11, fontFamily: 'DM Mono', color: C.muted, marginBottom: 14 }}>Töltsd fel az első PDF, DXF vagy DWG fájlt a kalkuláció elkezdéséhez.</div>
-            <button onClick={() => planInputRef.current?.click()} style={{
-              padding: '8px 20px', borderRadius: 7, border: 'none', cursor: 'pointer',
-              background: C.accent, color: '#09090B',
-              fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
-            }}>
-              Tervrajz feltöltése
-            </button>
-          </div>
-        )}
+        {/* Empty state removed — the upload drop zone above is sufficient */}
       </div>
     </div>
   )
