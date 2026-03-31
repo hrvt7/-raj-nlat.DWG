@@ -1,15 +1,20 @@
-// ─── Template Matching Web Worker (v4 — precision) ──────────────────────────
-// Sobel edge NCC with auto-trim and foreground-weighted scoring.
+// ─── Template Matching Web Worker (v5 — dual-channel precision) ─────────────
+// Color-aware NCC + grayscale NCC with auto-trim.
 //
-// Key precision improvements over v3:
-// 1. Auto-trim: template edges cropped to foreground bounding box + padding
-//    (removes empty background that diluted scores → fewer false positives)
-// 2. Foreground ratio filter: rejects matches where the image patch has
-//    too little edge content (catches uniform/empty regions)
-// 3. Single-scale only: multi-scale removed (±8% added noise, not precision)
-// 4. Adaptive stride based on template size
+// Key insight from research + real-world testing:
+// Electrical plan symbols are COLORED (cyan, red, green) on white/gray
+// background. Sobel edges treat all lines equally (walls, text, symbols)
+// → too many false positives. The COLOR CHANNEL is the strongest discriminator.
+//
+// Pipeline:
+// 1. Extract color-saturation channel (how "colorful" each pixel is)
+// 2. Auto-trim template on saturation foreground
+// 3. Run NCC on BOTH grayscale AND saturation channels
+// 4. Combined score = weighted average (saturation 60%, grayscale 40%)
+// 5. NMS to remove overlaps
 
-// ── Grayscale ───────────────────────────────────────────────────────────────
+// ── Color channels ──────────────────────────────────────────────────────────
+
 function toGray(rgba, width, height) {
   const gray = new Float32Array(width * height)
   for (let i = 0; i < width * height; i++) {
@@ -18,37 +23,56 @@ function toGray(rgba, width, height) {
   return gray
 }
 
-// ── Sobel edge magnitude (3×3) → normalized [0,1] ──────────────────────────
-function sobelEdges(gray, w, h) {
-  const edges = new Float32Array(w * h)
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const gx =
-        -gray[(y-1)*w+(x-1)] + gray[(y-1)*w+(x+1)]
-        -2*gray[y*w+(x-1)] + 2*gray[y*w+(x+1)]
-        -gray[(y+1)*w+(x-1)] + gray[(y+1)*w+(x+1)]
-      const gy =
-        -gray[(y-1)*w+(x-1)] - 2*gray[(y-1)*w+x] - gray[(y-1)*w+(x+1)]
-        +gray[(y+1)*w+(x-1)] + 2*gray[(y+1)*w+x] + gray[(y+1)*w+(x+1)]
-      edges[y * w + x] = Math.sqrt(gx * gx + gy * gy)
+// Saturation channel: how "colorful" is each pixel (0=gray/white/black, 1=vivid color)
+// This is the KEY discriminator on electrical plans where symbols are colored
+// and background/walls/text are grayscale.
+function toSaturation(rgba, width, height) {
+  const sat = new Float32Array(width * height)
+  for (let i = 0; i < width * height; i++) {
+    const r = rgba[i * 4] / 255
+    const g = rgba[i * 4 + 1] / 255
+    const b = rgba[i * 4 + 2] / 255
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    // HSL saturation: chroma / (1 - |2L - 1|)
+    const l = (max + min) / 2
+    if (max === min) {
+      sat[i] = 0 // achromatic (gray/white/black)
+    } else {
+      const chroma = max - min
+      sat[i] = chroma / (1 - Math.abs(2 * l - 1))
     }
   }
-  let maxVal = 0
-  for (let i = 0; i < edges.length; i++) if (edges[i] > maxVal) maxVal = edges[i]
-  if (maxVal > 0) for (let i = 0; i < edges.length; i++) edges[i] /= maxVal
-  return edges
+  return sat
 }
 
-// ── Auto-trim: crop edge image to foreground bounding box + padding ─────────
-// This is the KEY precision fix: the user's crop rectangle often includes
-// lots of empty background. In edge space, background = 0. We find the
-// tight bounding box of non-zero (foreground) pixels and crop to it.
-function autoTrimEdges(edges, w, h, padding) {
-  const EDGE_THRESHOLD = 0.05 // pixel considered "foreground" if edge > this
+// Hue channel (0-1, cyclic) — useful for distinguishing red vs cyan vs green symbols
+function toHue(rgba, width, height) {
+  const hue = new Float32Array(width * height)
+  for (let i = 0; i < width * height; i++) {
+    const r = rgba[i * 4] / 255
+    const g = rgba[i * 4 + 1] / 255
+    const b = rgba[i * 4 + 2] / 255
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const chroma = max - min
+    if (chroma < 0.05) { hue[i] = -1; continue } // achromatic → mark invalid
+    let h = 0
+    if (max === r) h = ((g - b) / chroma + 6) % 6
+    else if (max === g) h = (b - r) / chroma + 2
+    else h = (r - g) / chroma + 4
+    hue[i] = h / 6 // normalize to [0,1]
+  }
+  return hue
+}
+
+// ── Auto-trim on saturation foreground ──────────────────────────────────────
+function autoTrim(channel, w, h, padding, fgThreshold) {
+  const thresh = fgThreshold || 0.08
   let minX = w, minY = h, maxX = 0, maxY = 0
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (edges[y * w + x] > EDGE_THRESHOLD) {
+      if (channel[y * w + x] > thresh) {
         if (x < minX) minX = x
         if (x > maxX) maxX = x
         if (y < minY) minY = y
@@ -56,25 +80,23 @@ function autoTrimEdges(edges, w, h, padding) {
       }
     }
   }
-  // If no foreground found, return original
-  if (maxX <= minX || maxY <= minY) return { trimmed: edges, tw: w, th: h, offX: 0, offY: 0 }
-
-  // Add padding (but stay within bounds)
-  const pad = padding || 2
+  if (maxX <= minX || maxY <= minY) return { offX: 0, offY: 0, tw: w, th: h }
+  const pad = padding || 3
   minX = Math.max(0, minX - pad)
   minY = Math.max(0, minY - pad)
   maxX = Math.min(w - 1, maxX + pad)
   maxY = Math.min(h - 1, maxY + pad)
+  return { offX: minX, offY: minY, tw: maxX - minX + 1, th: maxY - minY + 1 }
+}
 
-  const tw = maxX - minX + 1
-  const th = maxY - minY + 1
-  const trimmed = new Float32Array(tw * th)
+function cropRegion(src, srcW, offX, offY, tw, th) {
+  const dst = new Float32Array(tw * th)
   for (let y = 0; y < th; y++) {
     for (let x = 0; x < tw; x++) {
-      trimmed[y * tw + x] = edges[(minY + y) * w + (minX + x)]
+      dst[y * tw + x] = src[(offY + y) * srcW + (offX + x)]
     }
   }
-  return { trimmed, tw, th, offX: minX, offY: minY }
+  return dst
 }
 
 // ── Summed Area Table ───────────────────────────────────────────────────────
@@ -98,24 +120,45 @@ function satSum(sat, w, x1, y1, x2, y2) {
   return sat[(y2+1)*sw+(x2+1)] - sat[y1*sw+(x2+1)] - sat[(y2+1)*sw+x1] + sat[y1*sw+x1]
 }
 
-// ── NCC matching with foreground-ratio filter ───────────────────────────────
-function matchTemplate(imgEdges, iW, iH, tplEdges, tW, tH, satData, threshold, stride, searchArea, minFgRatio) {
-  const { sat, sat2 } = satData
+// ── Single-channel NCC ──────────────────────────────────────────────────────
+function nccAtPosition(img, iW, tpl, tW, tH, x, y, iMean, iStd, tMean, tStd, N) {
+  let ncc = 0
+  for (let ty = 0; ty < tH; ty++) {
+    for (let tx = 0; tx < tW; tx++) {
+      ncc += (img[(y + ty) * iW + (x + tx)] - iMean) * (tpl[ty * tW + tx] - tMean)
+    }
+  }
+  return ncc / (N * iStd * tStd)
+}
+
+// ── Dual-channel matching ───────────────────────────────────────────────────
+function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
+                           satGray, satSatCh, threshold, stride, searchArea) {
   const N = tW * tH
 
-  // Template stats
-  let tSum = 0
-  for (let i = 0; i < N; i++) tSum += tplEdges[i]
-  const tMean = tSum / N
-  let tVar = 0
-  for (let i = 0; i < N; i++) { const d = tplEdges[i] - tMean; tVar += d * d }
-  const tStd = Math.sqrt(tVar / N)
-  if (tStd < 0.02) return []
+  // Template stats — grayscale
+  let tSumG = 0
+  for (let i = 0; i < N; i++) tSumG += tplGray[i]
+  const tMeanG = tSumG / N
+  let tVarG = 0
+  for (let i = 0; i < N; i++) { const d = tplGray[i] - tMeanG; tVarG += d * d }
+  const tStdG = Math.sqrt(tVarG / N)
 
-  // Template foreground pixel count (for reference)
-  let tplFgCount = 0
-  for (let i = 0; i < N; i++) if (tplEdges[i] > 0.05) tplFgCount++
-  const tplFgRatio = tplFgCount / N
+  // Template stats — saturation
+  let tSumS = 0
+  for (let i = 0; i < N; i++) tSumS += tplSat[i]
+  const tMeanS = tSumS / N
+  let tVarS = 0
+  for (let i = 0; i < N; i++) { const d = tplSat[i] - tMeanS; tVarS += d * d }
+  const tStdS = Math.sqrt(tVarS / N)
+
+  // Determine if template has significant color content
+  const hasColor = tStdS > 0.03
+  // Weight: if template is colorful, saturation channel dominates
+  const wSat = hasColor ? 0.6 : 0.0
+  const wGray = hasColor ? 0.4 : 1.0
+
+  if (tStdG < 0.01 && tStdS < 0.01) return [] // uniform template
 
   const detections = []
   const startX = searchArea ? Math.max(0, searchArea.x) : 0
@@ -123,32 +166,45 @@ function matchTemplate(imgEdges, iW, iH, tplEdges, tW, tH, satData, threshold, s
   const endX = searchArea ? Math.min(iW - tW, searchArea.x + searchArea.w - tW) : iW - tW
   const endY = searchArea ? Math.min(iH - tH, searchArea.y + searchArea.h - tH) : iH - tH
 
-  // Minimum foreground content in image patch to even consider matching
-  // This skips empty/uniform regions instantly (the main false positive source)
-  const requiredFgRatio = Math.max(minFgRatio || 0.3, tplFgRatio * 0.4)
-
   for (let y = startY; y <= endY; y += stride) {
     for (let x = startX; x <= endX; x += stride) {
-      // Quick foreground check using SAT (mean edge value as proxy)
-      const patchSum = satSum(sat, iW, x, y, x + tW - 1, y + tH - 1)
-      const patchMean = patchSum / N
-      // If patch mean is too low, it's mostly background → skip
-      if (patchMean < requiredFgRatio * tMean * 0.5) continue
+      // Quick check: if template is colorful, skip patches with no color
+      if (hasColor) {
+        const patchSatSum = satSum(satSatCh.sat, iW, x, y, x + tW - 1, y + tH - 1)
+        const patchSatMean = patchSatSum / N
+        if (patchSatMean < tMeanS * 0.2) continue // too little color → skip
+      }
 
-      const patchSum2 = satSum(sat2, iW, x, y, x + tW - 1, y + tH - 1)
-      const iMean = patchMean
-      const iVar = patchSum2 / N - iMean * iMean
-      const iStd = Math.sqrt(Math.max(0, iVar))
-      if (iStd < 0.02) continue
-
-      let ncc = 0
-      for (let ty = 0; ty < tH; ty++) {
-        for (let tx = 0; tx < tW; tx++) {
-          ncc += (imgEdges[(y + ty) * iW + (x + tx)] - iMean) * (tplEdges[ty * tW + tx] - tMean)
+      // Grayscale NCC
+      let scoreG = 0
+      if (tStdG > 0.01) {
+        const pSumG = satSum(satGray.sat, iW, x, y, x + tW - 1, y + tH - 1)
+        const pSum2G = satSum(satGray.sat2, iW, x, y, x + tW - 1, y + tH - 1)
+        const iMeanG = pSumG / N
+        const iVarG = pSum2G / N - iMeanG * iMeanG
+        const iStdG = Math.sqrt(Math.max(0, iVarG))
+        if (iStdG > 0.01) {
+          scoreG = nccAtPosition(imgGray, iW, tplGray, tW, tH, x, y, iMeanG, iStdG, tMeanG, tStdG, N)
         }
       }
-      ncc /= (N * iStd * tStd)
-      if (ncc >= threshold) detections.push({ x, y, score: ncc })
+
+      // Saturation NCC
+      let scoreS = 0
+      if (hasColor && tStdS > 0.01) {
+        const pSumS = satSum(satSatCh.sat, iW, x, y, x + tW - 1, y + tH - 1)
+        const pSum2S = satSum(satSatCh.sat2, iW, x, y, x + tW - 1, y + tH - 1)
+        const iMeanS = pSumS / N
+        const iVarS = pSum2S / N - iMeanS * iMeanS
+        const iStdS = Math.sqrt(Math.max(0, iVarS))
+        if (iStdS > 0.01) {
+          scoreS = nccAtPosition(imgSat, iW, tplSat, tW, tH, x, y, iMeanS, iStdS, tMeanS, tStdS, N)
+        }
+      }
+
+      const combined = wGray * scoreG + wSat * scoreS
+      if (combined >= threshold) {
+        detections.push({ x, y, score: combined })
+      }
     }
   }
 
@@ -180,37 +236,53 @@ self.onmessage = (e) => {
     const effectiveThreshold = threshold || 0.75
     const t0 = performance.now()
 
-    // 1. Grayscale
+    // 1. Extract channels from RGBA
     const imgGray = toGray(imgData, imgW, imgH)
+    const imgSat = toSaturation(imgData, imgW, imgH)
     const tplGray = toGray(tplData, tplW, tplH)
+    const tplSat = toSaturation(tplData, tplW, tplH)
 
-    // 2. Sobel edges
-    const imgEdges = sobelEdges(imgGray, imgW, imgH)
-    const tplEdges = sobelEdges(tplGray, tplW, tplH)
+    // 2. Auto-trim on saturation (if template is colorful) or grayscale variance
+    let tplSatStd = 0
+    { let s = 0; for (let i = 0; i < tplW * tplH; i++) s += tplSat[i]; const m = s / (tplW * tplH); let v = 0; for (let i = 0; i < tplW * tplH; i++) { const d = tplSat[i] - m; v += d * d }; tplSatStd = Math.sqrt(v / (tplW * tplH)) }
+    const trimChannel = tplSatStd > 0.03 ? tplSat : imgGray // trim by color if colorful, else by luminance
+    const trimThreshold = tplSatStd > 0.03 ? 0.08 : 0.15
+    const { offX, offY, tw: trimW, th: trimH } = autoTrim(
+      tplSatStd > 0.03 ? tplSat : tplGray, tplW, tplH, 3, trimThreshold
+    )
 
-    // 3. Auto-trim template to foreground bbox (removes empty background)
-    const { trimmed: trimmedTpl, tw: trimW, th: trimH, offX, offY } = autoTrimEdges(tplEdges, tplW, tplH, 3)
-    const trimRatio = (trimW * trimH) / (tplW * tplH)
+    // Crop both channels to the trimmed region
+    const tGray = cropRegion(tplGray, tplW, offX, offY, trimW, trimH)
+    const tSat = cropRegion(tplSat, tplW, offX, offY, trimW, trimH)
 
-    // 4. Build SAT on image edges
-    const imgSAT = buildSAT(imgEdges, imgW, imgH)
+    // 3. Build SATs for image channels
+    const satGray = buildSAT(imgGray, imgW, imgH)
+    const satSatCh = buildSAT(imgSat, imgW, imgH)
 
-    // 5. Single-scale matching (multi-scale removed — added noise, not precision)
+    // 4. Adaptive stride
     const tplArea = trimW * trimH
     const stride = tplArea > 2500 ? 4 : tplArea > 900 ? 3 : 2
 
-    const rawHits = matchTemplate(imgEdges, imgW, imgH, trimmedTpl, trimW, trimH, imgSAT, effectiveThreshold, stride, searchArea)
+    // 5. Dual-channel matching
+    const rawHits = matchDualChannel(
+      imgGray, imgSat, imgW, imgH,
+      tGray, tSat, trimW, trimH,
+      satGray, satSatCh,
+      effectiveThreshold, stride, searchArea
+    )
+
+    // 6. NMS
     const hits = nonMaxSuppression(rawHits, trimW, trimH, 0.5)
 
-    // Adjust hit coordinates: add back the trim offset so they point to
-    // the center of the ORIGINAL (untrimmed) template region
+    // Adjust coords for trim offset
     for (const h of hits) {
       h.x -= offX
       h.y -= offY
     }
 
     const elapsed = Math.round(performance.now() - t0)
-    console.log(`[TemplateMatch v4] ${rawHits.length} raw → ${hits.length} NMS | trim ${(trimRatio*100).toFixed(0)}% (${tplW}x${tplH}→${trimW}x${trimH}) | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
+    const colorMode = tplSatStd > 0.03 ? 'color(60%)+gray(40%)' : 'gray-only'
+    console.log(`[TemplateMatch v5] ${rawHits.length} raw → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
 
     self.postMessage({ type: 'result', hits })
   } catch (err) {
