@@ -100,8 +100,10 @@ self.onmessage = (e) => {
     const imgGray = toGray(imgData, imgW, imgH)
     const tplGray = toGray(tplData, tplW, tplH)
     const sat = buildSAT(imgGray, imgW, imgH)
-    const rawHits = matchTemplate(imgGray, imgW, imgH, tplGray, tplW, tplH, sat, threshold || 0.55, 2, searchArea)
-    const hits = nonMaxSuppression(rawHits, tplW, tplH, 0.3)
+    const effectiveThreshold = threshold || 0.75
+    const rawHits = matchTemplate(imgGray, imgW, imgH, tplGray, tplW, tplH, sat, effectiveThreshold, 3, searchArea)
+    const hits = nonMaxSuppression(rawHits, tplW, tplH, 0.5)
+    console.log(`[TemplateMatch] ${rawHits.length} raw → ${hits.length} after NMS (threshold=${effectiveThreshold}, stride=3, IoU=0.5, tpl=${tplW}x${tplH}, img=${imgW}x${imgH})`)
 
     self.postMessage({ type: 'result', hits })
   } catch (err) {

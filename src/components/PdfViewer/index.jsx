@@ -156,7 +156,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score,accepted}] in PDF doc coords
   const [autoSymbolLabel, setAutoSymbolLabel] = useState('') // user label for finalization
   const [autoSymbolCategory, setAutoSymbolCategory] = useState('other') // category key for finalization
-  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.55)
+  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.75)
   const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
   const [autoSymbolSearchArea, setAutoSymbolSearchArea] = useState(null) // {x,y,w,h} in PDF doc coords or null (full page)
   const [autoSymbolAreaRect, setAutoSymbolAreaRect] = useState(null) // screen coords during area selection
@@ -1679,7 +1679,7 @@ function PdfToolbar({
           <>
             <label style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
               Küszöb
-              <input type="range" min="0.3" max="0.9" step="0.05" value={autoSymbolThreshold}
+              <input type="range" min="0.50" max="0.95" step="0.05" value={autoSymbolThreshold}
                 onChange={e => onAutoSymbolThresholdChange(parseFloat(e.target.value))}
                 style={{ width: 50, accentColor: '#FF8C42' }} />
               <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#FF8C42', width: 28 }}>{(autoSymbolThreshold * 100).toFixed(0)}%</span>
