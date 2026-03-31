@@ -751,6 +751,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const sy = e.clientY - rect.top
     const pdf = screenToPdf(sx, sy)
 
+    // GLOBAL: middle mouse (button 1) or Shift+click ALWAYS pans, regardless of tool
+    if (e.button === 1 || (e.shiftKey && activeTool)) {
+      dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, startOX: viewRef.current.offsetX, startOY: viewRef.current.offsetY }
+      return
+    }
+
     // Auto-symbol done phase: click on a result to toggle accepted/rejected
     if (activeTool === 'auto-symbol' && autoSymbolPhase === 'done' && autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
@@ -1390,6 +1396,47 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           onMouseLeave={handleMouseUp}
           /* wheel handled via useEffect with { passive: false } to allow preventDefault */
         />
+
+        {/* Scrollbars — visible scroll indicators for pan navigation */}
+        {viewRef.current.pageWidth > 0 && (() => {
+          const v = viewRef.current
+          const cw = containerRef.current?.clientWidth || 1
+          const ch = containerRef.current?.clientHeight || 1
+          const pw = v.pageWidth * v.zoom
+          const ph = v.pageHeight * v.zoom
+          // Horizontal scrollbar
+          const hThumbW = Math.max(30, Math.min(cw, cw * cw / Math.max(pw, cw)))
+          const hRange = cw - hThumbW
+          const hPos = pw > cw ? hRange * Math.max(0, Math.min(1, -v.offsetX / (pw - cw))) : 0
+          // Vertical scrollbar
+          const vThumbH = Math.max(30, Math.min(ch, ch * ch / Math.max(ph, ch)))
+          const vRange = ch - vThumbH
+          const vPos = ph > ch ? vRange * Math.max(0, Math.min(1, -v.offsetY / (ph - ch))) : 0
+          const showH = pw > cw * 1.1
+          const showV = ph > ch * 1.1
+          return <>
+            {showH && <div style={{
+              position: 'absolute', bottom: 4, left: 4, right: showV ? 16 : 4, height: 8,
+              borderRadius: 4, background: 'rgba(255,255,255,0.05)', zIndex: 6, pointerEvents: 'none',
+            }}>
+              <div style={{
+                position: 'absolute', top: 1, height: 6, borderRadius: 3,
+                background: 'rgba(255,255,255,0.2)', width: hThumbW, left: hPos,
+                transition: 'left 0.1s ease-out',
+              }} />
+            </div>}
+            {showV && <div style={{
+              position: 'absolute', top: 4, right: 4, bottom: showH ? 16 : 4, width: 8,
+              borderRadius: 4, background: 'rgba(255,255,255,0.05)', zIndex: 6, pointerEvents: 'none',
+            }}>
+              <div style={{
+                position: 'absolute', left: 1, width: 6, borderRadius: 3,
+                background: 'rgba(255,255,255,0.2)', height: vThumbH, top: vPos,
+                transition: 'top 0.1s ease-out',
+              }} />
+            </div>}
+          </>
+        })()}
 
         {/* Loading */}
         {loading && (
