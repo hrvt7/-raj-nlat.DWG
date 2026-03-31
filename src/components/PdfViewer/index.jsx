@@ -769,8 +769,10 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           return
         }
       }
-      // Click outside results in done phase — just pan
-      dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, startOX: viewRef.current.offsetX, startOY: viewRef.current.offsetY }
+      // Click outside results in done phase — add manual marker at this position
+      // This lets the user manually add missing symbols that the matcher didn't find
+      setAutoSymbolResults(prev => [...prev, { x: pdf.x, y: pdf.y, score: 1.0, accepted: true, idx: prev.length, manual: true }])
+      setRenderTick(t => t + 1)
       return
     }
 
