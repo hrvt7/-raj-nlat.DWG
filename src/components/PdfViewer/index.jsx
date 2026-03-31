@@ -400,16 +400,18 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const page = await doc.getPage(num)
       if (renderId !== renderIdRef.current) return // superseded while awaiting getPage
 
-      const viewport = page.getViewport({ scale: 2, rotation: rotationRef.current }) // hi-dpi + rotation
+      // Render at 3x for sharper display at high zoom levels (was 2x — visibly pixelated)
+      const RENDER_SCALE = 3
+      const viewport = page.getViewport({ scale: RENDER_SCALE, rotation: rotationRef.current })
       // Store unrotated page dimensions for rotation-invariant coordinate conversion
-      const unrotVp = page.getViewport({ scale: 2, rotation: 0 })
-      unrotatedDimsRef.current = { w: unrotVp.width / 2, h: unrotVp.height / 2 }
+      const unrotVp = page.getViewport({ scale: RENDER_SCALE, rotation: 0 })
+      unrotatedDimsRef.current = { w: unrotVp.width / RENDER_SCALE, h: unrotVp.height / RENDER_SCALE }
       const canvas = pdfCanvasRef.current
       if (!canvas) return // unmounted during await
       canvas.width = viewport.width
       canvas.height = viewport.height
-      viewRef.current.pageWidth = viewport.width / 2
-      viewRef.current.pageHeight = viewport.height / 2
+      viewRef.current.pageWidth = viewport.width / RENDER_SCALE
+      viewRef.current.pageHeight = viewport.height / RENDER_SCALE
 
       const ctx = canvas.getContext('2d')
       const renderTask = page.render({ canvasContext: ctx, viewport })
@@ -423,8 +425,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (containerRef.current) {
         const cw = containerRef.current.clientWidth
         const ch = containerRef.current.clientHeight
-        const pw = viewport.width / 2
-        const ph = viewport.height / 2
+        const pw = viewport.width / RENDER_SCALE
+        const ph = viewport.height / RENDER_SCALE
         const zoom = Math.min(cw / pw, ch / ph) * 0.92
         viewRef.current.zoom = zoom
         viewRef.current.offsetX = (cw - pw * zoom) / 2
@@ -543,7 +545,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (pdfCanvasRef.current) {
       ctx.save()
       ctx.translate(v.offsetX, v.offsetY)
-      ctx.scale(v.zoom / 2, v.zoom / 2) // PDF rendered at 2x
+      ctx.scale(v.zoom / 3, v.zoom / 3) // PDF rendered at 3x (RENDER_SCALE)
       ctx.drawImage(pdfCanvasRef.current, 0, 0)
       ctx.restore()
     }
@@ -682,10 +684,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     // ── Auto Symbol: result markers (accepted = orange, rejected = dimmed red) ──
     if (autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
+      const ANALYSIS_SCALE = 3
       for (const hit of autoSymbolResults) {
         const s = proj(hit.x, hit.y)
-        const halfW = (tpl.w / 2) * v.zoom
-        const halfH = (tpl.h / 2) * v.zoom
+        // tpl.w/h are in analysis-scale pixels; convert to doc-scale for display
+        const halfW = (tpl.w / ANALYSIS_SCALE / 2) * v.zoom
+        const halfH = (tpl.h / ANALYSIS_SCALE / 2) * v.zoom
         const color = hit.accepted ? '#FF8C42' : '#FF6B6B'
         const alpha = hit.accepted ? 1 : 0.3
         ctx.globalAlpha = alpha
@@ -725,7 +729,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     // Auto-symbol done phase: click on a result to toggle accepted/rejected
     if (activeTool === 'auto-symbol' && autoSymbolPhase === 'done' && autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
-      const halfW = tpl.w / 2, halfH = tpl.h / 2
+      const ANALYSIS_SCALE = 3
+      const halfW = tpl.w / ANALYSIS_SCALE / 2, halfH = tpl.h / ANALYSIS_SCALE / 2
       // Check if click is inside any result rectangle
       for (let i = 0; i < autoSymbolResults.length; i++) {
         const hit = autoSymbolResults[i]
@@ -853,8 +858,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     setAutoSymbolError(null)
     setAutoSymbolResults([])
     try {
+      const ANALYSIS_SCALE = 3 // high-res raster for template matching
       const page = await pdfDoc.getPage(pageNum)
-      const { imageData, width, height } = await renderPageImageData(page, 1)
+      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
 
       // Abort any previous worker
@@ -868,21 +874,29 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           else reject(new Error(e.data.message || 'Worker hiba'))
         }
         worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
+        // Convert search area from doc coords to analysis-scale pixel coords
+        const scaledArea = searchArea ? {
+          x: Math.round(searchArea.x * ANALYSIS_SCALE),
+          y: Math.round(searchArea.y * ANALYSIS_SCALE),
+          w: Math.round(searchArea.w * ANALYSIS_SCALE),
+          h: Math.round(searchArea.h * ANALYSIS_SCALE),
+        } : null
         worker.postMessage({
           imgData: imageData.data,
           imgW: width, imgH: height,
           tplData: cropData,
           tplW: tW, tplH: tH,
           threshold,
-          searchArea: searchArea || null,
+          searchArea: scaledArea,
         })
       })
 
       // Stale result guard — if a newer search was started, discard this result
       if (autoSymbolSearchIdRef.current !== mySearchId) return
 
+      // Convert from analysis-scale pixel coords back to doc coords (scale=1)
       const results = result.map((h, i) => ({
-        x: h.x + tW / 2, y: h.y + tH / 2, score: h.score, accepted: true, idx: i,
+        x: (h.x + tW / 2) / ANALYSIS_SCALE, y: (h.y + tH / 2) / ANALYSIS_SCALE, score: h.score, accepted: true, idx: i,
       }))
       setAutoSymbolResults(results)
       setAutoSymbolPhase('done')
@@ -907,18 +921,20 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const x2 = Math.max(r.x1, r.x2), y2 = Math.max(r.y1, r.y2)
       const w = x2 - x1, h = y2 - y1
       if (w < 8 || h < 8) { setAutoSymbolRect(null); setAutoSymbolError('A kijelölés túl kicsi.'); return }
-      // Convert screen coords to PDF canvas coords (scale=2 render)
+      // Convert screen coords to PDF canvas coords (scale=3 render)
+      const RENDER_SCALE = 3
+      const ANALYSIS_SCALE = 3 // match the search analysis render scale
       const v = viewRef.current
-      const cx1 = (x1 - v.offsetX) / v.zoom * 2
-      const cy1 = (y1 - v.offsetY) / v.zoom * 2
-      const cw = w / v.zoom * 2
-      const ch = h / v.zoom * 2
-      // Crop from PDF render canvas
+      const cx1 = (x1 - v.offsetX) / v.zoom * RENDER_SCALE
+      const cy1 = (y1 - v.offsetY) / v.zoom * RENDER_SCALE
+      const cw = w / v.zoom * RENDER_SCALE
+      const ch = h / v.zoom * RENDER_SCALE
+      // Crop from PDF render canvas (3x resolution)
       try {
         const ctx = pdfCanvasRef.current.getContext('2d')
         const cropData = ctx.getImageData(Math.round(cx1), Math.round(cy1), Math.round(cw), Math.round(ch))
-        // Scale to match search scale (scale=1 = half the render canvas which is scale=2)
-        const tW = Math.round(cw / 2), tH = Math.round(ch / 2)
+        // Scale to match analysis scale (RENDER_SCALE → ANALYSIS_SCALE)
+        const tW = Math.round(cw / RENDER_SCALE * ANALYSIS_SCALE), tH = Math.round(ch / RENDER_SCALE * ANALYSIS_SCALE)
         if (tW < 4 || tH < 4) { setAutoSymbolRect(null); setAutoSymbolError('A minta túl kicsi — jelölj ki nagyobb területet.'); return }
         const tmpCanvas = document.createElement('canvas')
         tmpCanvas.width = tW; tmpCanvas.height = tH
