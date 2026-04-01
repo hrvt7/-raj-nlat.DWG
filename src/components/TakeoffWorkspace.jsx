@@ -29,7 +29,7 @@ import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote } from '../data
 import { createQuote } from '../utils/createQuote.js'
 import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
-import { WALL_FACTORS, calcProductivityFactor, CONTEXT_FACTORS } from '../data/workItemsDb.js'
+import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
 import { normalizeMarkers } from '../utils/markerModel.js'
@@ -53,6 +53,7 @@ import { C } from './takeoff/designTokens.js'
 // ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
 import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, detectDxfCableLengths } from '../utils/blockRecognition.js'
 import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows } from '../utils/takeoffRows.js'
+import { computeFullCalc, computeUnitCostByAsmByWall } from '../utils/fullCalc.js'
 
 // computePricing is imported from '../utils/pricing.js' — shared with MergePlansView
 
@@ -706,83 +707,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode })
   }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode])
 
-  // ── Extended calc (adds markup/margin, cable $/m override, VAT, NECA badge) ──
+  // ── Extended calc (markup/margin, cable $/m, VAT — extracted to utils/fullCalc.js) ──
   const fullCalc = useMemo(() => {
-    if (!pricing) return null
-    const productivityFactor = calcProductivityFactor(context || {})
-    // Cable cost from cable price per meter
-    const cableTotalM = cableEstimate?.cable_total_m || 0
-    const cableCost = cableTotalM * cablePricePerM
-    // Recalculate subtotal with explicit cable cost
-    const subtotal = pricing.materialCost + pricing.laborCost + cableCost
-    // Markup vs margin
-    let grandTotal
-    const markupPct = markup * 100
-    if (markupType === 'margin') {
-      const marginRatio = markupPct / 100
-      grandTotal = marginRatio >= 1 ? subtotal * 10 : subtotal / (1 - marginRatio)
-    } else {
-      grandTotal = subtotal * (1 + markupPct / 100)
-    }
-    if (!Number.isFinite(grandTotal)) grandTotal = subtotal
-    const markupAmount = grandTotal - subtotal
-    const bruttoTotal = grandTotal * (1 + vatPercent / 100)
-    // Group pricing lines by systemType for per-category breakdown
-    const bySystem = {}
-    for (const line of (pricing.lines || [])) {
-      const sys = line.systemType || 'general'
-      if (!bySystem[sys]) bySystem[sys] = { materialCost: 0, laborHours: 0, lines: [] }
-      bySystem[sys].materialCost += line.materialCost || 0
-      bySystem[sys].laborHours += line.hours || 0
-      bySystem[sys].lines.push(line)
-    }
-    // Group by assembly for summary (dedup: only compute once per unique asmId;
-    // last-row-wins semantics preserved — map[asmId] was overwritten anyway)
-    const lastByAsm = {}
-    for (const row of takeoffRows) lastByAsm[row.asmId] = row
-    const byAssembly = {}
-    for (const [asmId, row] of Object.entries(lastByAsm)) {
-      const asm = assemblies.find(a => a.id === (row.variantId || row.asmId))
-      if (!asm) continue
-      const rowP = computePricing({
-        takeoffRows: [row], assemblies, workItems, materials, context, markup: 0, hourlyRate,
-        cableEstimate: null, difficultyMode,
-      })
-      byAssembly[asmId] = {
-        name: asm.name || asmId,
-        category: asm.category || '',
-        qty: row.qty,
-        materialCost: rowP.materialCost,
-        laborCost: rowP.laborCost,
-        laborHours: rowP.laborHours,
-      }
-    }
-    return {
-      ...pricing,
-      cableTotalM, cablePricePerM, cableCost,
-      subtotal, markupType, markupPct, markupAmount, grandTotal, bruttoTotal, vatPercent,
-      productivityFactor, bySystem, byAssembly,
-    }
+    return computeFullCalc({
+      pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent,
+      context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode,
+    })
   }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode])
 
-  // ── Per-assembly unit cost ────────────────────────────────────────────────
-  // Compute unit cost for each assembly × each wall type (for per-split pricing display in TakeoffRow)
-  // Dedup: only compute once per unique asmId (last-row-wins preserves current semantics)
+  // ── Per-assembly unit cost (extracted to utils/fullCalc.js) ───────────────
   const unitCostByAsmByWall = useMemo(() => {
-    const map = {}
-    const lastRowByAsm = {}
-    for (const row of takeoffRows) lastRowByAsm[row.asmId] = row
-    for (const [asmId, row] of Object.entries(lastRowByAsm)) {
-      map[asmId] = {}
-      for (const wallKey of Object.keys(WALL_FACTORS)) {
-        const single = computePricing({
-          takeoffRows: [{ asmId: row.asmId, qty: 1, variantId: row.variantId, wallSplits: null, wallType: wallKey }],
-          assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate: null, difficultyMode,
-        })
-        map[asmId][wallKey] = single.total
-      }
-    }
-    return map
+    return computeUnitCostByAsmByWall({
+      takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, difficultyMode,
+    })
   }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, difficultyMode])
 
   // ── Accept all high-confidence ────────────────────────────────────────────

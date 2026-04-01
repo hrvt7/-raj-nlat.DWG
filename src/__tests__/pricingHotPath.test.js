@@ -22,6 +22,10 @@ const workspaceSrc = fs.readFileSync(
   path.resolve(__dirname, '../components/TakeoffWorkspace.jsx'),
   'utf-8'
 )
+const fullCalcSrc = fs.readFileSync(
+  path.resolve(__dirname, '../utils/fullCalc.js'),
+  'utf-8'
+)
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe('computePricing — output identity', () => {
@@ -93,70 +97,51 @@ describe('computePricing — output identity', () => {
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
-describe('unitCostByAsmByWall — dedup optimization', () => {
+describe('unitCostByAsmByWall — dedup optimization (in fullCalc.js)', () => {
   it('uses lastRowByAsm dedup before wall-type inner loop', () => {
-    const ucIdx = workspaceSrc.indexOf('unitCostByAsmByWall')
-    expect(ucIdx).toBeGreaterThan(-1)
-
-    const memoEnd = workspaceSrc.indexOf('}, [', ucIdx + 100)
-    const block = workspaceSrc.slice(ucIdx, memoEnd)
-
-    // Must build a dedup map from takeoffRows
-    expect(block).toContain('lastRowByAsm')
-    expect(block).toContain('for (const row of takeoffRows) lastRowByAsm[row.asmId] = row')
+    expect(fullCalcSrc).toContain('lastRowByAsm')
+    expect(fullCalcSrc).toContain('for (const row of takeoffRows) lastRowByAsm[row.asmId] = row')
   })
 
   it('iterates deduped entries (Object.entries(lastRowByAsm)), not raw takeoffRows', () => {
-    const ucIdx = workspaceSrc.indexOf('unitCostByAsmByWall')
-    const memoEnd = workspaceSrc.indexOf('}, [', ucIdx + 100)
-    const block = workspaceSrc.slice(ucIdx, memoEnd)
+    const ucIdx = fullCalcSrc.indexOf('computeUnitCostByAsmByWall')
+    const block = fullCalcSrc.slice(ucIdx)
 
-    // The wall-type loop must be inside iteration over lastRowByAsm, not takeoffRows
     expect(block).toContain('Object.entries(lastRowByAsm)')
-    // The WALL_FACTORS loop must come AFTER the dedup iteration start
     const dedupIterIdx = block.indexOf('Object.entries(lastRowByAsm)')
     const wallLoopIdx = block.indexOf('WALL_FACTORS', dedupIterIdx)
     expect(wallLoopIdx).toBeGreaterThan(dedupIterIdx)
   })
 
   it('does NOT iterate takeoffRows in the computePricing inner loop', () => {
-    const ucIdx = workspaceSrc.indexOf('unitCostByAsmByWall')
-    const memoEnd = workspaceSrc.indexOf('}, [', ucIdx + 100)
-    const block = workspaceSrc.slice(ucIdx, memoEnd)
+    const ucIdx = fullCalcSrc.indexOf('computeUnitCostByAsmByWall')
+    const block = fullCalcSrc.slice(ucIdx)
 
-    // After the dedup collection line, no 'for (const row of takeoffRows)' with computePricing
     const afterDedup = block.slice(block.indexOf('Object.entries(lastRowByAsm)'))
     expect(afterDedup).not.toContain('for (const row of takeoffRows)')
   })
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
-describe('fullCalc byAssembly — dedup optimization', () => {
+describe('fullCalc byAssembly — dedup optimization (in fullCalc.js)', () => {
   it('uses lastByAsm dedup before byAssembly computation', () => {
-    const byAsmIdx = workspaceSrc.indexOf('const byAssembly = {}')
-    expect(byAsmIdx).toBeGreaterThan(-1)
-
-    // lastByAsm must appear before byAssembly
-    const regionStart = byAsmIdx - 200
-    const region = workspaceSrc.slice(regionStart > 0 ? regionStart : 0, byAsmIdx + 500)
-    expect(region).toContain('lastByAsm')
-    expect(region).toContain('for (const row of takeoffRows) lastByAsm[row.asmId] = row')
+    expect(fullCalcSrc).toContain('const byAssembly = {}')
+    expect(fullCalcSrc).toContain('lastByAsm')
+    expect(fullCalcSrc).toContain('for (const row of takeoffRows) lastByAsm[row.asmId] = row')
   })
 
   it('iterates deduped entries, not raw takeoffRows for computePricing calls', () => {
-    const byAsmIdx = workspaceSrc.indexOf('const byAssembly = {}')
-    const blockEnd = workspaceSrc.indexOf('return {', byAsmIdx)
-    const block = workspaceSrc.slice(byAsmIdx, blockEnd)
+    const byAsmIdx = fullCalcSrc.indexOf('const byAssembly = {}')
+    const blockEnd = fullCalcSrc.indexOf('return {', byAsmIdx)
+    const block = fullCalcSrc.slice(byAsmIdx, blockEnd)
 
     expect(block).toContain('Object.entries(lastByAsm)')
-    // No 'for (const row of takeoffRows)' with computePricing inside
     expect(block).not.toContain('for (const row of takeoffRows)')
   })
 
   it('preserves last-row-wins semantics via dedup comment', () => {
-    const byAsmIdx = workspaceSrc.indexOf('const byAssembly = {}')
-    const beforeBlock = workspaceSrc.slice(byAsmIdx - 300, byAsmIdx)
-    expect(beforeBlock).toContain('last-row-wins')
+    // The comment is in the function doc or nearby
+    expect(fullCalcSrc).toContain('last-row-wins')
   })
 })
 
