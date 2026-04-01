@@ -1195,7 +1195,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             )}
             <div style={{ width: 1, height: 32, background: C.border, margin: '0 12px' }} />
             <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => setRightTab('calc')} title="Nyisd meg a Kalkuláció fület">
-              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Nettó</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Ajánlati ár (nettó){fullCalc.markupPct > 0 ? ` · +${fullCalc.markupPct.toFixed(0)}% árrés` : ''}</div>
               <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 18, color: C.accent }}>
                 {Math.round(fullCalc.grandTotal).toLocaleString('hu-HU')} Ft
               </div>
@@ -1722,12 +1722,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       {(fullCalc.measurementLines || []).map(item => (
                         <div key={`meas-${item.key}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 600 }}>
-                              📏 {item.label}
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontFamily: 'DM Mono', fontSize: 8, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,209,102,0.12)', border: '1px solid rgba(255,209,102,0.25)', color: C.yellow, fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }} title="Mért tétel a tervrajzról">MÉRÉS</span>
+                              {item.label}
                             </div>
                             <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
                               {item.totalMeters ? `${item.totalMeters.toFixed(1)} m` : `${item.count} szakasz`}
-                              {item.isAutoPriced ? ' · assembly ár' : item.pricePerUnit > 0 ? ' · kézi ár' : ''}
+                              {item.isAutoPriced
+                                ? <span style={{ marginLeft: 4, padding: '0 4px', borderRadius: 3, background: C.accentDim, color: C.accent, fontSize: 9 }}>auto</span>
+                                : item.pricePerUnit > 0
+                                  ? <span style={{ marginLeft: 4, padding: '0 4px', borderRadius: 3, background: 'rgba(255,209,102,0.12)', color: C.yellow, fontSize: 9 }}>kézi</span>
+                                  : ''}
                               {item.pricePerUnit > 0 ? ` · ${Math.round(item.pricePerUnit).toLocaleString('hu-HU')} Ft/m` : ''}
                             </div>
                           </div>
@@ -1923,7 +1928,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
                       {/* Grand total (nettó) */}
                       <div style={{ borderTop: `2px solid ${C.accent}40`, marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: 'Syne', fontSize: 15, fontWeight: 800, color: C.accent }}>Összesen (nettó)</span>
+                        <span style={{ fontFamily: 'Syne', fontSize: 15, fontWeight: 800, color: C.accent }}>Ajánlati ár (nettó)</span>
                         <span style={{ fontFamily: 'Syne', fontSize: 15, fontWeight: 800, color: C.accent }}>{Math.round(fullCalc.grandTotal).toLocaleString('hu-HU')} Ft</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>

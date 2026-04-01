@@ -48,6 +48,16 @@ export async function signIn(email, password) {
   if (error) throw error
   return data
 }
+export async function resetPassword(email) {
+  requireConfig('resetPassword')
+  const { error } = await supabase.auth.resetPasswordForEmail(email)
+  if (error) throw error
+}
+export async function resendConfirmation(email) {
+  requireConfig('resendConfirmation')
+  const { error } = await supabase.auth.resend({ type: 'signup', email })
+  if (error) throw error
+}
 export async function signOut() {
   requireConfig('signOut')
   const { error } = await supabase.auth.signOut()

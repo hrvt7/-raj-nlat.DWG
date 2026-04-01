@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
+import { supabase, signIn, signUp, signOut, resetPassword, resendConfirmation, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -261,6 +261,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       updatedAt: new Date().toISOString(),
     }
     onSaveQuote(updated)
+    toast.show('Ajánlat mentve', 'success')
   }
 
   const handlePdf = async () => {
@@ -639,6 +640,11 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               </button>
             ))}
           </div>
+          {outputMode === 'labor_only' && totalMaterials > 0 && (
+            <div style={{ background: 'rgba(255,209,102,0.08)', border: '1px solid rgba(255,209,102,0.25)', borderRadius: 8, padding: '8px 12px', marginTop: 8, fontFamily: 'DM Mono', fontSize: 10, color: C.yellow, lineHeight: 1.5 }}>
+              Az anyagköltség ({fmt(totalMaterials)} Ft) nem jelenik meg az ajánlatban.
+            </div>
+          )}
         </div>
 
         {/* Card 4 — Csoportosítás */}
@@ -1143,22 +1149,25 @@ function ItemsGroup({ title, count, accentColor, items, renderRow }) {
 
 // ─── AuthModal ─────────────────────────────────────────────────────────────────
 function AuthModal({ onAuth }) {
-  const [mode, setMode]         = useState('login') // login | register | confirm
+  const [mode, setMode]         = useState('login') // login | register | confirm | forgot | forgot-sent
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [name, setName]         = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
+  const [info, setInfo]         = useState('')
 
   const submit = async () => {
-    setError(''); setLoading(true)
+    setError(''); setInfo(''); setLoading(true)
     try {
-      if (mode === 'login') {
+      if (mode === 'forgot') {
+        await resetPassword(email)
+        setMode('forgot-sent')
+      } else if (mode === 'login') {
         await signIn(email, password)
         onAuth()
       } else {
         const { data } = await signUp(email, password, name)
-        // If Supabase returns a user but no session, email confirmation is required
         if (data?.user && !data?.session) {
           setMode('confirm')
         } else {
@@ -1170,11 +1179,48 @@ function AuthModal({ onAuth }) {
     } finally { setLoading(false) }
   }
 
+  const handleResend = async () => {
+    setError(''); setInfo(''); setLoading(true)
+    try {
+      await resendConfirmation(email)
+      setInfo('Aktiváló email újraküldve!')
+    } catch (e) {
+      setError(e.message || 'Újraküldés sikertelen')
+    } finally { setLoading(false) }
+  }
+
   const inp = {
     width: '100%', padding: '12px 16px', background: C.bg,
     border: `1px solid ${C.border}`, borderRadius: 10, color: C.text,
     fontFamily: 'DM Mono', fontSize: 13, outline: 'none', boxSizing: 'border-box',
     transition: 'border-color 0.2s',
+  }
+
+  // ── Forgot password sent screen ──
+  if (mode === 'forgot-sent') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+        <div style={{ position: 'absolute', inset: 0, opacity: 0.03, backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '32px 32px' }} />
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 20, padding: '44px 36px', width: '100%', maxWidth: 420, boxSizing: 'border-box', position: 'relative', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔑</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 22, background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', marginBottom: 12 }}>
+            Jelszó visszaállítás elküldve
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub, marginBottom: 8 }}>
+            Küldtünk egy jelszó-visszaállító linket erre a címre:
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 14, color: C.accent, fontWeight: 600, marginBottom: 24 }}>
+            {email}
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 28 }}>
+            Kattints az emailben kapott linkre az új jelszó beállításához.<br />Nézd meg a spam mappát is!
+          </div>
+          <button onClick={() => { setMode('login'); setError(''); setInfo('') }} style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)', color: '#09090B', fontFamily: 'Syne', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
+            Vissza a bejelentkezéshez
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // ── Email confirmation screen ──
@@ -1209,8 +1255,18 @@ function AuthModal({ onAuth }) {
             Kattints az emailben kapott linkre, majd térj vissza ide és jelentkezz be.
             <br />Nézd meg a spam mappát is!
           </div>
+          {info && (
+            <div style={{ background: C.accentDim, border: `1px solid ${C.accent}40`, color: C.accent, fontFamily: 'DM Mono', fontSize: 12, padding: '10px 14px', borderRadius: 10, marginBottom: 12 }}>
+              {info}
+            </div>
+          )}
+          {error && (
+            <div style={{ background: C.redDim, border: `1px solid ${C.red}40`, color: C.red, fontFamily: 'DM Mono', fontSize: 12, padding: '10px 14px', borderRadius: 10, marginBottom: 12 }}>
+              {error}
+            </div>
+          )}
           <button
-            onClick={() => { setMode('login'); setError('') }}
+            onClick={() => { setMode('login'); setError(''); setInfo('') }}
             style={{
               width: '100%', padding: '13px', borderRadius: 10, border: 'none',
               background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)',
@@ -1218,6 +1274,17 @@ function AuthModal({ onAuth }) {
             }}
           >
             Vissza a bejelentkezéshez
+          </button>
+          <button
+            onClick={handleResend}
+            disabled={loading}
+            style={{
+              width: '100%', padding: '11px', borderRadius: 10, marginTop: 10,
+              background: 'transparent', border: `1px solid ${C.border}`,
+              color: C.muted, fontFamily: 'DM Mono', fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            {loading ? 'Küldés...' : 'Nem kaptam meg — újraküldés'}
           </button>
         </div>
       </div>
@@ -1247,7 +1314,7 @@ function AuthModal({ onAuth }) {
             TakeoffPro
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 6, letterSpacing: '0.05em' }}>
-            {mode === 'login' ? 'Jelentkezz be a fiókodba' : 'Hozd létre a fiókodat'}
+            {mode === 'forgot' ? 'Jelszó visszaállítás' : mode === 'login' ? 'Jelentkezz be a fiókodba' : 'Hozd létre a fiókodat'}
           </div>
         </div>
 
@@ -1268,14 +1335,23 @@ function AuthModal({ onAuth }) {
             onFocus={e => e.target.style.borderColor = C.accent}
             onBlur={e => e.target.style.borderColor = C.border} />
         </div>
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: C.textSub, marginBottom: 6 }}>Jelszó</div>
-          <input style={inp} type="password" placeholder="••••••••" value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submit()}
-            onFocus={e => e.target.style.borderColor = C.accent}
-            onBlur={e => e.target.style.borderColor = C.border} />
-        </div>
+        {mode !== 'forgot' && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: C.textSub, marginBottom: 6 }}>Jelszó</div>
+            <input style={inp} type="password" placeholder="••••••••" value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && submit()}
+              onFocus={e => e.target.style.borderColor = C.accent}
+              onBlur={e => e.target.style.borderColor = C.border} />
+            {mode === 'login' && (
+              <div style={{ textAlign: 'right', marginTop: 6 }}>
+                <span onClick={() => { setMode('forgot'); setError(''); setInfo('') }} style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, cursor: 'pointer' }}>
+                  Elfelejtett jelszó?
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {error && (
           <div style={{
@@ -1289,26 +1365,34 @@ function AuthModal({ onAuth }) {
 
         <button
           onClick={submit}
-          disabled={loading || !email || !password}
+          disabled={loading || !email || (mode !== 'forgot' && !password)}
           style={{
             width: '100%', padding: '13px', borderRadius: 10, border: 'none',
             background: loading ? C.accentDim : 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)',
             color: '#09090B', fontFamily: 'Syne', fontWeight: 800, fontSize: 15,
             cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '-0.01em',
-            transition: 'all 0.2s', opacity: (!email || !password) ? 0.5 : 1,
+            transition: 'all 0.2s', opacity: (!email || (mode !== 'forgot' && !password)) ? 0.5 : 1,
           }}
         >
-          {loading ? 'Folyamatban...' : (mode === 'login' ? 'Bejelentkezés' : 'Fiók létrehozása')}
+          {loading ? 'Folyamatban...' : mode === 'forgot' ? 'Jelszó visszaállítás' : mode === 'login' ? 'Bejelentkezés' : 'Fiók létrehozása'}
         </button>
 
         <div style={{ textAlign: 'center', marginTop: 22, fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
-          {mode === 'login' ? 'Még nincs fiókod?' : 'Már van fiókod?'}{' '}
-          <span
-            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}
-            style={{ color: C.accent, cursor: 'pointer', fontWeight: 600 }}
-          >
-            {mode === 'login' ? 'Regisztráció' : 'Bejelentkezés'}
-          </span>
+          {mode === 'forgot' ? (
+            <span onClick={() => { setMode('login'); setError(''); setInfo('') }} style={{ color: C.accent, cursor: 'pointer', fontWeight: 600 }}>
+              Vissza a bejelentkezéshez
+            </span>
+          ) : (
+            <>
+              {mode === 'login' ? 'Még nincs fiókod?' : 'Már van fiókod?'}{' '}
+              <span
+                onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setInfo('') }}
+                style={{ color: C.accent, cursor: 'pointer', fontWeight: 600 }}
+              >
+                {mode === 'login' ? 'Regisztráció' : 'Bejelentkezés'}
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>

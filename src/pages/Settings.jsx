@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { C, fmt, Card, Button, Input, SectionHeader, ConfirmDialog, useToast } from '../components/ui.jsx'
 import { saveSettings, saveMaterials, DEFAULT_MATERIALS, loadQuotes, saveQuotes, saveTemplates, saveCompanyLogo } from '../data/store.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
@@ -18,19 +18,23 @@ const TABS = [
 
 export default function SettingsPage({ settings, onSettingsChange, materials, onMaterialsChange, onRestoreComplete }) {
   const [activeTab, setActiveTab] = useState('company')
+  const toast = useToast()
+  const saveTimerRef = useRef(null)
 
   const updateSettings = (path, value) => {
     const keys = path.split('.')
     const newSettings = { ...settings }
     let obj = newSettings
     for (let i = 0; i < keys.length - 1; i++) {
-      // Guard against undefined intermediates — create empty object if missing
       obj[keys[i]] = { ...(obj[keys[i]] || {}) }
       obj = obj[keys[i]]
     }
     obj[keys[keys.length - 1]] = value
     onSettingsChange(newSettings)
     saveSettings(newSettings)
+    // Debounced save toast — show after 800ms of no further changes
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => toast.show('Beállítások mentve', 'success'), 800)
   }
 
   return (
