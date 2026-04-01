@@ -85,14 +85,18 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   // ── Auto Symbol POC state ──
   const [autoSymbolActive, setAutoSymbolActive] = useState(false)
   const [autoSymbolPhase, setAutoSymbolPhase] = useState('idle') // idle | picking | areaSelect | searching | done
-  const [autoSymbolRect, setAutoSymbolRect] = useState(null) // {x1,y1,x2,y2} in screen coords during pick
+  const [autoSymbolRect, _setAutoSymbolRect] = useState(null) // {x1,y1,x2,y2} in screen coords during pick
+  const autoSymbolRectRef = useRef(null)
+  const setAutoSymbolRect = (v) => { autoSymbolRectRef.current = v; _setAutoSymbolRect(v) }
   const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score,accepted}] in PDF doc coords
   const [autoSymbolLabel, setAutoSymbolLabel] = useState('') // user label for finalization
   const [autoSymbolCategory, setAutoSymbolCategory] = useState('other') // category key for finalization
   const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.55)
   const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
   const [autoSymbolSearchArea, setAutoSymbolSearchArea] = useState(null) // {x,y,w,h} in PDF doc coords or null (full page)
-  const [autoSymbolAreaRect, setAutoSymbolAreaRect] = useState(null) // screen coords during area selection
+  const [autoSymbolAreaRect, _setAutoSymbolAreaRect] = useState(null) // screen coords during area selection
+  const autoSymbolAreaRectRef = useRef(null)
+  const setAutoSymbolAreaRect = (v) => { autoSymbolAreaRectRef.current = v; _setAutoSymbolAreaRect(v) }
   const autoSymbolTemplateRef = useRef(null) // { cropData, w, h } cropped template RGBA
   const autoSymbolStartRef = useRef(null) // mouse down position during picking
   const autoSymbolWorkerRef = useRef(null) // Web Worker instance
@@ -606,8 +610,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
 
     // ── Auto Symbol: sample selection rectangle ──
-    if (autoSymbolRect && autoSymbolPhase === 'picking') {
-      const r = autoSymbolRect
+    const _asRect = autoSymbolRectRef.current || autoSymbolRect
+    if (_asRect && autoSymbolPhase === 'picking') {
+      const r = _asRect
       ctx.strokeStyle = '#FF8C42'
       ctx.lineWidth = 2
       ctx.setLineDash([6, 4])
@@ -616,8 +621,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
 
     // ── Auto Symbol: search area rectangle (being drawn) ──
-    if (autoSymbolAreaRect && autoSymbolPhase === 'areaSelect') {
-      const r = autoSymbolAreaRect
+    const _asAreaRect = autoSymbolAreaRectRef.current || autoSymbolAreaRect
+    if (_asAreaRect && autoSymbolPhase === 'areaSelect') {
+      const r = _asAreaRect
       ctx.strokeStyle = '#4CC9F0'
       ctx.lineWidth = 2
       ctx.setLineDash([8, 4])
