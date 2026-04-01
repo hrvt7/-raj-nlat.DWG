@@ -37,22 +37,22 @@ describe('Architecture Boundaries', () => {
     expect(workspaceSrc).toContain('DxfViewerPanel')
   })
 
-  it('original recognizeBlock function still exists for blockName matching', () => {
-    expect(workspaceSrc).toContain('function recognizeBlock(blockName)')
+  it('recognizeBlock is imported from blockRecognition utility', () => {
+    expect(workspaceSrc).toContain("import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock")
   })
 })
 
 // ─── Smoke Scenarios ─────────────────────────────────────────────────────────
 describe('Smoke Scenarios', () => {
-  it('manual tools (DxfBlockOverlay, cable detection) not modified', () => {
+  it('manual tools (DxfBlockOverlay present, cable detection imported)', () => {
     expect(workspaceSrc).toContain('function DxfBlockOverlay')
-    expect(workspaceSrc).toContain('function detectDxfCableLengths')
+    expect(workspaceSrc).toContain('detectDxfCableLengths')
     expect(workspaceSrc).toContain('CABLE_GENERIC_KW')
   })
 
-  it('takeoffRows recomputation path intact', () => {
-    // takeoffRows computed from effectiveItems via asmOverrides
-    expect(workspaceSrc).toContain('asmOverrides[item.blockName]')
-    expect(workspaceSrc).toContain("if (!asmId) continue")
+  it('takeoffRows uses extracted aggregation functions', () => {
+    expect(workspaceSrc).toContain("import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows }")
+    expect(workspaceSrc).toContain('buildRecognitionRows(effectiveItems')
+    expect(workspaceSrc).toContain('mergeTakeoffRows(recognitionTakeoffRows')
   })
 })

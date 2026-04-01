@@ -58,92 +58,9 @@ const C = {
   text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
 }
 
-// ─── Block recognition rules ──────────────────────────────────────────────────
-const BLOCK_ASM_RULES = [
-  { patterns: ['LIGHT','LAMP','VILÁG','VILAG','LÁMPA','LAMPA','LED','SPOT','DOWNLIGHT','CEILING','MENNYEZET'], asmId: 'ASM-003', label: 'Lámpatest' },
-  { patterns: ['SWITCH','KAPCS','KAPCSOL','DIMMER','TOGGLE','NYOMÓ','NYOMO'], asmId: 'ASM-002', label: 'Kapcsoló' },
-  { patterns: ['SOCKET','DUGALJ','ALJZAT','OUTLET','PLUG','CSATLAKOZ','RECEPT','ERŐÁTVITELI','EROATVITELI'], asmId: 'ASM-001', label: 'Dugalj' },
-  { patterns: ['PANEL','DB_PANEL','ELOSZTO','ELOSZTÓ','MDB','SZEKRÉNY','SZEKRENY','DISTRIBUTION','BOARD','TABLOU'], asmId: 'ASM-018', label: 'Elosztó' },
-  { patterns: ['SMOKE','FÜST','FUST','DETECTOR','ÉRZÉKEL','ERZEKEL','ALARM'], asmId: null, label: 'Érzékelő' },
-]
-
-// Assembly overlay colors (for SVG dots on DXF)
-const ASM_COLORS = {
-  'ASM-001': '#4CC9F0',   // socket → blue
-  'ASM-002': '#FFD166',   // switch → yellow
-  'ASM-003': '#00E5A0',   // lamp → green
-  'ASM-018': '#FF6B6B',   // panel → red
-  null: '#9CA3AF',         // unknown → gray
-}
-
-function recognizeBlock(blockName) {
-  const up = (blockName || '').toUpperCase().replace(/[_\-\.]/g, ' ')
-
-  // Phase 1: exact match — return immediately (perfect confidence)
-  for (const rule of BLOCK_ASM_RULES) {
-    for (const pattern of rule.patterns) {
-      if (up === pattern) return { asmId: rule.asmId, confidence: 1.0, matchType: 'exact', rule }
-    }
-  }
-
-  // Phase 2: partial match — collect ALL matches, return the BEST one
-  let bestMatch = null
-  for (const rule of BLOCK_ASM_RULES) {
-    for (const pattern of rule.patterns) {
-      if (up.includes(pattern)) {
-        const normalizedLen = up.replace(/ /g, '').length
-        const specificity = Math.min(pattern.length / Math.max(normalizedLen, 1), 1)
-        const confidence = 0.60 + specificity * 0.35
-        if (!bestMatch || confidence > bestMatch.confidence) {
-          bestMatch = { asmId: rule.asmId, confidence, matchType: 'partial', rule }
-        }
-      }
-    }
-  }
-  if (bestMatch) return bestMatch
-
-  return { asmId: null, confidence: 0, matchType: 'unknown', rule: null }
-}
-
-// ─── DXF cable-layer detection ────────────────────────────────────────────────
-// Priority 1: if DXF has cable route geometry (layers with cable keywords + lengths),
-// use measured lengths directly.  Returns null if nothing suitable found.
-const CABLE_GENERIC_KW = ['KABEL','CABLE','NYM','NYY','CYKY','WIRE','VEZETEK','VILLAMOS','ARAM']
-const CABLE_TYPE_KW = {
-  light:  ['VILAG','LIGHT','3X1','1X1','LAMPA','VIL_KAB','LAMP','VILAGIT'],
-  socket: ['DUGALJ','SOCKET','3X2','1X2','DUG_KAB','KONNEKTOR','OUTLET'],
-  switch: ['KAPCS','SWITCH','KAPCSOL','KAP_KAB'],
-  other:  ['NYY','5X','FOGYASZT','PANEL_KAB'],
-}
-function detectDxfCableLengths(parsedDxf) {
-  if (!parsedDxf?.lengths?.length) return null
-  let total = 0
-  const byType = { light: 0, socket: 0, switch: 0, other: 0 }
-  let layerCount = 0
-  for (const l of parsedDxf.lengths) {
-    if (!l.length || l.length <= 0) continue
-    const up = (l.layer || '').toUpperCase()
-    if (!CABLE_GENERIC_KW.some(k => up.includes(k))) continue
-    layerCount++
-    total += l.length
-    if      (CABLE_TYPE_KW.light.some(k  => up.includes(k))) byType.light  += l.length
-    else if (CABLE_TYPE_KW.socket.some(k => up.includes(k))) byType.socket += l.length
-    else if (CABLE_TYPE_KW.switch.some(k => up.includes(k))) byType.switch += l.length
-    else if (CABLE_TYPE_KW.other.some(k  => up.includes(k))) byType.other  += l.length
-    else byType.socket += l.length  // ismeretlen → dugalj (leggyakoribb)
-  }
-  if (!layerCount || total <= 0) return null
-  const r = v => Math.round(v * 10) / 10
-  return {
-    cable_total_m: r(total),
-    cable_total_m_p50: r(total),
-    cable_total_m_p90: null,
-    cable_by_type: { light_m: r(byType.light), socket_m: r(byType.socket), switch_m: r(byType.switch), other_m: r(byType.other) },
-    method: `Mért kábelvonalak (${layerCount} réteg, ${Math.round(total)} m)`,
-    confidence: 0.92,
-    _source: 'dxf_layers',
-  }
-}
+// ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
+import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, detectDxfCableLengths } from '../utils/blockRecognition.js'
+import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows } from '../utils/takeoffRows.js'
 
 // computePricing is imported from '../utils/pricing.js' — shared with MergePlansView
 
@@ -1483,102 +1400,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   }, [parsedDxf, recognizedItems, cableEstimate, isPdf, referencePanels])
 
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
-  // From DXF/PDF auto-recognition pipeline
   // (workflowStatus is computed below takeoffRows because it needs takeoffRowCount)
   const recognitionTakeoffRows = useMemo(() => {
-    const rowMap = {}
-    for (const item of effectiveItems) {
-      const asmId = asmOverrides[item.blockName] !== undefined ? asmOverrides[item.blockName] : item.asmId
-      if (!asmId) continue
-      const splits = wallSplits[asmId] || null
-      // If splits exist, derive qty from their sum; otherwise use manual override or recognized count
-      const qty = splits
-        ? Object.values(splits).reduce((s, n) => s + n, 0)
-        : (qtyOverrides[asmId] !== undefined ? qtyOverrides[asmId] : (rowMap[asmId]?.qty || 0) + item.qty)
-      rowMap[asmId] = { asmId, qty, variantId: variantOverrides[asmId] || null, wallSplits: splits }
-    }
-    return Object.values(rowMap)
+    return buildRecognitionRows(effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits)
   }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
 
-  // From PDF manual markers (assembly-based counting)
   const markerTakeoffRows = useMemo(() => {
-    if (!pdfMarkers.length) return []
-    const rowMap = {}
-    for (const m of pdfMarkers) {
-      // Only count markers that have an assembly ID (ASM-xxx)
-      const asmId = m.asmId || (m.category?.startsWith('ASM-') ? m.category : null)
-      if (!asmId) continue
-      if (!rowMap[asmId]) rowMap[asmId] = { asmId, qty: 0, variantId: variantOverrides[asmId] || null, _fromMarkers: true }
-      rowMap[asmId].qty += 1
-    }
-    // Reconcile wallSplits: if splits exist, adjust to match actual marker count
-    for (const row of Object.values(rowMap)) {
-      const splits = wallSplits[row.asmId]
-      if (splits) {
-        const splitTotal = Object.values(splits).reduce((s, n) => s + n, 0)
-        const diff = row.qty - splitTotal
-        if (diff > 0) {
-          // New markers added — put extra in 'brick' (default)
-          row.wallSplits = { ...splits, brick: (splits.brick || 0) + diff }
-        } else if (diff < 0) {
-          // Markers removed — reduce from 'brick' first, then others
-          const adjusted = { ...splits }
-          let toRemove = Math.abs(diff)
-          // Remove from brick first
-          if (adjusted.brick && adjusted.brick > 0) {
-            const take = Math.min(adjusted.brick, toRemove)
-            adjusted.brick -= take
-            toRemove -= take
-          }
-          // Remove from others if still needed
-          if (toRemove > 0) {
-            for (const k of Object.keys(adjusted)) {
-              if (toRemove <= 0) break
-              if (adjusted[k] > 0) {
-                const take = Math.min(adjusted[k], toRemove)
-                adjusted[k] -= take
-                toRemove -= take
-              }
-            }
-          }
-          row.wallSplits = adjusted
-        } else {
-          row.wallSplits = splits
-        }
-      } else {
-        row.wallSplits = null
-      }
-    }
-    return Object.values(rowMap)
+    return buildMarkerRows(pdfMarkers, variantOverrides, wallSplits)
   }, [pdfMarkers, variantOverrides, wallSplits])
 
   // Merged takeoff rows: recognition + manual markers (no duplicates)
   const takeoffRows = useMemo(() => {
-    const rowMap = {}
-    // Recognition rows first
-    for (const row of recognitionTakeoffRows) {
-      rowMap[row.asmId] = { ...row }
-    }
-    // Marker rows add to or create new entries
-    for (const row of markerTakeoffRows) {
-      if (rowMap[row.asmId]) {
-        const existing = rowMap[row.asmId]
-        existing.qty += row.qty
-        // Merge wallSplits
-        if (row.wallSplits && existing.wallSplits) {
-          const merged = { ...existing.wallSplits }
-          for (const [k, v] of Object.entries(row.wallSplits)) {
-            merged[k] = (merged[k] || 0) + v
-          }
-          existing.wallSplits = merged
-        } else if (row.wallSplits) {
-          existing.wallSplits = { ...row.wallSplits }
-        }
-      } else {
-        rowMap[row.asmId] = { ...row }
-      }
-    }
-    return Object.values(rowMap)
+    return mergeTakeoffRows(recognitionTakeoffRows, markerTakeoffRows)
   }, [recognitionTakeoffRows, markerTakeoffRows])
 
   // ── Unified workflow status (single source for status/CTA/badges) ───────
