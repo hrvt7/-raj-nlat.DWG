@@ -797,7 +797,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       }
       return
     }
-  }, [activeTool, activeCategory, screenToPdf, drawOverlay])
+  }, [activeTool, activeCategory, screenToPdf, drawOverlayThrottled])
 
   const handleMouseMove = useCallback((e) => {
     const rect = overlayRef.current?.getBoundingClientRect()
@@ -825,7 +825,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
 
     mousePdfRef.current = screenToPdf(sx, sy)
     if (activeTool) drawOverlayThrottled()
-  }, [activeTool, screenToPdf, drawOverlay])
+  }, [activeTool, screenToPdf, drawOverlayThrottled])
 
   // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
   // IMPORTANT: must be declared BEFORE handleMouseUp which references it
@@ -1022,7 +1022,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     zoomRerenderTimerRef.current = setTimeout(() => {
       if (pdfDoc && pageNum > 0) renderPage(pdfDoc, pageNum, { zoomDriven: true })
     }, 400)
-  }, [drawOverlay, pdfDoc, pageNum, renderPage])
+  }, [drawOverlayThrottled, pdfDoc, pageNum, renderPage])
 
   // Re-search when threshold changes (debounced)
   useEffect(() => {
@@ -1064,7 +1064,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [calibDialog, drawOverlay])
+  }, [calibDialog, drawOverlayThrottled])
 
   // ── Undo / Clear ──
   const handleUndo = useCallback(() => {
@@ -1078,7 +1078,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
     setRenderTick(t => t + 1)
     drawOverlayThrottled()
-  }, [drawOverlay, onMarkersChange, markDirty])
+  }, [drawOverlayThrottled, onMarkersChange, markDirty])
 
   const handleClearAll = useCallback(() => {
     markersRef.current = []
@@ -1088,7 +1088,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     setRenderTick(t => t + 1)
     drawOverlayThrottled()
     if (onMarkersChange) onMarkersChange([])
-  }, [drawOverlay, onMarkersChange, markDirty])
+  }, [drawOverlayThrottled, onMarkersChange, markDirty])
 
   // ── Calibration submit ──
   const handleCalibSubmit = useCallback(() => {
@@ -1109,7 +1109,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     setCalibInput('')
     setRenderTick(t => t + 1)
     drawOverlayThrottled()
-  }, [calibDialog, calibInput, calibUnit, drawOverlay, markDirty])
+  }, [calibDialog, calibInput, calibUnit, drawOverlayThrottled, markDirty])
 
   // ── Measurement category reassignment (retroactive tagging of existing measurements) ──
   const handleMeasureCategoryChange = useCallback((idx, category) => {
@@ -1119,7 +1119,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       setRenderTick(t => t + 1)
       drawOverlayThrottled()
     }
-  }, [drawOverlay, markDirty])
+  }, [drawOverlayThrottled, markDirty])
 
   // ── Fit view ──
   const handleFitView = useCallback(() => {
@@ -1132,19 +1132,19 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.offsetX = (cw - v.pageWidth * zoom) / 2
     v.offsetY = (ch - v.pageHeight * zoom) / 2
     drawOverlayThrottled()
-  }, [drawOverlay])
+  }, [drawOverlayThrottled])
 
   // ── Resize ──
   useEffect(() => {
     const obs = new ResizeObserver(() => drawOverlayThrottled())
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
-  }, [drawOverlay])
+  }, [drawOverlayThrottled])
 
   // ── Repaint overlay when renderTick changes (e.g. markers restored from IDB) ──
   useEffect(() => {
     drawOverlayThrottled()
-  }, [renderTick, drawOverlay])
+  }, [renderTick, drawOverlayThrottled])
 
   // ── Count summary ──
   // UNIFIED: groups markers by asmId for assembly-level detail.
@@ -1245,7 +1245,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         onToggleEstimation={() => setEstimationOpen(p => !p)}
         estimationOpen={estimationOpen}
         showCableRoutes={showCableRoutes}
-        onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlay, 50) }}
+        onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlayThrottled, 50) }}
         rotation={rotation}
         onRotateLeft={() => { setRotation(r => (r - 90 + 360) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
         onRotateRight={() => { setRotation(r => (r + 90) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
