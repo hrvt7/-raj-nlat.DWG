@@ -13,7 +13,7 @@ function lazyRetry(importFn) {
       // First retry — browser may have stale HTML with old chunk hashes
       return importFn().catch((err) => {
         // If still failing, force a full page reload to fetch fresh HTML
-        console.error('Chunk load failed after retry, reloading page:', err)
+        console.error('[TakeoffWorkspace] Chunk load failed after retry, reloading page:', err)
         window.location.reload()
         // Return never-resolving promise so React doesn't render an error
         return new Promise(() => {})
@@ -1414,7 +1414,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       setRecognizedItems(items)
       if (items.length) setRightTab('takeoff')
     } catch (err) {
-      console.error('Parse error:', err)
+      console.error('[TakeoffWorkspace] Parse error:', err)
       setParsedDxf(normalizeDxfResult({ success: false, error: err.message || String(err) }, 'browser'))
       setEvidenceMap(null)
     } finally {

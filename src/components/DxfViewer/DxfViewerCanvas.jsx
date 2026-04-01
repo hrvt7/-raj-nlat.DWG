@@ -186,7 +186,7 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('DxfViewer load error:', err)
+          console.error('[DxfViewer] load error:', err)
           setError(err.message || 'Hiba a DXF betöltésénél')
           setLoading(false)
           if (onError) onError(err)

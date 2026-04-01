@@ -511,7 +511,8 @@ export async function extractPdfText(pdfData) {
       .filter(s => s.length > 1)
     doc.destroy()
     return texts
-  } catch {
+  } catch (err) {
+    console.warn('[planMetaInference] PDF text extraction failed:', err)
     return []
   }
 }

@@ -691,7 +691,7 @@ function AssemblyEditorPanel({ assembly, onUpdate, onDuplicate, onDelete }) {
         const updated = [...components]
         updated.splice(targetIdx, 0, newComp)
         setComponents(updated.map((c, i) => ({ ...c, sortOrder: i })))
-      } catch {}
+      } catch (err) { console.warn('[Assemblies] Invalid drag data:', err) }
     }
 
     setDragIdx(null)
@@ -715,7 +715,7 @@ function AssemblyEditorPanel({ assembly, onUpdate, onDuplicate, onDelete }) {
       try {
         const item = JSON.parse(data.replace('palette:', ''))
         addComponent(item)
-      } catch {}
+      } catch (err) { console.warn('[Assemblies] Invalid palette data:', err) }
     }
 
     setDragIdx(null)

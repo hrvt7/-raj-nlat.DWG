@@ -304,7 +304,7 @@ export async function parseDxfFile(file, onProgress) {
     try {
       return await parseDxfTextInWorker(text, onProgress)
     } catch (workerErr) {
-      console.warn('DXF Worker failed, falling back to main thread:', workerErr.message)
+      console.warn('[dxfParser] Worker failed, falling back to main thread:', workerErr.message)
       // Fallback to main thread (will be slow but won't fail silently)
       return parseDxfText(text)
     }

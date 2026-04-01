@@ -391,7 +391,8 @@ export default function DetectionReviewPanel({ plans, onClose, onDone, projectId
         let blob
         try {
           blob = await getPlanFile(plan.id)
-        } catch {
+        } catch (err) {
+          console.warn('[DetectionReviewPanel] Failed to load plan:', plan.id, err)
           continue
         }
         if (!blob) continue

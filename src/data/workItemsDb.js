@@ -1986,7 +1986,8 @@ export function evalQtyFormula(formula, vars = {}) {
     if (!tokens || tokens.length === 0) return null
     const result = evalTokens(tokens, { COUNT, METER, FLOOR })
     return typeof result === 'number' && isFinite(result) ? result : null
-  } catch {
+  } catch (err) {
+    console.warn('[workItemsDb] Formula eval failed:', formula, err)
     return null
   }
 }

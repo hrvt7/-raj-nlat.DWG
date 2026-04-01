@@ -228,54 +228,6 @@ export async function deletePlanBlob(planId, fileType) {
   if (error) throw error
 }
 
-// ── Subscription ───────────────────────────────────────────────────────────────
-export async function getSubscriptionStatus() {
-  requireConfig('getSubscriptionStatus')
-  const { data, error } = await supabase.from('profiles').select('plan, subscription_end').single()
-  if (error && error.code !== 'PGRST116') throw error
-  if (!data) return { plan: 'free', active: false }
-  const plan = data.plan || 'free'
-  const active = ['active', 'trial_active'].includes(plan)
-  return { plan, active, subscriptionEnd: data.subscription_end }
-}
-
-/**
- * Gyors check: van-e aktív előfizetés (active | trial_active)?
- * Usage: const ok = await isSubscribed()
- */
-export async function isSubscribed() {
-  try {
-    const { active } = await getSubscriptionStatus()
-    return active
-  } catch {
-    return false
-  }
-}
-
-// ── Trade Subscriptions ──────────────────────────────────────────────────────
-// Per-trade hozzáférés kezelés (dormant – test módban nem használjuk)
-
-/**
- * Felhasználó trade előfizetéseinek lekérdezése
- * @returns {{ erosaram: boolean, gyengaram: boolean, tuzjelzo: boolean }}
- */
-export async function loadTradeSubscriptionsRemote() {
-  requireConfig('loadTradeSubscriptionsRemote')
-  const { data, error } = await supabase
-    .from('trade_subscriptions')
-    .select('trade_id, status')
-  if (error && error.code !== 'PGRST116') throw error
-  const result = { erosaram: false, gyengaram: false, tuzjelzo: false }
-  if (data) {
-    for (const row of data) {
-      if (row.status === 'active' || row.status === 'trial') {
-        result[row.trade_id] = true
-      }
-    }
-  }
-  return result
-}
-
 // ── Quote Shares (client-facing portal) ─────────────────────────────────────
 
 /**
@@ -368,29 +320,5 @@ export async function acceptQuoteShare(token, acceptedByName) {
     })
   } catch {
     // Non-critical — acceptance already recorded above
-  }
-}
-
-/**
- * Trade aktiválása/deaktiválása
- */
-export async function setTradeSubscriptionRemote(tradeId, active) {
-  requireConfig('setTradeSubscriptionRemote')
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  if (active) {
-    const { error } = await supabase.from('trade_subscriptions').upsert({
-      user_id: user.id,
-      trade_id: tradeId,
-      status: 'active',
-      activated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,trade_id' })
-    if (error) throw error
-  } else {
-    const { error } = await supabase.from('trade_subscriptions')
-      .update({ status: 'inactive', updated_at: new Date().toISOString() })
-      .eq('user_id', user.id)
-      .eq('trade_id', tradeId)
-    if (error) throw error
   }
 }

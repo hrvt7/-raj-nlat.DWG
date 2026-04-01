@@ -1043,7 +1043,7 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
       const file = new File([blob], plan.name || FALLBACK_NAMES[ft] || 'terv.pdf', { type: MIME_TYPES[ft] || 'application/octet-stream' })
       if (onOpenFile) onOpenFile(file, plan)
       setOpeningId(null)
-    } catch { setOpeningId(null) }
+    } catch (err) { console.warn('[Projektek] Failed to open plan:', err); setOpeningId(null) }
   }, [onOpenFile, toast])
 
   const handleDelete = useCallback(async (planId) => {

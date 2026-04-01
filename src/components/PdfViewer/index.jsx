@@ -373,7 +373,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         setLoading(false)
       } catch (err) {
         if (!cancelled) {
-          console.error('PDF load error:', err)
+          console.error('[PdfViewer] PDF load error:', err)
           setError(err.message || 'Hiba a PDF betöltésénél')
           setLoading(false)
         }
@@ -477,7 +477,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // pdf.js throws RenderingCancelledException when we cancel an in-flight
       // render — this is expected and not an error.
       if (err?.name === 'RenderingCancelledException') return
-      console.error('Page render error:', err)
+      console.error('[PdfViewer] Page render error:', err)
     }
   }, [applyFocus])
 

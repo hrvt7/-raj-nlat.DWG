@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, getSubscriptionStatus, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
+import { supabase, signIn, signUp, signOut, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -296,7 +296,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
       const { generatePdf } = await import('./utils/generatePdf.js')
       await generatePdf(liveQuote, settings, pdfLevel, outputMode, groupBy, fileHandle)
     } catch (err) {
-      console.error('PDF generation failed:', err)
+      console.error('[App] PDF generation failed:', err)
       toast.show('PDF generálás sikertelen. Kérjük próbáld újra.', 'error')
     } finally {
       setPdfGenerating(false)
@@ -1266,16 +1266,6 @@ function SaaSShell() {
     })
     return () => subscription.unsubscribe()
   }, [])
-
-  // ── Subscription state ─────────────────────────────────────────────────────
-  const [subStatus, setSubStatus] = useState({ plan: 'free', active: false })
-  useEffect(() => {
-    if (session) {
-      getSubscriptionStatus()
-        .then(s => setSubStatus(s))
-        .catch(() => setSubStatus({ plan: 'free', active: false }))
-    }
-  }, [session])
 
   // ── Remote read-back: hydrate empty/broken local state from cloud for signed-in users ──
   // Conservative: only recovers when local data is clearly missing, empty, or corrupted.
