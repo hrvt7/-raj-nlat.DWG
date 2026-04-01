@@ -1,9 +1,10 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from http.server import BaseHTTPRequestHandler
 import json
 
 # Test _security import
 try:
-    from shared import check_origin
+     from security_helpers import check_origin
     sec_ok = True
     sec_err = None
 except Exception as e:

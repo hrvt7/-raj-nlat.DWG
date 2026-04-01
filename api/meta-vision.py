@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 """
 Vercel Serverless Function: /api/meta-vision
 Proxies PDF first-page images to OpenAI Vision API for metadata extraction.
@@ -5,7 +6,7 @@ The OpenAI API key lives server-side only — never exposed to the client bundle
 """
 from http.server import BaseHTTPRequestHandler
 import json, os, sys, urllib.request, urllib.error
-from shared import (
+from security_helpers import (
     send_cors_headers, check_origin, check_rate_limit,
     check_required_env, require_auth, safe_error_response, rate_limit_response
 )

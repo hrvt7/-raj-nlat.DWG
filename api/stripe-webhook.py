@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 """
 api/stripe-webhook.py
 Stripe webhook kezelő — subscription életciklus → Supabase profiles.plan frissítés.
@@ -14,7 +15,7 @@ Figyelendő events:
 
 from http.server import BaseHTTPRequestHandler
 import json, os, sys, hashlib, hmac, urllib.request, time
-from shared import IS_PRODUCTION, IS_LOCAL_DEV
+from security_helpers import IS_PRODUCTION, IS_LOCAL_DEV
 
 STRIPE_WEBHOOK_SECRET  = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 SUPABASE_URL           = os.environ.get('VITE_SUPABASE_URL', 'https://pprlbtsqfyrbfhbqjpai.supabase.co')

@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 """
 api/create-checkout.py
 Stripe Checkout session létrehozás — havi vagy éves előfizetés.
@@ -9,7 +10,7 @@ Returns: { "url": "<stripe-checkout-url>" }
 
 from http.server import BaseHTTPRequestHandler
 import json, os, sys, urllib.request, urllib.error, urllib.parse
-from shared import (
+from security_helpers import (
     send_cors_headers, check_body_size, check_origin, check_rate_limit,
     check_required_env, require_auth, safe_error_response, rate_limit_response
 )

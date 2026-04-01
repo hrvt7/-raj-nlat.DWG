@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from http.server import BaseHTTPRequestHandler
 import json, traceback, os, sys
 from urllib.request import urlopen, Request
@@ -5,7 +6,7 @@ import urllib.error
 
 # Import shared security helpers — with fallback for Vercel bundling edge cases
 try:
-    from shared import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
+     from security_helpers import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
 except ImportError:
     # Inline fallback if _security.py not available in function bundle
     def send_cors_headers(handler, origin=None):

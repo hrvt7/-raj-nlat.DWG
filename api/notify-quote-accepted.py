@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 """
 api/notify-quote-accepted.py
 Értesítési endpoint — kliens elfogadta az ajánlatot → email a vállalkozónak.
@@ -15,7 +16,7 @@ Szükséges Vercel environment variables:
 
 from http.server import BaseHTTPRequestHandler
 import json, os, re, urllib.request
-from shared import send_cors_headers, check_origin, check_rate_limit, rate_limit_response
+from security_helpers import send_cors_headers, check_origin, check_rate_limit, rate_limit_response
 
 SUPABASE_URL         = os.environ.get('SUPABASE_URL') or os.environ.get('VITE_SUPABASE_URL', '')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')

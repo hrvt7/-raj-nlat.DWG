@@ -1,7 +1,8 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, io, re, os, sys
 from collections import Counter
-from shared import (
+from security_helpers import (
     send_cors_headers, check_origin, check_rate_limit,
     require_auth, safe_error_response, rate_limit_response
 )

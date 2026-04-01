@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 """
 PDF Vektor Elemzés endpoint
 Direkt path/drawing elemzés PyMuPDF segítségével - nem Vision AI!
@@ -7,7 +8,7 @@ Kábelvonalak hossza réteg/szín alapján, léptékkel korrigálva.
 from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, io, math, os, sys
 from collections import defaultdict
-from shared import send_cors_headers, check_origin, check_rate_limit, safe_error_response, rate_limit_response
+from security_helpers import send_cors_headers, check_origin, check_rate_limit, safe_error_response, rate_limit_response
 MAX_UPLOAD_MB  = int(os.environ.get('MAX_UPLOAD_MB', '20'))
 
 def classify_color(c, threshold_r=0.75):
