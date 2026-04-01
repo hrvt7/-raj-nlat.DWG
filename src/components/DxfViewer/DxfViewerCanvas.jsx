@@ -58,6 +58,7 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
 
     let cancelled = false
     let moveHandler = null
+    let wheelHandler = null
 
     async function init() {
       setLoading(true)
@@ -152,6 +153,33 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
           canvas.addEventListener('mousemove', moveHandler)
         }
 
+        // Trackpad two-finger scroll = pan (matches PDF viewer behavior)
+        // Three.js OrbitControls treats all wheel events as zoom — we intercept
+        // non-pinch trackpad gestures and convert them to camera pan instead.
+        wheelHandler = (e) => {
+          // ctrlKey = trackpad pinch-to-zoom → let Three.js handle it
+          if (e.ctrlKey || e.metaKey) return
+          // No ctrlKey + deltaX/deltaY = two-finger trackpad scroll → pan
+          e.preventDefault()
+          e.stopPropagation()
+          const cam = viewer.camera
+          if (!cam) return
+          const viewWidth = cam.right - cam.left
+          const canvas = viewer.renderer?.domElement
+          if (!canvas) return
+          const scale = viewWidth / canvas.clientWidth
+          cam.left += e.deltaX * scale
+          cam.right += e.deltaX * scale
+          cam.top -= e.deltaY * scale
+          cam.bottom -= e.deltaY * scale
+          cam.updateProjectionMatrix()
+          viewer.Render()
+        }
+        const canvasEl = viewer.renderer?.domElement
+        if (canvasEl) {
+          canvasEl.addEventListener('wheel', wheelHandler, { passive: false })
+        }
+
         if (onLoad) {
           const layers = viewer.GetLayers(true)
           onLoad({ layers, bounds: viewer.bounds, origin: viewer.origin })
@@ -170,8 +198,12 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
 
     return () => {
       cancelled = true
-      if (moveHandler && viewerRef.current?.renderer?.domElement) {
-        viewerRef.current.renderer.domElement.removeEventListener('mousemove', moveHandler)
+      const canvasEl = viewerRef.current?.renderer?.domElement
+      if (moveHandler && canvasEl) {
+        canvasEl.removeEventListener('mousemove', moveHandler)
+      }
+      if (wheelHandler && canvasEl) {
+        canvasEl.removeEventListener('wheel', wheelHandler)
       }
       if (viewerRef.current) {
         try { viewerRef.current.Destroy() } catch {}
