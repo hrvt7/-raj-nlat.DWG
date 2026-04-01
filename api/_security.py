@@ -77,7 +77,13 @@ def _is_allowed_origin(origin):
         return IS_LOCAL_DEV
     if IS_LOCAL_DEV and ('localhost' in origin or '127.0.0.1' in origin):
         return True
-    return origin in ALLOWED_ORIGINS
+    # Exact match against configured origins
+    if origin in ALLOWED_ORIGINS:
+        return True
+    # Allow Vercel preview/production deployment URLs (*.vercel.app)
+    if origin.endswith('.vercel.app') and origin.startswith('https://'):
+        return True
+    return False
 
 
 def check_origin(handler):
