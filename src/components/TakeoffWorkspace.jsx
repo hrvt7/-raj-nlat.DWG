@@ -735,31 +735,52 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       groups[key].totalMeters += seg.distMeters || 0
       groups[key].count++
     }
+    // Pre-build cable tray assembly index: extract width from each kabeltalca assembly name
+    // e.g. "Kábeltálca 100mm rendszer (10m)" → width=100, "Kábeltálca 200×60" → width=200
+    const cableTrayAsms = assemblies
+      .filter(a => a.category === 'kabeltalca')
+      .map(a => {
+        const m = a.name?.match(/(\d{2,4})\s*(?:mm|×)/)
+        return m ? { asm: a, width: parseInt(m[1], 10) } : null
+      })
+      .filter(Boolean)
+
     return Object.values(groups).map(g => {
       // Try to find a matching assembly for this measurement category
-      // Cable tray keys are like "kt_100_60" → width = 100 → match assembly name containing that width
       let matchedAsm = null
       let autoPrice = 0
+
       if (g.key.startsWith('kt_')) {
-        const width = parseInt(g.key.split('_')[1], 10) // kt_100_60 → 100
-        if (width) {
-          matchedAsm = assemblies.find(a =>
-            a.category === 'kabeltalca' && !a.variantOf && a.name?.includes(`${width}mm`)
-          ) || assemblies.find(a =>
-            a.category === 'kabeltalca' && a.name?.includes(`${width}mm`)
-          )
-          if (matchedAsm) {
-            // Assembly is priced per 10m typically — compute per-meter cost
-            const asmPricing = computePricing({
-              takeoffRows: [{ asmId: matchedAsm.id, qty: 1, variantId: null, wallSplits: null }],
-              assemblies, workItems, materials, context, markup: 0, hourlyRate, cableEstimate: null, difficultyMode,
-            })
-            // The assembly qty is for 10m (components have qty=10 for materials/workitems)
-            // So the total cost IS the per-10m cost → divide by 10 for per-meter
-            const asmBaseQty = (matchedAsm.components || []).find(c => c.unit === 'm')?.qty || 10
-            autoPrice = asmPricing.total / Math.max(asmBaseQty, 1)
+        // Cable tray key format: kt_{width}_{height} e.g. kt_100_60
+        const targetWidth = parseInt(g.key.split('_')[1], 10)
+        if (targetWidth) {
+          // Find the best matching assembly by width:
+          // 1. Exact width match, prefer non-variant
+          // 2. Exact width match, any
+          // 3. Nearest width (for sizes without dedicated assembly)
+          const exact = cableTrayAsms.find(c => c.width === targetWidth && !c.asm.variantOf)
+            || cableTrayAsms.find(c => c.width === targetWidth)
+          if (exact) {
+            matchedAsm = exact.asm
+          } else if (cableTrayAsms.length > 0) {
+            // Find nearest width (e.g. 150mm → closest to 100mm or 200mm assembly)
+            const sorted = [...cableTrayAsms].sort((a, b) =>
+              Math.abs(a.width - targetWidth) - Math.abs(b.width - targetWidth)
+            )
+            matchedAsm = sorted[0].asm
           }
         }
+      }
+
+      if (matchedAsm) {
+        // Compute per-meter cost from the assembly
+        const asmPricing = computePricing({
+          takeoffRows: [{ asmId: matchedAsm.id, qty: 1, variantId: null, wallSplits: null }],
+          assemblies, workItems, materials, context, markup: 0, hourlyRate, cableEstimate: null, difficultyMode,
+        })
+        // Assembly base qty in meters (components with unit='m')
+        const asmBaseQty = (matchedAsm.components || []).find(c => c.unit === 'm')?.qty || 10
+        autoPrice = asmPricing.total / Math.max(asmBaseQty, 1)
       }
       const effectivePrice = measurementPrices[g.key] !== undefined && measurementPrices[g.key] > 0
         ? measurementPrices[g.key]
