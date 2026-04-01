@@ -412,7 +412,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: f.name }),
           })
-          const createJson = await createRes.json()
+          let createJson
+          try {
+            createJson = await createRes.json()
+          } catch {
+            throw new Error(
+              createRes.status === 503
+                ? 'A DWG konverzió szolgáltatás nem elérhető. Exportáld a tervrajzot PDF vagy DXF formátumba.'
+                : `A szerver nem JSON választ adott (HTTP ${createRes.status}). Próbáld újra később, vagy használj PDF/DXF formátumot.`
+            )
+          }
           if (!createRes.ok || !createJson.success) {
             throw new Error(createJson.error || `Job létrehozása sikertelen (${createRes.status})`)
           }
@@ -441,7 +450,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ jobId }),
             }, 2)
-            const pollJson = await pollRes.json()
+            let pollJson
+            try { pollJson = await pollRes.json() } catch {
+              throw new Error(`A szerver nem JSON választ adott a pollingra (HTTP ${pollRes.status}).`)
+            }
             if (!pollRes.ok || !pollJson.success) {
               throw new Error(pollJson.error || 'Státusz lekérdezése sikertelen')
             }
