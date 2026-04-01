@@ -23,9 +23,9 @@ describe('Architecture Boundaries', () => {
     expect(workspaceSrc).toContain('const takeoffRows = useMemo(')
   })
 
-  it('asmOverrides flow is preserved (existing RecognitionRow still works)', () => {
-    expect(workspaceSrc).toContain('function RecognitionRow(')
-    expect(workspaceSrc).toContain('asmOverrides[item.blockName]')
+  it('asmOverrides flow is preserved (RecognitionRow imported)', () => {
+    expect(workspaceSrc).toContain("import RecognitionRow from './takeoff/RecognitionRow.jsx'")
+    expect(workspaceSrc).toContain('asmOverrides')
   })
 
   it('pricing pipeline is untouched (computePricing call unchanged)', () => {
