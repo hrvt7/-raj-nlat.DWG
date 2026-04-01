@@ -382,7 +382,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         viewRef.current.offsetX = (cw - pw * zoom) / 2
         viewRef.current.offsetY = (ch - ph * zoom) / 2
       }
-      drawOverlayThrottled()
+      drawOverlay()
 
       // ── Consume pending focus after page render ──
       if (pendingFocusRef.current) {
@@ -451,16 +451,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   }, [])
 
   // ── Draw overlay (annotations, crosshair, live measure) ──
-  // rAF-throttled wrapper: coalesces multiple calls per frame into one paint
   const drawOverlayRafRef = useRef(null)
-  const drawOverlayThrottled = useCallback(() => {
-    if (drawOverlayRafRef.current) return // already scheduled
-    drawOverlayRafRef.current = requestAnimationFrame(() => {
-      drawOverlayRafRef.current = null
-      drawOverlayImpl()
-    })
-  }, [])
-  const drawOverlayImpl = useCallback(() => {
+  const drawOverlay = useCallback(() => {
     const canvas = overlayRef.current
     if (!canvas || !containerRef.current) return
     const cw = containerRef.current.clientWidth
@@ -646,7 +638,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     // ── Auto Symbol: result markers (accepted = orange, rejected = dimmed red) ──
     if (autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
-      const ANALYSIS_SCALE = 4
+      const ANALYSIS_SCALE = 300 / 72
       // Template size in doc coords (rotation-invariant)
       // The template was cropped from the rotated raster, so for 90/270 rotation
       // the doc-space width/height are swapped relative to the raster w/h
@@ -709,7 +701,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     // Auto-symbol done phase: click on a result to toggle accepted/rejected
     if (activeTool === 'auto-symbol' && autoSymbolPhase === 'done' && autoSymbolResults.length > 0 && autoSymbolTemplateRef.current) {
       const tpl = autoSymbolTemplateRef.current
-      const ANALYSIS_SCALE = 4
+      const ANALYSIS_SCALE = 300 / 72
       const docTplW = tpl.w / ANALYSIS_SCALE, docTplH = tpl.h / ANALYSIS_SCALE
       // Check if click is inside any result rectangle
       for (let i = 0; i < autoSymbolResults.length; i++) {
@@ -720,7 +712,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         const hw = Math.abs(c2.x - c1.x) / 2, hh = Math.abs(c2.y - c1.y) / 2
         if (sx >= s.x - hw && sx <= s.x + hw && sy >= s.y - hh && sy <= s.y + hh) {
           setAutoSymbolResults(prev => prev.map((r, j) => j === i ? { ...r, accepted: !r.accepted } : r))
-          drawOverlayThrottled()
+          drawOverlay()
           return
         }
       }
@@ -760,7 +752,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, category: resolvedCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
       markDirty()
       setRenderTick(t => t + 1)
-      drawOverlayThrottled()
+      drawOverlay()
       // Notify parent of marker change
       if (onMarkersChange) {
         onMarkersChange([...markersRef.current])
@@ -799,11 +791,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           activeStartRef.current = null
           setRenderTick(t => t + 1)
         }
-        drawOverlayThrottled()
+        drawOverlay()
       }
       return
     }
-  }, [activeTool, activeCategory, screenToPdf, drawOverlayThrottled])
+  }, [activeTool, activeCategory, screenToPdf, drawOverlay])
 
   const handleMouseMove = useCallback((e) => {
     const rect = overlayRef.current?.getBoundingClientRect()
@@ -816,7 +808,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const r = { x1: autoSymbolStartRef.current.sx, y1: autoSymbolStartRef.current.sy, x2: sx, y2: sy }
       if (autoSymbolPhase === 'picking') setAutoSymbolRect(r)
       else setAutoSymbolAreaRect(r)
-      drawOverlayImpl()
+      drawOverlay()
       return
     }
 
@@ -825,13 +817,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const dy = e.clientY - dragRef.current.startY
       viewRef.current.offsetX = dragRef.current.startOX + dx
       viewRef.current.offsetY = dragRef.current.startOY + dy
-      drawOverlayImpl()
+      drawOverlay()
       return
     }
 
     mousePdfRef.current = screenToPdf(sx, sy)
-    if (activeTool) drawOverlayImpl()
-  }, [activeTool, screenToPdf, drawOverlayImpl])
+    if (activeTool) drawOverlay()
+  }, [activeTool, screenToPdf, drawOverlay])
 
   // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
   // IMPORTANT: must be declared BEFORE handleMouseUp which references it
@@ -842,7 +834,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     setAutoSymbolError(null)
     setAutoSymbolResults([])
     try {
-      const ANALYSIS_SCALE = 4 // ~300 DPI high-res raster for template matching
+      const ANALYSIS_SCALE = 300 / 72 // 300 DPI high-res raster for template matching
       const page = await pdfDoc.getPage(pageNum)
       const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE, rotationRef.current)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
@@ -920,7 +912,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const w = x2 - x1, h = y2 - y1
       if (w < 8 || h < 8) { setAutoSymbolRect(null); setAutoSymbolError('A kijelölés túl kicsi.'); return }
       // Convert screen coords to PDF doc coords, then render an on-demand analysis crop
-      const ANALYSIS_SCALE = 4 // ~300 DPI — match the search raster
+      const ANALYSIS_SCALE = 300 / 72 // ~300 DPI — match the search raster
       const v = viewRef.current
       // Screen → doc coords → rotated canvas coords for the crop rectangle
       const doc1 = screenToPdf(x1, y1)
@@ -1006,7 +998,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // Two-finger trackpad scroll → pan
       v.offsetX -= e.deltaX
       v.offsetY -= e.deltaY
-      drawOverlayThrottled()
+      drawOverlay()
       setRenderTick(t => t + 1) // update scrollbars
       return
     }
@@ -1021,14 +1013,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.offsetX = sx - (sx - v.offsetX) * (newZoom / v.zoom)
     v.offsetY = sy - (sy - v.offsetY) * (newZoom / v.zoom)
     v.zoom = newZoom
-    drawOverlayThrottled()
+    drawOverlay()
     setRenderTick(t => t + 1) // update scrollbars
     // Schedule high-quality re-render after zoom settles
     if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current)
     zoomRerenderTimerRef.current = setTimeout(() => {
       if (pdfDoc && pageNum > 0) renderPage(pdfDoc, pageNum, { zoomDriven: true })
     }, 400)
-  }, [drawOverlayThrottled, pdfDoc, pageNum, renderPage])
+  }, [drawOverlay, pdfDoc, pageNum, renderPage])
 
   // Re-search when threshold changes (debounced)
   useEffect(() => {
@@ -1059,7 +1051,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   useEffect(() => {
     const h = (e) => {
       if (calibDialog) return
-      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; drawOverlayThrottled() }
+      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; drawOverlay() }
       if (e.key === 'c' || e.key === 'C') setActiveTool(t => t === 'count' ? null : 'count')
       if (e.key === 'm' || e.key === 'M') setActiveTool(t => t === 'measure' ? null : 'measure')
       if (e.key === 's' || e.key === 'S') setActiveTool(t => t === 'calibrate' ? null : 'calibrate')
@@ -1070,7 +1062,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [calibDialog, drawOverlayThrottled])
+  }, [calibDialog, drawOverlay])
 
   // ── Undo / Clear ──
   const handleUndo = useCallback(() => {
@@ -1083,8 +1075,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (onMarkersChange) onMarkersChange([...markersRef.current])
     }
     setRenderTick(t => t + 1)
-    drawOverlayThrottled()
-  }, [drawOverlayThrottled, onMarkersChange, markDirty])
+    drawOverlay()
+  }, [drawOverlay, onMarkersChange, markDirty])
 
   const handleClearAll = useCallback(() => {
     markersRef.current = []
@@ -1092,9 +1084,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     activeStartRef.current = null
     markDirty()
     setRenderTick(t => t + 1)
-    drawOverlayThrottled()
+    drawOverlay()
     if (onMarkersChange) onMarkersChange([])
-  }, [drawOverlayThrottled, onMarkersChange, markDirty])
+  }, [drawOverlay, onMarkersChange, markDirty])
 
   // ── Calibration submit ──
   const handleCalibSubmit = useCallback(() => {
@@ -1114,8 +1106,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     setCalibDialog(null)
     setCalibInput('')
     setRenderTick(t => t + 1)
-    drawOverlayThrottled()
-  }, [calibDialog, calibInput, calibUnit, drawOverlayThrottled, markDirty])
+    drawOverlay()
+  }, [calibDialog, calibInput, calibUnit, drawOverlay, markDirty])
 
   // ── Measurement category reassignment (retroactive tagging of existing measurements) ──
   const handleMeasureCategoryChange = useCallback((idx, category) => {
@@ -1123,9 +1115,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       measuresRef.current[idx] = { ...measuresRef.current[idx], category: category || undefined }
       markDirty()
       setRenderTick(t => t + 1)
-      drawOverlayThrottled()
+      drawOverlay()
     }
-  }, [drawOverlayThrottled, markDirty])
+  }, [drawOverlay, markDirty])
 
   // ── Fit view ──
   const handleFitView = useCallback(() => {
@@ -1137,20 +1129,20 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.zoom = zoom
     v.offsetX = (cw - v.pageWidth * zoom) / 2
     v.offsetY = (ch - v.pageHeight * zoom) / 2
-    drawOverlayThrottled()
-  }, [drawOverlayThrottled])
+    drawOverlay()
+  }, [drawOverlay])
 
   // ── Resize ──
   useEffect(() => {
-    const obs = new ResizeObserver(() => drawOverlayThrottled())
+    const obs = new ResizeObserver(() => drawOverlay())
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
-  }, [drawOverlayThrottled])
+  }, [drawOverlay])
 
   // ── Repaint overlay when renderTick changes (e.g. markers restored from IDB) ──
   useEffect(() => {
-    drawOverlayThrottled()
-  }, [renderTick, drawOverlayThrottled])
+    drawOverlay()
+  }, [renderTick, drawOverlay])
 
   // ── Count summary ──
   // UNIFIED: groups markers by asmId for assembly-level detail.
@@ -1244,8 +1236,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
-        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlayThrottled(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
-        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlayThrottled(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
+        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlay(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
+        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlay(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
         onUndo={handleUndo} onClearAll={handleClearAll}
         onToggleCountPanel={() => setCountPanelOpen(!countPanelOpen)}
         countPanelOpen={countPanelOpen}
@@ -1255,7 +1247,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         onToggleEstimation={() => setEstimationOpen(p => !p)}
         estimationOpen={estimationOpen}
         showCableRoutes={showCableRoutes}
-        onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlayThrottled, 50) }}
+        onToggleCableRoutes={() => { setShowCableRoutes(p => !p); setTimeout(drawOverlay, 50) }}
         rotation={rotation}
         onRotateLeft={() => { setRotation(r => (r - 90 + 360) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
         onRotateRight={() => { setRotation(r => (r + 90) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
@@ -1281,7 +1273,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
             autoSymbolTemplateRef.current = null
             autoSymbolWorkerRef.current?.terminate()
             setActiveTool(null)
-            drawOverlayThrottled()
+            drawOverlay()
           } else {
             setAutoSymbolActive(true)
             setAutoSymbolPhase('picking')
@@ -1301,7 +1293,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           autoSymbolTemplateRef.current = null
           autoSymbolWorkerRef.current?.terminate()
           setAutoSymbolLabel('')
-          drawOverlayThrottled()
+          drawOverlay()
         }}
         onAutoSymbolSearchFull={() => {
           setAutoSymbolPhase('searching')
@@ -1353,7 +1345,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           autoSymbolWorkerRef.current?.terminate()
           setActiveTool(null)
           setAutoSymbolLabel('')
-          drawOverlayThrottled()
+          drawOverlay()
         }}
       />
 
@@ -1378,7 +1370,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         <PdfScrollbars viewRef={viewRef} containerRef={containerRef} renderTick={renderTick} onPan={(dx, dy) => {
           viewRef.current.offsetX += dx
           viewRef.current.offsetY += dy
-          drawOverlayThrottled()
+          drawOverlay()
         }} />
 
         {/* Loading */}
