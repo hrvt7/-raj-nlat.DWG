@@ -1233,12 +1233,6 @@ function AuthModal({ onAuth }) {
           </span>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: C.muted }}>
-          Folytatás bejelentkezés nélkül →{' '}
-          <span onClick={onAuth} style={{ color: C.muted, cursor: 'pointer', textDecoration: 'underline' }}>
-            vendégként
-          </span>
-        </div>
       </div>
     </div>
   )
@@ -1259,7 +1253,6 @@ function SaaSShell() {
   // ── Auth state ─────────────────────────────────────────────────────────────
   const [session, setSession] = useState(null)
   const [authChecked, setAuthChecked] = useState(false)
-  const [showAuth, setShowAuth] = useState(false)
   const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
@@ -1405,9 +1398,17 @@ function SaaSShell() {
 
   const handleSignOut = async () => {
     await signOut()
+    // Clear all local data to prevent leakage to next user
+    const keysToKeep = ['takeoffpro_cookie_consent'] // preserve cookie consent
+    const allKeys = Object.keys(localStorage).filter(k => k.startsWith('takeoffpro_'))
+    for (const k of allKeys) {
+      if (!keysToKeep.includes(k)) localStorage.removeItem(k)
+    }
     setSession(null)
     setUserEmail('')
-    setSubStatus({ plan: 'free', active: false })
+    // Redirect to landing
+    window.location.hash = ''
+    window.location.reload()
   }
 
   // Trade-specifikus oldal navigáció: "assemblies-erosaram" → page='assemblies', activeTrade='erosaram'
@@ -1620,10 +1621,21 @@ function SaaSShell() {
   const SIDEBAR_COLLAPSED = 60
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const sidebarW = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_FULL
+  // ── Auth gate: mandatory login ───────────────────────────────────────────
+  if (!authChecked) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg }}>
+        <div style={{ color: C.muted, fontFamily: 'DM Mono', fontSize: 13 }}>Betöltés...</div>
+      </div>
+    )
+  }
+  if (!session) {
+    return <AuthModal onAuth={() => {}} />
+  }
+
   return (
     <ToastProvider>
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
-      {showAuth && <AuthModal onAuth={() => setShowAuth(false)} />}
       <Sidebar
         active={activeTrade ? `${page}-${activeTrade}` : page}
         activeTrade={activeTrade}
