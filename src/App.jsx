@@ -1165,48 +1165,71 @@ function AuthModal({ onAuth }) {
   }
 
   const inp = {
-    width: '100%', padding: '10px 14px', background: '#1A1F2E',
-    border: `1px solid ${C.border}`, borderRadius: 8, color: C.text,
-    fontSize: 14, outline: 'none', boxSizing: 'border-box',
+    width: '100%', padding: '12px 16px', background: C.bg,
+    border: `1px solid ${C.border}`, borderRadius: 10, color: C.text,
+    fontFamily: 'DM Mono', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    transition: 'border-color 0.2s',
   }
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      position: 'fixed', inset: 0, background: C.bg,
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
     }}>
+      {/* Subtle grid background */}
+      <div style={{ position: 'absolute', inset: 0, opacity: 0.03, backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '32px 32px' }} />
+
       <div style={{
-        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 16,
-        padding: '36px 32px', width: '100%', maxWidth: 400, boxSizing: 'border-box',
+        background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 20,
+        padding: '44px 36px', width: '100%', maxWidth: 420, boxSizing: 'border-box',
+        position: 'relative', boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
       }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 6 }}>
-          {mode === 'login' ? 'Bejelentkezés' : 'Regisztráció'}
+        {/* Logo / brand */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 26, letterSpacing: '-0.02em',
+            background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+          }}>
+            TakeoffPro
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 6, letterSpacing: '0.05em' }}>
+            {mode === 'login' ? 'Jelentkezz be a fiókodba' : 'Hozd létre a fiókodat'}
+          </div>
         </div>
-        <div style={{ color: C.muted, fontSize: 13, marginBottom: 24 }}>TakeoffPro fiók</div>
 
         {mode === 'register' && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Teljes név</div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: C.textSub, marginBottom: 6 }}>Teljes név</div>
             <input style={inp} placeholder="Kovács János" value={name}
-              onChange={e => setName(e.target.value)} />
+              onChange={e => setName(e.target.value)}
+              onFocus={e => e.target.style.borderColor = C.accent}
+              onBlur={e => e.target.style.borderColor = C.border} />
           </div>
         )}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>E-mail</div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: C.textSub, marginBottom: 6 }}>E-mail cím</div>
           <input style={inp} type="email" placeholder="email@ceg.hu" value={email}
             onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submit()} />
+            onKeyDown={e => e.key === 'Enter' && submit()}
+            onFocus={e => e.target.style.borderColor = C.accent}
+            onBlur={e => e.target.style.borderColor = C.border} />
         </div>
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ color: C.muted, fontSize: 12, marginBottom: 6 }}>Jelszó</div>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: C.textSub, marginBottom: 6 }}>Jelszó</div>
           <input style={inp} type="password" placeholder="••••••••" value={password}
             onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submit()} />
+            onKeyDown={e => e.key === 'Enter' && submit()}
+            onFocus={e => e.target.style.borderColor = C.accent}
+            onBlur={e => e.target.style.borderColor = C.border} />
         </div>
 
         {error && (
-          <div style={{ background: '#FF6B6B18', border: '1px solid #FF6B6B40',
-            color: '#FF6B6B', fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 16 }}>
+          <div style={{
+            background: C.redDim, border: `1px solid ${C.red}40`,
+            color: C.red, fontFamily: 'DM Mono', fontSize: 12,
+            padding: '10px 14px', borderRadius: 10, marginBottom: 18,
+          }}>
             {error}
           </div>
         )}
@@ -1215,24 +1238,25 @@ function AuthModal({ onAuth }) {
           onClick={submit}
           disabled={loading || !email || !password}
           style={{
-            width: '100%', padding: '11px', borderRadius: 8, border: 'none',
-            background: loading ? C.accentDim : C.accent, color: '#09090B',
-            fontWeight: 700, fontSize: 15, cursor: loading ? 'not-allowed' : 'pointer',
+            width: '100%', padding: '13px', borderRadius: 10, border: 'none',
+            background: loading ? C.accentDim : 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)',
+            color: '#09090B', fontFamily: 'Syne', fontWeight: 800, fontSize: 15,
+            cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '-0.01em',
+            transition: 'all 0.2s', opacity: (!email || !password) ? 0.5 : 1,
           }}
         >
           {loading ? 'Folyamatban...' : (mode === 'login' ? 'Bejelentkezés' : 'Fiók létrehozása')}
         </button>
 
-        <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: C.muted }}>
+        <div style={{ textAlign: 'center', marginTop: 22, fontFamily: 'DM Mono', fontSize: 12, color: C.muted }}>
           {mode === 'login' ? 'Még nincs fiókod?' : 'Már van fiókod?'}{' '}
           <span
             onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}
-            style={{ color: C.accent, cursor: 'pointer', textDecoration: 'underline' }}
+            style={{ color: C.accent, cursor: 'pointer', fontWeight: 600 }}
           >
             {mode === 'login' ? 'Regisztráció' : 'Bejelentkezés'}
           </span>
         </div>
-
       </div>
     </div>
   )
