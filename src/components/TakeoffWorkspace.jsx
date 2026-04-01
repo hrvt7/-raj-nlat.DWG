@@ -2206,9 +2206,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.textSub, textAlign: 'center', maxWidth: 360, lineHeight: 1.7 }}>
                     {dwgError
                       ? <span style={{ color: '#FF9090' }}>{dwgError}</span>
-                      : <>A CloudConvert API nem tudta konvertálni a fájlt.</>
-                    }<br />
-                    Exportáld DXF formátumban, majd töltsd fel újra:
+                      : <>A DWG fájl automatikus konvertálása nem sikerült.</>
+                    }<br /><br />
+                    <strong>Két megoldás:</strong><br />
+                    1. Exportáld PDF-ként → az Auto Symbol funkcióval dolgozz<br />
+                    2. Exportáld DXF-ként → a blokk-alapú felismerés automatikusan működik
                   </div>
                   <div style={{
                     background: C.bgCard, border: `1px solid ${C.borderLight}`, borderRadius: 10,
