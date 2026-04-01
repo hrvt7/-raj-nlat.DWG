@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json, traceback, os, sys
 from urllib.request import urlopen, Request
+import urllib.error
 from _security import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
 
 CLOUDCONVERT_API_KEY = os.environ.get('CLOUDCONVERT_API_KEY', '')
@@ -45,8 +46,23 @@ def create_job(filename):
             'Content-Type': 'application/json',
         }
     )
-    with urlopen(req, timeout=30) as r:
-        job = json.loads(r.read())
+    try:
+        with urlopen(req, timeout=30) as r:
+            job = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')[:200]
+        if e.code == 401:
+            raise Exception('CloudConvert API kulcs érvénytelen vagy lejárt. Ellenőrizd a Vercel env vars-ban.')
+        elif e.code == 402:
+            raise Exception('CloudConvert kvóta elfogyott. Ellenőrizd a fiókod: https://cloudconvert.com/dashboard')
+        elif e.code == 429:
+            raise Exception('CloudConvert rate limit — túl sok kérés. Próbáld újra 1 perc múlva.')
+        else:
+            raise Exception(f'CloudConvert API hiba ({e.code}): {body}')
+    except Exception as e:
+        if 'not valid JSON' in str(e) or 'Unexpected token' in str(e):
+            raise Exception('CloudConvert API nem elérhető vagy hibás választ adott. Próbáld újra később.')
+        raise
 
     upload_task = next(
         (t for t in job['data']['tasks'] if t['name'] == 'upload-file'),
