@@ -1013,11 +1013,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const prjDefault = initialData?.quoteOverrides?._outputMode
         || (planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined')
 
+      // Use fullCalc as the financial source of truth (includes measurementCost, markup, VAT)
+      const financialPricing = fullCalc ? {
+        total:        Math.round(fullCalc.grandTotal),
+        materialCost: Math.round((pricing?.materialCost || 0) + (fullCalc.measurementCost || 0)),
+        laborCost:    Math.round(pricing?.laborCost || 0),
+        laborHours:   pricing?.laborHours || 0,
+      } : pricing
+
       const quote = createQuote({
         displayName,
         clientName,
         outputMode: prjDefault,
-        pricing,
+        pricing: financialPricing,
         pricingParams: { hourlyRate, markupPct: markup, markupType },
         settings,
         overrides: {

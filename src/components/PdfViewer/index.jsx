@@ -913,7 +913,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       setAutoSymbolError('Keresés sikertelen: ' + (err.message || 'ismeretlen hiba'))
       setAutoSymbolPhase('done')
     } finally {
-      if (autoSymbolSearchIdRef.current === mySearchId) setAutoSymbolSearching(false)
+      if (mountedRef.current && autoSymbolSearchIdRef.current === mySearchId) setAutoSymbolSearching(false)
     }
   }, [pdfDoc, pageNum])
 
