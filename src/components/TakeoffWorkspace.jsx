@@ -754,20 +754,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         // Cable tray key format: kt_{width}_{height} e.g. kt_100_60
         const targetWidth = parseInt(g.key.split('_')[1], 10)
         if (targetWidth) {
-          // Find the best matching assembly by width:
-          // 1. Exact width match, prefer non-variant
-          // 2. Exact width match, any
-          // 3. Nearest width (for sizes without dedicated assembly)
+          // Exact width match only — no nearest/approximate matching
           const exact = cableTrayAsms.find(c => c.width === targetWidth && !c.asm.variantOf)
             || cableTrayAsms.find(c => c.width === targetWidth)
           if (exact) {
             matchedAsm = exact.asm
-          } else if (cableTrayAsms.length > 0) {
-            // Find nearest width (e.g. 150mm → closest to 100mm or 200mm assembly)
-            const sorted = [...cableTrayAsms].sort((a, b) =>
-              Math.abs(a.width - targetWidth) - Math.abs(b.width - targetWidth)
-            )
-            matchedAsm = sorted[0].asm
           }
         }
       }
