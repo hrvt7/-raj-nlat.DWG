@@ -1474,6 +1474,16 @@ function SaaSShell() {
   }, [])
 
   const handleSignOut = async () => {
+    // Sync all local data to remote BEFORE clearing (prevents data loss)
+    try {
+      await Promise.allSettled([
+        saveSettingsRemote(settings),
+        saveQuoteRemote && quotes.length > 0 ? Promise.all(quotes.map(q => saveQuoteRemote(q).catch(() => {}))) : Promise.resolve(),
+        saveAssembliesRemote(loadAssemblies()),
+        saveMaterialsRemote(materials),
+        saveWorkItemsRemote(loadWorkItems()),
+      ])
+    } catch { /* best-effort sync before logout */ }
     await signOut()
     // Clear all local data to prevent leakage to next user
     const keysToKeep = ['takeoffpro_cookie_consent'] // preserve cookie consent
