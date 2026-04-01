@@ -191,6 +191,14 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
     || editExclusions !== (quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
     || editValidity !== (quote.validityText ?? '')
     || editPaymentTerms !== (quote.paymentTermsText ?? '')
+  // ── Navigation guard: warn before leaving with unsaved changes ───────────
+  useEffect(() => {
+    if (!isDirty) return
+    const handler = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
+
   const totalHours = quote.totalHours || 0
   const totalMaterials = Math.round(quote.totalMaterials || 0)
   const newTotalLabor = Math.round(totalHours * effectiveRate)
@@ -1496,7 +1504,7 @@ function SaaSShell() {
       clientName: '',
       outputMode: planPrjDefault,
       pricing: p,
-      pricingParams: { hourlyRate: meta.calcHourlyRate || 9000, markupPct: meta.calcMarkup || 0 },
+      pricingParams: { hourlyRate: meta.calcHourlyRate || 9000, markupPct: meta.calcMarkup || 0, markupType: meta.calcMarkupType || settings?.labor?.markup_type || 'markup' },
       settings,
       overrides: {
         items: (meta.calcPricingLines || []).map(item => ({

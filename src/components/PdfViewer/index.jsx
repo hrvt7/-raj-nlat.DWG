@@ -165,6 +165,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const autoSymbolWorkerRef = useRef(null) // Web Worker instance
   const autoSymbolSearchIdRef = useRef(0) // monotonic counter to detect stale results
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
+  const mountedRef = useRef(true) // guard against setState after unmount
 
   // ── Dirty state tracking (unsaved local changes) ──
   const dirtyRef = useRef(false)
@@ -933,8 +934,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         })
       })
 
-      // Stale result guard — if a newer search was started, discard this result
-      if (autoSymbolSearchIdRef.current !== mySearchId) return
+      // Stale/unmount guard — discard result if component unmounted or newer search started
+      if (!mountedRef.current || autoSymbolSearchIdRef.current !== mySearchId) return
 
       // Convert from analysis-scale rotated pixel coords → canvas coords → doc coords
       const dd = unrotatedDimsRef.current
@@ -951,7 +952,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       setAutoSymbolPhase('done')
       if (results.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken.')
     } catch (err) {
-      if (autoSymbolSearchIdRef.current !== mySearchId) return // stale
+      if (!mountedRef.current || autoSymbolSearchIdRef.current !== mySearchId) return // stale/unmounted
       console.error('[AutoSymbol] worker search failed:', err)
       setAutoSymbolError('Keresés sikertelen: ' + (err.message || 'ismeretlen hiba'))
       setAutoSymbolPhase('done')
@@ -1098,8 +1099,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     return () => el.removeEventListener('wheel', handler)
   }, [handleWheel])
 
-  // Cleanup worker on unmount
-  useEffect(() => () => { autoSymbolWorkerRef.current?.terminate() }, [])
+  // Cleanup on unmount: worker, timers, mounted flag
+  useEffect(() => () => {
+    mountedRef.current = false
+    autoSymbolWorkerRef.current?.terminate()
+    if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current)
+  }, [])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {

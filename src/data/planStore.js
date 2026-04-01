@@ -377,11 +377,26 @@ export async function hashFile(file) {
  * @param {string} fileHash - SHA-256 hex
  * @param {Object} parseResult - { blocks, lengths, layers, summary, ... }
  */
+const PARSE_CACHE_MAX_ENTRIES = 50
+
 export async function cacheParseResult(fileHash, parseResult) {
   await parseCacheStore.setItem(`pc_${fileHash}`, {
     ...parseResult,
     _cachedAt: Date.now(),
   })
+  // LRU eviction: if cache exceeds max, remove oldest entries
+  try {
+    const keys = await parseCacheStore.keys()
+    if (keys.length > PARSE_CACHE_MAX_ENTRIES) {
+      const entries = await Promise.all(keys.map(async k => {
+        const item = await parseCacheStore.getItem(k)
+        return { key: k, cachedAt: item?._cachedAt || 0 }
+      }))
+      entries.sort((a, b) => a.cachedAt - b.cachedAt)
+      const toRemove = entries.slice(0, entries.length - PARSE_CACHE_MAX_ENTRIES)
+      await Promise.all(toRemove.map(e => parseCacheStore.removeItem(e.key)))
+    }
+  } catch { /* eviction failure is non-critical */ }
 }
 
 /**

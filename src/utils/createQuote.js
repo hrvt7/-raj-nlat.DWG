@@ -25,7 +25,7 @@ import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
  * @param {string}  [opts.clientName]       — Client name (default: '')
  * @param {string}  opts.outputMode         — 'combined' | 'labor_only' | 'split_material_labor'
  * @param {object}  opts.pricing            — { total, materialCost, laborCost, laborHours }
- * @param {object}  opts.pricingParams      — { hourlyRate, markupPct } (markupPct as decimal, e.g. 0.10)
+ * @param {object}  opts.pricingParams      — { hourlyRate, markupPct, markupType } (markupPct as decimal, e.g. 0.10; markupType: 'markup'|'margin')
  * @param {object}  opts.settings           — Full app settings object (from loadSettings())
  * @param {object}  [opts.overrides]        — Path-specific fields spread last (items, source, fileName, etc.)
  * @returns {object} Fully-formed quote object ready for saveQuote()
@@ -87,6 +87,7 @@ export function createQuote({ displayName, clientName, outputMode, pricing, pric
     pricingData: {
       hourlyRate:     Number(pricingParams?.hourlyRate) || 0,
       markup_pct:     Number(pricingParams?.markupPct) || 0,
+      markup_type:    pricingParams?.markupType || 'markup',
     },
 
     // ── Path-specific overrides (items, source, fileName, planId, etc.) ──

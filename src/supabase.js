@@ -124,7 +124,11 @@ export async function saveQuoteRemote(quote) {
 }
 export async function deleteQuoteRemote(quoteNumber) {
   requireConfig('deleteQuoteRemote')
-  const { error } = await supabase.from('quotes').delete().eq('quote_number', quoteNumber)
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const { error } = await supabase.from('quotes').delete()
+    .eq('user_id', user.id)
+    .eq('quote_number', quoteNumber)
   if (error) throw error
 }
 

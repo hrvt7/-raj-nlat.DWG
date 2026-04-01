@@ -904,7 +904,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         clientName,
         outputMode: prjDefault,
         pricing,
-        pricingParams: { hourlyRate, markupPct: markup },
+        pricingParams: { hourlyRate, markupPct: markup, markupType },
         settings,
         overrides: {
           items,

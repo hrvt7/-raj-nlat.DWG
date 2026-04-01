@@ -164,6 +164,7 @@ export default function PdfMergePanel({ plans, materials: propMaterials, onClose
       pricingParams: {
         hourlyRate: settings?.labor?.hourly_rate ?? _allSettings.labor.hourly_rate,
         markupPct:  (settings?.labor?.markup_percent ?? _allSettings.labor.markup_percent) / 100,
+        markupType: settings?.labor?.markup_type || 'markup',
       },
       settings: _allSettings,
       overrides: {

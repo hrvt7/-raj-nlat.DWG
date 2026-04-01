@@ -5,6 +5,7 @@
 
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 import { supabaseConfigured, saveProjectsRemote } from '../supabase.js'
+import { guardedWrite } from './lsConcurrency.js'
 
 const LS_KEY = 'takeoffpro_projects_meta'
 
@@ -51,14 +52,16 @@ export function generateProjectId() {
  * @param {Object} project - { id, name, description?, legendPlanId?, createdAt }
  */
 export function saveProject(project) {
-  const all = loadMeta()
-  const idx = all.findIndex(p => p.id === project.id)
-  if (idx >= 0) {
-    all[idx] = { ...all[idx], ...project }
-  } else {
-    all.unshift(project)
-  }
-  saveMeta(all)
+  guardedWrite(LS_KEY, [], (all) => {
+    const list = unwrapVersioned(all, PROJECTS_SCHEMA_VERSION, [])
+    const idx = list.findIndex(p => p.id === project.id)
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...project }
+    } else {
+      list.unshift(project)
+    }
+    return list
+  }, (data) => saveMeta(data))
   return project
 }
 
@@ -82,10 +85,14 @@ export function getProject(projectId) {
  * @param {string} projectId
  */
 export function deleteProject(projectId) {
-  const before = loadMeta()
-  const after = before.filter(p => p.id !== projectId)
-  saveMeta(after)
-  return after.length < before.length  // true if actually removed
+  let removed = false
+  guardedWrite(LS_KEY, [], (all) => {
+    const list = unwrapVersioned(all, PROJECTS_SCHEMA_VERSION, [])
+    const after = list.filter(p => p.id !== projectId)
+    removed = after.length < list.length
+    return after
+  }, (data) => saveMeta(data))
+  return removed
 }
 
 /**
@@ -95,14 +102,17 @@ export function deleteProject(projectId) {
  * @returns {boolean} true if project found and updated
  */
 export function updateProject(projectId, updates) {
-  const all = loadMeta()
-  const idx = all.findIndex(p => p.id === projectId)
-  if (idx >= 0) {
-    all[idx] = { ...all[idx], ...updates }
-    saveMeta(all)
-    return true
-  }
-  return false
+  let found = false
+  guardedWrite(LS_KEY, [], (all) => {
+    const list = unwrapVersioned(all, PROJECTS_SCHEMA_VERSION, [])
+    const idx = list.findIndex(p => p.id === projectId)
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...updates }
+      found = true
+    }
+    return list
+  }, (data) => saveMeta(data))
+  return found
 }
 
 // ── Fallback project ────────────────────────────────────────────────────────
