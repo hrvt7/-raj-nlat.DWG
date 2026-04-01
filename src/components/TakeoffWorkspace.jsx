@@ -114,6 +114,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── PDF manual markers (assembly-based counting from PdfViewer) ─────────
   const [pdfMarkers, setPdfMarkers] = useState([])
+  const [pdfMeasurements, setPdfMeasurements] = useState([]) // [{x1,y1,x2,y2,dist,category?}]
   const prevMarkerCountRef = useRef(0)
   useEffect(() => {
     const asmMarkers = pdfMarkers.filter(m => m.asmId || (m.category && m.category.startsWith('ASM-')))
@@ -1224,6 +1225,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   onMarkersChange={(markers) => {
                     setPdfMarkers(markers)
                   }}
+                  onMeasurementsChange={(measurements) => {
+                    setPdfMeasurements(measurements)
+                  }}
                   onCableData={(data) => {
                     if (data) {
                       const normalized = normalizeCableEstimate(data, CABLE_SOURCE.PDF_MARKERS)
@@ -1597,6 +1601,46 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         </div>
                       ))}
                     </div>
+
+                    {/* ── Measurements from PDF (cable trays, manual measurements) ── */}
+                    {pdfMeasurements.length > 0 && (() => {
+                      // Group measurements by category
+                      const groups = {}
+                      let uncategorizedTotal = 0
+                      let uncategorizedCount = 0
+                      for (const seg of pdfMeasurements) {
+                        const dist = seg.dist * (fullCalc?.productivityFactor ? 1 : 1) // raw px dist — needs scale
+                        if (seg.category) {
+                          if (!groups[seg.category]) groups[seg.category] = { totalDist: 0, count: 0, label: seg.category }
+                          groups[seg.category].totalDist += seg.dist
+                          groups[seg.category].count++
+                        } else {
+                          uncategorizedTotal += seg.dist
+                          uncategorizedCount++
+                        }
+                      }
+                      const hasAny = Object.keys(groups).length > 0 || uncategorizedCount > 0
+                      if (!hasAny) return null
+                      // We need scale factor from the PdfViewer — stored in annotations
+                      // For now show pixel distances; when calibrated, show meters
+                      return (
+                        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+                          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Mérések ({pdfMeasurements.length} db)</div>
+                          {Object.entries(groups).map(([cat, info]) => (
+                            <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{info.label} ({info.count} db)</div>
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.yellow, fontWeight: 700 }}>{Math.round(info.totalDist)} px</div>
+                            </div>
+                          ))}
+                          {uncategorizedCount > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}>
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>Általános mérés ({uncategorizedCount} db)</div>
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.yellow, fontWeight: 700 }}>{Math.round(uncategorizedTotal)} px</div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* ── Cable cost ── */}
                     {fullCalc.cableTotalM > 0 && (

@@ -22,7 +22,7 @@ const C = {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, focusTarget, onDirtyChange }) {
+export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, onMeasurementsChange, focusTarget, onDirtyChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -36,6 +36,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   useEffect(() => { onCableDataRef.current = onCableData })
   const onMarkersChangeRef = useRef(onMarkersChange)
   useEffect(() => { onMarkersChangeRef.current = onMarkersChange })
+  const onMeasurementsChangeRef = useRef(onMeasurementsChange)
+  useEffect(() => { onMeasurementsChangeRef.current = onMeasurementsChange })
 
   // ── PDF state ──
   const [pdfDoc, setPdfDoc] = useState(null)
@@ -104,6 +106,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
   const mountedRef = useRef(true) // guard against setState after unmount
 
+  // ── Notify parent of measurement changes ──
+  const notifyMeasurements = useCallback(() => {
+    const cb = onMeasurementsChangeRef.current
+    if (cb) cb([...measuresRef.current])
+  }, [])
+
   // ── Dirty state tracking (unsaved local changes) ──
   const dirtyRef = useRef(false)
   const markDirty = useCallback(() => {
@@ -141,7 +149,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         setRenderTick(t => t + 1)
         if (onMarkersChange) onMarkersChange([...markersRef.current])
       }
-      if (ann.measurements?.length) { measuresRef.current = ann.measurements }
+      if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurements() }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
@@ -484,6 +492,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         return { ...seg, x1: doc1.x, y1: doc1.y, x2: doc2.x, y2: doc2.y }
       })
       if (onMarkersChange) onMarkersChange([...markersRef.current])
+      notifyMeasurements()
     }
     // proj: unrotated doc coords → screen coords (via docToCanvas + zoom/offset)
     const proj = (dx, dy) => {
@@ -788,6 +797,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           const measCategory = activeCatDef?.isCableTray ? activeCategory : undefined
           measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist, ...(measCategory ? { category: measCategory } : {}) })
           markDirty()
+          notifyMeasurements()
           activeStartRef.current = null
           setRenderTick(t => t + 1)
         }
@@ -1069,6 +1079,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (measuresRef.current.length > 0) {
       measuresRef.current.pop()
       markDirty()
+      notifyMeasurements()
     } else if (markersRef.current.length > 0) {
       markersRef.current.pop()
       markDirty()
@@ -1076,17 +1087,18 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
     setRenderTick(t => t + 1)
     drawOverlay()
-  }, [drawOverlay, onMarkersChange, markDirty])
+  }, [drawOverlay, onMarkersChange, markDirty, notifyMeasurements])
 
   const handleClearAll = useCallback(() => {
     markersRef.current = []
     measuresRef.current = []
     activeStartRef.current = null
     markDirty()
+    notifyMeasurements()
     setRenderTick(t => t + 1)
     drawOverlay()
     if (onMarkersChange) onMarkersChange([])
-  }, [drawOverlay, onMarkersChange, markDirty])
+  }, [drawOverlay, onMarkersChange, markDirty, notifyMeasurements])
 
   // ── Calibration submit ──
   const handleCalibSubmit = useCallback(() => {
@@ -1103,6 +1115,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     markDirty()
     // Update existing measurements
     measuresRef.current = measuresRef.current.map(seg => ({ ...seg }))
+    notifyMeasurements()
     setCalibDialog(null)
     setCalibInput('')
     setRenderTick(t => t + 1)
