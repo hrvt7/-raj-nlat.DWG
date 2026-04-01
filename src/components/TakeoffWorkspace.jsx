@@ -817,6 +817,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     } else {
       base.measurementCost = 0
     }
+    // Attach measurement line items for Kalkuláció tab + quote export
+    base.measurementLines = measurementItems.filter(item => item.cost > 0 || item.totalMeters > 0)
     return base
   }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal])
 
@@ -980,6 +982,25 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         hours:       line.hours || 0,
         materialCost: line.materialCost || 0,
       }))
+      // Add measurement line items (cable trays, manual measurements) to the quote
+      for (const mi of measurementItems) {
+        if (!mi.totalMeters || mi.totalMeters <= 0) continue
+        items.push({
+          name:        mi.label + (mi.isAutoPriced ? '' : ' (kézi ár)'),
+          code:        mi.matchedAsmId || mi.key,
+          qty:         Math.round(mi.totalMeters * 10) / 10,
+          unit:        'm',
+          type:        'material',
+          systemType:  'general',
+          sourcePlanSystemType: _fqPlanSysType,
+          sourcePlanFloor: _fqPlanFloor,
+          sourcePlanFloorLabel: _fqPlanFloorLabel,
+          unitPrice:   mi.pricePerUnit,
+          hours:       0,
+          materialCost: mi.cost,
+          _fromMeasurement: true,
+        })
+      }
 
       const assemblySummary = buildAssemblySummary(
         takeoffRows, pricing, assemblies, workItems, materials,
@@ -1686,6 +1707,26 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.blue }}>{Math.round(info.materialCost).toLocaleString('hu-HU')} Ft</div>
                             <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.yellow }}>{Math.round(info.laborCost).toLocaleString('hu-HU')} Ft</div>
+                          </div>
+                        </div>
+                      ))}
+                      {/* Measurement line items (cable trays, manual measurements) as normal rows */}
+                      {(fullCalc.measurementLines || []).map(item => (
+                        <div key={`meas-${item.key}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 600 }}>
+                              📏 {item.label}
+                            </div>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
+                              {item.totalMeters ? `${item.totalMeters.toFixed(1)} m` : `${item.count} szakasz`}
+                              {item.isAutoPriced ? ' · assembly ár' : item.pricePerUnit > 0 ? ' · kézi ár' : ''}
+                              {item.pricePerUnit > 0 ? ` · ${Math.round(item.pricePerUnit).toLocaleString('hu-HU')} Ft/m` : ''}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: item.cost > 0 ? C.accent : C.muted, fontWeight: 700 }}>
+                              {item.cost > 0 ? `${Math.round(item.cost).toLocaleString('hu-HU')} Ft` : '—'}
+                            </div>
                           </div>
                         </div>
                       ))}
