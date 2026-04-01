@@ -15,7 +15,7 @@ Szükséges Vercel environment variables:
 
 from http.server import BaseHTTPRequestHandler
 import json, os, re, urllib.request
-from _security import send_cors_headers, check_origin, check_rate_limit, rate_limit_response
+from api_security import send_cors_headers, check_origin, check_rate_limit, rate_limit_response
 
 SUPABASE_URL         = os.environ.get('SUPABASE_URL') or os.environ.get('VITE_SUPABASE_URL', '')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')

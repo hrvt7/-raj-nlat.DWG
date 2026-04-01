@@ -1,6 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, os, urllib.request, urllib.error, sys
-from _security import (
+from api_security import (
     send_cors_headers, check_body_size, check_origin, check_rate_limit,
     check_required_env, require_auth, safe_error_response, rate_limit_response
 )

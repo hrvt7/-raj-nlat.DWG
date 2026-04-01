@@ -1,7 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, io, re, os, sys
 from collections import Counter
-from _security import (
+from api_security import (
     send_cors_headers, check_origin, check_rate_limit,
     require_auth, safe_error_response, rate_limit_response
 )

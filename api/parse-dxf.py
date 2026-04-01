@@ -1,6 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 import json, tempfile, os, sys, base64, traceback
-from _security import send_cors_headers, check_origin, check_rate_limit, safe_error_response, rate_limit_response
+from api_security import send_cors_headers, check_origin, check_rate_limit, safe_error_response, rate_limit_response
 MAX_UPLOAD_MB  = int(os.environ.get('MAX_UPLOAD_MB', '30'))  # DXF can be larger
 
 
