@@ -7,82 +7,15 @@ import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/cat
 import { renderPageImageData } from '../../utils/templateMatching.js'
 import templateMatchWorkerUrl from '../../workers/templateMatch.worker.js?url'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasToDoc, drawMarker, drawMeasureLine } from './pdfUtils.js'
+export { docToCanvas, canvasToDoc } from './pdfUtils.js'
+import PdfScrollbars from './PdfScrollbars.jsx'
+import PdfToolbar from './PdfToolbar.jsx'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
   accent: '#00E5A0', yellow: '#FFD166', red: '#FF6B6B', blue: '#4CC9F0',
   text: '#E4E4E7', textSub: '#9CA3AF', muted: '#71717A',
-}
-
-// ── Map assembly to COUNT_CATEGORIES key ─────────────────────────────────────
-// When users select an assembly from AssemblyDropdown (e.g. ASM-001), the marker
-// must store the matching COUNT_CATEGORY key (socket, switch, light, etc.) so that
-// EstimationPanel can count and price them correctly.
-function resolveCountCategory(assemblyId, assemblies) {
-  if (!assemblyId?.startsWith?.('ASM-')) return assemblyId // already a category key
-  const asm = assemblies?.find(a => a.id === assemblyId)
-  if (!asm) return 'other'
-  if (asm.category === 'vilagitas') return 'light'
-  if (asm.category === 'elosztok') return 'elosztok'
-  if (asm.category === 'szerelvenyek') {
-    const up = (asm.name || '').toUpperCase()
-    if (up.includes('DUGALJ') || up.includes('ALJZAT') || up.includes('SOCKET') || up.includes('KONNEKTOR')) return 'socket'
-    if (up.includes('KAPCSOL') || up.includes('SWITCH') || up.includes('DIMMER') || up.includes('VÁLTÓ') || up.includes('VALTO')) return 'switch'
-    return 'socket' // default for szerelvenyek
-  }
-  return 'other'
-}
-
-// ── Migrate legacy markers ──────────────────────────────────────────────────
-// Older markers stored assembly IDs (ASM-xxx) as category. Convert them to
-// proper COUNT_CATEGORY keys while preserving the assembly ID in asmId.
-function migrateMarkers(markers, assemblies) {
-  if (!markers?.length || !assemblies?.length) return markers
-  let changed = false
-  const migrated = markers.map(m => {
-    if (m.category?.startsWith?.('ASM-')) {
-      changed = true
-      const resolved = resolveCountCategory(m.category, assemblies)
-      return { ...m, category: resolved, asmId: m.asmId || m.category }
-    }
-    return m
-  })
-  return changed ? migrated : markers
-}
-
-function formatDist(m) {
-  if (m < 0.01) return `${(m * 1000).toFixed(1)} mm`
-  if (m < 1) return `${(m * 100).toFixed(1)} cm`
-  if (m < 100) return `${m.toFixed(2)} m`
-  return `${m.toFixed(1)} m`
-}
-
-// ── Rotation-invariant coordinate helpers ─────────────────────────────────
-// W, H are UNROTATED page dimensions (at 1× scale).
-// Rotation is CW in degrees (0, 90, 180, 270).
-//
-// docToCanvas: unrotated document coords → rotated canvas coords
-// canvasToDoc: rotated canvas coords → unrotated document coords
-//
-// These ensure markers are stored in rotation-invariant (doc) space and
-// rendered correctly regardless of the current rotation.
-
-export function docToCanvas(dx, dy, rot, W, H) {
-  switch (rot) {
-    case 90:  return { x: dy,     y: W - dx }
-    case 180: return { x: W - dx, y: H - dy }
-    case 270: return { x: H - dy, y: dx }
-    default:  return { x: dx,     y: dy }
-  }
-}
-
-export function canvasToDoc(cx, cy, rot, W, H) {
-  switch (rot) {
-    case 90:  return { x: W - cy, y: cx }
-    case 180: return { x: W - cx, y: H - cy }
-    case 270: return { x: cy,     y: H - cx }
-    default:  return { x: cx,     y: cy }
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -445,7 +378,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         viewRef.current.offsetX = (cw - pw * zoom) / 2
         viewRef.current.offsetY = (ch - ph * zoom) / 2
       }
-      drawOverlay()
+      drawOverlayThrottled()
 
       // ── Consume pending focus after page render ──
       if (pendingFocusRef.current) {
@@ -514,7 +447,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   }, [])
 
   // ── Draw overlay (annotations, crosshair, live measure) ──
-  const drawOverlay = useCallback(() => {
+  // rAF-throttled wrapper: coalesces multiple calls per frame into one paint
+  const drawOverlayRafRef = useRef(null)
+  const drawOverlayThrottled = useCallback(() => {
+    if (drawOverlayRafRef.current) return // already scheduled
+    drawOverlayRafRef.current = requestAnimationFrame(() => {
+      drawOverlayRafRef.current = null
+      drawOverlayImpl()
+    })
+  }, [])
+  const drawOverlayImpl = useCallback(() => {
     const canvas = overlayRef.current
     if (!canvas || !containerRef.current) return
     const cw = containerRef.current.clientWidth
@@ -772,7 +714,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         const hw = Math.abs(c2.x - c1.x) / 2, hh = Math.abs(c2.y - c1.y) / 2
         if (sx >= s.x - hw && sx <= s.x + hw && sy >= s.y - hh && sy <= s.y + hh) {
           setAutoSymbolResults(prev => prev.map((r, j) => j === i ? { ...r, accepted: !r.accepted } : r))
-          drawOverlay()
+          drawOverlayThrottled()
           return
         }
       }
@@ -812,7 +754,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, category: resolvedCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
       markDirty()
       setRenderTick(t => t + 1)
-      drawOverlay()
+      drawOverlayThrottled()
       // Notify parent of marker change
       if (onMarkersChange) {
         onMarkersChange([...markersRef.current])
@@ -851,7 +793,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           activeStartRef.current = null
           setRenderTick(t => t + 1)
         }
-        drawOverlay()
+        drawOverlayThrottled()
       }
       return
     }
@@ -868,7 +810,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const r = { x1: autoSymbolStartRef.current.sx, y1: autoSymbolStartRef.current.sy, x2: sx, y2: sy }
       if (autoSymbolPhase === 'picking') setAutoSymbolRect(r)
       else setAutoSymbolAreaRect(r)
-      drawOverlay()
+      drawOverlayThrottled()
       return
     }
 
@@ -877,12 +819,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const dy = e.clientY - dragRef.current.startY
       viewRef.current.offsetX = dragRef.current.startOX + dx
       viewRef.current.offsetY = dragRef.current.startOY + dy
-      drawOverlay()
+      drawOverlayThrottled()
       return
     }
 
     mousePdfRef.current = screenToPdf(sx, sy)
-    if (activeTool) drawOverlay()
+    if (activeTool) drawOverlayThrottled()
   }, [activeTool, screenToPdf, drawOverlay])
 
   // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
@@ -1058,7 +1000,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       // Two-finger trackpad scroll → pan
       v.offsetX -= e.deltaX
       v.offsetY -= e.deltaY
-      drawOverlay()
+      drawOverlayThrottled()
       setRenderTick(t => t + 1) // update scrollbars
       return
     }
@@ -1073,7 +1015,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.offsetX = sx - (sx - v.offsetX) * (newZoom / v.zoom)
     v.offsetY = sy - (sy - v.offsetY) * (newZoom / v.zoom)
     v.zoom = newZoom
-    drawOverlay()
+    drawOverlayThrottled()
     setRenderTick(t => t + 1) // update scrollbars
     // Schedule high-quality re-render after zoom settles
     if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current)
@@ -1104,13 +1046,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     mountedRef.current = false
     autoSymbolWorkerRef.current?.terminate()
     if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current)
+    if (drawOverlayRafRef.current) cancelAnimationFrame(drawOverlayRafRef.current)
   }, [])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const h = (e) => {
       if (calibDialog) return
-      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; drawOverlay() }
+      if (e.key === 'Escape') { setActiveTool(null); activeStartRef.current = null; drawOverlayThrottled() }
       if (e.key === 'c' || e.key === 'C') setActiveTool(t => t === 'count' ? null : 'count')
       if (e.key === 'm' || e.key === 'M') setActiveTool(t => t === 'measure' ? null : 'measure')
       if (e.key === 's' || e.key === 'S') setActiveTool(t => t === 'calibrate' ? null : 'calibrate')
@@ -1134,7 +1077,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (onMarkersChange) onMarkersChange([...markersRef.current])
     }
     setRenderTick(t => t + 1)
-    drawOverlay()
+    drawOverlayThrottled()
   }, [drawOverlay, onMarkersChange, markDirty])
 
   const handleClearAll = useCallback(() => {
@@ -1143,7 +1086,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     activeStartRef.current = null
     markDirty()
     setRenderTick(t => t + 1)
-    drawOverlay()
+    drawOverlayThrottled()
     if (onMarkersChange) onMarkersChange([])
   }, [drawOverlay, onMarkersChange, markDirty])
 
@@ -1165,7 +1108,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     setCalibDialog(null)
     setCalibInput('')
     setRenderTick(t => t + 1)
-    drawOverlay()
+    drawOverlayThrottled()
   }, [calibDialog, calibInput, calibUnit, drawOverlay, markDirty])
 
   // ── Measurement category reassignment (retroactive tagging of existing measurements) ──
@@ -1174,7 +1117,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       measuresRef.current[idx] = { ...measuresRef.current[idx], category: category || undefined }
       markDirty()
       setRenderTick(t => t + 1)
-      drawOverlay()
+      drawOverlayThrottled()
     }
   }, [drawOverlay, markDirty])
 
@@ -1188,19 +1131,19 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     v.zoom = zoom
     v.offsetX = (cw - v.pageWidth * zoom) / 2
     v.offsetY = (ch - v.pageHeight * zoom) / 2
-    drawOverlay()
+    drawOverlayThrottled()
   }, [drawOverlay])
 
   // ── Resize ──
   useEffect(() => {
-    const obs = new ResizeObserver(() => drawOverlay())
+    const obs = new ResizeObserver(() => drawOverlayThrottled())
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
   }, [drawOverlay])
 
   // ── Repaint overlay when renderTick changes (e.g. markers restored from IDB) ──
   useEffect(() => {
-    drawOverlay()
+    drawOverlayThrottled()
   }, [renderTick, drawOverlay])
 
   // ── Count summary ──
@@ -1291,8 +1234,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         activeCategory={activeCategory} onCategoryChange={setActiveCategory}
         scale={scale} markerCount={markerCount} measureCount={measureCount}
         onFitView={handleFitView}
-        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlay(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
-        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlay(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
+        onZoomIn={() => { viewRef.current.zoom = Math.min(20, viewRef.current.zoom * 1.2); drawOverlayThrottled(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
+        onZoomOut={() => { viewRef.current.zoom = Math.max(0.1, viewRef.current.zoom / 1.2); drawOverlayThrottled(); setRenderTick(t => t + 1); if (pdfDoc && pageNum > 0) { if (zoomRerenderTimerRef.current) clearTimeout(zoomRerenderTimerRef.current); zoomRerenderTimerRef.current = setTimeout(() => renderPage(pdfDoc, pageNum, { zoomDriven: true }), 400) } }}
         onUndo={handleUndo} onClearAll={handleClearAll}
         onToggleCountPanel={() => setCountPanelOpen(!countPanelOpen)}
         countPanelOpen={countPanelOpen}
@@ -1328,7 +1271,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
             autoSymbolTemplateRef.current = null
             autoSymbolWorkerRef.current?.terminate()
             setActiveTool(null)
-            drawOverlay()
+            drawOverlayThrottled()
           } else {
             setAutoSymbolActive(true)
             setAutoSymbolPhase('picking')
@@ -1348,7 +1291,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           autoSymbolTemplateRef.current = null
           autoSymbolWorkerRef.current?.terminate()
           setAutoSymbolLabel('')
-          drawOverlay()
+          drawOverlayThrottled()
         }}
         onAutoSymbolSearchFull={() => {
           setAutoSymbolPhase('searching')
@@ -1400,7 +1343,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           autoSymbolWorkerRef.current?.terminate()
           setActiveTool(null)
           setAutoSymbolLabel('')
-          drawOverlay()
+          drawOverlayThrottled()
         }}
       />
 
@@ -1425,7 +1368,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         <PdfScrollbars viewRef={viewRef} containerRef={containerRef} renderTick={renderTick} onPan={(dx, dy) => {
           viewRef.current.offsetX += dx
           viewRef.current.offsetY += dy
-          drawOverlay()
+          drawOverlayThrottled()
         }} />
 
         {/* Loading */}
@@ -1594,382 +1537,3 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   )
 }
 
-// ─── Drawing helpers (same as DXF overlay) ──────────────────────────────────
-
-function drawMarker(ctx, x, y, color, zoom, source) {
-  const r = Math.max(6, 10 * Math.min(zoom, 1.5))
-  const isDetection = source === 'detection'
-
-  ctx.beginPath()
-  ctx.arc(x, y, r, 0, Math.PI * 2)
-  ctx.fillStyle = color + (isDetection ? '20' : '40')
-  ctx.fill()
-  ctx.lineWidth = isDetection ? 1.5 : 2
-
-  if (isDetection) {
-    // Dashed border for auto-detected markers
-    ctx.setLineDash([3, 3])
-  }
-  ctx.strokeStyle = color
-  ctx.stroke()
-  ctx.setLineDash([]) // reset
-
-  // Cross (manual) or dot (detection)
-  if (isDetection) {
-    // Small inner dot for detection markers
-    ctx.beginPath()
-    ctx.arc(x, y, 2.5, 0, Math.PI * 2)
-    ctx.fillStyle = color
-    ctx.fill()
-  } else {
-    // Cross for manual markers
-    const c = r * 0.5
-    ctx.beginPath()
-    ctx.moveTo(x - c, y); ctx.lineTo(x + c, y)
-    ctx.moveTo(x, y - c); ctx.lineTo(x, y + c)
-    ctx.stroke()
-  }
-}
-
-function drawMeasureLine(ctx, x1, y1, x2, y2, label, color) {
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.strokeStyle = color
-  ctx.lineWidth = 2
-  ctx.setLineDash([6, 3])
-  ctx.stroke()
-  ctx.setLineDash([])
-
-  // Endpoints
-  for (const [ex, ey] of [[x1, y1], [x2, y2]]) {
-    ctx.beginPath()
-    ctx.arc(ex, ey, 4, 0, Math.PI * 2)
-    ctx.fillStyle = color
-    ctx.fill()
-  }
-
-  // Label
-  const mx = (x1 + x2) / 2
-  const my = (y1 + y2) / 2
-  ctx.font = '600 12px "DM Mono", monospace'
-  const tw = ctx.measureText(label).width
-  ctx.fillStyle = 'rgba(0,0,0,0.8)'
-  ctx.fillRect(mx - tw / 2 - 6, my - 18, tw + 12, 22)
-  ctx.fillStyle = color
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(label, mx, my - 7)
-}
-
-// ─── PDF Toolbar ────────────────────────────────────────────────────────────
-
-// ─── Interactive scrollbars for PDF pan navigation ──────────────────────────
-function PdfScrollbars({ viewRef, containerRef, renderTick, onPan }) {
-  const [dragging, setDragging] = useState(null) // { axis: 'h'|'v', startMouse, startOffset }
-
-  const v = viewRef.current
-  const cw = containerRef.current?.clientWidth || 1
-  const ch = containerRef.current?.clientHeight || 1
-  const pw = v.pageWidth * v.zoom
-  const ph = v.pageHeight * v.zoom
-  const showH = pw > cw * 1.05
-  const showV = ph > ch * 1.05
-
-  // Thumb sizes
-  const hThumbW = showH ? Math.max(40, cw * cw / pw) : 0
-  const vThumbH = showV ? Math.max(40, ch * ch / ph) : 0
-  // Thumb positions (0 to trackLen - thumbLen)
-  const hTrackW = cw - (showV ? 20 : 8) - 8
-  const vTrackH = ch - (showH ? 20 : 8) - 8
-  const hPos = showH ? Math.max(0, Math.min(hTrackW - hThumbW, (hTrackW - hThumbW) * (-v.offsetX / Math.max(1, pw - cw)))) : 0
-  const vPos = showV ? Math.max(0, Math.min(vTrackH - vThumbH, (vTrackH - vThumbH) * (-v.offsetY / Math.max(1, ph - ch)))) : 0
-
-  useEffect(() => {
-    if (!dragging) return
-    const onMove = (e) => {
-      const delta = dragging.axis === 'h'
-        ? e.clientX - dragging.startMouse
-        : e.clientY - dragging.startMouse
-      const trackLen = dragging.axis === 'h' ? hTrackW : vTrackH
-      const thumbLen = dragging.axis === 'h' ? hThumbW : vThumbH
-      const pageLen = dragging.axis === 'h' ? pw : ph
-      const viewLen = dragging.axis === 'h' ? cw : ch
-      const ratio = delta / Math.max(1, trackLen - thumbLen)
-      const panDelta = -ratio * (pageLen - viewLen)
-      if (dragging.axis === 'h') {
-        viewRef.current.offsetX = dragging.startOffset + panDelta
-      } else {
-        viewRef.current.offsetY = dragging.startOffset + panDelta
-      }
-      onPan(0, 0) // trigger redraw
-    }
-    const onUp = () => setDragging(null)
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-  }, [dragging]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const thumbStyle = { borderRadius: 4, cursor: 'pointer', transition: dragging ? 'none' : 'all 0.1s' }
-
-  if (!showH && !showV) return null
-  return <>
-    {showH && <div style={{
-      position: 'absolute', bottom: 2, left: 4, width: hTrackW, height: 10,
-      borderRadius: 5, background: 'rgba(255,255,255,0.04)', zIndex: 8,
-    }}
-      onMouseDown={(e) => {
-        // Click on track → jump to that position
-        const rect = e.currentTarget.getBoundingClientRect()
-        const clickPos = e.clientX - rect.left
-        const ratio = clickPos / hTrackW
-        viewRef.current.offsetX = -ratio * (pw - cw)
-        onPan(0, 0)
-      }}
-    >
-      <div style={{
-        ...thumbStyle, position: 'absolute', top: 1, height: 8,
-        background: dragging?.axis === 'h' ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.25)',
-        width: hThumbW, left: hPos,
-      }}
-        onMouseDown={(e) => { e.stopPropagation(); setDragging({ axis: 'h', startMouse: e.clientX, startOffset: viewRef.current.offsetX }) }}
-      />
-    </div>}
-    {showV && <div style={{
-      position: 'absolute', top: 4, right: 2, height: vTrackH, width: 10,
-      borderRadius: 5, background: 'rgba(255,255,255,0.04)', zIndex: 8,
-    }}
-      onMouseDown={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect()
-        const clickPos = e.clientY - rect.top
-        const ratio = clickPos / vTrackH
-        viewRef.current.offsetY = -ratio * (ph - ch)
-        onPan(0, 0)
-      }}
-    >
-      <div style={{
-        ...thumbStyle, position: 'absolute', left: 1, width: 8,
-        background: dragging?.axis === 'v' ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.25)',
-        height: vThumbH, top: vPos,
-      }}
-        onMouseDown={(e) => { e.stopPropagation(); setDragging({ axis: 'v', startMouse: e.clientY, startOffset: viewRef.current.offsetY }) }}
-      />
-    </div>}
-  </>
-}
-
-function PdfToolbar({
-  activeTool, onToolChange,
-  activeCategory, onCategoryChange,
-  scale, markerCount, measureCount,
-  onFitView, onZoomIn, onZoomOut,
-  onUndo, onClearAll,
-  onToggleCountPanel, countPanelOpen,
-  pageNum, numPages, onPrevPage, onNextPage,
-  /* onToggleEstimation, estimationOpen — removed with Részletek button */
-  showCableRoutes, onToggleCableRoutes,
-  rotation, onRotateLeft, onRotateRight,
-  assemblies,
-  autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolAcceptedCount, autoSymbolSearching, autoSymbolError,
-  autoSymbolThreshold, autoSymbolCategory, autoSymbolLabel,
-  onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
-  onAutoSymbolAcceptAll, onAutoSymbolRejectAll, onAutoSymbolCategoryChange, onAutoSymbolLabelChange, onAutoSymbolFinalize,
-}) {
-  const TOOLS = [
-    { id: 'count', label: 'Számlálás', key: 'C' },
-    { id: 'measure', label: 'Mérés', key: 'M' },
-    { id: 'calibrate', label: 'Skála', key: 'S' },
-  ]
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', background: C.bgCard, borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap', position: 'relative', zIndex: 10 }}>
-      {/* Page nav */}
-      {numPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginRight: 8, background: C.bg, borderRadius: 6, padding: 2 }}>
-          <TinyBtn onClick={onPrevPage} disabled={pageNum <= 1} title="Előző oldal">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </TinyBtn>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, padding: '0 2px', userSelect: 'none' }}>{pageNum}/{numPages}</span>
-          <TinyBtn onClick={onNextPage} disabled={pageNum >= numPages} title="Következő oldal">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </TinyBtn>
-        </div>
-      )}
-
-      {/* Tool buttons */}
-      {TOOLS.map(t => {
-        const on = activeTool === t.id
-        return (
-          <button key={t.id} onClick={() => onToolChange(on ? null : t.id)} title={`${t.label} (${t.key})`} style={{
-            padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
-            display: 'flex', alignItems: 'center', gap: 5,
-            background: on ? 'rgba(0,229,160,0.12)' : 'transparent',
-            border: `1px solid ${on ? 'rgba(0,229,160,0.3)' : 'transparent'}`,
-            color: on ? C.accent : C.text, transition: 'all 0.12s',
-          }}>
-            {t.label}
-            {t.id === 'count' && markerCount > 0 && <span style={{ background: C.accent, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{markerCount}</span>}
-            {t.id === 'measure' && measureCount > 0 && <span style={{ background: C.yellow, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{measureCount}</span>}
-            {t.id === 'calibrate' && scale.calibrated && <span style={{ background: C.blue, color: C.bg, borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 700, fontFamily: 'DM Mono' }}>✓</span>}
-          </button>
-        )
-      })}
-
-      {/* Assembly/Category picker — shown for count + measure */}
-      {activeTool === 'count' && assemblies?.length > 0 && (
-        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
-      )}
-      {activeTool === 'count' && (!assemblies || !assemblies.length) && (
-        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
-      )}
-      {activeTool === 'measure' && (
-        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
-      )}
-
-      {/* ── Auto Symbol POC ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8, borderLeft: `1px solid ${C.border}`, paddingLeft: 8 }}>
-        <button onClick={onAutoSymbolToggle} title="Auto szimbólum keresés (BETA)" style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
-          display: 'flex', alignItems: 'center', gap: 5,
-          background: autoSymbolActive ? 'rgba(255,140,66,0.12)' : 'transparent',
-          border: `1px solid ${autoSymbolActive ? 'rgba(255,140,66,0.3)' : 'transparent'}`,
-          color: autoSymbolActive ? '#FF8C42' : C.text, transition: 'all 0.12s',
-        }}>
-          ⚡ Auto
-          {autoSymbolCount > 0 && <span style={{ background: '#FF8C42', color: '#09090B', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{autoSymbolCount}</span>}
-        </button>
-        {autoSymbolActive && autoSymbolPhase === 'picking' && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>① Jelölj ki mintát ↓</span>
-        )}
-        {autoSymbolActive && autoSymbolPhase === 'areaSelect' && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#4CC9F0' }}>② Keresési terület (opcionális) ↓</span>
-        )}
-        {autoSymbolActive && autoSymbolPhase === 'areaSelect' && (
-          <button onClick={onAutoSymbolSearchFull}
-            style={{ padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono', background: '#FF8C42', border: 'none', color: '#09090B', fontWeight: 700 }}>
-            Keresés teljes oldalon →
-          </button>
-        )}
-        {autoSymbolSearching && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>Keresés…</span>
-        )}
-        {autoSymbolError && !autoSymbolSearching && (
-          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: autoSymbolCount === 0 ? '#FF8C42' : '#FF6B6B' }}>{autoSymbolError}</span>
-        )}
-        {autoSymbolPhase === 'done' && (
-          <>
-            <label style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
-              Küszöb
-              <input type="range" min="0.40" max="0.95" step="0.05" value={autoSymbolThreshold}
-                onChange={e => onAutoSymbolThresholdChange(parseFloat(e.target.value))}
-                style={{ width: 50, accentColor: '#FF8C42' }} />
-              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#FF8C42', width: 28 }}>{(autoSymbolThreshold * 100).toFixed(0)}%</span>
-            </label>
-            <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent }}>
-              {autoSymbolAcceptedCount}/{autoSymbolCount}
-            </span>
-            <button onClick={onAutoSymbolAcceptAll} title="Összes elfogadása" style={{
-              padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
-              background: 'rgba(0,229,160,0.1)', border: '1px solid rgba(0,229,160,0.3)', color: C.accent,
-            }}>✓ Mind</button>
-            <button onClick={onAutoSymbolRejectAll} title="Összes kizárása" style={{
-              padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
-              background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#FF6B6B',
-            }}>✕ Mind</button>
-            {assemblies?.length > 0 ? (
-              <AssemblyDropdown activeCategory={autoSymbolCategory} onCategoryChange={onAutoSymbolCategoryChange} assemblies={assemblies} />
-            ) : (
-              <CategoryDropdown activeCategory={autoSymbolCategory} onCategoryChange={onAutoSymbolCategoryChange} />
-            )}
-            <input value={autoSymbolLabel} onChange={e => onAutoSymbolLabelChange(e.target.value)}
-              placeholder="Címke…" style={{ width: 80, padding: '2px 6px', borderRadius: 4, fontSize: 10, fontFamily: 'DM Mono', background: C.bg, border: `1px solid ${C.border}`, color: C.text }} />
-            <button onClick={onAutoSymbolFinalize} disabled={autoSymbolAcceptedCount === 0 || autoSymbolSearching} title="Elfogadott találatok hozzáadása a takeoff-hoz" style={{
-              padding: '3px 10px', borderRadius: 5, cursor: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? 'pointer' : 'default', fontSize: 10, fontFamily: 'Syne', fontWeight: 700,
-              background: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? '#FF8C42' : C.bgCard, border: 'none', color: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? '#09090B' : C.muted,
-              opacity: (autoSymbolAcceptedCount > 0 && !autoSymbolSearching) ? 1 : 0.5,
-            }}>+ Takeoff ({autoSymbolAcceptedCount})</button>
-            <button onClick={onAutoSymbolClear} title="Új minta" style={{
-              padding: '2px 6px', borderRadius: 4, cursor: 'pointer', fontSize: 9, fontFamily: 'DM Mono',
-              background: 'transparent', border: `1px solid ${C.border}`, color: C.muted,
-            }}>Új minta</button>
-          </>
-        )}
-      </div>
-
-      <div style={{ flex: 1 }} />
-
-      {/* Undo/Clear */}
-      {(markerCount > 0 || measureCount > 0) && (
-        <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }}>
-          <TinyBtn onClick={onUndo} title="Visszavonás (Ctrl+Z)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 10h10a5 5 0 0 1 0 10H9"/><path d="M3 10l4-4M3 10l4 4"/></svg>
-          </TinyBtn>
-          <TinyBtn onClick={onClearAll} title="Összes törlése" style={{ color: C.red }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </TinyBtn>
-        </div>
-      )}
-
-      {/* Összesítő — text pill */}
-      {markerCount > 0 && (
-        <button onClick={onToggleCountPanel} title="Összesítő panel" style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
-          fontFamily: 'Syne', fontWeight: 700,
-          background: countPanelOpen ? 'rgba(0,229,160,0.15)' : 'transparent',
-          border: `1px solid ${countPanelOpen ? 'rgba(0,229,160,0.3)' : C.border}`,
-          color: countPanelOpen ? C.accent : C.muted,
-          transition: 'all 0.12s',
-        }}>
-          {countPanelOpen ? 'Összesítő ✓' : 'Összesítő'}
-        </button>
-      )}
-
-      {/* Cable routes toggle */}
-      {markerCount > 0 && (
-        <button onClick={onToggleCableRoutes} style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
-          fontFamily: 'Syne', fontWeight: 700,
-          background: showCableRoutes ? 'rgba(255,209,102,0.15)' : 'transparent',
-          border: `1px solid ${showCableRoutes ? C.yellow : C.border}`,
-          color: showCableRoutes ? C.yellow : C.muted,
-          transition: 'all 0.12s',
-        }}>
-          {showCableRoutes ? 'Kábelvonalak ✓' : 'Kábelvonalak'}
-        </button>
-      )}
-
-      {/* Rotation controls */}
-      <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }} title="Terv forgatása">
-        <TinyBtn onClick={onRotateLeft} title="Forgatás balra (−90°)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2.5 2v6h6"/><path d="M2.5 8a10 10 0 1 1 3.17-4.39"/></svg>
-        </TinyBtn>
-        {rotation !== 0 && (
-          <span style={{ fontSize: 9, fontFamily: 'DM Mono', color: C.muted, padding: '4px 3px', alignSelf: 'center' }}>{rotation}°</span>
-        )}
-        <TinyBtn onClick={onRotateRight} title="Forgatás jobbra (+90°)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21.5 2v6h-6"/><path d="M21.5 8A10 10 0 1 0 18.33 3.61"/></svg>
-        </TinyBtn>
-      </div>
-
-      {/* Zoom controls */}
-      <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: C.bg, borderRadius: 6, padding: 2 }}>
-        <TinyBtn onClick={onZoomIn} title="Nagyítás"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg></TinyBtn>
-        <TinyBtn onClick={onFitView} title="Illesztés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></TinyBtn>
-        <TinyBtn onClick={onZoomOut} title="Kicsinyítés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg></TinyBtn>
-      </div>
-    </div>
-  )
-}
-
-function TinyBtn({ children, onClick, title, style, disabled }) {
-  return (
-    <button onClick={onClick} title={title} disabled={disabled} style={{
-      padding: '5px 7px', borderRadius: 4, cursor: disabled ? 'default' : 'pointer',
-      background: 'transparent', border: 'none', color: C.muted, fontSize: 13,
-      fontFamily: 'DM Mono', fontWeight: 600, opacity: disabled ? 0.3 : 1,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      transition: 'color 0.1s',
-      ...style,
-    }}>{children}</button>
-  )
-}

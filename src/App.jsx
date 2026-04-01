@@ -20,7 +20,7 @@ import { loadSettings, saveSettings, loadWorkItems, saveWorkItems, loadMaterials
 import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta, saveAllPlansMeta } from './data/planStore.js'
 import { generateProjectId, saveProject, saveAllProjects, loadProjects, getProject } from './data/projectStore.js'
 import { QuoteStatusBadge, fmt, ToastProvider, useToast } from './components/ui.jsx'
-import SuccessPage from './pages/Success.jsx'
+// SuccessPage removed — Stripe payment flow is not active
 import TakeoffWorkspace from './components/TakeoffWorkspace.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, groupItemsBySystem, groupItemsByFloor } from './data/quoteDefaults.js'
@@ -2031,7 +2031,6 @@ document.head.appendChild(styleEl)
 function routeFromLocation() {
   const path = window.location.pathname
   const hash = window.location.hash
-  if (path === '/success' || hash === '#success') return 'success'
   if (hash === '#app') return 'app'
   if (hash === '#privacy') return 'privacy'
   if (hash === '#terms') return 'terms'
@@ -2052,7 +2051,6 @@ export default function App() {
     }
   }, [])
 
-  if (route === 'success') return <SuccessPage />
   if (route === 'app') return <SaaSShell />
   if (route === 'privacy') return <Landing page="privacy" onStart={() => { window.location.hash = '#app'; setRoute('app') }} />
   if (route === 'terms') return <Landing page="terms" onStart={() => { window.location.hash = '#app'; setRoute('app') }} />
