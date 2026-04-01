@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@sentry/react": "^10.47.0",
     "@supabase/supabase-js": "^2.98.0",
     "dxf-viewer": "^1.0.46",
     "html2canvas": "^1.4.1",

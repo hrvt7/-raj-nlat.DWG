@@ -3,6 +3,7 @@
 // Renders a recoverable error card with "Próbáld újra" and "Váltás manuális módra" CTA.
 
 import React from 'react'
+import { Sentry } from '../sentry.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -25,6 +26,7 @@ export default class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     this.setState({ info })
     console.error('[ErrorBoundary] Uncaught error:', error, info)
+    Sentry?.captureException(error, { extra: { componentStack: info?.componentStack } })
   }
 
   handleReset() {
