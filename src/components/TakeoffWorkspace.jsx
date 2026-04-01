@@ -724,7 +724,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode })
   }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode])
 
-  // ── Measurement cost (manual pricing of PDF measurements) ──────────────
+  // ── Measurement cost (auto-pricing from assembly + manual fallback) ─────
   const measurementItems = useMemo(() => {
     if (!pdfMeasurements.length) return []
     const groups = {}
@@ -735,12 +735,46 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       groups[key].totalMeters += seg.distMeters || 0
       groups[key].count++
     }
-    return Object.values(groups).map(g => ({
-      ...g,
-      pricePerUnit: measurementPrices[g.key] || 0,
-      cost: (g.totalMeters || 0) * (measurementPrices[g.key] || 0),
-    }))
-  }, [pdfMeasurements, measurementPrices])
+    return Object.values(groups).map(g => {
+      // Try to find a matching assembly for this measurement category
+      // Cable tray keys are like "kt_100_60" → width = 100 → match assembly name containing that width
+      let matchedAsm = null
+      let autoPrice = 0
+      if (g.key.startsWith('kt_')) {
+        const width = parseInt(g.key.split('_')[1], 10) // kt_100_60 → 100
+        if (width) {
+          matchedAsm = assemblies.find(a =>
+            a.category === 'kabeltalca' && !a.variantOf && a.name?.includes(`${width}mm`)
+          ) || assemblies.find(a =>
+            a.category === 'kabeltalca' && a.name?.includes(`${width}mm`)
+          )
+          if (matchedAsm) {
+            // Assembly is priced per 10m typically — compute per-meter cost
+            const asmPricing = computePricing({
+              takeoffRows: [{ asmId: matchedAsm.id, qty: 1, variantId: null, wallSplits: null }],
+              assemblies, workItems, materials, context, markup: 0, hourlyRate, cableEstimate: null, difficultyMode,
+            })
+            // The assembly qty is for 10m (components have qty=10 for materials/workitems)
+            // So the total cost IS the per-10m cost → divide by 10 for per-meter
+            const asmBaseQty = (matchedAsm.components || []).find(c => c.unit === 'm')?.qty || 10
+            autoPrice = asmPricing.total / Math.max(asmBaseQty, 1)
+          }
+        }
+      }
+      const effectivePrice = measurementPrices[g.key] !== undefined && measurementPrices[g.key] > 0
+        ? measurementPrices[g.key]
+        : autoPrice
+      return {
+        ...g,
+        label: matchedAsm ? matchedAsm.name : g.label,
+        matchedAsmId: matchedAsm?.id || null,
+        autoPrice,
+        pricePerUnit: effectivePrice,
+        cost: (g.totalMeters || 0) * effectivePrice,
+        isAutoPriced: effectivePrice === autoPrice && autoPrice > 0,
+      }
+    })
+  }, [pdfMeasurements, measurementPrices, assemblies, workItems, materials, context, hourlyRate, difficultyMode])
 
   const measurementCostTotal = useMemo(() => {
     return measurementItems.reduce((s, item) => s + item.cost, 0)
@@ -1669,13 +1703,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                                 {item.cost > 0 ? `${Math.round(item.cost).toLocaleString('hu-HU')} Ft` : '—'}
                               </div>
                             </div>
-                            {item.totalMeters > 0 && (
+                            {item.totalMeters > 0 && item.isAutoPriced ? (
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent }}>
+                                Assembly ár: {Math.round(item.autoPrice).toLocaleString('hu-HU')} Ft/m (automatikus)
+                              </div>
+                            ) : item.totalMeters > 0 ? (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>Ár (Ft/m):</span>
                                 <input
                                   type="number" min={0} step={100}
                                   value={measurementPrices[item.key] || ''}
-                                  placeholder="0"
+                                  placeholder={item.autoPrice > 0 ? Math.round(item.autoPrice) : '0'}
                                   onChange={e => setMeasurementPrices(prev => ({ ...prev, [item.key]: Math.max(0, parseFloat(e.target.value) || 0) }))}
                                   style={{ width: 90, padding: '3px 6px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
                                 />
@@ -1685,8 +1723,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                                   </span>
                                 )}
                               </div>
-                            )}
-                            {!item.totalMeters && (
+                            ) : (
                               <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.red }}>
                                 Kalibráld a rajzot a Skála eszközzel az árazáshoz
                               </div>
