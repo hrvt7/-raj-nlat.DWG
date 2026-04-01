@@ -28,7 +28,6 @@
     "api/parse-pdf-vectors.py":   { "maxDuration": 30 },
     "api/create-checkout.py":     { "maxDuration": 15 },
     "api/stripe-webhook.py":      { "maxDuration": 15 },
-    "api/notify-quote-accepted.py": { "maxDuration": 15 },
-    "api/health.py":               { "maxDuration": 5 }
+    "api/notify-quote-accepted.py": { "maxDuration": 15 }
   }
 }
