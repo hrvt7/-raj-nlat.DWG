@@ -106,10 +106,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
   const mountedRef = useRef(true) // guard against setState after unmount
 
-  // ── Notify parent of measurement changes ──
+  // ── Notify parent of measurement changes (with calibrated distances) ──
   const notifyMeasurements = useCallback(() => {
     const cb = onMeasurementsChangeRef.current
-    if (cb) cb([...measuresRef.current])
+    if (!cb) return
+    const sf = scaleRef.current
+    const enriched = measuresRef.current.map(seg => ({
+      ...seg,
+      distMeters: sf.calibrated && sf.factor ? seg.dist * sf.factor : null,
+    }))
+    cb(enriched)
   }, [])
 
   // ── Dirty state tracking (unsaved local changes) ──

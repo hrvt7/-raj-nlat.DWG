@@ -115,6 +115,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── PDF manual markers (assembly-based counting from PdfViewer) ─────────
   const [pdfMarkers, setPdfMarkers] = useState([])
   const [pdfMeasurements, setPdfMeasurements] = useState([]) // [{x1,y1,x2,y2,dist,category?}]
+  const [measurementPrices, setMeasurementPrices] = useState({}) // { categoryKey: pricePerUnit(Ft) }
   const prevMarkerCountRef = useRef(0)
   useEffect(() => {
     const asmMarkers = pdfMarkers.filter(m => m.asmId || (m.category && m.category.startsWith('ASM-')))
@@ -723,13 +724,55 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode })
   }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode])
 
+  // ── Measurement cost (manual pricing of PDF measurements) ──────────────
+  const measurementItems = useMemo(() => {
+    if (!pdfMeasurements.length) return []
+    const groups = {}
+    for (const seg of pdfMeasurements) {
+      const key = seg.category || '_general'
+      if (!groups[key]) groups[key] = { key, label: seg.category || 'Általános mérés', totalDist: 0, totalMeters: 0, count: 0 }
+      groups[key].totalDist += seg.dist
+      groups[key].totalMeters += seg.distMeters || 0
+      groups[key].count++
+    }
+    return Object.values(groups).map(g => ({
+      ...g,
+      pricePerUnit: measurementPrices[g.key] || 0,
+      cost: (g.totalMeters || 0) * (measurementPrices[g.key] || 0),
+    }))
+  }, [pdfMeasurements, measurementPrices])
+
+  const measurementCostTotal = useMemo(() => {
+    return measurementItems.reduce((s, item) => s + item.cost, 0)
+  }, [measurementItems])
+
   // ── Extended calc (markup/margin, cable $/m, VAT — extracted to utils/fullCalc.js) ──
   const fullCalc = useMemo(() => {
-    return computeFullCalc({
+    const base = computeFullCalc({
       pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent,
       context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode,
     })
-  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode])
+    if (!base) return null
+    // Add measurement costs to the total
+    if (measurementCostTotal > 0) {
+      base.subtotal += measurementCostTotal
+      base.measurementCost = measurementCostTotal
+      // Recalculate grand total with markup
+      const markupPct = base.markupPct
+      if (base.markupType === 'margin') {
+        const marginRatio = markupPct / 100
+        base.grandTotal = marginRatio >= 1 ? base.subtotal * 10 : base.subtotal / (1 - marginRatio)
+      } else {
+        base.grandTotal = base.subtotal * (1 + markupPct / 100)
+      }
+      if (!Number.isFinite(base.grandTotal)) base.grandTotal = base.subtotal
+      base.markupAmount = base.grandTotal - base.subtotal
+      base.bruttoTotal = base.grandTotal * (1 + base.vatPercent / 100)
+    } else {
+      base.measurementCost = 0
+    }
+    return base
+  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal])
 
   // ── Per-assembly unit cost (extracted to utils/fullCalc.js) ───────────────
   const unitCostByAsmByWall = useMemo(() => {
@@ -1602,45 +1645,56 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       ))}
                     </div>
 
-                    {/* ── Measurements from PDF (cable trays, manual measurements) ── */}
-                    {pdfMeasurements.length > 0 && (() => {
-                      // Group measurements by category
-                      const groups = {}
-                      let uncategorizedTotal = 0
-                      let uncategorizedCount = 0
-                      for (const seg of pdfMeasurements) {
-                        const dist = seg.dist * (fullCalc?.productivityFactor ? 1 : 1) // raw px dist — needs scale
-                        if (seg.category) {
-                          if (!groups[seg.category]) groups[seg.category] = { totalDist: 0, count: 0, label: seg.category }
-                          groups[seg.category].totalDist += seg.dist
-                          groups[seg.category].count++
-                        } else {
-                          uncategorizedTotal += seg.dist
-                          uncategorizedCount++
-                        }
-                      }
-                      const hasAny = Object.keys(groups).length > 0 || uncategorizedCount > 0
-                      if (!hasAny) return null
-                      // We need scale factor from the PdfViewer — stored in annotations
-                      // For now show pixel distances; when calibrated, show meters
-                      return (
-                        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
-                          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>Mérések ({pdfMeasurements.length} db)</div>
-                          {Object.entries(groups).map(([cat, info]) => (
-                            <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
-                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text }}>{info.label} ({info.count} db)</div>
-                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.yellow, fontWeight: 700 }}>{Math.round(info.totalDist)} px</div>
-                            </div>
-                          ))}
-                          {uncategorizedCount > 0 && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}>
-                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.textSub }}>Általános mérés ({uncategorizedCount} db)</div>
-                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.yellow, fontWeight: 700 }}>{Math.round(uncategorizedTotal)} px</div>
-                            </div>
+                    {/* ── Measurements from PDF — priceable items ── */}
+                    {measurementItems.length > 0 && (
+                      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
+                        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 10 }}>
+                          Mérések ({pdfMeasurements.length} db)
+                          {measurementCostTotal > 0 && (
+                            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.yellow, marginLeft: 8 }}>
+                              {Math.round(measurementCostTotal).toLocaleString('hu-HU')} Ft
+                            </span>
                           )}
                         </div>
-                      )
-                    })()}
+                        {measurementItems.map(item => (
+                          <div key={item.key} style={{ padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 600 }}>{item.label}</div>
+                                <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
+                                  {item.count} szakasz · {item.totalMeters ? `${item.totalMeters.toFixed(1)} m` : `${Math.round(item.totalDist)} px (nincs kalibráció)`}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right', fontFamily: 'DM Mono', fontSize: 12, color: item.cost > 0 ? C.yellow : C.muted, fontWeight: 700 }}>
+                                {item.cost > 0 ? `${Math.round(item.cost).toLocaleString('hu-HU')} Ft` : '—'}
+                              </div>
+                            </div>
+                            {item.totalMeters > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>Ár (Ft/m):</span>
+                                <input
+                                  type="number" min={0} step={100}
+                                  value={measurementPrices[item.key] || ''}
+                                  placeholder="0"
+                                  onChange={e => setMeasurementPrices(prev => ({ ...prev, [item.key]: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                                  style={{ width: 90, padding: '3px 6px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                                />
+                                {item.cost > 0 && (
+                                  <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent }}>
+                                    = {Math.round(item.cost).toLocaleString('hu-HU')} Ft
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {!item.totalMeters && (
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.red }}>
+                                Kalibráld a rajzot a Skála eszközzel az árazáshoz
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* ── Cable cost ── */}
                     {fullCalc.cableTotalM > 0 && (
