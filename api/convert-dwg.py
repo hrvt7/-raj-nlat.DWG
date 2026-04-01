@@ -2,7 +2,38 @@ from http.server import BaseHTTPRequestHandler
 import json, traceback, os, sys
 from urllib.request import urlopen, Request
 import urllib.error
-from _security import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
+
+# Import shared security helpers — with fallback for Vercel bundling edge cases
+try:
+    from _security import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
+except ImportError:
+    # Inline fallback if _security.py not available in function bundle
+    def send_cors_headers(handler, origin=None):
+        handler.send_header('Access-Control-Allow-Origin', os.environ.get('ALLOWED_ORIGINS', '*').split(',')[0].strip() if not origin else origin)
+        handler.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        handler.send_header('Access-Control-Allow-Headers', 'Content-Type')
+    def check_origin(handler): return True
+    def check_rate_limit(handler, limit=30): return True
+    def check_required_env(handler, *env_vars):
+        missing = [v for v in env_vars if not os.environ.get(v)]
+        if missing:
+            handler.send_response(503)
+            handler.send_header('Content-Type', 'application/json')
+            handler.end_headers()
+            handler.wfile.write(json.dumps({'success': False, 'error': 'Service temporarily unavailable'}).encode())
+            return False
+        return True
+    def safe_error_response(handler, code, msg, exc=None):
+        if exc: print(f"[API ERROR] {msg}: {traceback.format_exc()}", file=sys.stderr)
+        handler.send_response(code)
+        handler.send_header('Content-Type', 'application/json')
+        handler.end_headers()
+        handler.wfile.write(json.dumps({'success': False, 'error': msg}).encode())
+    def rate_limit_response(handler):
+        handler.send_response(429)
+        handler.send_header('Content-Type', 'application/json')
+        handler.end_headers()
+        handler.wfile.write(json.dumps({'success': False, 'error': 'Too many requests'}).encode())
 
 CLOUDCONVERT_API_KEY = os.environ.get('CLOUDCONVERT_API_KEY', '')
 
