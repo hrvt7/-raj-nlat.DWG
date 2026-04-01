@@ -805,12 +805,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const sx = e.clientX - rect.left
     const sy = e.clientY - rect.top
 
-    // Auto-symbol rectangle drag (sample or area)
+    // Auto-symbol rectangle drag (sample or area) — use immediate draw for visual feedback
     if (autoSymbolStartRef.current && (autoSymbolPhase === 'picking' || autoSymbolPhase === 'areaSelect')) {
       const r = { x1: autoSymbolStartRef.current.sx, y1: autoSymbolStartRef.current.sy, x2: sx, y2: sy }
       if (autoSymbolPhase === 'picking') setAutoSymbolRect(r)
       else setAutoSymbolAreaRect(r)
-      drawOverlayThrottled()
+      drawOverlayImpl()
       return
     }
 
@@ -819,13 +819,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       const dy = e.clientY - dragRef.current.startY
       viewRef.current.offsetX = dragRef.current.startOX + dx
       viewRef.current.offsetY = dragRef.current.startOY + dy
-      drawOverlayThrottled()
+      drawOverlayImpl()
       return
     }
 
     mousePdfRef.current = screenToPdf(sx, sy)
-    if (activeTool) drawOverlayThrottled()
-  }, [activeTool, screenToPdf, drawOverlayThrottled])
+    if (activeTool) drawOverlayImpl()
+  }, [activeTool, screenToPdf, drawOverlayImpl])
 
   // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
   // IMPORTANT: must be declared BEFORE handleMouseUp which references it
