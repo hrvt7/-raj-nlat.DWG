@@ -1143,7 +1143,7 @@ function ItemsGroup({ title, count, accentColor, items, renderRow }) {
 
 // ─── AuthModal ─────────────────────────────────────────────────────────────────
 function AuthModal({ onAuth }) {
-  const [mode, setMode]         = useState('login') // login | register
+  const [mode, setMode]         = useState('login') // login | register | confirm
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [name, setName]         = useState('')
@@ -1155,10 +1155,16 @@ function AuthModal({ onAuth }) {
     try {
       if (mode === 'login') {
         await signIn(email, password)
+        onAuth()
       } else {
-        await signUp(email, password, name)
+        const { data } = await signUp(email, password, name)
+        // If Supabase returns a user but no session, email confirmation is required
+        if (data?.user && !data?.session) {
+          setMode('confirm')
+        } else {
+          onAuth()
+        }
       }
-      onAuth()
     } catch (e) {
       setError(e.message || 'Hiba történt')
     } finally { setLoading(false) }
@@ -1169,6 +1175,53 @@ function AuthModal({ onAuth }) {
     border: `1px solid ${C.border}`, borderRadius: 10, color: C.text,
     fontFamily: 'DM Mono', fontSize: 13, outline: 'none', boxSizing: 'border-box',
     transition: 'border-color 0.2s',
+  }
+
+  // ── Email confirmation screen ──
+  if (mode === 'confirm') {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, background: C.bg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+      }}>
+        <div style={{ position: 'absolute', inset: 0, opacity: 0.03, backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '32px 32px' }} />
+        <div style={{
+          background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 20,
+          padding: '44px 36px', width: '100%', maxWidth: 420, boxSizing: 'border-box',
+          position: 'relative', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>✉</div>
+          <div style={{
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 22,
+            background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            marginBottom: 12,
+          }}>
+            Erősítsd meg az email címed
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 13, color: C.textSub, marginBottom: 8 }}>
+            Küldtünk egy aktiváló linket erre a címre:
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 14, color: C.accent, fontWeight: 600, marginBottom: 24 }}>
+            {email}
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 28 }}>
+            Kattints az emailben kapott linkre, majd térj vissza ide és jelentkezz be.
+            <br />Nézd meg a spam mappát is!
+          </div>
+          <button
+            onClick={() => { setMode('login'); setError('') }}
+            style={{
+              width: '100%', padding: '13px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)',
+              color: '#09090B', fontFamily: 'Syne', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+            }}
+          >
+            Vissza a bejelentkezéshez
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
