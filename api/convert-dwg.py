@@ -5,7 +5,7 @@ import urllib.error
 
 # Import shared security helpers — with fallback for Vercel bundling edge cases
 try:
-    from api_security import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
+    from shared import send_cors_headers, check_origin, check_rate_limit, check_required_env, safe_error_response, rate_limit_response
 except ImportError:
     # Inline fallback if _security.py not available in function bundle
     def send_cors_headers(handler, origin=None):

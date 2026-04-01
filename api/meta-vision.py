@@ -5,7 +5,7 @@ The OpenAI API key lives server-side only — never exposed to the client bundle
 """
 from http.server import BaseHTTPRequestHandler
 import json, os, sys, urllib.request, urllib.error
-from api_security import (
+from shared import (
     send_cors_headers, check_origin, check_rate_limit,
     check_required_env, require_auth, safe_error_response, rate_limit_response
 )

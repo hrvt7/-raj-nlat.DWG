@@ -18,17 +18,16 @@
     }
   ],
   "functions": {
-    "api/cable-agent.py":         { "maxDuration": 90, "includeFiles": "api/api_security.py" },
-    "api/ai.py":                  { "maxDuration": 60, "includeFiles": "api/api_security.py" },
-    "api/meta-vision.py":         { "maxDuration": 30, "includeFiles": "api/api_security.py" },
-    "api/parse-dwg.py":           { "maxDuration": 60, "includeFiles": "api/api_security.py" },
-    "api/parse-pdf.py":           { "maxDuration": 120, "includeFiles": "api/api_security.py" },
-    "api/parse-dxf.py":           { "maxDuration": 30, "includeFiles": "api/api_security.py" },
-    "api/convert-dwg.py":         { "maxDuration": 60, "includeFiles": "api/api_security.py" },
-    "api/parse-pdf-vectors.py":   { "maxDuration": 30, "includeFiles": "api/api_security.py" },
-    "api/create-checkout.py":     { "maxDuration": 15, "includeFiles": "api/api_security.py" },
-    "api/stripe-webhook.py":      { "maxDuration": 15, "includeFiles": "api/api_security.py" },
-    "api/notify-quote-accepted.py": { "maxDuration": 15, "includeFiles": "api/api_security.py" },
-    "api/health.py":              { "includeFiles": "api/api_security.py" }
+    "api/cable-agent.py":         { "maxDuration": 90 },
+    "api/ai.py":                  { "maxDuration": 60 },
+    "api/meta-vision.py":         { "maxDuration": 30 },
+    "api/parse-dwg.py":           { "maxDuration": 60 },
+    "api/parse-pdf.py":           { "maxDuration": 120 },
+    "api/parse-dxf.py":           { "maxDuration": 30 },
+    "api/convert-dwg.py":         { "maxDuration": 60 },
+    "api/parse-pdf-vectors.py":   { "maxDuration": 30 },
+    "api/create-checkout.py":     { "maxDuration": 15 },
+    "api/stripe-webhook.py":      { "maxDuration": 15 },
+    "api/notify-quote-accepted.py": { "maxDuration": 15 }
   }
 }

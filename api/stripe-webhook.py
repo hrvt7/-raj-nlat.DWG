@@ -14,7 +14,7 @@ Figyelendő events:
 
 from http.server import BaseHTTPRequestHandler
 import json, os, sys, hashlib, hmac, urllib.request, time
-from api_security import IS_PRODUCTION, IS_LOCAL_DEV
+from shared import IS_PRODUCTION, IS_LOCAL_DEV
 
 STRIPE_WEBHOOK_SECRET  = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 SUPABASE_URL           = os.environ.get('VITE_SUPABASE_URL', 'https://pprlbtsqfyrbfhbqjpai.supabase.co')

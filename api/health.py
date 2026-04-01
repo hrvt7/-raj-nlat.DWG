@@ -3,7 +3,7 @@ import json
 
 # Test _security import
 try:
-    from api_security import check_origin
+    from shared import check_origin
     sec_ok = True
     sec_err = None
 except Exception as e:
