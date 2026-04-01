@@ -46,6 +46,7 @@ import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrai
 import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
 import { suggestAssemblies } from '../utils/suggestAssemblies.js'
+import { getAuthHeaders } from '../supabase.js'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 import { C } from './takeoff/designTokens.js'
@@ -407,9 +408,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           }
 
           // Step 1: Create CloudConvert job (our server, tiny JSON request)
+          const authHeaders = await getAuthHeaders()
           const createRes = await fetchWithRetry(`${apiUrl}/api/convert-dwg`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders,
             body: JSON.stringify({ filename: f.name }),
           })
           let createJson
@@ -445,9 +447,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           const MAX_POLL_MS = 120_000
           while (Date.now() - pollStart < MAX_POLL_MS) {
             await new Promise(r => setTimeout(r, 3000))
+            const pollHeaders = await getAuthHeaders()
             const pollRes = await fetchWithRetry(`${apiUrl}/api/convert-dwg`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: pollHeaders,
               body: JSON.stringify({ jobId }),
             }, 2)
             let pollJson

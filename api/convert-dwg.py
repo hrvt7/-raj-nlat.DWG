@@ -6,7 +6,7 @@ import urllib.error
 
 # Import shared security helpers — with fallback for Vercel bundling edge cases
 try:
-     from security_helpers import send_cors_headers, check_origin, check_rate_limit, check_body_size, check_required_env, safe_error_response, rate_limit_response
+     from security_helpers import send_cors_headers, check_origin, check_rate_limit, check_body_size, check_required_env, require_auth, safe_error_response, rate_limit_response
 except ImportError:
     # Inline fallback if _security.py not available in function bundle
     def send_cors_headers(handler, origin=None):
@@ -158,6 +158,7 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not check_origin(self): return
         if not check_rate_limit(self, limit=5): return rate_limit_response(self)
+        if not require_auth(self): return
         if not check_body_size(self, max_bytes=1024): return  # only JSON metadata, not file bytes
         if not check_required_env(self, 'CLOUDCONVERT_API_KEY'): return
         try:

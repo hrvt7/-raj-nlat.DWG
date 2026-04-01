@@ -80,9 +80,12 @@ def _is_allowed_origin(origin):
     # Exact match against configured origins
     if origin in ALLOWED_ORIGINS:
         return True
-    # Allow Vercel preview/production deployment URLs (*.vercel.app)
-    if origin.endswith('.vercel.app') and origin.startswith('https://'):
-        return True
+    # Allow only TakeoffPro Vercel deployment URLs (preview + production)
+    if origin.startswith('https://') and origin.endswith('.vercel.app'):
+        # Only accept our project's deployment URLs (takeoffpro-*.vercel.app or raj-nlat-dwg.vercel.app)
+        host = origin.replace('https://', '')
+        if host.startswith('takeoffpro-') or host.startswith('raj-nlat-dwg'):
+            return True
     return False
 
 

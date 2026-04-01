@@ -7,7 +7,7 @@ Vision AI NINCS – csak a tényleges fájl adataiból dolgozunk.
 from http.server import BaseHTTPRequestHandler
 import json, base64, traceback, os, sys, re
 from collections import Counter
-from security_helpers import send_cors_headers, check_origin, check_rate_limit, safe_error_response, rate_limit_response
+from security_helpers import send_cors_headers, check_origin, check_rate_limit, require_auth, safe_error_response, rate_limit_response
 MAX_UPLOAD_MB  = int(os.environ.get('MAX_UPLOAD_MB', '30'))
 
 SYMBOL_KEYWORDS = {
@@ -99,6 +99,7 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not check_origin(self): return
         if not check_rate_limit(self): return rate_limit_response(self)
+        if not require_auth(self): return
         filename = 'file.dwg'
         try:
             length = int(self.headers.get('Content-Length', 0))
