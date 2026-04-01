@@ -687,7 +687,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     const totalM  = lightM + socketM + switchM
     const normalized = normalizeCableEstimate({
       cable_total_m: totalM,
-      cable_by_type: { light_m: lightM, socket_m: socketM, switch_m: switchM, other_m: 0 },
+      cable_by_type: { light_m: lightM, socket_m: socketM, switch_m: switchM, data_m: 0, fire_m: 0, other_m: 0 },
       method: 'Becslés eszközszám alapján (nincs pozícióadat)',
       confidence: 0.55,
     }, CABLE_SOURCE.DEVICE_COUNT)
@@ -1503,6 +1503,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       { key: 'light_m', label: 'Világítási kör (NYM-J 3×1.5)', color: C.accent },
                       { key: 'socket_m', label: 'Dugalj kör (NYM-J 3×2.5)', color: C.blue },
                       { key: 'switch_m', label: 'Kapcsoló kör (NYM-J 3×1.5)', color: C.yellow },
+                      { key: 'data_m', label: 'Gyengeáram (Cat6 / koax)', color: '#A8DADC' },
+                      { key: 'fire_m', label: 'Tűzjelző (JE-H(St)H E30)', color: '#E63946' },
                       { key: 'other_m', label: 'Egyéb (NYM-J 5×2.5)', color: C.textSub },
                     ].map(({ key, label, color }) => {
                       const m = cableEstimate.cable_by_type?.[key] || 0

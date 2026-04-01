@@ -58,6 +58,8 @@ export const CABLE_TYPE_KW = {
   light:  ['VILAG','LIGHT','3X1','1X1','LAMPA','VIL_KAB','LAMP','VILAGIT'],
   socket: ['DUGALJ','SOCKET','3X2','1X2','DUG_KAB','KONNEKTOR','OUTLET'],
   switch: ['KAPCS','SWITCH','KAPCSOL','KAP_KAB'],
+  data:   ['CAT6','CAT5','UTP','FTP','KOAX','COAX','RJ45','ADAT','DATA','PATCH','GYENGE','LAN','WIFI'],
+  fire:   ['TUZ','FIRE','JE-H','JELSTH','TUZVEDELM','TUZJELZO','SMOKE','DETECTOR','ALARM','E30','FE180'],
   other:  ['NYY','5X','FOGYASZT','PANEL_KAB'],
 }
 
@@ -68,7 +70,7 @@ export const CABLE_TYPE_KW = {
 export function detectDxfCableLengths(parsedDxf) {
   if (!parsedDxf?.lengths?.length) return null
   let total = 0
-  const byType = { light: 0, socket: 0, switch: 0, other: 0 }
+  const byType = { light: 0, socket: 0, switch: 0, data: 0, fire: 0, other: 0 }
   let layerCount = 0
   for (const l of parsedDxf.lengths) {
     if (!l.length || l.length <= 0) continue
@@ -79,6 +81,8 @@ export function detectDxfCableLengths(parsedDxf) {
     if      (CABLE_TYPE_KW.light.some(k  => up.includes(k))) byType.light  += l.length
     else if (CABLE_TYPE_KW.socket.some(k => up.includes(k))) byType.socket += l.length
     else if (CABLE_TYPE_KW.switch.some(k => up.includes(k))) byType.switch += l.length
+    else if (CABLE_TYPE_KW.data.some(k   => up.includes(k))) byType.data   += l.length
+    else if (CABLE_TYPE_KW.fire.some(k   => up.includes(k))) byType.fire   += l.length
     else if (CABLE_TYPE_KW.other.some(k  => up.includes(k))) byType.other  += l.length
     else byType.socket += l.length  // ismeretlen → dugalj (leggyakoribb)
   }
@@ -88,7 +92,7 @@ export function detectDxfCableLengths(parsedDxf) {
     cable_total_m: r(total),
     cable_total_m_p50: r(total),
     cable_total_m_p90: null,
-    cable_by_type: { light_m: r(byType.light), socket_m: r(byType.socket), switch_m: r(byType.switch), other_m: r(byType.other) },
+    cable_by_type: { light_m: r(byType.light), socket_m: r(byType.socket), switch_m: r(byType.switch), data_m: r(byType.data), fire_m: r(byType.fire), other_m: r(byType.other) },
     method: `Mért kábelvonalak (${layerCount} réteg, ${Math.round(total)} m)`,
     confidence: 0.92,
     _source: 'dxf_layers',

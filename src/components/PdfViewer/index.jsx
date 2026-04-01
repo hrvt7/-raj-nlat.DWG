@@ -1177,8 +1177,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     if (!panel) { cb(null); return }
 
     // Compute Manhattan cable lengths from panel to each device
-    let lightM = 0, socketM = 0, switchM = 0, otherM = 0
-    let lightN = 0, socketN = 0, switchN = 0, otherN = 0
+    let lightM = 0, socketM = 0, switchM = 0, dataM = 0, fireM = 0, otherM = 0
+    let lightN = 0, socketN = 0, switchN = 0, dataN = 0, fireN = 0, otherN = 0
     const ROUTING_FACTOR = 1.25 // wall routing + vertical drops overhead
 
     for (const m of markers) {
@@ -1196,11 +1196,13 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       if (asmCat === 'vilagitas' || m.category === 'light') { lightM += dist; lightN++ }
       else if (m.category === 'socket' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('dugalj'))) { socketM += dist; socketN++ }
       else if (m.category === 'switch' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('kapcsol'))) { switchM += dist; switchN++ }
+      else if (asmCat === 'gyengaram') { dataM += dist; dataN++ }
+      else if (asmCat === 'tuzjelzo') { fireM += dist; fireN++ }
       else { otherM += dist; otherN++ }
     }
 
-    const totalM = lightM + socketM + switchM + otherM
-    const deviceCount = lightN + socketN + switchN + otherN
+    const totalM = lightM + socketM + switchM + dataM + fireM + otherM
+    const deviceCount = lightN + socketN + switchN + dataN + fireN + otherN
     if (deviceCount === 0) { cb(null); return }
 
     cb({
@@ -1211,6 +1213,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         light_m: Math.round(lightM * 10) / 10,
         socket_m: Math.round(socketM * 10) / 10,
         switch_m: Math.round(switchM * 10) / 10,
+        data_m: Math.round(dataM * 10) / 10,
+        fire_m: Math.round(fireM * 10) / 10,
         other_m: Math.round(otherM * 10) / 10,
       },
       method: `Kézi jelölés alapján (${deviceCount} eszköz, Manhattan-távolság × ${ROUTING_FACTOR})`,

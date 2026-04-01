@@ -270,7 +270,7 @@ describe('Constants', () => {
     expect(CABLE_GENERIC_KW).toContain('WIRE')
   })
 
-  it('CABLE_TYPE_KW has all four categories', () => {
-    expect(Object.keys(CABLE_TYPE_KW)).toEqual(['light', 'socket', 'switch', 'other'])
+  it('CABLE_TYPE_KW has all six categories', () => {
+    expect(Object.keys(CABLE_TYPE_KW)).toEqual(['light', 'socket', 'switch', 'data', 'fire', 'other'])
   })
 })
