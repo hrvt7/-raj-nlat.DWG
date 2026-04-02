@@ -118,20 +118,24 @@ export function parseDxfText(text) {
   let insAttribs = []                  // [{tag, value}] for current INSERT's ATTRIBs
   let attribTag = null                 // current ATTRIB tag name being collected
 
+  let polylineLayer = 'DEFAULT' // track POLYLINE layer separately (VERTEX has its own layer code)
+
   const flushPolyline = () => {
-    if (entityType === 'LWPOLYLINE' && pts.length > 1) {
+    // Push the last pending point before computing length
+    if (ptX !== null) { pts.push([ptX, ptY || 0]); ptX = null; ptY = null }
+    if ((entityType === 'LWPOLYLINE' || entityType === 'POLYLINE') && pts.length > 1) {
+      const pLayer = entityType === 'POLYLINE' ? polylineLayer : entityLayer
       let L = 0
       for (let j = 0; j + 1 < pts.length; j++) {
         const dx = pts[j+1][0]-pts[j][0], dy = pts[j+1][1]-pts[j][1]
         L += Math.sqrt(dx*dx+dy*dy)
       }
       if (closed) { const dx=pts[0][0]-pts[pts.length-1][0], dy=pts[0][1]-pts[pts.length-1][1]; L+=Math.sqrt(dx*dx+dy*dy) }
-      lengthByLayer[entityLayer] = (lengthByLayer[entityLayer]||0) + L
+      lengthByLayer[pLayer] = (lengthByLayer[pLayer]||0) + L
+      allLayers.add(pLayer)
       // Capture polyline points for SVG
-      if (polylineGeom.length < MAX_POLYS) {
-        const pointsCopy = [...pts]
-        if (ptX !== null) pointsCopy.push([ptX, ptY||0])
-        if (pointsCopy.length > 1) polylineGeom.push({ layer: entityLayer, points: pointsCopy, closed })
+      if (polylineGeom.length < MAX_POLYS && pts.length > 1) {
+        polylineGeom.push({ layer: pLayer, points: [...pts], closed })
       }
     }
   }
@@ -189,12 +193,24 @@ export function parseDxfText(text) {
       if (val === 'ATTRIB') {
         entityType = 'ATTRIB'; attribTag = null; continue
       }
-      // SEQEND terminates ATTRIB sequence — flush the INSERT with its attribs
+      // VERTEX entities follow classic POLYLINE — collect points
+      if (val === 'VERTEX') {
+        entityType = 'VERTEX'; continue
+      }
+      // SEQEND terminates both ATTRIB (INSERT) and VERTEX (POLYLINE) sequences
       if (val === 'SEQEND') {
-        flushInsert(); entityType = null; continue
+        if (pts.length > 0 || ptX !== null) {
+          entityType = 'POLYLINE' // restore for flushPolyline check
+          flushPolyline()
+          pts = []; ptX = null; ptY = null
+        }
+        flushInsert()
+        entityType = null; continue
       }
       flushPolyline()
       flushInsert()
+      // Save POLYLINE layer before it gets overwritten by VERTEX layer codes
+      if (val === 'POLYLINE') polylineLayer = 'DEFAULT'
       entityType = val; entityLayer = 'DEFAULT'; pts = []; ptX = null; ptY = null
       closed = false; lineStart = null; textVal = null
       insName = null; insX = null; insY = null
@@ -212,6 +228,18 @@ export function parseDxfText(text) {
       if (code === 2) insName = val
       if (code === 10) insX = parseFloat(val)
       if (code === 20) insY = parseFloat(val)
+    }
+
+    // Classic POLYLINE: capture layer and closed flag
+    if (entityType === 'POLYLINE') {
+      if (code === 8) polylineLayer = val
+      if (code === 70) closed = !!(parseInt(val, 10) & 1)
+    }
+
+    // Classic VERTEX: capture point coordinates
+    if (entityType === 'VERTEX') {
+      if (code === 10) { if (ptX !== null) pts.push([ptX, ptY || 0]); ptX = parseFloat(val); ptY = null }
+      if (code === 20) ptY = parseFloat(val)
     }
 
     // Collect ATTRIB tag/value pairs for the current INSERT

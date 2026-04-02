@@ -7,7 +7,7 @@ import { parseDxfText } from '../dxfParser.js'
  * Build a minimal well-formed DXF text string.
  * Group codes and values alternate line-by-line as per DXF spec.
  */
-function buildDxf({ insunits = 0, inserts = [], polylines = [] } = {}) {
+function buildDxf({ insunits = 0, inserts = [], polylines = [], classicPolylines = [] } = {}) {
   const lines = []
 
   const add = (code, val) => {
@@ -42,6 +42,19 @@ function buildDxf({ insunits = 0, inserts = [], polylines = [] } = {}) {
       add(10, px)
       add(20, py)
     }
+  }
+
+  // Classic POLYLINE + VERTEX + SEQEND (R12/R14 style)
+  for (const poly of classicPolylines) {
+    add(0, 'POLYLINE')
+    add(8, poly.layer || 'LAYER_P')
+    add(70, poly.closed ? 1 : 0)
+    for (const [px, py] of poly.points) {
+      add(0, 'VERTEX')
+      add(10, px)
+      add(20, py)
+    }
+    add(0, 'SEQEND')
   }
 
   add(0, 'ENDSEC')
@@ -271,5 +284,69 @@ describe('BLOCKS section support', () => {
     const result = parseDxfText(lines.join('\n'))
     expect(result.blocks.length).toBe(1)
     expect(result.blocks[0].name).toBe('SHOULD_APPEAR')
+  })
+})
+
+// ── Classic POLYLINE + VERTEX support ───────────────────────────────────────
+
+describe('Classic POLYLINE support', () => {
+  it('parses classic POLYLINE+VERTEX+SEQEND and computes length', () => {
+    const dxf = buildDxf({
+      insunits: 6, // meters
+      classicPolylines: [
+        { layer: 'E_KABEL', points: [[0, 0], [10, 0], [10, 5]], closed: false },
+      ],
+    })
+    const result = parseDxfText(dxf)
+    expect(result.success).toBe(true)
+    const cableLayer = result.lengths.find(l => l.layer === 'E_KABEL')
+    expect(cableLayer).toBeTruthy()
+    // 10 + 5 = 15 units → 15m (factor=1 for meters)
+    expect(cableLayer.length).toBeCloseTo(15, 0)
+  })
+
+  it('handles closed classic POLYLINE', () => {
+    const dxf = buildDxf({
+      insunits: 6,
+      classicPolylines: [
+        { layer: 'E_KABEL', points: [[0, 0], [10, 0], [10, 10], [0, 10]], closed: true },
+      ],
+    })
+    const result = parseDxfText(dxf)
+    const cableLayer = result.lengths.find(l => l.layer === 'E_KABEL')
+    expect(cableLayer).toBeTruthy()
+    // 10 + 10 + 10 + 10 = 40m (closed square)
+    expect(cableLayer.length).toBeCloseTo(40, 0)
+  })
+
+  it('classic POLYLINE does not break LWPOLYLINE parsing', () => {
+    const dxf = buildDxf({
+      insunits: 6,
+      polylines: [
+        { layer: 'LW_LAYER', points: [[0, 0], [5, 0]], closed: false },
+      ],
+      classicPolylines: [
+        { layer: 'CL_LAYER', points: [[0, 0], [8, 0]], closed: false },
+      ],
+    })
+    const result = parseDxfText(dxf)
+    const lwLayer = result.lengths.find(l => l.layer === 'LW_LAYER')
+    const clLayer = result.lengths.find(l => l.layer === 'CL_LAYER')
+    expect(lwLayer).toBeTruthy()
+    expect(clLayer).toBeTruthy()
+    expect(lwLayer.length).toBeCloseTo(5, 0)
+    expect(clLayer.length).toBeCloseTo(8, 0)
+  })
+
+  it('captures classic POLYLINE geometry for SVG overlay', () => {
+    const dxf = buildDxf({
+      classicPolylines: [
+        { layer: 'E_WIRE', points: [[1, 2], [3, 4], [5, 6]] },
+      ],
+    })
+    const result = parseDxfText(dxf)
+    expect(result.polylineGeom.length).toBe(1)
+    expect(result.polylineGeom[0].layer).toBe('E_WIRE')
+    expect(result.polylineGeom[0].points.length).toBe(3)
   })
 })
