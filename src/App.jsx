@@ -203,8 +203,16 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   const totalMaterials = Math.round(quote.totalMaterials || 0)
   const newTotalLabor = Math.round(totalHours * effectiveRate)
   const newSubtotal = totalMaterials + newTotalLabor
-  const newMarkupAmount = Math.round(newSubtotal * (Number(editMarkup) / 100))
-  const net = newSubtotal + newMarkupAmount
+  const markupType = quote.pricingData?.markup_type || 'markup'
+  const markupPctRaw = Number(editMarkup) / 100
+  let net
+  if (markupType === 'margin') {
+    net = markupPctRaw >= 1 ? newSubtotal * 10 : Math.round(newSubtotal / (1 - markupPctRaw))
+  } else {
+    net = Math.round(newSubtotal * (1 + markupPctRaw))
+  }
+  if (!Number.isFinite(net)) net = newSubtotal
+  const newMarkupAmount = net - newSubtotal
   // (Per-component gross values are provided by quoteDisplayTotals below,
   //  with proportional ÁFA allocation so they always sum to displayGross.)
 
