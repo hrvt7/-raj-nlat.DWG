@@ -23,7 +23,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, focusTarget, assemblies: assembliesProp }, ref) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, focusTarget, assemblies: assembliesProp }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -32,6 +32,20 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   // inline onCableData (new reference each render → useEffect re-fires → setState → re-render → …)
   const onCableDataRef = useRef(onCableData)
   useEffect(() => { onCableDataRef.current = onCableData })
+  const onMeasurementsChangeRef = useRef(onMeasurementsChange)
+  useEffect(() => { onMeasurementsChangeRef.current = onMeasurementsChange })
+
+  // Notify parent of measurement changes (with calibrated distances)
+  const notifyMeasurements = useCallback(() => {
+    const cb = onMeasurementsChangeRef.current
+    if (!cb) return
+    const enriched = measuresRef.current.map(seg => ({
+      ...seg,
+      dist: seg.distance / (scaleRef.current?.factor || 1), // raw pixel dist for compat
+      distMeters: seg.distance, // already in meters
+    }))
+    cb(enriched)
+  }, [])
 
   // Expose inner DxfViewerCanvas imperative API so parents (e.g. DxfBlockOverlay) can use
   // sceneToScreen, getViewer, subscribe, etc. through the forwarded ref.
@@ -100,7 +114,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     hydratedRef.current = false // reset — auto-save guard active until restore finishes
     getPlanAnnotations(planId).then(ann => {
       if (ann.markers?.length) { markersRef.current = normalizeMarkers(ann.markers); setRenderTick(t => t + 1) }
-      if (ann.measurements?.length) { measuresRef.current = ann.measurements }
+      if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurements() }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
@@ -448,6 +462,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
           distance: distM, label: formatDist(distM),
         }]
         activeStartRef.current = null
+        notifyMeasurements()
         setRenderTick(t => t + 1)
       }
     }
@@ -532,13 +547,14 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     }
     if (activeTool === 'measure' && measuresRef.current.length > 0) {
       measuresRef.current = measuresRef.current.slice(0, -1)
+      notifyMeasurements()
       setRenderTick(t => t + 1)
     }
-  }, [activeTool])
+  }, [activeTool, notifyMeasurements])
 
   const handleClearAll = useCallback(() => {
     if (activeTool === 'count') markersRef.current = []
-    if (activeTool === 'measure') measuresRef.current = []
+    if (activeTool === 'measure') { measuresRef.current = []; notifyMeasurements() }
     activeStartRef.current = null
     setRenderTick(t => t + 1)
   }, [activeTool])
@@ -565,8 +581,9 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       const distM = rawDist * factor
       return { ...m, distance: distM, label: formatDist(distM) }
     })
+    notifyMeasurements()
     setRenderTick(t => t + 1)
-  }, [calibDialog, calibInput, calibUnit])
+  }, [calibDialog, calibInput, calibUnit, notifyMeasurements])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {

@@ -1248,6 +1248,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 planId={planId}
                 assemblies={assemblies}
                 focusTarget={focusTarget}
+                onMeasurementsChange={(measurements) => {
+                  setPdfMeasurements(measurements)
+                }}
                 onCableData={(data) => {
                   if (data) {
                     const normalized = normalizeCableEstimate(data, CABLE_SOURCE.DXF_MARKERS)
