@@ -50,7 +50,14 @@ export async function signIn(email, password) {
 }
 export async function resetPassword(email) {
   requireConfig('resetPassword')
-  const { error } = await supabase.auth.resetPasswordForEmail(email)
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/#app',
+  })
+  if (error) throw error
+}
+export async function updatePassword(newPassword) {
+  requireConfig('updatePassword')
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) throw error
 }
 export async function resendConfirmation(email) {
@@ -70,7 +77,7 @@ export async function getSession() {
 }
 export function onAuthChange(cb) {
   if (!supabaseConfigured) return { data: { subscription: { unsubscribe() {} } } }
-  return supabase.auth.onAuthStateChange((_e, session) => cb(session))
+  return supabase.auth.onAuthStateChange((event, session) => cb(session, event))
 }
 
 /**

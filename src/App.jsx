@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, resetPassword, resendConfirmation, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
+import { supabase, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -1147,6 +1147,93 @@ function ItemsGroup({ title, count, accentColor, items, renderRow }) {
   )
 }
 
+// ─── PasswordResetForm ─────────────────────────────────────────────────────────
+function PasswordResetForm({ onDone }) {
+  const [pw1, setPw1] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+
+  const handleSubmit = async () => {
+    setError('')
+    if (pw1.length < 6) { setError('A jelszónak legalább 6 karakter hosszúnak kell lennie.'); return }
+    if (pw1 !== pw2) { setError('A két jelszó nem egyezik.'); return }
+    setLoading(true)
+    try {
+      await updatePassword(pw1)
+      setSuccess(true)
+    } catch (e) {
+      setError(e.message || 'Jelszó módosítás sikertelen')
+    } finally { setLoading(false) }
+  }
+
+  const inp = {
+    width: '100%', padding: '12px 16px', background: C.bg,
+    border: `1px solid ${C.border}`, borderRadius: 10, color: C.text,
+    fontFamily: 'DM Mono', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+    transition: 'border-color 0.2s',
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+      <div style={{ position: 'absolute', inset: 0, opacity: 0.03, backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '32px 32px' }} />
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 20, padding: '44px 36px', width: '100%', maxWidth: 420, boxSizing: 'border-box', position: 'relative', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 26, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+            TakeoffPro
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 6, letterSpacing: '0.05em' }}>
+            {success ? 'Jelszó sikeresen módosítva' : 'Új jelszó beállítása'}
+          </div>
+        </div>
+
+        {success ? (
+          <>
+            <div style={{ textAlign: 'center', fontSize: 48, marginBottom: 16 }}>✅</div>
+            <div style={{ textAlign: 'center', fontFamily: 'DM Mono', fontSize: 13, color: C.accent, marginBottom: 28 }}>
+              A jelszavad sikeresen megváltozott. Most már bejelentkezhetsz az új jelszóval.
+            </div>
+            <button onClick={onDone} style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)', color: '#09090B', fontFamily: 'Syne', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
+              Tovább az alkalmazásba
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: C.textSub, marginBottom: 6 }}>Új jelszó</div>
+              <input style={inp} type="password" placeholder="Legalább 6 karakter" value={pw1}
+                onChange={e => setPw1(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                onFocus={e => e.target.style.borderColor = C.accent}
+                onBlur={e => e.target.style.borderColor = C.border} />
+            </div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: 'Syne', fontWeight: 600, fontSize: 12, color: C.textSub, marginBottom: 6 }}>Jelszó megerősítés</div>
+              <input style={inp} type="password" placeholder="Írd be újra" value={pw2}
+                onChange={e => setPw2(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                onFocus={e => e.target.style.borderColor = C.accent}
+                onBlur={e => e.target.style.borderColor = C.border} />
+            </div>
+
+            {error && (
+              <div style={{ background: C.redDim, border: `1px solid ${C.red}40`, color: C.red, fontFamily: 'DM Mono', fontSize: 12, padding: '10px 14px', borderRadius: 10, marginBottom: 18 }}>
+                {error}
+              </div>
+            )}
+
+            <button onClick={handleSubmit} disabled={loading || !pw1}
+              style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: loading ? C.accentDim : 'linear-gradient(135deg, #21F3A3 0%, #17C7FF 100%)', color: '#09090B', fontFamily: 'Syne', fontWeight: 800, fontSize: 15, cursor: loading ? 'not-allowed' : 'pointer', opacity: !pw1 ? 0.5 : 1, transition: 'all 0.2s' }}>
+              {loading ? 'Folyamatban...' : 'Jelszó módosítása'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── AuthModal ─────────────────────────────────────────────────────────────────
 function AuthModal({ onAuth }) {
   const [mode, setMode]         = useState('login') // login | register | confirm | forgot | forgot-sent
@@ -1415,6 +1502,7 @@ function SaaSShell() {
   const [session, setSession] = useState(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [passwordRecovery, setPasswordRecovery] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1422,9 +1510,12 @@ function SaaSShell() {
       setUserEmail(session?.user?.email || '')
       setAuthChecked(true)
     })
-    const { data: { subscription } } = onAuthChange(s => {
+    const { data: { subscription } } = onAuthChange((s, event) => {
       setSession(s)
       setUserEmail(s?.user?.email || '')
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true)
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -1802,6 +1893,9 @@ function SaaSShell() {
   }
   if (!session) {
     return <AuthModal onAuth={() => {}} />
+  }
+  if (passwordRecovery) {
+    return <PasswordResetForm onDone={() => setPasswordRecovery(false)} />
   }
 
   return (
