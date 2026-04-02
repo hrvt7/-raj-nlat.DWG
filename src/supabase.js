@@ -87,8 +87,19 @@ export function onAuthChange(cb) {
 export async function getAuthHeaders(contentType = 'application/json') {
   const headers = { 'Content-Type': contentType }
   try {
-    const session = await getSession()
+    // getSession() returns the cached session which may have an expired access_token.
+    // Supabase access_tokens live ~1 hour. If the user's tab was idle, the auto-refresh
+    // may not have run. We proactively check and refresh before sending API requests.
+    let session = await getSession()
     if (session?.access_token) {
+      const expiresAt = session.expires_at ? session.expires_at * 1000 : 0
+      const isExpiredOrSoon = !expiresAt || Date.now() > expiresAt - 120000 // 2 min buffer
+      if (isExpiredOrSoon) {
+        try {
+          const { data } = await supabase.auth.refreshSession()
+          if (data?.session?.access_token) session = data.session
+        } catch { /* refresh failed — use existing token as-is */ }
+      }
       headers['Authorization'] = `Bearer ${session.access_token}`
     }
   } catch { /* no session available — headers without auth */ }

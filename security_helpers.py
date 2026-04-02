@@ -172,7 +172,7 @@ def verify_supabase_token(handler):
             print(f"[SECURITY] Supabase auth API error: {status}", file=sys.stderr)
         return None
     except Exception as e:
-        print(f"[SECURITY] Supabase auth verification failed: {e}", file=sys.stderr)
+        print(f"[SECURITY] Supabase auth verification failed: {type(e).__name__}: {e} | URL={SUPABASE_URL}/auth/v1/user | apikey_len={len(SUPABASE_ANON_KEY)}", file=sys.stderr)
         return None
 
 
