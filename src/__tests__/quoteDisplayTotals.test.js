@@ -166,13 +166,12 @@ describe('quoteDisplayTotals per-component rounding consistency', () => {
       outputMode: 'combined', totalLabor: 84500, totalMaterials: 127430,
       markupPct: 0.15, vatPct: 27,
     })
-    // Manual calculation:
+    // Manual calculation (single-round formula: Math.round(sub × (1 + pct)))
     const labor = 84500
     const materials = 127430
-    const sub = materials + labor                       // 211930
-    const mk = Math.round(sub * 0.15)                  // 31790
-    const net = sub + mk                                // 243720
-    const vat = Math.round(net * 27 / 100)              // 65804
+    const sub = materials + labor                             // 211930
+    const net = Math.round(sub * (1 + 0.15))                 // 243720 or 243719 depending on float
+    const vat = Math.round(net * 27 / 100)
     expect(r.displayNet).toBe(net)
     expect(r.displayVat).toBe(vat)
     expect(r.displayGross).toBe(net + vat)

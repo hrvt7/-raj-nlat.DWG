@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
+import { supabase, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, saveProjectsRemote, savePlansRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -430,7 +430,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   // ── Display values per outputMode (internal data untouched) ──────────────
   const { displayNet, displayGross, grossMaterials, grossLabor, grossMarkup, markupAmount } = quoteDisplayTotals({
     outputMode, totalLabor: newTotalLabor, totalMaterials,
-    markupPct: Number(editMarkup) / 100, vatPct,
+    markupPct: Number(editMarkup) / 100, markupType, vatPct,
   })
 
   // ── Markup visibility flag for internal KPI strip ──────────────────────────
@@ -1665,6 +1665,8 @@ function SaaSShell() {
         saveAssembliesRemote(loadAssemblies()),
         saveMaterialsRemote(materials),
         saveWorkItemsRemote(loadWorkItems()),
+        saveProjectsRemote(loadProjects()),
+        savePlansRemote(loadPlans()),
       ])
     } catch { /* best-effort sync before logout */ }
     await signOut()

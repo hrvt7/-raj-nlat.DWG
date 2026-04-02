@@ -29,11 +29,13 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
   const markupPct = Number(quote.pricingData?.markup_pct) || 0
 
   // Use shared helper for outputMode-aware totals (consistent with UI)
+  const markupType = quote.pricingData?.markup_type || 'markup'
   const { displayNet: dNet, displayVat: dVat, displayGross: dGross, fullNet: net } = quoteDisplayTotals({
     outputMode,
     totalLabor: Number(quote.totalLabor) || 0,
     totalMaterials: Number(quote.totalMaterials) || 0,
     markupPct,
+    markupType,
     vatPct,
   })
   const company   = settings?.company || {}

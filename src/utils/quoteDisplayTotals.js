@@ -21,20 +21,29 @@
  * @param {number}  opts.vatPct      - VAT percent (default 27)
  * @returns {{ displayNet: number, displayVat: number, displayGross: number, fullNet: number, grossMaterials: number, grossLabor: number, grossMarkup: number, markupAmount: number }}
  */
-export function quoteDisplayTotals({ outputMode, totalLabor, totalMaterials, markupPct, vatPct = 27 }) {
+export function quoteDisplayTotals({ outputMode, totalLabor, totalMaterials, markupPct, markupType = 'markup', vatPct = 27 }) {
   const labor = Math.round(Number(totalLabor) || 0)
   const materials = Math.round(Number(totalMaterials) || 0)
   const markup = Number(markupPct) || 0
   const vat = Number(vatPct) || 27
+  const isMargin = markupType === 'margin'
 
-  // Full combined net (always computed the same way)
+  // Helper: apply markup or margin to a subtotal
+  const applyMarkup = (sub) => {
+    if (isMargin) {
+      return markup >= 1 ? sub * 10 : Math.round(sub / (1 - markup))
+    }
+    return Math.round(sub * (1 + markup))
+  }
+
+  // Full combined net
   const fullSubtotal = materials + labor
-  const fullMarkup = Math.round(fullSubtotal * markup)
-  const fullNet = fullSubtotal + fullMarkup
+  const fullNet = applyMarkup(fullSubtotal)
+  const fullMarkup = fullNet - fullSubtotal
 
-  // Labor-only net: labor + markup applied to labor only
-  const laborMarkup = Math.round(labor * markup)
-  const laborNet = labor + laborMarkup
+  // Labor-only net: markup/margin applied to labor only
+  const laborNet = applyMarkup(labor)
+  const laborMarkup = laborNet - labor
 
   const displayNet = outputMode === 'labor_only' ? laborNet : fullNet
   const displayVat = Math.round(displayNet * vat / 100)

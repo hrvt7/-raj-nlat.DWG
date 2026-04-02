@@ -51,7 +51,7 @@ export async function signIn(email, password) {
 export async function resetPassword(email) {
   requireConfig('resetPassword')
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + '/#app',
+    redirectTo: window.location.origin + '/',
   })
   if (error) throw error
 }
