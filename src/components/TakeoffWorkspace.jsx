@@ -924,14 +924,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           takeoffRows, pricing, assemblies, workItems, materials,
           context, markup, hourlyRate, difficultyMode, computePricing,
         )
+        const grandTotal = fullCalc?.grandTotal || pricing.total
         updatePlanMeta(planId, {
-          calcTotal: Math.round(pricing.total),
+          calcTotal: Math.round(grandTotal),
           calcItemCount: takeoffRows.reduce((s, r) => s + r.qty, 0),
           calcDate: new Date().toISOString(),
           calcTakeoffRows: takeoffRows,
           calcPricing: {
-            total: pricing.total,
-            materialCost: pricing.materialCost,
+            total: grandTotal,
+            materialCost: (pricing.materialCost || 0) + (fullCalc?.measurementCost || 0),
             laborCost: pricing.laborCost,
             laborHours: pricing.laborHours,
           },
