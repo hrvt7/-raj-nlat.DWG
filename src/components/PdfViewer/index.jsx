@@ -153,7 +153,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         // Migrate legacy ASM-xxx categories to COUNT_CATEGORY keys
         markersRef.current = migrateMarkers(normalized, assembliesProp)
         setRenderTick(t => t + 1)
-        if (onMarkersChange) onMarkersChange([...markersRef.current])
+        if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
       }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurements() }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
@@ -193,7 +193,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     const unsub = onAnnotationsChanged(planId, ({ markers, assignments: extAssignments }) => {
       markersRef.current = migrateMarkers(normalizeMarkers(markers), assembliesProp)
       setRenderTick(t => t + 1)
-      if (onMarkersChange) onMarkersChange([...markersRef.current])
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
       // Auto-fill assignments from saved defaults when new detection markers arrive
       const currentAsgn = extAssignments || assignmentsRef.current
       const defaults = loadCategoryAssemblyMap()
@@ -204,7 +204,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       }
     })
     return unsub
-  }, [planId, onMarkersChange])
+  // onMarkersChange accessed via stable ref — no dep needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId])
 
   // ── Focus on target marker (from review panel locate) ──
   // Pending focus: saved when focusTarget arrives before PDF is rendered.
@@ -497,7 +499,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         const doc2 = canvasToDoc(seg.x2, seg.y2, mig.rotation, d.w, d.h)
         return { ...seg, x1: doc1.x, y1: doc1.y, x2: doc2.x, y2: doc2.y }
       })
-      if (onMarkersChange) onMarkersChange([...markersRef.current])
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
       notifyMeasurements()
     }
     // proj: unrotated doc coords → screen coords (via docToCanvas + zoom/offset)
@@ -769,8 +771,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
       setRenderTick(t => t + 1)
       drawOverlay()
       // Notify parent of marker change
-      if (onMarkersChange) {
-        onMarkersChange([...markersRef.current])
+      if (onMarkersChangeRef.current) {
+        onMarkersChangeRef.current([...markersRef.current])
       }
       // Auto-populate assignment: always update to match the LAST-used assembly
       // for this category. This keeps the AssignTab dropdown in sync.
@@ -1089,11 +1091,11 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     } else if (markersRef.current.length > 0) {
       markersRef.current.pop()
       markDirty()
-      if (onMarkersChange) onMarkersChange([...markersRef.current])
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
     }
     setRenderTick(t => t + 1)
     drawOverlay()
-  }, [drawOverlay, onMarkersChange, markDirty, notifyMeasurements])
+  }, [drawOverlay, markDirty, notifyMeasurements])
 
   const handleClearAll = useCallback(() => {
     markersRef.current = []
@@ -1103,8 +1105,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     notifyMeasurements()
     setRenderTick(t => t + 1)
     drawOverlay()
-    if (onMarkersChange) onMarkersChange([])
-  }, [drawOverlay, onMarkersChange, markDirty, notifyMeasurements])
+    if (onMarkersChangeRef.current) onMarkersChangeRef.current([])
+  }, [drawOverlay, markDirty, notifyMeasurements])
 
   // ── Calibration submit ──
   const handleCalibSubmit = useCallback(() => {
@@ -1352,7 +1354,7 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           }
           markDirty()
           setRenderTick(t => t + 1)
-          if (onMarkersChange) onMarkersChange([...markersRef.current])
+          if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
           // Reset auto symbol
           setAutoSymbolActive(false)
           setAutoSymbolPhase('idle')
