@@ -101,15 +101,24 @@ function parseDxfText(text) {
   }
   self.postMessage({ type: 'progress', pct: 45 })
 
-  // ── Find ENTITIES section ──────────────────────────────────────────────────
-  let entityStart = -1, sectionName = '', inSection = false
-  for (let i = 0; i < tokens.length; i++) {
-    const [code, val] = tokens[i]
-    if (code === 0 && val === 'SECTION') { inSection = true; continue }
-    if (inSection && code === 2) {
-      sectionName = val; inSection = false
-      if (val === 'ENTITIES') { entityStart = i + 1; break }
+  // ── Find BLOCKS + ENTITIES sections ────────────────────────────────────────
+  let entityStart = -1, blocksStart = -1, blocksEnd = -1
+  {
+    let inSection = false
+    for (let i = 0; i < tokens.length; i++) {
+      const [code, val] = tokens[i]
+      if (code === 0 && val === 'SECTION') { inSection = true; continue }
+      if (inSection && code === 2) {
+        inSection = false
+        if (val === 'ENTITIES') entityStart = i + 1
+        if (val === 'BLOCKS') blocksStart = i + 1
+      }
+      if (code === 0 && val === 'ENDSEC') {
+        if (blocksStart > 0 && blocksEnd < 0 && entityStart < 0) blocksEnd = i
+        if (blocksStart > 0 && entityStart > 0 && blocksEnd < 0) blocksEnd = i
+      }
     }
+    if (blocksStart > 0 && blocksEnd < 0) blocksEnd = entityStart > 0 ? entityStart - 2 : tokens.length
   }
   self.postMessage({ type: 'progress', pct: 50 })
 
@@ -169,12 +178,37 @@ function parseDxfText(text) {
     }
   }
 
-  const entityTokens = tokens.slice(entityStart >= 0 ? entityStart : 0)
+  // ── BLOCKS: extract entities from *MODEL_SPACE / *PAPER_SPACE ───────────
+  const blocksTokens = []
+  if (blocksStart > 0 && blocksEnd > blocksStart) {
+    let inModelSpace = false
+    for (let i = blocksStart; i < blocksEnd; i++) {
+      const [code, val] = tokens[i]
+      if (code === 0 && val === 'BLOCK') { inModelSpace = false; continue }
+      if (code === 2 && !inModelSpace) {
+        const up = val.toUpperCase()
+        if (up === '*MODEL_SPACE' || up === '*PAPER_SPACE') inModelSpace = true
+        continue
+      }
+      if (code === 0 && val === 'ENDBLK') { inModelSpace = false; continue }
+      if (inModelSpace) blocksTokens.push(tokens[i])
+    }
+  }
+
+  // Build combined entity token stream
+  const entityTokens = []
+  if (blocksTokens.length > 0) entityTokens.push(...blocksTokens)
+  if (entityStart >= 0) {
+    for (let i = entityStart; i < tokens.length; i++) {
+      const [code, val] = tokens[i]
+      if (code === 0 && val === 'ENDSEC') break
+      entityTokens.push(tokens[i])
+    }
+  }
   const entityTotal  = entityTokens.length
 
   for (let i = 0; i < entityTokens.length; i++) {
     const [code, val] = entityTokens[i]
-    if (code === 0 && val === 'ENDSEC') { flushPolyline(); flushInsert(); break }
 
     if (code === 0) {
       // ATTRIB entities follow INSERT — collect tag/value pairs
