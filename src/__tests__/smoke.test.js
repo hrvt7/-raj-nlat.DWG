@@ -966,14 +966,8 @@ import { resolve } from 'path'
 
 describe('QuoteView email fallback — no bare showToast', () => {
   it('QuoteView body uses toast.show, not showToast', () => {
-    const src = readFileSync(resolve(__dirname, '..', 'App.jsx'), 'utf8')
-    // Extract QuoteView function body (starts at "function QuoteView" and ends
-    // at the next top-level "function " or "// ─── " section heading)
-    const start = src.indexOf('function QuoteView(')
-    expect(start).toBeGreaterThan(-1)
-    // QuoteView is ~830 lines; grab enough to cover the handleEmail fallback
-    const nextFn = src.indexOf('\nfunction ', start + 1)
-    const body = src.slice(start, nextFn > start ? nextFn : start + 20000)
+    const src = readFileSync(resolve(__dirname, '..', 'components', 'QuoteView.jsx'), 'utf8')
+    const body = src // entire file IS QuoteView now
     // Must NOT contain bare showToast calls (these would be ReferenceErrors)
     const bareShowToast = body.match(/[^.]showToast\s*\(/g) || []
     expect(bareShowToast).toHaveLength(0)
@@ -982,10 +976,7 @@ describe('QuoteView email fallback — no bare showToast', () => {
   })
 
   it('QuoteView has explicit status actions for sent, won, and lost', () => {
-    const src = readFileSync(resolve(__dirname, '..', 'App.jsx'), 'utf8')
-    const start = src.indexOf('function QuoteView(')
-    const nextFn = src.indexOf('\nfunction ', start + 1)
-    const body = src.slice(start, nextFn > start ? nextFn : start + 20000)
+    const body = readFileSync(resolve(__dirname, '..', 'components', 'QuoteView.jsx'), 'utf8')
     // markAs helper must exist and call onStatusChange
     expect(body).toContain('const markAs')
     expect(body).toContain('onStatusChange(quote.id, status)')

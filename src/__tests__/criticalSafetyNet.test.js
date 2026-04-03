@@ -498,8 +498,8 @@ describe('Plan→Quote financial integrity', () => {
   })
 
   it('QuoteView uses quote.vatPercent not just settings', () => {
-    const appSrc = readSrc('App.jsx')
-    expect(appSrc).toContain('Number(quote.vatPercent)')
+    const qvSrc = readSrc('components/QuoteView.jsx')
+    expect(qvSrc).toContain('Number(quote.vatPercent)')
   })
 
   it('generatePdf uses quote.vatPercent not just settings', () => {
