@@ -6,6 +6,22 @@ import { calcProductivityFactor } from '../data/workItemsDb.js'
 import { WALL_FACTORS } from '../data/workItemsDb.js'
 
 /**
+ * Apply markup or margin to a subtotal. Single source of truth — used by
+ * computeFullCalc and by TakeoffWorkspace's measurement-only recalc.
+ */
+export function applyMarkupToSubtotal(subtotal, markupPctRaw, markupType) {
+  const markupPct = markupPctRaw * 100
+  let grandTotal
+  if (markupType === 'margin') {
+    const marginRatio = markupPct / 100
+    grandTotal = marginRatio >= 1 ? subtotal * 10 : subtotal / (1 - marginRatio)
+  } else {
+    grandTotal = subtotal * (1 + markupPct / 100)
+  }
+  return Number.isFinite(grandTotal) ? grandTotal : subtotal
+}
+
+/**
  * Compute the full pricing calculation from base pricing.
  * Adds markup/margin, cable cost override, VAT, per-system and per-assembly breakdown.
  */
@@ -21,14 +37,7 @@ export function computeFullCalc({
   const cableCost = hasCatalogCable ? 0 : cableTotalM * cablePricePerM
   const subtotal = pricing.materialCost + pricing.laborCost + cableCost
   const markupPct = markup * 100
-  let grandTotal
-  if (markupType === 'margin') {
-    const marginRatio = markupPct / 100
-    grandTotal = marginRatio >= 1 ? subtotal * 10 : subtotal / (1 - marginRatio)
-  } else {
-    grandTotal = subtotal * (1 + markupPct / 100)
-  }
-  if (!Number.isFinite(grandTotal)) grandTotal = subtotal
+  let grandTotal = applyMarkupToSubtotal(subtotal, markup, markupType)
   const markupAmount = grandTotal - subtotal
   const bruttoTotal = grandTotal * (1 + vatPercent / 100)
 

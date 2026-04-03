@@ -95,7 +95,7 @@ describe('buildQuoteHtml — structure and content', () => {
     const html = buildQuoteHtml(baseQuote, baseSettings, 'summary', 'combined')
     // Materials: 450 000, Labor: 320 000
     expect(html).toContain('Anyagköltség')
-    expect(html).toContain('Munkadíj')
+    expect(html).toContain('Szerelési díj')
     expect(html).toContain('BRUTTÓ VÉGÖSSZEG')
   })
 
@@ -257,10 +257,10 @@ describe('buildQuoteHtml — markup absorbed into Munkadíj (no standalone Árr�
     expect(html).toContain('435\u00a0500')
   })
 
-  it('financial summary Munkadíj row includes markup', () => {
+  it('financial summary Szerelési díj row includes markup', () => {
     const html = buildQuoteHtml(quoteWithMarkup, baseSettings)
-    // Munkadíj row should show 435500 (labor + markup), not raw 320000
-    expect(html).toMatch(/fin-label[^>]*>Munkadíj/)
+    // Szerelési díj row should show 435500 (labor + markup), not raw 320000
+    expect(html).toMatch(/fin-label[^>]*>Szerelési díj/)
     expect(html).toContain('435\u00a0500')
   })
 

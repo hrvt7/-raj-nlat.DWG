@@ -54,7 +54,7 @@ import { C } from './takeoff/designTokens.js'
 // ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
 import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, detectDxfCableLengths } from '../utils/blockRecognition.js'
 import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows } from '../utils/takeoffRows.js'
-import { computeFullCalc, computeUnitCostByAsmByWall } from '../utils/fullCalc.js'
+import { computeFullCalc, computeUnitCostByAsmByWall, applyMarkupToSubtotal } from '../utils/fullCalc.js'
 
 // computePricing is imported from '../utils/pricing.js' — shared with MergePlansView
 
@@ -835,15 +835,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     if (measurementCostTotal > 0) {
       base.subtotal += measurementCostTotal
       base.measurementCost = measurementCostTotal
-      // Recalculate grand total with markup
-      const markupPct = base.markupPct
-      if (base.markupType === 'margin') {
-        const marginRatio = markupPct / 100
-        base.grandTotal = marginRatio >= 1 ? base.subtotal * 10 : base.subtotal / (1 - marginRatio)
-      } else {
-        base.grandTotal = base.subtotal * (1 + markupPct / 100)
-      }
-      if (!Number.isFinite(base.grandTotal)) base.grandTotal = base.subtotal
+      // Recalculate grand total with shared markup helper (single source of truth)
+      base.grandTotal = applyMarkupToSubtotal(base.subtotal, base.markupPct / 100, base.markupType)
       base.markupAmount = base.grandTotal - base.subtotal
       base.bruttoTotal = base.grandTotal * (1 + base.vatPercent / 100)
     } else {
