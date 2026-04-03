@@ -931,6 +931,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
           hours: line.hours || 0, materialCost: line.materialCost || 0,
         }))
+        // Include measurement items in per-plan snapshot (cable trays, manual measurements)
+        for (const mi of measurementItems) {
+          if (!mi.totalMeters || mi.totalMeters <= 0) continue
+          snapshotItems.push({
+            name: mi.label + (mi.isAutoPriced ? '' : ' (kézi ár)'),
+            code: mi.matchedAsmId || mi.key, qty: Math.round(mi.totalMeters * 10) / 10, unit: 'm',
+            type: 'material', systemType: 'general',
+            sourcePlanSystemType: _planSysType, sourcePlanFloor: _planFloor, sourcePlanFloorLabel: _planFloorLabel,
+            unitPrice: mi.pricePerUnit, hours: 0, materialCost: mi.cost, _fromMeasurement: true,
+          })
+        }
         const snapshotAssembly = buildAssemblySummary(
           takeoffRows, pricing, assemblies, workItems, materials,
           context, markup, hourlyRate, difficultyMode, computePricing,
@@ -1260,6 +1271,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 planId={planId}
                 assemblies={assemblies}
                 focusTarget={focusTarget}
+                onMarkersChange={(markers) => {
+                  setPdfMarkers(markers)
+                }}
                 onMeasurementsChange={(measurements) => {
                   setPdfMeasurements(measurements)
                 }}

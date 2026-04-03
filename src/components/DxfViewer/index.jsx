@@ -23,7 +23,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, focusTarget, assemblies: assembliesProp }, ref) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, onMarkersChange, focusTarget, assemblies: assembliesProp }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -34,6 +34,8 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   useEffect(() => { onCableDataRef.current = onCableData })
   const onMeasurementsChangeRef = useRef(onMeasurementsChange)
   useEffect(() => { onMeasurementsChangeRef.current = onMeasurementsChange })
+  const onMarkersChangeRef = useRef(onMarkersChange)
+  useEffect(() => { onMarkersChangeRef.current = onMarkersChange })
 
   // Notify parent of measurement changes (with calibrated distances)
   const notifyMeasurements = useCallback(() => {
@@ -252,6 +254,14 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   // onCableData accessed via stable ref — no dep needed
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderTick, scale])
+
+  // ── Report marker changes to parent (mirrors PdfViewer onMarkersChange) ──
+  useEffect(() => {
+    if (onMarkersChangeRef.current) {
+      onMarkersChangeRef.current([...markersRef.current])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderTick])
 
   // ── Coordinate projection helper ──
   const project = useCallback((sx, sy) => {
