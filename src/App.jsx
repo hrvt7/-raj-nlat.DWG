@@ -17,7 +17,7 @@ const LegendPanel            = lazy(() => import('./components/LegendPanel.jsx')
 const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPanel.jsx'))
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
 import { loadSettings, saveSettings, loadWorkItems, saveWorkItems, loadMaterials, saveMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies, saveAssemblies } from './data/store.js'
-import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta, saveAllPlansMeta } from './data/planStore.js'
+import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta, saveAllPlansMeta, syncAllAnnotationsRemote } from './data/planStore.js'
 import { generateProjectId, saveProject, saveAllProjects, loadProjects, getProject } from './data/projectStore.js'
 import { QuoteStatusBadge, fmt, ToastProvider, useToast } from './components/ui.jsx'
 // SuccessPage removed — Stripe payment flow is not active
@@ -1675,6 +1675,7 @@ function SaaSShell() {
         saveWorkItemsRemote(loadWorkItems()),
         saveProjectsRemote(loadProjects()),
         savePlansRemote(loadPlans()),
+        syncAllAnnotationsRemote(),
       ])
     } catch { /* best-effort sync before logout */ }
     await signOut()
