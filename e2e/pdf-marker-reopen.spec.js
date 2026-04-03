@@ -133,7 +133,7 @@ test('PDF markers are visually drawn on overlay canvas after save and reopen', a
 
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ }).click()
+  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ }).click()
 
   const workspace = page.locator('[data-testid="workspace-container"]')
   await expect(workspace).toBeVisible({ timeout: 15_000 })
@@ -162,7 +162,7 @@ test('PDF markers are visually drawn on overlay canvas after save and reopen', a
   // ── Reopen ──
   const planCards = page.locator('[data-testid="plan-card"]')
   await expect(planCards.first()).toBeVisible({ timeout: 5_000 })
-  const reopenBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const reopenBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(reopenBtn).toBeVisible()
   await reopenBtn.click()
 

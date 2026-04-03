@@ -142,7 +142,7 @@ test('PDF plan opens into workspace with seeded markers and takeoff rows', async
   await expect(planCard).toContainText('Smoke PDF plan.pdf')
 
   // Open the plan
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 
@@ -176,7 +176,7 @@ test('PDF workspace save persists calculation and shows success', async ({ page 
 
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ }).click()
+  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ }).click()
 
   const workspace = page.locator('[data-testid="workspace-container"]')
   await expect(workspace).toBeVisible({ timeout: 15_000 })
@@ -223,7 +223,7 @@ test('reopening a saved PDF plan restores calculation state', async ({ page }) =
 
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ }).click()
+  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ }).click()
 
   const workspace = page.locator('[data-testid="workspace-container"]')
   await expect(workspace).toBeVisible({ timeout: 15_000 })
@@ -251,7 +251,7 @@ test('reopening a saved PDF plan restores calculation state', async ({ page }) =
   // ── Second pass: reopen ──
   const planCards = page.locator('[data-testid="plan-card"]')
   await expect(planCards.first()).toBeVisible({ timeout: 5_000 })
-  const reopenBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const reopenBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(reopenBtn).toBeVisible()
   await reopenBtn.click()
 

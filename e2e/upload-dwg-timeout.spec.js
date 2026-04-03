@@ -118,7 +118,7 @@ test('DWG conversion timeout shows visible failure with timeout message', async 
 
   // Open the plan → conversion flow starts (workspace stays in loading/converting
   // state until conversion resolves — workspace-container testid only appears after)
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 

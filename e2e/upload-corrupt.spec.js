@@ -55,7 +55,7 @@ test('corrupt DXF upload shows visible parse failure in workspace', async ({ pag
   await expect(planCard).toContainText('corrupt.dxf')
 
   // Open the plan in workspace
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 

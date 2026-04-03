@@ -107,7 +107,7 @@ async function navigateToWorkspace(page) {
 
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible()
   await openBtn.click()
 

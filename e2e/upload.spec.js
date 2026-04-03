@@ -60,7 +60,7 @@ test('real DXF file upload creates plan and reaches workspace', async ({ page })
   await expect(planCard).toContainText('smoke-plan.dxf')
 
   // Click "Megnyitás" to open the plan in workspace
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 

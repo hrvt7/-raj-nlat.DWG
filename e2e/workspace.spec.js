@@ -108,7 +108,7 @@ test('DXF plan opens into workspace with recognized items', async ({ page }) => 
   // Click "Megnyitás" on the plan card
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible()
   await openBtn.click()
 
@@ -141,7 +141,7 @@ test('workspace save persists calculation and shows success', async ({ page }) =
 
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await openBtn.click()
 
   // Wait for workspace to fully load
@@ -191,7 +191,7 @@ test('reopening a saved plan restores calculation state', async ({ page }) => {
 
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ }).click()
+  planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ }).click()
 
   const workspace = page.locator('[data-testid="workspace-container"]')
   await expect(workspace).toBeVisible({ timeout: 15_000 })
@@ -225,7 +225,7 @@ test('reopening a saved plan restores calculation state', async ({ page }) => {
   // Plan card should show some pricing indication (calcTotal > 0 means "Szerkesztés" button
   // appears instead of "Megnyitás" for a plan with saved calc data)
   // The button text changes from "Megnyitás" to "Szerkesztés" after save
-  const reopenBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const reopenBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(reopenBtn).toBeVisible()
 
   // ── Second pass: reopen the plan ──

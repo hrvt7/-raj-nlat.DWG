@@ -118,7 +118,7 @@ test('DWG conversion succeeds but empty DXF output shows safe failure state', as
   await expect(planCard).toContainText('corrupt.dwg')
 
   // ── Open plan → triggers DWG conversion flow ──────────────────────────
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 

@@ -131,7 +131,7 @@ test('recognition memory reuse: second plan auto-resolves a previously unknown b
   await expect(planCards.first()).toBeVisible({ timeout: 5_000 })
 
   // Click "Megnyitás" on Plan A (first card)
-  const planAOpen = planCards.nth(0).locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const planAOpen = planCards.nth(0).locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(planAOpen).toBeVisible()
   await planAOpen.click()
 
@@ -178,7 +178,7 @@ test('recognition memory reuse: second plan auto-resolves a previously unknown b
   await expect(planCards.nth(1)).toBeVisible({ timeout: 5_000 })
 
   // Open Plan B (second card)
-  const planBOpen = planCards.nth(1).locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const planBOpen = planCards.nth(1).locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(planBOpen).toBeVisible()
   await planBOpen.click()
 
