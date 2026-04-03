@@ -46,7 +46,9 @@ export const COUNT_CATEGORIES = [
 ]
 
 // Shared grouped category dropdown — used by both DxfToolbar and PdfViewer
-export function CategoryDropdown({ activeCategory, onCategoryChange }) {
+// When assemblies prop is provided, cable tray items are built from assemblies
+// with category 'kabeltalca' instead of the hardcoded CABLE_TRAY_SIZES list.
+export function CategoryDropdown({ activeCategory, onCategoryChange, assemblies }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -57,10 +59,37 @@ export function CategoryDropdown({ activeCategory, onCategoryChange }) {
     return () => document.removeEventListener('mousedown', h)
   }, [open])
 
-  const cat = COUNT_CATEGORIES.find(c => c.key === activeCategory) || COUNT_CATEGORIES[0]
-  const regularCats = COUNT_CATEGORIES.filter(c => !c.isCableTray && c.key !== 'other')
-  const cableTrayCATS = COUNT_CATEGORIES.filter(c => c.isCableTray)
-  const otherCat = COUNT_CATEGORIES.find(c => c.key === 'other')
+  // Build cable tray items from assemblies when available
+  const asmTrayCats = React.useMemo(() => {
+    if (!assemblies?.length) return null
+    const trays = assemblies.filter(a => a.category === 'kabeltalca')
+    if (!trays.length) return null
+    return trays.map(a => {
+      const m = a.name?.match(/(\d{2,4})\s*(?:mm|×)/)
+      const width = m ? parseInt(m[1], 10) : 0
+      const hm = a.name?.match(/×\s*(\d{2,4})/)
+      const height = hm ? parseInt(hm[1], 10) : 0
+      return {
+        key: width && height ? `kt_${width}_${height}` : `kt_asm_${a.id}`,
+        label: a.name,
+        color: CABLE_TRAY_COLOR,
+        isCableTray: true,
+        cableTrayWidth: width,
+        cableTrayHeight: height,
+      }
+    })
+  }, [assemblies])
+
+  const allCats = React.useMemo(() => {
+    const base = COUNT_CATEGORIES.filter(c => !c.isCableTray)
+    const trays = asmTrayCats || COUNT_CATEGORIES.filter(c => c.isCableTray)
+    return [...base.filter(c => c.key !== 'other'), ...trays, ...base.filter(c => c.key === 'other')]
+  }, [asmTrayCats])
+
+  const cat = allCats.find(c => c.key === activeCategory) || allCats[0]
+  const regularCats = allCats.filter(c => !c.isCableTray && c.key !== 'other')
+  const cableTrayCATS = allCats.filter(c => c.isCableTray)
+  const otherCat = allCats.find(c => c.key === 'other')
 
   const CatBtn = ({ c }) => (
     <button key={c.key} onClick={() => { onCategoryChange(c.key); setOpen(false) }} style={{

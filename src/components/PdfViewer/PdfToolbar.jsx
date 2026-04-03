@@ -70,7 +70,7 @@ export default function PdfToolbar({
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
       {activeTool === 'measure' && (
-        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
+        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
       )}
 
       {/* ── Auto Symbol POC ── */}

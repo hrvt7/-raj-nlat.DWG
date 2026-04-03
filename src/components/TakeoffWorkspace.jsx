@@ -806,10 +806,22 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Extended calc (markup/margin, cable $/m, VAT — extracted to utils/fullCalc.js) ──
   const fullCalc = useMemo(() => {
-    const base = computeFullCalc({
+    let base = computeFullCalc({
       pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent,
       context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode,
     })
+    // When there are no takeoff rows but measurements exist, create a minimal calc
+    // so the Kalkuláció tab shows measurement lines instead of an empty state.
+    if (!base && measurementItems.length > 0) {
+      const markupPct = markup * 100
+      base = {
+        materialCost: 0, laborCost: 0, laborHours: 0, lines: [],
+        cableTotalM: 0, cablePricePerM: 0, cableCost: 0,
+        subtotal: 0, markupType, markupPct, markupAmount: 0,
+        grandTotal: 0, bruttoTotal: 0, vatPercent,
+        bySystem: {}, byAssembly: {},
+      }
+    }
     if (!base) return null
     // Add measurement costs to the total
     if (measurementCostTotal > 0) {
@@ -832,7 +844,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     // Attach measurement line items for Kalkuláció tab + quote export
     base.measurementLines = measurementItems.filter(item => item.cost > 0 || item.totalMeters > 0)
     return base
-  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal])
+  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal, measurementItems])
 
   // ── Per-assembly unit cost (extracted to utils/fullCalc.js) ───────────────
   const unitCostByAsmByWall = useMemo(() => {
