@@ -21,6 +21,7 @@ export default function PdfToolbar({
   autoSymbolThreshold, autoSymbolCategory, autoSymbolLabel,
   onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
   onAutoSymbolAcceptAll, onAutoSymbolRejectAll, onAutoSymbolCategoryChange, onAutoSymbolLabelChange, onAutoSymbolFinalize,
+  onBatchProjectSearch, batchSearching, batchProgress,
 }) {
   const TOOLS = [
     { id: 'count', label: 'Számlálás', key: 'C' },
@@ -73,8 +74,23 @@ export default function PdfToolbar({
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
       )}
 
-      {/* ── Auto Symbol POC ── */}
+      {/* ── Auto Symbol + Batch Search ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8, borderLeft: `1px solid ${C.border}`, paddingLeft: 8 }}>
+        {onBatchProjectSearch && !autoSymbolActive && (
+          <button onClick={onBatchProjectSearch} disabled={batchSearching} title="Korábbi szimbólumok keresése a projekt más rajzairól" style={{
+            padding: '5px 10px', borderRadius: 6, cursor: batchSearching ? 'wait' : 'pointer', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: batchSearching ? 'rgba(76,201,240,0.12)' : 'transparent',
+            border: `1px solid ${batchSearching ? 'rgba(76,201,240,0.3)' : 'transparent'}`,
+            color: batchSearching ? '#4CC9F0' : C.text, transition: 'all 0.12s',
+          }}>
+            🔍 Korábbi
+            {batchSearching && <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#4CC9F0' }}>…</span>}
+          </button>
+        )}
+        {batchProgress && (
+          <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#4CC9F0', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{batchProgress}</span>
+        )}
         <button onClick={onAutoSymbolToggle} title="Auto szimbólum keresés (BETA)" style={{
           padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
           display: 'flex', alignItems: 'center', gap: 5,
