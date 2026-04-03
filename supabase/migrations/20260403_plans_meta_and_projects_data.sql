@@ -20,6 +20,11 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS data jsonb DEFAULT '[]'::js
 -- (original table had non-unique index only)
 ALTER TABLE public.projects ADD CONSTRAINT projects_user_id_unique UNIQUE (user_id);
 
+-- Add defaults for NOT NULL columns so blob upsert doesn't fail
+-- (upsertUserBlob only provides user_id + data, not id/name)
+ALTER TABLE public.projects ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE public.projects ALTER COLUMN name SET DEFAULT '';
+
 -- Enable RLS on plans_meta
 ALTER TABLE public.plans_meta ENABLE ROW LEVEL SECURITY;
 
