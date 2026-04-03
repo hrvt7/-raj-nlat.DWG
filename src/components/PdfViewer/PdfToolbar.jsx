@@ -105,11 +105,15 @@ export default function PdfToolbar({
         )}
         {autoSymbolPhase === 'done' && (
           <>
-            <label style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <label style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 3 }}>
               Küszöb
-              <input type="range" min="0.40" max="0.95" step="0.05" value={autoSymbolThreshold}
+              <button onClick={() => onAutoSymbolThresholdChange(Math.max(0.30, autoSymbolThreshold - 0.05))}
+                style={{ width: 18, height: 18, borderRadius: 4, border: `1px solid ${C.border}`, background: C.bg, color: '#FF8C42', cursor: 'pointer', fontSize: 12, fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>−</button>
+              <input type="range" min="0.30" max="0.95" step="0.05" value={autoSymbolThreshold}
                 onChange={e => onAutoSymbolThresholdChange(parseFloat(e.target.value))}
-                style={{ width: 50, accentColor: '#FF8C42' }} />
+                style={{ width: 55, accentColor: '#FF8C42' }} />
+              <button onClick={() => onAutoSymbolThresholdChange(Math.min(0.95, autoSymbolThreshold + 0.05))}
+                style={{ width: 18, height: 18, borderRadius: 4, border: `1px solid ${C.border}`, background: C.bg, color: '#FF8C42', cursor: 'pointer', fontSize: 12, fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>+</button>
               <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#FF8C42', width: 28 }}>{(autoSymbolThreshold * 100).toFixed(0)}%</span>
             </label>
             <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent }}>
