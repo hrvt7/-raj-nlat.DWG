@@ -63,7 +63,7 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
   const laborCardVal = outputMode === 'labor_only' ? dNet : (dNet - rawMaterials)
   const kpiCardDefs = [
     outputMode !== 'labor_only' && { label: 'Anyagköltség (nettó)', value: fmtHU(rawMaterials) + ' Ft', accent: false },
-    { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)', value: fmtHU(laborCardVal) + ' Ft', accent: false },
+    { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Szerelési díj (nettó)', value: fmtHU(laborCardVal) + ' Ft', accent: false },
     { label: 'Munkaóra',             value: (quote.totalHours || 0).toFixed(1)             + ' ó',  accent: false },
     { label: outputMode === 'labor_only' ? 'Bruttó munkadíj összeg' : 'Bruttó végösszeg', value: fmtHU(dGross) + ' Ft', accent: true },
   ].filter(Boolean)
@@ -77,7 +77,7 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
   const isLO = outputMode === 'labor_only'
   const finRows = [
     !isLO && ['Anyagköltség', fmtHU(rawMaterials) + ' Ft'],
-    [isLO ? 'Szerelési munkadíj' : 'Munkadíj', fmtHU(laborCardVal) + ' Ft'],
+    [isLO ? 'Szerelési munkadíj' : 'Szerelési díj', fmtHU(laborCardVal) + ' Ft'],
     [isLO ? 'Nettó munkadíj összesen' : 'Nettó összköltség', fmtHU(dNet) + ' Ft'],
     [`ÁFA (${vatPct}%)`, fmtHU(dVat) + ' Ft'],
   ].filter(Boolean)
