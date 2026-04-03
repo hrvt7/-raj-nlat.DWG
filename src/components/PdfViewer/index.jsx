@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
-import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
+import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged, getPlansByProject } from '../../data/planStore.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
 import { renderPageImageData } from '../../utils/templateMatching.js'
@@ -22,7 +22,7 @@ const C = {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, onMeasurementsChange, focusTarget, onDirtyChange }) {
+export default function PdfViewerPanel({ file, style, planId, projectId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, onMeasurementsChange, focusTarget, onDirtyChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -103,6 +103,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const autoSymbolTemplateRef = useRef(null) // { cropData, w, h } cropped template RGBA
   const autoSymbolStartRef = useRef(null) // mouse down position during picking
   const autoSymbolWorkerRef = useRef(null) // Web Worker instance
+  const [batchSearching, setBatchSearching] = useState(false)
+  const [batchProgress, setBatchProgress] = useState('')
   const autoSymbolSearchIdRef = useRef(0) // monotonic counter to detect stale results
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
   const mountedRef = useRef(true) // guard against setState after unmount
@@ -924,6 +926,132 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }
   }, [pdfDoc, pageNum])
 
+  // ── Batch search: run all saved templates from other plans in the same project ──
+  const runBatchProjectSearch = useCallback(async () => {
+    if (!pdfDoc || !planId || !projectId) return
+    setBatchSearching(true)
+    setBatchProgress('Template-ek betöltése…')
+    try {
+      // 1. Collect templates from all OTHER plans in the same project
+      const projectPlans = getPlansByProject(projectId).filter(p => p.id !== planId)
+      const allTemplates = []
+      for (const plan of projectPlans) {
+        const ann = await getPlanAnnotations(plan.id)
+        if (ann?.savedTemplates?.length) {
+          for (const tpl of ann.savedTemplates) {
+            // Deduplicate by category+asmId+size
+            const isDupe = allTemplates.some(t =>
+              t.category === tpl.category && t.asmId === tpl.asmId &&
+              Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5
+            )
+            if (!isDupe) allTemplates.push(tpl)
+          }
+        }
+      }
+      if (allTemplates.length === 0) {
+        setBatchProgress('')
+        setBatchSearching(false)
+        setAutoSymbolError('Nincs mentett szimbólum ebben a projektben. Először használd az Auto szimbólum keresést egy másik rajzon.')
+        return
+      }
+
+      // 2. Render current page for matching
+      const ANALYSIS_SCALE = 300 / 72
+      const page = await pdfDoc.getPage(pageNum)
+      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE, rotationRef.current)
+
+      // 3. Run search for each template sequentially
+      const allMarkers = []
+      for (let i = 0; i < allTemplates.length; i++) {
+        const tpl = allTemplates[i]
+        setBatchProgress(`Keresés: ${tpl.label || tpl.category} (${i + 1}/${allTemplates.length})…`)
+
+        // Reconstruct RGBA data from stored array
+        const cropData = new Uint8ClampedArray(tpl.cropData)
+
+        // Abort previous worker
+        if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
+        const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
+        autoSymbolWorkerRef.current = worker
+
+        const hits = await new Promise((resolve, reject) => {
+          worker.onmessage = (e) => {
+            if (e.data.type === 'result') resolve(e.data.hits)
+            else reject(new Error(e.data.message || 'Worker hiba'))
+          }
+          worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
+          worker.postMessage({
+            imgData: imageData.data,
+            imgW: width, imgH: height,
+            tplData: cropData,
+            tplW: tpl.w, tplH: tpl.h,
+            threshold: 0.30,
+            searchArea: null,
+          })
+        })
+
+        if (!mountedRef.current) return
+
+        // Convert coords and filter by threshold
+        const dd = unrotatedDimsRef.current
+        const rr = rotationRef.current
+        const threshold = tpl.threshold || 0.50
+        for (const h of hits) {
+          if (h.score < threshold) continue
+          const cx = (h.x + tpl.w / 2) / ANALYSIS_SCALE
+          const cy = (h.y + tpl.h / 2) / ANALYSIS_SCALE
+          const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
+          allMarkers.push({
+            x: doc.x, y: doc.y,
+            category: tpl.category,
+            asmId: tpl.asmId,
+            label: tpl.label,
+            score: h.score,
+            source: 'batch_detection',
+          })
+        }
+      }
+
+      // 4. Deduplicate (same spot = keep highest score)
+      allMarkers.sort((a, b) => b.score - a.score)
+      const dedupDist = 15 // PDF coord pixels
+      const unique = []
+      for (const m of allMarkers) {
+        const tooClose = unique.some(u => Math.sqrt((m.x - u.x) ** 2 + (m.y - u.y) ** 2) < dedupDist)
+        if (!tooClose) unique.push(m)
+      }
+
+      // 5. Add as markers
+      const asm = assembliesProp || []
+      for (const m of unique) {
+        const a = asm.find(a => a.id === m.asmId)
+        const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
+        const color = a ? (ASM_COLORS_MAP[a.category] || '#9CA3AF') : '#9CA3AF'
+        markersRef.current.push(createMarker({
+          x: m.x, y: m.y,
+          category: m.category,
+          color,
+          asmId: m.asmId,
+          source: 'batch_detection',
+          confidence: m.score,
+          label: m.label,
+        }))
+      }
+
+      markDirty()
+      setRenderTick(t => t + 1)
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
+      setBatchProgress(`✓ ${unique.length} szimbólum találva`)
+      setTimeout(() => setBatchProgress(''), 3000)
+    } catch (err) {
+      console.error('[BatchSearch] failed:', err)
+      setBatchProgress('Keresés sikertelen: ' + err.message)
+      setTimeout(() => setBatchProgress(''), 5000)
+    } finally {
+      setBatchSearching(false)
+    }
+  }, [pdfDoc, pageNum, planId, projectId, assembliesProp, markDirty])
+
   const handleMouseUp = useCallback(async () => {
     // Auto-symbol: finish rectangle pick → crop template → search
     if (autoSymbolStartRef.current && autoSymbolPhase === 'picking') {
@@ -1339,6 +1467,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         }}
         onAutoSymbolCategoryChange={setAutoSymbolCategory}
         onAutoSymbolLabelChange={setAutoSymbolLabel}
+        onBatchProjectSearch={projectId ? runBatchProjectSearch : null}
+        batchSearching={batchSearching}
+        batchProgress={batchProgress}
         onAutoSymbolFinalize={() => {
           // Finalize: add accepted results as markers to the existing PDF takeoff flow
           const accepted = autoSymbolResults.filter(r => r.accepted)
@@ -1364,6 +1495,27 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           markDirty()
           setRenderTick(t => t + 1)
           if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
+          // Save template to plan annotations for reuse on other plans in the same project
+          if (planId && autoSymbolTemplateRef.current) {
+            const tpl = autoSymbolTemplateRef.current
+            getPlanAnnotations(planId).then(ann => {
+              const existing = ann?.savedTemplates || []
+              // Don't save duplicates (same category + similar size)
+              const isDupe = existing.some(t => t.category === resolvedCategory && t.asmId === (asm?.id || null) && Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5)
+              if (!isDupe) {
+                const newTemplate = {
+                  cropData: Array.from(tpl.cropData), // convert to plain array for JSON serialization
+                  w: tpl.w, h: tpl.h,
+                  category: resolvedCategory,
+                  asmId: asm?.id || null,
+                  label,
+                  threshold: autoSymbolThreshold,
+                  savedAt: new Date().toISOString(),
+                }
+                savePlanAnnotations(planId, { ...ann, savedTemplates: [...existing, newTemplate] }, { silent: true })
+              }
+            }).catch(() => {}) // non-blocking
+          }
           // Reset auto symbol
           setAutoSymbolActive(false)
           setAutoSymbolPhase('idle')

@@ -1383,6 +1383,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 <PdfViewerPanel
                   file={file}
                   planId={planId}
+                  projectId={planId ? (getPlanMeta(planId)?.projectId || null) : null}
                   style={{ height: '100%', border: 'none', borderRadius: 0 }}
                   assemblies={assemblies}
                   focusTarget={focusTarget}
