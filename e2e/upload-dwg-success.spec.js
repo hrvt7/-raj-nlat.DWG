@@ -127,7 +127,7 @@ test('successful DWG upload converts to DXF and opens workspace with recognized 
   await expect(planCard).toContainText('corrupt.dwg')
 
   // ── Open the plan → triggers DWG conversion flow ──────────────────────
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 

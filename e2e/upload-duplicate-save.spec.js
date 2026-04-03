@@ -120,7 +120,7 @@ test('saving one duplicate-filename plan does not affect the other', async ({ pa
   await expect(planCards.nth(1)).toContainText(SHARED_FILENAME)
 
   // ── Open plan A (first card) → workspace → save ──
-  const openBtnA = planCards.nth(0).locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtnA = planCards.nth(0).locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtnA).toBeVisible()
   await openBtnA.click()
 
@@ -168,7 +168,7 @@ test('saving one duplicate-filename plan does not affect the other', async ({ pa
   await expect(planCards).toHaveCount(2, { timeout: 10_000 })
 
   // ── Open plan B (second card) ──
-  const openBtnB = planCards.nth(1).locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtnB = planCards.nth(1).locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtnB).toBeVisible({ timeout: 5_000 })
   await openBtnB.click()
 

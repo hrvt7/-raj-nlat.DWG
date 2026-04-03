@@ -105,7 +105,7 @@ test('exploded DXF shows switch_to_pdf CTA and transitions to PDF workflow', asy
   // Open the plan
   const planCard = page.locator('[data-testid="plan-card"]').first()
   await expect(planCard).toBeVisible({ timeout: 5_000 })
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 

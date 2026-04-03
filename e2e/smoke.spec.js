@@ -136,7 +136,7 @@ test('plan open button triggers the file-open path', async ({ page }) => {
   await expect(firstPlanCard).toBeVisible({ timeout: 5_000 })
 
   // Find the "Megnyitás" button inside the first plan card
-  const openBtn = firstPlanCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = firstPlanCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible()
 
   // Click the open button — this triggers getPlanFile() from IndexedDB

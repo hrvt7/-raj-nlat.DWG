@@ -55,7 +55,7 @@ test('corrupt PDF upload shows visible viewer error in workspace', async ({ page
   await expect(planCard).toContainText('corrupt.pdf')
 
   // Open the plan in workspace
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 

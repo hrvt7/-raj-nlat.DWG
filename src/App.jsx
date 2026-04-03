@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, saveProjectsRemote, savePlansRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
+import { supabase, supabaseConfigured, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, saveProjectsRemote, savePlansRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
 import Sidebar from './components/Sidebar.jsx'
 
 // ── Lazy-loaded pages (not needed on initial render) ────────────────────────
@@ -1894,7 +1894,7 @@ function SaaSShell() {
   const SIDEBAR_COLLAPSED = 60
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const sidebarW = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_FULL
-  // ── Auth gate: mandatory login ───────────────────────────────────────────
+  // ── Auth gate: mandatory login (skip in offline mode when Supabase is not configured) ──
   if (!authChecked) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg }}>
@@ -1902,7 +1902,7 @@ function SaaSShell() {
       </div>
     )
   }
-  if (!session) {
+  if (!session && supabaseConfigured) {
     return <AuthModal onAuth={() => {}} />
   }
   if (passwordRecovery) {

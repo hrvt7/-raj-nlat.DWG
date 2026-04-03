@@ -112,7 +112,7 @@ async function openProjectPlan(page, projectIndex) {
   await expect(planCards.first()).toBeVisible({ timeout: 5_000 })
 
   // Open the plan
-  const openBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCards.first().locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible()
   await openBtn.click()
 

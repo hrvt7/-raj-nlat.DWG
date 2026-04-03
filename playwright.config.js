@@ -14,7 +14,7 @@ export default defineConfig({
     { name: 'chromium', use: { browserName: 'chromium' } },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'npx vite --port 5173',
     port: 5173,
     reuseExistingServer: true,
     timeout: 15_000,

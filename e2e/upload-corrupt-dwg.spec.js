@@ -70,7 +70,7 @@ test('corrupt DWG upload shows visible conversion error in workspace', async ({ 
   await expect(planCard).toContainText('corrupt.dwg')
 
   // Open the plan in workspace
-  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés/ })
+  const openBtn = planCard.locator('button', { hasText: /Megnyitás|Szerkesztés|Munkaterület/ })
   await expect(openBtn).toBeVisible({ timeout: 5_000 })
   await openBtn.click()
 
