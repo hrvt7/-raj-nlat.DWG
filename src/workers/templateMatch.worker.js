@@ -304,6 +304,7 @@ self.onmessage = (e) => {
     const SCALE_LEVELS = [0.90, 1.00, 1.10]
 
     // 5. Coarse-to-fine: first pass at large stride, then refine around candidates
+    const tplArea = trimW * trimH
     const coarseStride = tplArea > 2500 ? 6 : tplArea > 900 ? 4 : 3
     const fineRadius = Math.max(trimW, trimH) // refine within this radius
     const fineStride = 1
