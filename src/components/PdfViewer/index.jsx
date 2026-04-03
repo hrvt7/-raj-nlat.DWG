@@ -105,6 +105,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const autoSymbolWorkerRef = useRef(null) // Web Worker instance
   const [batchSearching, setBatchSearching] = useState(false)
   const [batchProgress, setBatchProgress] = useState('')
+  const savedTemplatesRef = useRef([]) // preserved through unmount save
   const autoSymbolSearchIdRef = useRef(0) // monotonic counter to detect stale results
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
   const mountedRef = useRef(true) // guard against setState after unmount
@@ -159,6 +160,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
       }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurements() }
+      if (ann.savedTemplates?.length) { savedTemplatesRef.current = ann.savedTemplates }
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
@@ -289,6 +291,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           quoteOverrides: quoteOverridesRef.current,
           rotation: rotationRef.current,
           coordVersion: 2, // markers/measurements in unrotated doc coords
+          savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
         }, { silent: true })
       }).catch(() => {
         // Fallback: save what we have if store read fails
@@ -1495,26 +1498,31 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           markDirty()
           setRenderTick(t => t + 1)
           if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
-          // Save template to plan annotations for reuse on other plans in the same project
+          // Save template to plan annotations for reuse on other plans in the same project.
+          // We save synchronously via getPlanAnnotations→savePlanAnnotations AND also
+          // store in savedTemplatesRef so the unmount auto-save preserves it.
           if (planId && autoSymbolTemplateRef.current) {
             const tpl = autoSymbolTemplateRef.current
+            const newTemplate = {
+              cropData: Array.from(tpl.cropData), // convert to plain array for JSON serialization
+              w: tpl.w, h: tpl.h,
+              category: resolvedCategory,
+              asmId: asm?.id || null,
+              label,
+              threshold: autoSymbolThreshold,
+              savedAt: new Date().toISOString(),
+            }
+            // Immediately save to annotations
             getPlanAnnotations(planId).then(ann => {
               const existing = ann?.savedTemplates || []
-              // Don't save duplicates (same category + similar size)
               const isDupe = existing.some(t => t.category === resolvedCategory && t.asmId === (asm?.id || null) && Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5)
               if (!isDupe) {
-                const newTemplate = {
-                  cropData: Array.from(tpl.cropData), // convert to plain array for JSON serialization
-                  w: tpl.w, h: tpl.h,
-                  category: resolvedCategory,
-                  asmId: asm?.id || null,
-                  label,
-                  threshold: autoSymbolThreshold,
-                  savedAt: new Date().toISOString(),
-                }
-                savePlanAnnotations(planId, { ...ann, savedTemplates: [...existing, newTemplate] }, { silent: true })
+                savedTemplatesRef.current = [...existing, newTemplate]
+                savePlanAnnotations(planId, { ...ann, savedTemplates: savedTemplatesRef.current }, { silent: true })
+              } else {
+                savedTemplatesRef.current = existing
               }
-            }).catch(() => {}) // non-blocking
+            }).catch(() => {})
           }
           // Reset auto symbol
           setAutoSymbolActive(false)
