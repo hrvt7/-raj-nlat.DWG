@@ -211,7 +211,7 @@ describe('Logout → login → recovery chain contract', () => {
   it('hydration effect reads all 7 entities from remote after login', () => {
     const appSrc = readSrc('App.jsx')
     const hydrationSection = appSrc.slice(
-      appSrc.indexOf('settingsNeedsRecovery'),
+      appSrc.indexOf('Cross-device merge'),
       appSrc.indexOf('Remote read-back failed')
     )
     expect(hydrationSection).toContain('loadSettingsRemote')

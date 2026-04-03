@@ -1579,57 +1579,64 @@ function SaaSShell() {
       } catch { return true }
     }
 
-    const settingsNeedsRecovery = isSettingsRecoverable()
-    const quotesNeedsRecovery = isQuotesRecoverable()
-    const assembliesNeedRecovery = isArrayRecoverable('takeoffpro_assemblies')
-    const materialsNeedRecovery = isArrayRecoverable('takeoffpro_materials')
-    const workItemsNeedRecovery = isArrayRecoverable('takeoffpro_work_items')
-    const projectsNeedRecovery = isEnvelopeRecoverable('takeoffpro_projects_meta')
-    const plansNeedRecovery = isEnvelopeRecoverable('takeoffpro_plans_meta')
-
-    if (!settingsNeedsRecovery && !quotesNeedsRecovery &&
-        !assembliesNeedRecovery && !materialsNeedRecovery && !workItemsNeedRecovery &&
-        !projectsNeedRecovery && !plansNeedRecovery) return
+    // ── Cross-device merge: always fetch remote on login, use whichever has more data ──
+    // Previous logic only recovered when local was empty. This caused cross-device
+    // data loss: switching browsers showed stale/empty data even though remote had
+    // the user's full dataset. Now we always fetch remote and merge: if remote has
+    // more items than local, remote wins. This covers:
+    // - Fresh browser (local empty → remote wins)
+    // - Same browser after logout (local empty → remote wins)
+    // - Cross-device (local has defaults, remote has real data → remote wins)
 
     ;(async () => {
       try {
-        if (settingsNeedsRecovery) {
+        // Settings: remote wins if local is empty/default
+        if (isSettingsRecoverable()) {
           const remote = await loadSettingsRemote()
           if (remote) { saveSettings(remote); setSettings(loadSettings()) }
         }
-        if (quotesNeedsRecovery) {
+
+        // Quotes: remote wins if it has more quotes than local
+        {
           const rows = await loadQuotesRemote()
           const mapped = (rows || []).map(r => r.pricing_data).filter(Boolean)
-          if (mapped.length > 0) { saveQuotes(mapped); setQuotes(loadQuotes()) }
-        }
-        if (assembliesNeedRecovery) {
-          const remote = await loadAssembliesRemote()
-          if (Array.isArray(remote) && remote.length > 0) {
-            saveAssemblies(remote); setAsmRev(r => r + 1)
+          const local = loadQuotes()
+          if (mapped.length > 0 && mapped.length > local.length) {
+            saveQuotes(mapped); setQuotes(loadQuotes())
           }
         }
-        if (materialsNeedRecovery) {
-          const remote = await loadMaterialsRemote()
-          if (Array.isArray(remote) && remote.length > 0) {
-            saveMaterials(remote); setMaterials(loadMaterials())
+
+        // Catalog blobs: remote wins if it has more items than local
+        const mergeArray = async (loadRemoteFn, loadLocalFn, saveLocalFn, onUpdate) => {
+          const remote = await loadRemoteFn()
+          if (!Array.isArray(remote) || remote.length === 0) return
+          const local = loadLocalFn()
+          if (remote.length > local.length) {
+            saveLocalFn(remote)
+            onUpdate()
           }
         }
-        if (workItemsNeedRecovery) {
-          const remote = await loadWorkItemsRemote()
-          if (Array.isArray(remote) && remote.length > 0) {
-            saveWorkItems(remote); setWorkItems(loadWorkItems())
+        await mergeArray(loadAssembliesRemote, loadAssemblies, saveAssemblies, () => setAsmRev(r => r + 1))
+        await mergeArray(loadMaterialsRemote, loadMaterials, saveMaterials, () => setMaterials(loadMaterials()))
+        await mergeArray(loadWorkItemsRemote, loadWorkItems, saveWorkItems, () => setWorkItems(loadWorkItems()))
+
+        // Envelope blobs: remote wins if it has more items
+        {
+          const remoteProjects = await loadProjectsRemote()
+          if (Array.isArray(remoteProjects) && remoteProjects.length > 0) {
+            const localProjects = loadProjects()
+            if (remoteProjects.length > localProjects.length) {
+              saveAllProjects(remoteProjects); setProjRev(r => r + 1)
+            }
           }
         }
-        if (projectsNeedRecovery) {
-          const remote = await loadProjectsRemote()
-          if (Array.isArray(remote) && remote.length > 0) {
-            saveAllProjects(remote); setProjRev(r => r + 1)
-          }
-        }
-        if (plansNeedRecovery) {
-          const remote = await loadPlansRemote()
-          if (Array.isArray(remote) && remote.length > 0) {
-            saveAllPlansMeta(remote); setPlanRev(r => r + 1)
+        {
+          const remotePlans = await loadPlansRemote()
+          if (Array.isArray(remotePlans) && remotePlans.length > 0) {
+            const localPlans = loadPlans()
+            if (remotePlans.length > localPlans.length) {
+              saveAllPlansMeta(remotePlans); setPlanRev(r => r + 1)
+            }
           }
         }
       } catch (err) {
