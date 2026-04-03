@@ -384,11 +384,21 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           const apiUrl = import.meta.env.VITE_API_URL || ''
 
           // ── Helper: fetch with retry + exponential backoff ──────────────
+          // On 401 (expired token): refresh session + retry once with new headers.
+          // On 5xx: retry up to MAX_RETRIES with exponential backoff.
           const MAX_RETRIES = 3
+          let _auth401Retried = false  // one-shot flag — prevent infinite 401 loops
           const fetchWithRetry = async (url, opts, retries = MAX_RETRIES) => {
             for (let attempt = 0; attempt <= retries; attempt++) {
               try {
                 const res = await fetch(url, opts)
+                // 401 = expired/invalid token — refresh and retry ONCE
+                if (res.status === 401 && !_auth401Retried) {
+                  _auth401Retried = true
+                  console.warn('DWG convert: 401 — refreshing token and retrying')
+                  const freshHeaders = await getAuthHeaders()
+                  return fetch(url, { ...opts, headers: freshHeaders })
+                }
                 if (res.ok || res.status < 500) return res  // only retry on 5xx
                 if (attempt < retries) {
                   const delay = Math.min(1000 * Math.pow(2, attempt), 8000) + Math.random() * 500
