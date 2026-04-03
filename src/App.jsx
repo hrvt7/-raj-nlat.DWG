@@ -172,7 +172,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
   }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
 
   // ── Derived pricing from editable rate + markup ────────────────────────────
-  const vatPct = Number(settings?.labor?.vat_percent) || 27
+  const vatPct = Number(quote.vatPercent) || Number(settings?.labor?.vat_percent) || 27
   // Guard: empty input falls back to stored rate, then 9000 — prevents silent zero labor
   const effectiveRate = editRate === '' ? (Number(quote.pricingData?.hourlyRate) || 9000) : Number(editRate)
 
@@ -1789,6 +1789,7 @@ function SaaSShell() {
           sourcePlanFloorLabel: item.sourcePlanFloorLabel || meta.inferredMeta?.floorLabel || null,
         })),
         assemblySummary: meta.calcAssemblySummary || [],
+        cableCost: meta.calcCableCost || 0,
         source: 'plan-takeoff',
         fileName: meta.fileName || meta.name,
         planId: pid,

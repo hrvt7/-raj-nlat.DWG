@@ -434,3 +434,76 @@ describe('Full financial pipeline — pricing → fullCalc → quote → display
     expect(row.total_gross_ft).toBe(Math.round(quote.gross * 1.27))
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 8. PLAN→QUOTE FINANCIAL INTEGRITY (P0 audit fix)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('Plan→Quote financial integrity', () => {
+  it('createQuote stores cableCost from overrides (plan→quote path)', () => {
+    const q = createQuote({
+      displayName: 'Plan Cable Test',
+      outputMode: 'combined',
+      pricing: { total: 150000, materialCost: 80000, laborCost: 50000, laborHours: 10 },
+      pricingParams: { hourlyRate: 5000, markupPct: 0.15, markupType: 'margin' },
+      settings: { labor: { vat_percent: 27 } },
+      overrides: { cableCost: 20000, source: 'plan-takeoff' },
+    })
+    expect(q.cableCost).toBe(20000)
+    expect(q.pricingData.markup_type).toBe('margin')
+  })
+
+  it('vatPercent stored on quote is used by quoteDisplayTotals', () => {
+    // Quote created with 27% VAT
+    const q = createQuote({
+      displayName: 'VAT Test',
+      outputMode: 'combined',
+      pricing: { total: 100000, materialCost: 60000, laborCost: 40000, laborHours: 8 },
+      pricingParams: { hourlyRate: 5000, markupPct: 0 },
+      settings: { labor: { vat_percent: 27 } },
+    })
+    expect(q.vatPercent).toBe(27)
+
+    // displayTotals using quote.vatPercent (not live settings)
+    const display = quoteDisplayTotals({
+      outputMode: 'combined',
+      totalLabor: q.totalLabor,
+      totalMaterials: q.totalMaterials,
+      cableCost: 0,
+      markupPct: 0,
+      vatPct: q.vatPercent, // from quote, not settings
+    })
+    expect(display.displayVat).toBe(Math.round(100000 * 27 / 100))
+    expect(display.displayGross).toBe(100000 + display.displayVat)
+  })
+
+  it('plan meta snapshot should include markupType and cableCost fields', () => {
+    // Architecture test: verify TakeoffWorkspace saves these fields
+    const workspaceSrc = readSrc('components/TakeoffWorkspace.jsx')
+    const planMetaSection = workspaceSrc.slice(
+      workspaceSrc.indexOf('updatePlanMeta(planId, {'),
+      workspaceSrc.indexOf('// Learn from save')
+    )
+    expect(planMetaSection).toContain('calcMarkupType:')
+    expect(planMetaSection).toContain('calcCableCost:')
+  })
+
+  it('buildQuoteFromPlan passes cableCost in overrides', () => {
+    const appSrc = readSrc('App.jsx')
+    const buildSection = appSrc.slice(
+      appSrc.indexOf('buildQuoteFromPlan'),
+      appSrc.indexOf('saveQuote(quote)')
+    )
+    expect(buildSection).toContain('cableCost: meta.calcCableCost')
+  })
+
+  it('QuoteView uses quote.vatPercent not just settings', () => {
+    const appSrc = readSrc('App.jsx')
+    expect(appSrc).toContain('Number(quote.vatPercent)')
+  })
+
+  it('generatePdf uses quote.vatPercent not just settings', () => {
+    const pdfSrc = readSrc('utils/generatePdf.js')
+    expect(pdfSrc).toContain('Number(quote.vatPercent)')
+  })
+})

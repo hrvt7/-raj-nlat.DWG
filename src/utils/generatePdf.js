@@ -25,7 +25,7 @@ function escHtml(s) {
 // ─── HTML builder (exported for testing) ─────────────────────────────────────
 // Returns the full HTML string without opening a window or triggering print.
 export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
-  const vatPct    = Number(settings?.labor?.vat_percent) || 27
+  const vatPct    = Number(quote.vatPercent) || Number(settings?.labor?.vat_percent) || 27
   const markupPct = Number(quote.pricingData?.markup_pct) || 0
 
   // Use shared helper for outputMode-aware totals (consistent with UI)
