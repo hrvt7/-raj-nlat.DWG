@@ -253,15 +253,17 @@ function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
 
 // ── Non-Maximum Suppression ─────────────────────────────────────────────────
 function nonMaxSuppression(detections, tW, tH, overlapThreshold) {
+  // Use center-distance NMS instead of IoU — more robust for rotated matches.
+  // Two hits within minDist of each other are considered the same symbol;
+  // the higher-scoring one wins.
+  const minDist = Math.max(tW, tH) * 0.6
   const kept = []
   outer: for (const d of detections) {
+    const dcx = d.x + tW / 2, dcy = d.y + tH / 2
     for (const k of kept) {
-      const ix1 = Math.max(d.x, k.x), iy1 = Math.max(d.y, k.y)
-      const ix2 = Math.min(d.x + tW, k.x + tW), iy2 = Math.min(d.y + tH, k.y + tH)
-      const iw = Math.max(0, ix2 - ix1), ih = Math.max(0, iy2 - iy1)
-      const intersection = iw * ih
-      const union = 2 * tW * tH - intersection
-      if (intersection / union > overlapThreshold) continue outer
+      const kcx = k.x + tW / 2, kcy = k.y + tH / 2
+      const dist = Math.sqrt((dcx - kcx) ** 2 + (dcy - kcy) ** 2)
+      if (dist < minDist) continue outer
     }
     kept.push(d)
   }
