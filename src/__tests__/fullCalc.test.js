@@ -97,6 +97,60 @@ describe('computeFullCalc', () => {
     })
     expect(result.grandTotal).toBe(1000000) // 10x cap
   })
+
+  // ── P0 regression: cable pricing dedup ─────────────────────────────────────
+  it('cableCost = 0 when pricing.lines has catalog cable items (dedup)', () => {
+    const pricingWithCable = makePricing({
+      materialCost: 80000,  // includes 30000 from catalog cable
+      lines: [
+        { systemType: 'lighting', materialCost: 30000, hours: 0, type: 'cable' },
+        { systemType: 'erosaram', materialCost: 50000, hours: 6, type: 'material' },
+      ],
+    })
+    const result = computeFullCalc({
+      pricing: pricingWithCable, cableEstimate: { cable_total_m: 100 },
+      cablePricePerM: 800, markup: 0, markupType: 'markup', vatPercent: 0,
+      context: {}, takeoffRows: [], assemblies: [], workItems: [],
+      materials: [], hourlyRate: 5000, difficultyMode: 'normal',
+    })
+    // Catalog cable already in materialCost — pricePerM must NOT add on top
+    expect(result.cableCost).toBe(0)
+    expect(result.subtotal).toBe(80000 + 30000) // materialCost + laborCost from makePricing
+  })
+
+  it('cableCost uses pricePerM fallback when no catalog cable lines', () => {
+    const pricingNoCable = makePricing({
+      materialCost: 50000,
+      lines: [
+        { systemType: 'erosaram', materialCost: 50000, hours: 6, type: 'material' },
+      ],
+    })
+    const result = computeFullCalc({
+      pricing: pricingNoCable, cableEstimate: { cable_total_m: 100 },
+      cablePricePerM: 800, markup: 0, markupType: 'markup', vatPercent: 0,
+      context: {}, takeoffRows: [], assemblies: [], workItems: [],
+      materials: [], hourlyRate: 5000, difficultyMode: 'normal',
+    })
+    // No catalog cable → pricePerM fallback applies
+    expect(result.cableCost).toBe(80000) // 100m × 800
+    expect(result.subtotal).toBe(50000 + 30000 + 80000)
+  })
+
+  it('cableCost uses pricePerM when cable lines have zero materialCost', () => {
+    const pricingZeroCable = makePricing({
+      lines: [
+        { systemType: 'lighting', materialCost: 0, hours: 0, type: 'cable' },
+      ],
+    })
+    const result = computeFullCalc({
+      pricing: pricingZeroCable, cableEstimate: { cable_total_m: 50 },
+      cablePricePerM: 600, markup: 0, markupType: 'markup', vatPercent: 0,
+      context: {}, takeoffRows: [], assemblies: [], workItems: [],
+      materials: [], hourlyRate: 5000, difficultyMode: 'normal',
+    })
+    // Cable line exists but materialCost=0 (catalog material not found) → fallback
+    expect(result.cableCost).toBe(30000) // 50m × 600
+  })
 })
 
 describe('computeUnitCostByAsmByWall', () => {

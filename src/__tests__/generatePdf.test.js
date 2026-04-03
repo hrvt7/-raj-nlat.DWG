@@ -419,6 +419,41 @@ describe('buildMailtoUrl', () => {
   })
 })
 
+// ── P1 regression: margin mode PDF KPI consistency ────────────────────────
+describe('buildQuoteHtml — margin mode KPI consistency', () => {
+  it('Munkadíj + Anyagköltség = Nettó összköltség in margin mode', () => {
+    const marginQuote = {
+      ...baseQuote,
+      totalMaterials: 100000,
+      totalLabor: 50000,
+      totalHours: 10,
+      pricingData: { hourlyRate: 5000, markup_pct: 0.20, markup_type: 'margin' },
+    }
+    const html = buildQuoteHtml(marginQuote, baseSettings, 'summary', 'combined')
+    // Extract displayed numbers from KPI cards
+    // Margin 20%: subtotal=150000, net=150000/(1-0.20)=187500
+    // laborCardVal = 187500 - 100000 = 87500
+    // Check that the HTML contains both the material and gross values
+    expect(html).toContain('100\u00a0000 Ft') // rawMaterials
+    expect(html).toContain('87\u00a0500 Ft')  // laborCardVal (dNet - rawMaterials)
+  })
+
+  it('Munkadíj = dNet in labor_only margin mode', () => {
+    const marginLO = {
+      ...baseQuote,
+      totalMaterials: 100000,
+      totalLabor: 50000,
+      totalHours: 10,
+      pricingData: { hourlyRate: 5000, markup_pct: 0.20, markup_type: 'margin' },
+    }
+    const html = buildQuoteHtml(marginLO, baseSettings, 'summary', 'labor_only')
+    // labor_only + margin 20%: dNet = 50000 / (1-0.20) = 62500
+    expect(html).toContain('62\u00a0500 Ft')
+    // Materials should NOT appear
+    expect(html).not.toContain('Anyagköltség')
+  })
+})
+
 describe('createQuote — new fields have defaults', () => {
   // Verify createQuote produces the new fields so they never arrive as undefined
   it('new quote has empty string defaults for clientAddress, clientTaxNumber, projectAddress', async () => {

@@ -16,7 +16,9 @@ export function computeFullCalc({
   if (!pricing) return null
   const productivityFactor = calcProductivityFactor(context || {})
   const cableTotalM = cableEstimate?.cable_total_m || 0
-  const cableCost = cableTotalM * cablePricePerM
+  // Cable dedup: if pricing already has catalog-based cable line items, don't add pricePerM on top
+  const hasCatalogCable = (pricing.lines || []).some(l => l.type === 'cable' && l.materialCost > 0)
+  const cableCost = hasCatalogCable ? 0 : cableTotalM * cablePricePerM
   const subtotal = pricing.materialCost + pricing.laborCost + cableCost
   const markupPct = markup * 100
   let grandTotal

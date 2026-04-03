@@ -47,13 +47,9 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
   const hourlyRate = Number(quote.pricingData?.hourlyRate) || 9000
 
   // ── Per-component amounts for transparent breakdown ──────────────────────
+  // Derive laborCardVal from dNet so markup/margin mode is always consistent
+  // with quoteDisplayTotals (which already handles both modes correctly).
   const rawMaterials = Math.round(Number(quote.totalMaterials) || 0)
-  const rawLabor = Math.round(Number(quote.totalLabor) || 0)
-  const rawSubtotal = rawMaterials + rawLabor
-  const markupAmount = outputMode === 'labor_only'
-    ? Math.round(rawLabor * markupPct)
-    : Math.round(rawSubtotal * markupPct)
-  const markupPctDisplay = Math.round(markupPct * 100)
 
   // ── Logo HTML (XSS-safe: only allow data: URIs for base64 images) ──────────
   const logoSrc = company.logo_base64 || ''
@@ -63,7 +59,8 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
     : `<span class="company-name-text">${escHtml(company.name || 'TakeoffPro')}</span>`
 
   // ── KPI cards (filtered by outputMode, markup absorbed into Munkadíj) ─────
-  const laborCardVal = rawLabor + markupAmount   // labor + markup — client-clean
+  // laborCardVal = dNet - rawMaterials ensures Anyagköltség + Munkadíj = Nettó összesen
+  const laborCardVal = outputMode === 'labor_only' ? dNet : (dNet - rawMaterials)
   const kpiCardDefs = [
     outputMode !== 'labor_only' && { label: 'Anyagköltség (nettó)', value: fmtHU(rawMaterials) + ' Ft', accent: false },
     { label: outputMode === 'labor_only' ? 'Szerelési munkadíj (nettó)' : 'Munkadíj (nettó)', value: fmtHU(laborCardVal) + ' Ft', accent: false },
