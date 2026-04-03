@@ -177,4 +177,45 @@ describe('quoteDisplayTotals per-component rounding consistency', () => {
     expect(r.displayGross).toBe(net + vat)
     expect(r.fullNet).toBe(net)
   })
+
+  // ── P1-2 regression: cable cost must survive QuoteView recalc ──────────────
+  it('cableCost included in fullSubtotal and displayNet', () => {
+    const withCable = quoteDisplayTotals({
+      outputMode: 'combined', totalLabor: 50000, totalMaterials: 100000,
+      cableCost: 30000, markupPct: 0.10, vatPct: 27,
+    })
+    const withoutCable = quoteDisplayTotals({
+      outputMode: 'combined', totalLabor: 50000, totalMaterials: 100000,
+      cableCost: 0, markupPct: 0.10, vatPct: 27,
+    })
+    // Cable cost should increase displayNet by cable × (1 + markup)
+    const expectedDiff = Math.round(30000 * 1.10) // 33000
+    expect(withCable.displayNet - withoutCable.displayNet).toBe(expectedDiff)
+    // Sum invariant must still hold
+    const sum = withCable.grossMaterials + withCable.grossLabor + withCable.grossMarkup
+    expect(sum).toBe(withCable.displayGross)
+  })
+
+  it('cableCost defaults to 0 — backward compatible', () => {
+    const noCable = quoteDisplayTotals({
+      outputMode: 'combined', totalLabor: 50000, totalMaterials: 100000,
+      markupPct: 0.10, vatPct: 27,
+    })
+    const explicitZero = quoteDisplayTotals({
+      outputMode: 'combined', totalLabor: 50000, totalMaterials: 100000,
+      cableCost: 0, markupPct: 0.10, vatPct: 27,
+    })
+    expect(noCable.displayNet).toBe(explicitZero.displayNet)
+    expect(noCable.displayGross).toBe(explicitZero.displayGross)
+  })
+
+  it('cableCost excluded in labor_only mode', () => {
+    const r = quoteDisplayTotals({
+      outputMode: 'labor_only', totalLabor: 50000, totalMaterials: 100000,
+      cableCost: 30000, markupPct: 0.10, vatPct: 27,
+    })
+    // labor_only: displayNet = applyMarkup(labor only)
+    const expectedNet = Math.round(50000 * 1.10)
+    expect(r.displayNet).toBe(expectedNet)
+  })
 })

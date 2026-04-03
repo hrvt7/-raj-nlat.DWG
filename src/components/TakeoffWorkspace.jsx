@@ -1044,6 +1044,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           assemblySummary,
           context,
           cableEstimate,
+          cableCost: Math.round(fullCalc?.cableCost || 0),
           source: 'takeoff-workspace',
           fileName: file?.name,
           bundleId: initialData?.bundleId || null,

@@ -201,8 +201,9 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
 
   const totalHours = quote.totalHours || 0
   const totalMaterials = Math.round(quote.totalMaterials || 0)
+  const cableCost = Math.round(quote.cableCost || 0)
   const newTotalLabor = Math.round(totalHours * effectiveRate)
-  const newSubtotal = totalMaterials + newTotalLabor
+  const newSubtotal = totalMaterials + newTotalLabor + cableCost
   const markupType = quote.pricingData?.markup_type || 'markup'
   const markupPctRaw = Number(editMarkup) / 100
   let net
@@ -429,7 +430,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
 
   // ── Display values per outputMode (internal data untouched) ──────────────
   const { displayNet, displayGross, grossMaterials, grossLabor, grossMarkup, markupAmount } = quoteDisplayTotals({
-    outputMode, totalLabor: newTotalLabor, totalMaterials,
+    outputMode, totalLabor: newTotalLabor, totalMaterials, cableCost,
     markupPct: Number(editMarkup) / 100, markupType, vatPct,
   })
 

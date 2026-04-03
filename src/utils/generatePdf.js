@@ -34,6 +34,7 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
     outputMode,
     totalLabor: Number(quote.totalLabor) || 0,
     totalMaterials: Number(quote.totalMaterials) || 0,
+    cableCost: Number(quote.cableCost) || 0,
     markupPct,
     markupType,
     vatPct,

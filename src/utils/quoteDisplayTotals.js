@@ -21,9 +21,10 @@
  * @param {number}  opts.vatPct      - VAT percent (default 27)
  * @returns {{ displayNet: number, displayVat: number, displayGross: number, fullNet: number, grossMaterials: number, grossLabor: number, grossMarkup: number, markupAmount: number }}
  */
-export function quoteDisplayTotals({ outputMode, totalLabor, totalMaterials, markupPct, markupType = 'markup', vatPct = 27 }) {
+export function quoteDisplayTotals({ outputMode, totalLabor, totalMaterials, cableCost = 0, markupPct, markupType = 'markup', vatPct = 27 }) {
   const labor = Math.round(Number(totalLabor) || 0)
   const materials = Math.round(Number(totalMaterials) || 0)
+  const cable = Math.round(Number(cableCost) || 0)
   const markup = Number(markupPct) || 0
   const vat = Number(vatPct) || 27
   const isMargin = markupType === 'margin'
@@ -36,8 +37,8 @@ export function quoteDisplayTotals({ outputMode, totalLabor, totalMaterials, mar
     return Math.round(sub * (1 + markup))
   }
 
-  // Full combined net
-  const fullSubtotal = materials + labor
+  // Full combined net (materials already include measurementCost; cable is separate)
+  const fullSubtotal = materials + labor + cable
   const fullNet = applyMarkup(fullSubtotal)
   const fullMarkup = fullNet - fullSubtotal
 
@@ -53,7 +54,7 @@ export function quoteDisplayTotals({ outputMode, totalLabor, totalMaterials, mar
   // Allocate total ÁFA proportionally to each component so their sum matches
   // displayGross exactly. Rounding each component's ÁFA independently would
   // drift by ≤2 Ft (e.g. round(A×r)+round(B×r) ≠ round((A+B)×r)).
-  const displayMaterials = outputMode === 'labor_only' ? 0 : materials
+  const displayMaterials = outputMode === 'labor_only' ? 0 : (materials + cable)
   const markupAmount = outputMode === 'labor_only' ? laborMarkup : fullMarkup
 
   const vatMat    = displayNet > 0 ? Math.round(displayMaterials * displayVat / displayNet) : 0
