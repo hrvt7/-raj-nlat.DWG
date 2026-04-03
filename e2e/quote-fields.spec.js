@@ -101,13 +101,13 @@ test('new fields persist through save and reopen', async ({ page }) => {
   await projInput.fill('1013 Budapest, Attila út 20.')
 
   // The save button should become active (shows "Mentés")
-  const saveBtn = page.locator('button', { hasText: 'Mentés' })
-  await expect(saveBtn).toBeVisible({ timeout: 3_000 })
+  const saveBtn = page.locator('[data-testid="quote-save-btn"]')
+  await expect(saveBtn).toContainText('Mentés', { timeout: 3_000 })
   await expect(saveBtn).toBeEnabled()
   await saveBtn.click()
 
   // After save, button should show "✓ Mentve"
-  await expect(page.locator('button', { hasText: '✓ Mentve' })).toBeVisible({ timeout: 3_000 })
+  await expect(saveBtn).toContainText('✓ Mentve', { timeout: 3_000 })
 
   // Navigate away — use sidebar nav (reliable, has data-testid)
   await page.locator('[data-testid="sidebar-nav-quotes"]').click()
@@ -178,16 +178,17 @@ test('dirty check triggers when only new fields are changed', async ({ page }) =
   await openSeededQuote(page)
 
   // Initially, save button should show "✓ Mentve"
-  await expect(page.locator('button', { hasText: '✓ Mentve' })).toBeVisible({ timeout: 3_000 })
+  const saveBtn = page.locator('[data-testid="quote-save-btn"]')
+  await expect(saveBtn).toContainText('✓ Mentve', { timeout: 3_000 })
 
   // Type into just the client address field
   const addrInput = page.locator('input[placeholder="Ügyfél címe…"]')
   await addrInput.fill('Teszt cím')
 
   // Save button should change to "Mentés" (dirty)
-  await expect(page.locator('button', { hasText: 'Mentés' })).toBeVisible({ timeout: 2_000 })
+  await expect(saveBtn).toContainText('Mentés', { timeout: 2_000 })
 
   // Clear it back to empty — should revert to "✓ Mentve"
   await addrInput.fill('')
-  await expect(page.locator('button', { hasText: '✓ Mentve' })).toBeVisible({ timeout: 2_000 })
+  await expect(saveBtn).toContainText('✓ Mentve', { timeout: 2_000 })
 })

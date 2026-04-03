@@ -1001,7 +1001,7 @@ function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
               </div>
             ))}
             {/* Save button */}
-            <button onClick={handleMetaSave} disabled={!isDirty}
+            <button data-testid="quote-save-btn" onClick={handleMetaSave} disabled={!isDirty}
               style={{
                 width: '100%', padding: '9px', borderRadius: 8, cursor: isDirty ? 'pointer' : 'default',
                 background: isDirty ? C.accent : C.bg, border: `1px solid ${isDirty ? C.accent : C.border}`,

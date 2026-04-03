@@ -100,12 +100,12 @@ test('clientEmail persists through save and reopen', async ({ page }) => {
   await emailInput.fill('ugyfel@example.com')
 
   // Dirty → "Mentés" visible
-  const saveBtn = page.locator('button', { hasText: 'Mentés' })
-  await expect(saveBtn).toBeVisible({ timeout: 3_000 })
+  const saveBtn = page.locator('[data-testid="quote-save-btn"]')
+  await expect(saveBtn).toContainText('Mentés', { timeout: 3_000 })
   await saveBtn.click()
 
   // After save: "✓ Mentve"
-  await expect(page.locator('button', { hasText: '✓ Mentve' })).toBeVisible({ timeout: 3_000 })
+  await expect(saveBtn).toContainText('✓ Mentve', { timeout: 3_000 })
 
   // Navigate away
   await page.locator('[data-testid="sidebar-nav-quotes"]').click()
@@ -124,17 +124,18 @@ test('dirty check activates when clientEmail changes', async ({ page }) => {
   await seedData(page)
   await openSeededQuote(page)
 
-  await expect(page.locator('button', { hasText: '✓ Mentve' })).toBeVisible({ timeout: 3_000 })
+  const saveBtn = page.locator('[data-testid="quote-save-btn"]')
+  await expect(saveBtn).toContainText('✓ Mentve', { timeout: 3_000 })
 
   const emailInput = page.locator('input[placeholder="Email cím…"]')
   await emailInput.fill('test@test.hu')
 
   // Should be dirty
-  await expect(page.locator('button', { hasText: 'Mentés' })).toBeVisible({ timeout: 2_000 })
+  await expect(saveBtn).toContainText('Mentés', { timeout: 2_000 })
 
   // Clear → revert to clean
   await emailInput.fill('')
-  await expect(page.locator('button', { hasText: '✓ Mentve' })).toBeVisible({ timeout: 2_000 })
+  await expect(saveBtn).toContainText('✓ Mentve', { timeout: 2_000 })
 })
 
 // ─── Test: "Email küldése" button produces correct mailto URL with email ─────
