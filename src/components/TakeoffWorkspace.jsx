@@ -1770,29 +1770,53 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                           </div>
                         </div>
                       ))}
-                      {/* Measurement line items (cable trays, manual measurements) as normal rows */}
+                      {/* Measurement line items (cable trays, manual measurements) as pricing rows */}
                       {(fullCalc.measurementLines || []).map(item => (
-                        <div key={`meas-${item.key}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontFamily: 'DM Mono', fontSize: 8, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,209,102,0.12)', border: '1px solid rgba(255,209,102,0.25)', color: C.yellow, fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }} title="Mért tétel a tervrajzról">MÉRÉS</span>
-                              {item.label}
+                        <div key={`meas-${item.key}`} style={{ padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.text, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontFamily: 'DM Mono', fontSize: 8, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,209,102,0.12)', border: '1px solid rgba(255,209,102,0.25)', color: C.yellow, fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }} title="Mért tétel a tervrajzról">MÉRÉS</span>
+                                {item.label}
+                              </div>
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
+                                {item.totalMeters ? `${item.totalMeters.toFixed(1)} m` : `${item.count} szakasz`}
+                                {item.isAutoPriced
+                                  ? <span style={{ marginLeft: 4, padding: '0 4px', borderRadius: 3, background: C.accentDim, color: C.accent, fontSize: 9 }}>auto · {Math.round(item.autoPrice).toLocaleString('hu-HU')} Ft/m</span>
+                                  : item.pricePerUnit > 0
+                                    ? <span style={{ marginLeft: 4, padding: '0 4px', borderRadius: 3, background: 'rgba(255,209,102,0.12)', color: C.yellow, fontSize: 9 }}>kézi · {Math.round(item.pricePerUnit).toLocaleString('hu-HU')} Ft/m</span>
+                                    : ''}
+                              </div>
                             </div>
-                            <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>
-                              {item.totalMeters ? `${item.totalMeters.toFixed(1)} m` : `${item.count} szakasz`}
-                              {item.isAutoPriced
-                                ? <span style={{ marginLeft: 4, padding: '0 4px', borderRadius: 3, background: C.accentDim, color: C.accent, fontSize: 9 }}>auto</span>
-                                : item.pricePerUnit > 0
-                                  ? <span style={{ marginLeft: 4, padding: '0 4px', borderRadius: 3, background: 'rgba(255,209,102,0.12)', color: C.yellow, fontSize: 9 }}>kézi</span>
-                                  : ''}
-                              {item.pricePerUnit > 0 ? ` · ${Math.round(item.pricePerUnit).toLocaleString('hu-HU')} Ft/m` : ''}
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: item.cost > 0 ? C.accent : C.muted, fontWeight: 700 }}>
+                                {item.cost > 0 ? `${Math.round(item.cost).toLocaleString('hu-HU')} Ft` : '—'}
+                              </div>
                             </div>
                           </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: item.cost > 0 ? C.accent : C.muted, fontWeight: 700 }}>
-                              {item.cost > 0 ? `${Math.round(item.cost).toLocaleString('hu-HU')} Ft` : '—'}
+                          {/* Manual price input for items without auto-pricing */}
+                          {item.totalMeters > 0 && !item.isAutoPriced && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.muted }}>Ár (Ft/m):</span>
+                              <input
+                                type="number" min={0} step={100}
+                                value={measurementPrices[item.key] || ''}
+                                placeholder={item.autoPrice > 0 ? Math.round(item.autoPrice) : '0'}
+                                onChange={e => setMeasurementPrices(prev => ({ ...prev, [item.key]: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                                style={{ width: 90, padding: '3px 6px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight || C.border}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                              />
+                              {item.cost > 0 && (
+                                <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.accent }}>
+                                  = {Math.round(item.cost).toLocaleString('hu-HU')} Ft
+                                </span>
+                              )}
                             </div>
-                          </div>
+                          )}
+                          {!item.totalMeters && (
+                            <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: C.red, marginTop: 2 }}>
+                              Kalibráld a rajzot a Skála eszközzel az árazáshoz
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
