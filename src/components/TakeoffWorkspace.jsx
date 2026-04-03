@@ -1876,24 +1876,34 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                           <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text }}>Kábel költség</span>
+                          {fullCalc.cableCost === 0 && cablePricePerM > 0 && (
+                            <span style={{ fontFamily: 'DM Mono', fontSize: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,229,160,0.1)', color: C.accent }}>katalógus árak aktívak</span>
+                          )}
                         </div>
-                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Kábel ár (Ft/m)</div>
-                            <input
-                              type="number" min={0} step={50}
-                              value={cablePricePerM}
-                              onChange={e => setCablePricePerM(Math.max(0, parseFloat(e.target.value) || 0))}
-                              style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
-                            />
+                        {fullCalc.cableCost === 0 && (pricing?.lines || []).some(l => l.type === 'cable' && l.materialCost > 0) ? (
+                          <div style={{ fontSize: 10, color: C.muted, fontFamily: 'DM Mono', lineHeight: 1.5 }}>
+                            A kábel költség az anyagkatalógus tételárain alapul ({Math.round(fullCalc.cableTotalM)} m, {(pricing?.lines || []).filter(l => l.type === 'cable').length} kábeltétel).
+                            A Ft/m felülírás itt nem érvényesül, mert a katalógus részletesebb árazást ad.
                           </div>
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-                            <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Összesen ({Math.round(fullCalc.cableTotalM)} m)</div>
-                            <div style={{ padding: '5px 7px', borderRadius: 4, background: 'rgba(76,201,240,0.07)', border: '1px solid rgba(76,201,240,0.18)', fontSize: 11, fontFamily: 'DM Mono', color: C.blue, fontWeight: 700 }}>
-                              {Math.round(fullCalc.cableCost).toLocaleString('hu-HU')} Ft
+                        ) : (
+                          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Kábel ár (Ft/m)</div>
+                              <input
+                                type="number" min={0} step={50}
+                                value={cablePricePerM}
+                                onChange={e => setCablePricePerM(Math.max(0, parseFloat(e.target.value) || 0))}
+                                style={{ width: '100%', padding: '5px 7px', borderRadius: 4, background: C.bg, border: `1px solid ${C.borderLight}`, color: C.text, fontSize: 11, fontFamily: 'DM Mono', boxSizing: 'border-box' }}
+                              />
+                            </div>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                              <div style={{ fontSize: 9, color: C.muted, fontFamily: 'DM Mono', marginBottom: 3 }}>Összesen ({Math.round(fullCalc.cableTotalM)} m)</div>
+                              <div style={{ padding: '5px 7px', borderRadius: 4, background: 'rgba(76,201,240,0.07)', border: '1px solid rgba(76,201,240,0.18)', fontSize: 11, fontFamily: 'DM Mono', color: C.blue, fontWeight: 700 }}>
+                                {Math.round(fullCalc.cableCost).toLocaleString('hu-HU')} Ft
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     )}
 
