@@ -31,6 +31,13 @@ except ImportError:
         handler.send_header('Content-Type', 'application/json')
         handler.end_headers()
         handler.wfile.write(json.dumps({'success': False, 'error': msg}).encode())
+    def require_auth(handler):
+        """Fail-closed fallback: reject all requests when security_helpers is unavailable."""
+        handler.send_response(401)
+        handler.send_header('Content-Type', 'application/json')
+        handler.end_headers()
+        handler.wfile.write(json.dumps({'success': False, 'error': 'Hitelesítés nem elérhető'}).encode())
+        return False
     def rate_limit_response(handler):
         handler.send_response(429)
         handler.send_header('Content-Type', 'application/json')

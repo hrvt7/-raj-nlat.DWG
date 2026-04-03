@@ -388,16 +388,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           // On 5xx: retry up to MAX_RETRIES with exponential backoff.
           const MAX_RETRIES = 3
           let _auth401Retried = false  // one-shot flag — prevent infinite 401 loops
+          const isOwnApi = (url) => url.includes('/api/convert-dwg')
           const fetchWithRetry = async (url, opts, retries = MAX_RETRIES) => {
             for (let attempt = 0; attempt <= retries; attempt++) {
               try {
                 const res = await fetch(url, opts)
-                // 401 = expired/invalid token — refresh and retry ONCE
-                if (res.status === 401 && !_auth401Retried) {
+                // 401 = expired/invalid token — refresh and retry ONCE (only for our API, not CloudConvert)
+                if (res.status === 401 && !_auth401Retried && isOwnApi(url)) {
                   _auth401Retried = true
                   console.warn('DWG convert: 401 — refreshing token and retrying')
                   const freshHeaders = await getAuthHeaders()
-                  return fetch(url, { ...opts, headers: freshHeaders })
+                  return fetchWithRetry(url, { ...opts, headers: freshHeaders }, 0)
                 }
                 if (res.ok || res.status < 500) return res  // only retry on 5xx
                 if (attempt < retries) {
