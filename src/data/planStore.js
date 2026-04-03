@@ -108,14 +108,22 @@ export async function savePlan(plan, fileBlob) {
   // preventing orphan metadata entries that point to missing files.
   if (fileBlob) {
     await planFileStore.setItem(plan.id, fileBlob)
-    // Fire-and-forget remote blob backup (only when Supabase is configured)
+    // Remote blob backup with 1 retry (only when Supabase is configured)
     if (supabaseConfigured) {
-      uploadPlanBlob(plan.id, fileBlob, plan.fileType).then(() => {
-        updatePlanMeta(plan.id, { remoteBackupAt: new Date().toISOString() })
-      }).catch(err => {
-        console.warn('[planStore] remote blob backup failed:', err.message)
-        updatePlanMeta(plan.id, { remoteBackupAt: null })
-      })
+      const tryUpload = (attempt) => {
+        uploadPlanBlob(plan.id, fileBlob, plan.fileType).then(() => {
+          updatePlanMeta(plan.id, { remoteBackupAt: new Date().toISOString() })
+        }).catch(err => {
+          if (attempt < 1) {
+            console.warn(`[planStore] remote blob backup failed (retry in 5s):`, err.message)
+            setTimeout(() => tryUpload(attempt + 1), 5000)
+          } else {
+            console.warn('[planStore] remote blob backup failed after retry:', err.message)
+            updatePlanMeta(plan.id, { remoteBackupAt: null })
+          }
+        })
+      }
+      tryUpload(0)
     }
   }
 
@@ -275,6 +283,23 @@ function _notifyAnnotListeners(planId, annotations) {
       }
     }
   }
+}
+
+/**
+ * Sync all plan annotations to remote (used by pre-logout sync).
+ * Iterates all plans and syncs their annotations if they exist locally.
+ */
+export async function syncAllAnnotationsRemote() {
+  if (!supabaseConfigured) return
+  const plans = loadPlansMeta()
+  const results = await Promise.allSettled(
+    plans.map(async (p) => {
+      const ann = await planAnnotStore.getItem(p.id)
+      if (ann) await saveAnnotationsRemote(p.id, ann)
+    })
+  )
+  const failed = results.filter(r => r.status === 'rejected')
+  if (failed.length) console.warn(`[planStore] annotation sync: ${failed.length}/${plans.length} failed`)
 }
 
 // ─── Annotation management (markers, measurements, scale) ──────────────────

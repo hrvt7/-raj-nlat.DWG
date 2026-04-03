@@ -17,7 +17,7 @@ const LegendPanel            = lazy(() => import('./components/LegendPanel.jsx')
 const DetectionReviewPanel   = lazy(() => import('./components/DetectionReviewPanel.jsx'))
 const PdfMergePanel          = lazy(() => import('./components/PdfMergePanel.jsx'))
 import { loadSettings, saveSettings, loadWorkItems, saveWorkItems, loadMaterials, saveMaterials, loadQuotes, saveQuotes, saveQuote, loadAssemblies, saveAssemblies } from './data/store.js'
-import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta, saveAllPlansMeta } from './data/planStore.js'
+import { getPlanFile, getPlanMeta, getPlansByProject, loadPlans, updatePlanMeta, saveAllPlansMeta, syncAllAnnotationsRemote } from './data/planStore.js'
 import { generateProjectId, saveProject, saveAllProjects, loadProjects, getProject } from './data/projectStore.js'
 import { QuoteStatusBadge, fmt, ToastProvider, useToast } from './components/ui.jsx'
 // SuccessPage removed — Stripe payment flow is not active
@@ -125,7 +125,7 @@ function PdfPreview({ level, outputMode = 'combined' }) {
 }
 
 // ─── QuoteView ────────────────────────────────────────────────────────────────
-function QuoteView({ quote, settings, onBack, onStatusChange, onSaveQuote }) {
+function QuoteView({ quote, settings, session, onBack, onStatusChange, onSaveQuote }) {
   const toast = useToast()
   const statuses = ['draft', 'sent', 'won', 'lost', 'expired']
   const statusLabels = { draft: 'Piszkozat', sent: 'Elküldve', won: 'Nyertes', lost: 'Elveszett', expired: 'Lejárt' }
@@ -1675,6 +1675,7 @@ function SaaSShell() {
         saveWorkItemsRemote(loadWorkItems()),
         saveProjectsRemote(loadProjects()),
         savePlansRemote(loadPlans()),
+        syncAllAnnotationsRemote(),
       ])
     } catch { /* best-effort sync before logout */ }
     await signOut()
@@ -2043,7 +2044,7 @@ function SaaSShell() {
             <Suspense fallback={<div style={{ color: C.muted, textAlign: 'center', padding: 40, fontFamily: 'DM Mono', fontSize: 13 }}>Betöltés…</div>}>
             <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
               {viewingQuote && page === 'quotes' ? (
-                <QuoteView quote={viewingQuote} settings={settings} onBack={() => setViewingQuote(null)}
+                <QuoteView quote={viewingQuote} settings={settings} session={session} onBack={() => setViewingQuote(null)}
                   onStatusChange={handleStatusChange} onSaveQuote={handleSaveQuote} />
               ) : page === 'dashboard' ? (
                 <Dashboard quotes={quotes} settings={settings}

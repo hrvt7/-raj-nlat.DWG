@@ -528,7 +528,13 @@ export function saveQuote(quote) {
     }
     // Prune oldest quotes beyond cap to prevent unbounded localStorage growth
     if (quotes.length > MAX_QUOTES) {
+      const pruned = quotes.length - MAX_QUOTES
       quotes.length = MAX_QUOTES
+      console.warn(`[store] ${pruned} régi ajánlat törölve (max ${MAX_QUOTES})`)
+      // Notify UI so user can see a warning
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('takeoffpro:quotes-pruned', { detail: { pruned, max: MAX_QUOTES } }))
+      }
     }
     return wrapVersioned(quotes, QUOTES_SCHEMA_VERSION)
   }, (data) => save(LS_KEYS.QUOTES, data))
