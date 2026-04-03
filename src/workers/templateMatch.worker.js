@@ -300,14 +300,12 @@ self.onmessage = (e) => {
     const satGray = buildSAT(imgGray, imgW, imgH)
     const satSatCh = buildSAT(imgSat, imgW, imgH)
 
-    // 4. Multi-scale levels — catches symbols at ±10% different size
-    const SCALE_LEVELS = [0.90, 1.00, 1.10]
-
-    // 5. Coarse-to-fine: first pass at large stride, then refine around candidates
+    // 4. Adaptive stride (same as original v7)
     const tplArea = trimW * trimH
-    const coarseStride = tplArea > 2500 ? 6 : tplArea > 900 ? 4 : 3
-    const fineRadius = Math.max(trimW, trimH) // refine within this radius
-    const fineStride = 1
+    const stride = tplArea > 2500 ? 4 : tplArea > 900 ? 3 : 2
+
+    // 5. Multi-scale levels — catches symbols at ±10% different size
+    const SCALE_LEVELS = [0.92, 1.00, 1.08]
 
     // 6. Multi-rotation matching (0°, 90°, 180°, 270° + mirror)
     // Electrical symbols appear in multiple orientations on plans.
@@ -343,36 +341,22 @@ self.onmessage = (e) => {
           sSat = resizeGray(variant.satTpl, variant.w, variant.h, sW, sH)
         }
 
-        // COARSE PASS — large stride, low threshold to find candidate regions
-        const coarseHits = matchDualChannel(
+        // Single-pass matching at the effective threshold and adaptive stride
+        const variantHits = matchDualChannel(
           imgGray, imgSat, imgW, imgH,
           sGray, sSat, sW, sH,
           satGray, satSatCh,
-          effectiveThreshold * 0.7, coarseStride, searchArea
+          effectiveThreshold, stride, searchArea
         )
 
-        // FINE PASS — stride=1 around each coarse candidate for precise position
-        for (const ch of coarseHits) {
-          const fineArea = {
-            x: Math.max(0, ch.x - fineRadius),
-            y: Math.max(0, ch.y - fineRadius),
-            w: fineRadius * 2 + sW,
-            h: fineRadius * 2 + sH,
-          }
-          const fineHits = matchDualChannel(
-            imgGray, imgSat, imgW, imgH,
-            sGray, sSat, sW, sH,
-            satGray, satSatCh,
-            effectiveThreshold, fineStride, fineArea
-          )
-          for (const h of fineHits) {
-            allHits.push({ x: h.x + (sW - trimW) / 2, y: h.y + (sH - trimH) / 2, score: h.score })
-          }
+        for (const h of variantHits) {
+          // Center the hit position to match the original template's center
+          allHits.push({ x: h.x + (sW - trimW) / 2, y: h.y + (sH - trimH) / 2, score: h.score })
         }
       }
     }
 
-    // 6. Cross-rotation NMS — best-scoring hit wins per location
+    // 7. Cross-rotation + cross-scale NMS — best-scoring hit wins per location
     allHits.sort((a, b) => b.score - a.score)
     const hits = nonMaxSuppression(allHits, Math.max(trimW, trimH), Math.max(trimW, trimH), 0.5)
 
