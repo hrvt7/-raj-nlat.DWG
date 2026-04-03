@@ -842,7 +842,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       base.measurementCost = 0
     }
     // Attach measurement line items for Kalkuláció tab + quote export
-    base.measurementLines = measurementItems.filter(item => item.cost > 0 || item.totalMeters > 0)
+    // Show all measurement items (even with 0 cost) so users see what they measured
+    base.measurementLines = measurementItems
     return base
   }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal, measurementItems])
 

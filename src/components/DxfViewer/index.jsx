@@ -470,6 +470,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         measuresRef.current = [...measuresRef.current, {
           x1: start.x, y1: start.y, x2: sx, y2: sy,
           distance: distM, label: formatDist(distM),
+          category: activeCategory || undefined,
         }]
         activeStartRef.current = null
         notifyMeasurements()

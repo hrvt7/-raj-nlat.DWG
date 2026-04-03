@@ -800,10 +800,9 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
           setCalibDialog({ pxDistance: pxDist, x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y })
           activeStartRef.current = null
         } else {
-          // Tag measurement with cable tray category if the active category is a cable tray
-          const activeCatDef = COUNT_CATEGORIES.find(c => c.key === activeCategory)
-          const measCategory = activeCatDef?.isCableTray ? activeCategory : undefined
-          measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist, ...(measCategory ? { category: measCategory } : {}) })
+          // Tag measurement with the active category (cable tray or other measurement type)
+          // Always pass activeCategory so it flows to measurementItems grouping and assembly matching
+          measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist, category: activeCategory || undefined })
           markDirty()
           notifyMeasurements()
           activeStartRef.current = null
