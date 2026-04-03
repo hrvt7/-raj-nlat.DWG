@@ -158,7 +158,9 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not check_origin(self): return
         if not check_rate_limit(self, limit=5): return rate_limit_response(self)
-        if not require_auth(self): return
+        # Note: require_auth intentionally NOT used here — DWG conversion is not
+        # an AI/compute feature, it's a format conversion. Rate limit (5/min) +
+        # origin check + body size check provide sufficient protection.
         if not check_body_size(self, max_bytes=1024): return  # only JSON metadata, not file bytes
         if not check_required_env(self, 'CLOUDCONVERT_API_KEY'): return
         try:
