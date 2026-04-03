@@ -70,7 +70,16 @@ async function prerender() {
   const server = await startServer()
 
   console.log('[prerender] Launching browser...')
-  const browser = await chromium.launch({ headless: true })
+  let browser
+  try {
+    browser = await chromium.launch({ headless: true })
+  } catch (launchErr) {
+    console.warn('[prerender] Skipped:', launchErr.message.split('\n')[0])
+    console.warn('[prerender] The build output will use client-side rendering only.')
+    console.warn('[prerender] To pre-render, run the build locally with Playwright installed.')
+    server.close()
+    process.exit(0)
+  }
   const page = await browser.newPage()
 
   console.log('[prerender] Loading landing page...')
