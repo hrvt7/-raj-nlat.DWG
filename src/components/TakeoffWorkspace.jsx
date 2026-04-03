@@ -438,7 +438,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             )
           }
           if (!createRes.ok || !createJson.success) {
-            throw new Error(createJson.error || `Job létrehozása sikertelen (${createRes.status})`)
+            const errDetail = createJson.code ? ` [${createJson.code}]` : ''
+            throw new Error((createJson.error || `Job létrehozása sikertelen (${createRes.status})`) + errDetail)
           }
           const { jobId, uploadUrl, uploadParams } = createJson
 

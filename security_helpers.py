@@ -128,7 +128,7 @@ def verify_supabase_token(handler):
 
     Calls GET {SUPABASE_URL}/auth/v1/user with the user's Bearer token.
     Supabase validates the token server-side (signing-key-agnostic).
-    Returns user dict (with 'id' = user UUID) if valid, None otherwise.
+    Returns (user_dict, None) if valid, (None, reason_code) otherwise.
 
     Fail-closed on any remote deploy (production + preview) without Supabase config.
     Synthetic dev-user ONLY on localhost (IS_LOCAL_DEV).
@@ -136,18 +136,23 @@ def verify_supabase_token(handler):
     auth = handler.headers.get('Authorization', '')
 
     if not auth.startswith('Bearer ') or len(auth) < 20:
-        return None
+        return None, 'no_token'
 
     token = auth[7:]
 
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         if not IS_LOCAL_DEV:
             # Any remote environment (production, preview, staging) — fail-closed
-            print(f"[SECURITY] Supabase not configured on remote env (VERCEL_ENV={_VERCEL_ENV!r}) — blocking", file=sys.stderr)
-            return None
+            print(f"[SECURITY] Supabase not configured on remote env (VERCEL_ENV={_VERCEL_ENV!r}) — blocking. "
+                  f"SUPABASE_URL={'set' if SUPABASE_URL else 'MISSING'}, "
+                  f"SUPABASE_ANON_KEY={'set' if SUPABASE_ANON_KEY else 'MISSING'}, "
+                  f"VITE_SUPABASE_URL={'set' if os.environ.get('VITE_SUPABASE_URL') else 'MISSING'}, "
+                  f"VITE_SUPABASE_ANON_KEY={'set' if os.environ.get('VITE_SUPABASE_ANON_KEY') else 'MISSING'}",
+                  file=sys.stderr)
+            return None, 'config_missing'
         # Strictly local dev only — allow with synthetic user
         print("[SECURITY] Supabase not configured — allowing in local dev only", file=sys.stderr)
-        return {'id': 'dev-user', 'email': 'dev@localhost'}
+        return {'id': 'dev-user', 'email': 'dev@localhost'}, None
 
     try:
         import urllib.request
@@ -162,26 +167,27 @@ def verify_supabase_token(handler):
         with urllib.request.urlopen(req, timeout=5) as resp:
             user = json.loads(resp.read())
         if user.get('id'):
-            return user
-        return None
+            return user, None
+        return None, 'token_no_user_id'
     except urllib.error.HTTPError as e:
         status = e.code
         if status == 401:
             print(f"[SECURITY] Supabase token invalid/expired (401)", file=sys.stderr)
         else:
             print(f"[SECURITY] Supabase auth API error: {status}", file=sys.stderr)
-        return None
+        return None, f'supabase_{status}'
     except Exception as e:
         print(f"[SECURITY] Supabase auth verification failed: {type(e).__name__}: {e} | URL={SUPABASE_URL}/auth/v1/user | apikey_len={len(SUPABASE_ANON_KEY)}", file=sys.stderr)
-        return None
+        return None, 'auth_api_error'
 
 
 def require_auth(handler):
     """
     Require valid Supabase session for costly AI endpoints.
     Returns user payload if OK, sends 401 if not.
+    Response includes a diagnostic 'code' field to aid debugging.
     """
-    payload = verify_supabase_token(handler)
+    payload, reason = verify_supabase_token(handler)
     if payload:
         return payload
 
@@ -191,7 +197,8 @@ def require_auth(handler):
     handler.end_headers()
     handler.wfile.write(json.dumps({
         'success': False,
-        'error': 'Bejelentkezés szükséges az AI funkciók használatához.'
+        'error': 'Bejelentkezés szükséges az AI funkciók használatához.',
+        'code': reason or 'auth_failed',
     }).encode())
     return None
 
