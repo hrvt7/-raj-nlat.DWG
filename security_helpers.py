@@ -36,8 +36,9 @@ ALLOWED_ORIGINS = [o.strip() for o in _ALLOWED_ORIGINS_RAW.split(',') if o.strip
 # user's access_token. This is signing-key-agnostic — works with both legacy
 # HS256 shared secrets and new asymmetric JWKS signing keys.
 # Requires: SUPABASE_URL (project URL, e.g. https://xxx.supabase.co)
-SUPABASE_URL = os.environ.get('SUPABASE_URL', '') or os.environ.get('VITE_SUPABASE_URL', '')
-SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '') or os.environ.get('VITE_SUPABASE_ANON_KEY', '')
+# Strip whitespace/newlines — Vercel env var paste can introduce trailing chars
+SUPABASE_URL = (os.environ.get('SUPABASE_URL', '') or os.environ.get('VITE_SUPABASE_URL', '')).strip().rstrip('/')
+SUPABASE_ANON_KEY = (os.environ.get('SUPABASE_ANON_KEY', '') or os.environ.get('VITE_SUPABASE_ANON_KEY', '')).strip()
 
 # Default max request body size: 5 MB
 DEFAULT_MAX_BODY = 5 * 1024 * 1024
@@ -157,14 +158,15 @@ def verify_supabase_token(handler):
     try:
         import urllib.request
         import urllib.error
+        auth_url = f'{SUPABASE_URL}/auth/v1/user'
         req = urllib.request.Request(
-            f'{SUPABASE_URL}/auth/v1/user',
+            auth_url,
             headers={
                 'Authorization': f'Bearer {token}',
                 'apikey': SUPABASE_ANON_KEY,
             }
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=8) as resp:
             user = json.loads(resp.read())
         if user.get('id'):
             return user, None
@@ -174,10 +176,16 @@ def verify_supabase_token(handler):
         if status == 401:
             print(f"[SECURITY] Supabase token invalid/expired (401)", file=sys.stderr)
         else:
-            print(f"[SECURITY] Supabase auth API error: {status}", file=sys.stderr)
+            body_hint = ''
+            try: body_hint = e.read().decode('utf-8', errors='replace')[:100]
+            except: pass
+            print(f"[SECURITY] Supabase auth API HTTP {status}: {body_hint}", file=sys.stderr)
         return None, f'supabase_{status}'
+    except urllib.error.URLError as e:
+        print(f"[SECURITY] Supabase URL error: {e.reason} | URL={auth_url}", file=sys.stderr)
+        return None, 'url_error'
     except Exception as e:
-        print(f"[SECURITY] Supabase auth verification failed: {type(e).__name__}: {e} | URL={SUPABASE_URL}/auth/v1/user | apikey_len={len(SUPABASE_ANON_KEY)}", file=sys.stderr)
+        print(f"[SECURITY] Supabase auth exception: {type(e).__name__}: {e} | URL={SUPABASE_URL}/auth/v1/user | apikey_len={len(SUPABASE_ANON_KEY)}", file=sys.stderr)
         return None, 'auth_api_error'
 
 
