@@ -300,11 +300,15 @@ self.onmessage = (e) => {
     const satGray = buildSAT(imgGray, imgW, imgH)
     const satSatCh = buildSAT(imgSat, imgW, imgH)
 
-    // 4. Adaptive stride
-    const tplArea = trimW * trimH
-    const stride = tplArea > 2500 ? 4 : tplArea > 900 ? 3 : 2
+    // 4. Multi-scale levels — catches symbols at ±10% different size
+    const SCALE_LEVELS = [0.90, 1.00, 1.10]
 
-    // 5. Multi-rotation matching (0°, 90°, 180°, 270° + mirror)
+    // 5. Coarse-to-fine: first pass at large stride, then refine around candidates
+    const coarseStride = tplArea > 2500 ? 6 : tplArea > 900 ? 4 : 3
+    const fineRadius = Math.max(trimW, trimH) // refine within this radius
+    const fineStride = 1
+
+    // 6. Multi-rotation matching (0°, 90°, 180°, 270° + mirror)
     // Electrical symbols appear in multiple orientations on plans.
     // This replaces multi-scale (rotation is more important than ±10% scale).
     // Generate rotated + mirrored variants of the trimmed template
@@ -324,18 +328,46 @@ self.onmessage = (e) => {
 
     let allHits = []
     for (const variant of variants) {
-      if (variant.w < 4 || variant.h < 4 || variant.w >= imgW || variant.h >= imgH) continue
+      for (const scale of SCALE_LEVELS) {
+        // Scale the template variant
+        const sW = Math.round(variant.w * scale)
+        const sH = Math.round(variant.h * scale)
+        if (sW < 4 || sH < 4 || sW >= imgW || sH >= imgH) continue
 
-      const variantHits = matchDualChannel(
-        imgGray, imgSat, imgW, imgH,
-        variant.grayTpl, variant.satTpl, variant.w, variant.h,
-        satGray, satSatCh,
-        effectiveThreshold, stride, searchArea
-      )
+        let sGray, sSat
+        if (scale === 1.0) {
+          sGray = variant.grayTpl; sSat = variant.satTpl
+        } else {
+          sGray = resizeGray(variant.grayTpl, variant.w, variant.h, sW, sH)
+          sSat = resizeGray(variant.satTpl, variant.w, variant.h, sW, sH)
+        }
 
-      for (const h of variantHits) {
-        // Center the hit position to match the original template's center
-        allHits.push({ x: h.x + (variant.w - trimW) / 2, y: h.y + (variant.h - trimH) / 2, score: h.score })
+        // COARSE PASS — large stride, low threshold to find candidate regions
+        const coarseHits = matchDualChannel(
+          imgGray, imgSat, imgW, imgH,
+          sGray, sSat, sW, sH,
+          satGray, satSatCh,
+          effectiveThreshold * 0.7, coarseStride, searchArea
+        )
+
+        // FINE PASS — stride=1 around each coarse candidate for precise position
+        for (const ch of coarseHits) {
+          const fineArea = {
+            x: Math.max(0, ch.x - fineRadius),
+            y: Math.max(0, ch.y - fineRadius),
+            w: fineRadius * 2 + sW,
+            h: fineRadius * 2 + sH,
+          }
+          const fineHits = matchDualChannel(
+            imgGray, imgSat, imgW, imgH,
+            sGray, sSat, sW, sH,
+            satGray, satSatCh,
+            effectiveThreshold, fineStride, fineArea
+          )
+          for (const h of fineHits) {
+            allHits.push({ x: h.x + (sW - trimW) / 2, y: h.y + (sH - trimH) / 2, score: h.score })
+          }
+        }
       }
     }
 
