@@ -93,7 +93,8 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
   const [autoSymbolResults, setAutoSymbolResults] = useState([]) // [{x,y,score,accepted}] in PDF doc coords
   const [autoSymbolLabel, setAutoSymbolLabel] = useState('') // user label for finalization
   const [autoSymbolCategory, setAutoSymbolCategory] = useState('other') // category key for finalization
-  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.55)
+  const [autoSymbolThreshold, setAutoSymbolThreshold] = useState(0.50)
+  const autoSymbolAllHitsRef = useRef([]) // full hit list at low threshold — slider filters this
   const [autoSymbolSearching, setAutoSymbolSearching] = useState(false)
   const [autoSymbolSearchArea, setAutoSymbolSearchArea] = useState(null) // {x,y,w,h} in PDF doc coords or null (full page)
   const [autoSymbolAreaRect, _setAutoSymbolAreaRect] = useState(null) // screen coords during area selection
@@ -881,12 +882,14 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
             h: Math.round(Math.abs(sc2.y - sc1.y) * ANALYSIS_SCALE),
           }
         }
+        // Always search at a LOW threshold (0.30) to collect ALL potential hits.
+        // The UI threshold slider then filters this cached list instantly.
         worker.postMessage({
           imgData: imageData.data,
           imgW: width, imgH: height,
           tplData: cropData,
           tplW: tW, tplH: tH,
-          threshold,
+          threshold: 0.30,
           searchArea: scaledArea,
         })
       })
@@ -905,9 +908,12 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
         const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
         return { x: doc.x, y: doc.y, score: h.score, accepted: true, idx: i }
       })
-      setAutoSymbolResults(results)
+      // Cache ALL hits — the threshold slider filters this list instantly (no re-search)
+      autoSymbolAllHitsRef.current = results
+      const filtered = results.filter(h => h.score >= threshold).map(h => ({ ...h, accepted: true }))
+      setAutoSymbolResults(filtered)
       setAutoSymbolPhase('done')
-      if (results.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken.')
+      if (filtered.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken. Próbáld alacsonyabb küszöbbel.')
     } catch (err) {
       if (!mountedRef.current || autoSymbolSearchIdRef.current !== mySearchId) return // stale/unmounted
       console.error('[AutoSymbol] worker search failed:', err)
@@ -1039,12 +1045,16 @@ export default function PdfViewerPanel({ file, style, planId, onCreateQuote, onC
     }, 400)
   }, [drawOverlay, pdfDoc, pageNum, renderPage])
 
-  // Re-search when threshold changes (debounced)
+  // Filter cached hits when threshold changes — NO re-search needed (instant)
   useEffect(() => {
-    if (autoSymbolPhase !== 'done' || !autoSymbolTemplateRef.current) return
-    const t = setTimeout(() => runAutoSymbolSearch(autoSymbolThreshold, autoSymbolSearchArea), 300)
-    return () => clearTimeout(t)
-  }, [autoSymbolThreshold]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (autoSymbolPhase !== 'done' || autoSymbolAllHitsRef.current.length === 0) return
+    const filtered = autoSymbolAllHitsRef.current
+      .filter(h => h.score >= autoSymbolThreshold)
+      .map((h, i) => ({ ...h, accepted: true, idx: i }))
+    setAutoSymbolResults(filtered)
+    if (filtered.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken. Próbáld alacsonyabb küszöbbel.')
+    else setAutoSymbolError(null)
+  }, [autoSymbolThreshold, autoSymbolPhase])
 
   // Register wheel handler with { passive: false } so preventDefault works
   // (React onWheel is passive by default in modern browsers → console errors)
