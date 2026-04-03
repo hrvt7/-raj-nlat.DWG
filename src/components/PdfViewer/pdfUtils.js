@@ -8,12 +8,17 @@ export function resolveCountCategory(assemblyId, assemblies) {
   if (!asm) return 'other'
   if (asm.category === 'vilagitas') return 'light'
   if (asm.category === 'elosztok') return 'elosztok'
+  if (asm.category === 'kabeltalca') return 'conduit' // cable trays → conduit category (structural)
+  if (asm.category === 'tuzjelzo') return 'light' // fire detectors are ceiling-mounted like lights
+  if (asm.category === 'gyengaram') return 'socket' // data points are wall-mounted like sockets
   if (asm.category === 'szerelvenyek') {
     const up = (asm.name || '').toUpperCase()
     if (up.includes('DUGALJ') || up.includes('ALJZAT') || up.includes('SOCKET') || up.includes('KONNEKTOR')) return 'socket'
     if (up.includes('KAPCSOL') || up.includes('SWITCH') || up.includes('DIMMER') || up.includes('VÁLTÓ') || up.includes('VALTO')) return 'switch'
     return 'socket' // default for szerelvenyek
   }
+  // Any other category (bontas, nyomvonal, dobozolas, kabelezes, kotesek, etc.)
+  // is structural work — no cable route should be drawn to these
   return 'other'
 }
 

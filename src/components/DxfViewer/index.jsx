@@ -338,6 +338,10 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
           const pp = proj(panel.x, panel.y)
           for (const m of markers) {
             if (m.category === 'panel') continue
+            // Match PDF overlay filters: skip cable trays, junction, other
+            const mCatDef = COUNT_CATEGORIES.find(c => c.key === m.category)
+            if (mCatDef?.isCableTray) continue
+            if (m.category === 'junction' || m.category === 'other') continue
             const mp = proj(m.x, m.y)
             // Draw L-shaped Manhattan route: horizontal first, then vertical
             const midX = mp.x
