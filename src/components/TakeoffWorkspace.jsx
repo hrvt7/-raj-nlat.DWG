@@ -27,7 +27,7 @@ import { parseDxfFile, parseDxfText, parseDxfTextInWorker } from '../dxfParser.j
 import { estimateCablesMST } from '../pdfTakeoff.js'
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote } from '../data/store.js'
 import { createQuote } from '../utils/createQuote.js'
-import { savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
+import { savePlan as savePlanBlob, savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { computePricing } from '../utils/pricing.js'
@@ -495,8 +495,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
         setDwgStatus('done')
         // Create synthetic DXF file for the viewer and parse for recognition
-        const syntheticFile = new File([dxfText], f.name.replace(/\.dwg$/i, '.dxf'), { type: 'text/plain' })
+        const dxfName = f.name.replace(/\.dwg$/i, '.dxf')
+        const syntheticFile = new File([dxfText], dxfName, { type: 'text/plain' })
         setViewerFile(syntheticFile)
+        // Persist converted DXF so reopening doesn't trigger reconversion
+        if (planId) {
+          const dxfBlob = new Blob([dxfText], { type: 'text/plain' })
+          savePlanBlob({ id: planId, name: dxfName, fileType: 'dxf' }, dxfBlob).catch(err =>
+            console.warn('[TakeoffWorkspace] DWG→DXF cache save failed:', err.message)
+          )
+        }
         // Parse converted DXF in a Web Worker to avoid freezing the UI on large files
         try {
           result = await parseDxfTextInWorker(dxfText, pct => setParseProgress(pct))
