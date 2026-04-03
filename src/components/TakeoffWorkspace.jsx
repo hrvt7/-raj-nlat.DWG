@@ -984,6 +984,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           calcAssemblySummary: snapshotAssembly,
           calcHourlyRate: hourlyRate,
           calcMarkup: markup,
+          calcMarkupType: markupType,
+          calcCableCost: Math.round(fullCalc?.cableCost || 0),
         })
         // Learn from save — only train memory with reviewed/trusted items
         // Gate: low-confidence auto-matches must NOT train memory to avoid
