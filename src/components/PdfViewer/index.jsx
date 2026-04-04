@@ -146,6 +146,15 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const quoteOverridesRef = useRef({})
   useEffect(() => { assignmentsRef.current = assignments }, [assignments])
   useEffect(() => { quoteOverridesRef.current = quoteOverrides }, [quoteOverrides])
+  // Persist assignments/quoteOverrides to IDB on every change so explicit parent save
+  // reads fresh data (prevents race with unmount auto-save)
+  useEffect(() => {
+    if (!planId || !hydratedRef.current) return
+    getPlanAnnotations(planId).then(stored => {
+      if (!stored) return
+      savePlanAnnotations(planId, { ...stored, assignments, quoteOverrides }, { silent: true })
+    }).catch(() => {})
+  }, [assignments, quoteOverrides, planId])
 
   // ── Load saved annotations on mount ──
   useEffect(() => {
@@ -527,7 +536,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
     // ── Cable routes (Manhattan L-shaped lines) ──
     if (showCableRoutes) {
-      const allMarkers = markersRef.current
+      const allMarkers = markersRef.current.filter(m => !m.pageNum || m.pageNum === pageNum)
       const panel = allMarkers.find(m => m.category === 'panel')
       if (panel) {
         const pp = proj(panel.x, panel.y)
@@ -553,8 +562,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       }
     }
 
-    // ── Markers ──
+    // ── Markers (filtered to current page) ──
     for (const m of markersRef.current) {
+      if (m.pageNum && m.pageNum !== pageNum) continue // skip markers from other pages
       const s = proj(m.x, m.y)
       drawMarker(ctx, s.x, s.y, m.color, v.zoom, m.source)
     }
@@ -586,8 +596,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       if (progress < 1) requestAnimationFrame(() => setRenderTick(t => t + 1))
     }
 
-    // ── Measurements ──
+    // ── Measurements (filtered to current page) ──
     for (const seg of measuresRef.current) {
+      if (seg.pageNum && seg.pageNum !== pageNum) continue
       const a = proj(seg.x1, seg.y1)
       const b = proj(seg.x2, seg.y2)
       const distLabel = sf.factor ? formatDist(seg.dist * sf.factor) : `${seg.dist.toFixed(1)} px`
@@ -772,7 +783,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // map it to the proper category key (socket/switch/light/panel) so EstimationPanel
       // can count and price them. Store assembly ID in asmId field.
       const resolvedCategory = asm ? resolveCountCategory(asm.id, assembliesProp) : activeCategory
-      markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, category: resolvedCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
+      markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, pageNum, category: resolvedCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
       markDirty()
       setRenderTick(t => t + 1)
       drawOverlay()
@@ -808,7 +819,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         } else {
           // Tag measurement with the active category (cable tray or other measurement type)
           // Always pass activeCategory so it flows to measurementItems grouping and assembly matching
-          measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist, category: activeCategory || undefined })
+          measuresRef.current.push({ x1: start.x, y1: start.y, x2: pdf.x, y2: pdf.y, dist: pxDist, category: activeCategory || undefined, pageNum })
           markDirty()
           notifyMeasurements()
           activeStartRef.current = null
@@ -1031,7 +1042,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
         const color = a ? (ASM_COLORS_MAP[a.category] || '#9CA3AF') : '#9CA3AF'
         markersRef.current.push(createMarker({
-          x: m.x, y: m.y,
+          x: m.x, y: m.y, pageNum,
           category: m.category,
           color,
           asmId: m.asmId,
@@ -1241,6 +1252,18 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     markersRef.current = []
     measuresRef.current = []
     activeStartRef.current = null
+    // Clear Auto Symbol state
+    setAutoSymbolActive(false)
+    setAutoSymbolPhase('idle')
+    setAutoSymbolResults([])
+    setAutoSymbolRect(null)
+    setAutoSymbolAreaRect(null)
+    setAutoSymbolSearchArea(null)
+    setAutoSymbolError(null)
+    autoSymbolAllHitsRef.current = []
+    autoSymbolTemplateRef.current = null
+    autoSymbolStartRef.current = null
+    if (autoSymbolWorkerRef.current) { autoSymbolWorkerRef.current.terminate(); autoSymbolWorkerRef.current = null }
     markDirty()
     notifyMeasurements()
     setRenderTick(t => t + 1)
@@ -1349,8 +1372,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       if (m.category === 'junction' || m.category === 'other') continue
 
       const dist = (Math.abs(m.x - panel.x) + Math.abs(m.y - panel.y)) * sf.factor * ROUTING_FACTOR
-      // Assembly-based categorization: look up the assembly category
-      const asm = (assembliesProp || []).find(a => a.id === m.category)
+      // Assembly-based categorization: look up by asmId (not m.category which is a COUNT key)
+      const asm = m.asmId ? (assembliesProp || []).find(a => a.id === m.asmId) : null
       const asmCat = asm?.category
       if (asmCat === 'vilagitas' || m.category === 'light') { lightM += dist; lightN++ }
       else if (m.category === 'socket' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('dugalj'))) { socketM += dist; socketN++ }
@@ -1486,7 +1509,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           const label = autoSymbolLabel.trim() || asm?.name || COUNT_CATEGORIES.find(c => c.key === autoSymbolCategory)?.label || 'Auto szimbólum'
           for (const hit of accepted) {
             markersRef.current.push(createMarker({
-              x: hit.x, y: hit.y,
+              x: hit.x, y: hit.y, pageNum,
               category: resolvedCategory,
               color,
               asmId: asm ? asm.id : null,
