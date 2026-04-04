@@ -1604,22 +1604,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       />
                     )})}
 
-                    {/* Cable summary in takeoff */}
-                    {cableEstimate && (
-                      <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 8, background: 'rgba(76,201,240,0.06)', border: `1px solid rgba(76,201,240,0.2)` }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.blue }}>
-                              Kábel — ~{Math.round(cableEstimate.cable_total_m)} m
-                            </span>
-                            <CableModeBadge cableAudit={cableAudit} />
-                          </div>
-                          <button onClick={() => setRightTab('cable')} style={{ background: 'none', border: 'none', color: C.blue, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono' }}>
-                            részletek →
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
 
@@ -1681,6 +1665,23 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Cable summary — always at the bottom of Felmérés tab */}
+                {cableEstimate && (
+                  <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 8, background: 'rgba(76,201,240,0.06)', border: `1px solid rgba(76,201,240,0.2)` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.blue }}>
+                          Kábel — ~{Math.round(cableEstimate.cable_total_m)} m
+                        </span>
+                        <CableModeBadge cableAudit={cableAudit} />
+                      </div>
+                      <button onClick={() => setRightTab('cable')} style={{ background: 'none', border: 'none', color: C.blue, cursor: 'pointer', fontSize: 11, fontFamily: 'DM Mono' }}>
+                        részletek →
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
