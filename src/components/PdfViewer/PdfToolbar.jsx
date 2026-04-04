@@ -70,8 +70,11 @@ export default function PdfToolbar({
       {activeTool === 'count' && (!assemblies || !assemblies.length) && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
-      {activeTool === 'measure' && (
-        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
+      {activeTool === 'measure' && assemblies?.length > 0 && (
+        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} measureMode />
+      )}
+      {activeTool === 'measure' && (!assemblies || !assemblies.length) && (
+        <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
       {/* ── Auto Symbol + Batch Search ── */}
