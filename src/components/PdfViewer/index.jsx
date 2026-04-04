@@ -5,6 +5,7 @@ import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged, getPlans
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
 import { renderPageImageData } from '../../utils/templateMatching.js'
+import { classifyPage, extractTextItems, findNearbyText, textContextScore } from '../../utils/pdfVectorAnalysis.js'
 import templateMatchWorkerUrl from '../../workers/templateMatch.worker.js?url'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasToDoc, drawMarker, drawMeasureLine } from './pdfUtils.js'
@@ -874,6 +875,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const mySearchId = ++autoSymbolSearchIdRef.current
     setAutoSymbolSearching(true)
     setAutoSymbolError(null)
+    // Phase 3: Log page classification (vector/mixed/raster)
+    try {
+      const pageObj = await pdfDoc.getPage(pageNum)
+      const cls = await classifyPage(pageObj)
+      console.log(`[AutoSymbol] Page ${pageNum}: ${cls.type} (${cls.vectorOps} vector ops, ${cls.imageOps} image ops, ratio ${cls.ratio.toFixed(2)})`)
+    } catch { /* non-blocking */ }
     setAutoSymbolResults([])
     try {
       const ANALYSIS_SCALE = 300 / 72 // 300 DPI high-res raster for template matching
@@ -924,14 +931,29 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // Convert from analysis-scale rotated pixel coords → canvas coords → doc coords
       const dd = unrotatedDimsRef.current
       const rr = rotationRef.current
-      const results = result.map((h, i) => {
-        // hit coords are CENTER positions in analysis-scale pixels → convert to canvas-scale
+      const rawResults = result.map((h, i) => {
         const cx = h.x / ANALYSIS_SCALE
         const cy = h.y / ANALYSIS_SCALE
-        // canvas coords → doc coords (undo rotation)
         const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
         return { x: doc.x, y: doc.y, score: h.score, accepted: true, idx: i }
       })
+
+      // Phase 3: Text-assisted context scoring (non-blocking, best-effort)
+      let results = rawResults
+      try {
+        const textItems = await extractTextItems(page)
+        if (textItems.length > 0) {
+          const category = autoSymbolCategory || 'light'
+          results = rawResults.map(h => {
+            const nearby = findNearbyText(textItems, h.x, h.y, 60)
+            const ctxScore = textContextScore(nearby, category)
+            // Blend: 80% NCC score + 20% text context
+            const blendedScore = h.score * 0.8 + ctxScore * 0.2
+            return { ...h, score: blendedScore, nccScore: h.score, ctxScore }
+          })
+        }
+      } catch { /* text extraction failed — use raw NCC scores */ }
+
       // Cache ALL hits — the threshold slider filters this list instantly (no re-search)
       autoSymbolAllHitsRef.current = results
       const filtered = results.filter(h => h.score >= threshold).map(h => ({ ...h, accepted: true }))
@@ -1014,15 +1036,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
         if (!mountedRef.current) return
 
-        // Convert coords and filter by threshold
+        // Convert coords and filter by threshold + hard-negative memory
         const dd = unrotatedDimsRef.current
         const rr = rotationRef.current
         const threshold = tpl.threshold || 0.50
+        const negatives = tpl.rejectedPositions || []
+        const NEG_RADIUS = 20 // PDF units — reject hits near previously rejected positions
         for (const h of hits) {
           if (h.score < threshold) continue
           const cx = h.x / ANALYSIS_SCALE
           const cy = h.y / ANALYSIS_SCALE
           const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
+          // Phase 4: Skip if near a hard-negative position
+          if (negatives.some(n => Math.sqrt((doc.x - n.x) ** 2 + (doc.y - n.y) ** 2) < NEG_RADIUS)) continue
           allMarkers.push({
             x: doc.x, y: doc.y,
             category: tpl.category,
@@ -1534,13 +1560,32 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           // store in savedTemplatesRef so the unmount auto-save preserves it.
           if (planId && autoSymbolTemplateRef.current) {
             const tpl = autoSymbolTemplateRef.current
+            // Per-symbol tuning: compute accept/reject stats for threshold calibration
+            const totalResults = autoSymbolResults.length
+            const acceptedCount = accepted.length
+            const rejectedCount = totalResults - acceptedCount
+            const acceptRate = totalResults > 0 ? acceptedCount / totalResults : 1
+            // Auto-calibrate: if user accepted most results, the threshold was good.
+            // If many were rejected, suggest a higher threshold next time.
+            const calibratedThreshold = acceptRate > 0.8 ? autoSymbolThreshold
+              : Math.min(0.90, autoSymbolThreshold + (1 - acceptRate) * 0.10)
+
+            // Phase 4: Hard-negative memory — save rejected positions for future filtering
+            const rejected = autoSymbolResults.filter(r => !r.accepted)
+            const rejectedPositions = rejected.map(r => ({ x: Math.round(r.x), y: Math.round(r.y) }))
+
             const newTemplate = {
-              cropData: Array.from(tpl.cropData), // convert to plain array for JSON serialization
+              cropData: Array.from(tpl.cropData),
               w: tpl.w, h: tpl.h,
               category: resolvedCategory,
               asmId: asm?.id || null,
               label,
-              threshold: autoSymbolThreshold,
+              rejectedPositions, // hard-negative memory
+              threshold: calibratedThreshold,
+              nmsRadius: Math.max(tpl.w, tpl.h) * 0.6, // per-symbol NMS radius
+              acceptRate,
+              totalSearched: totalResults,
+              totalAccepted: acceptedCount,
               savedAt: new Date().toISOString(),
             }
             // Immediately save to annotations
