@@ -925,9 +925,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const dd = unrotatedDimsRef.current
       const rr = rotationRef.current
       const results = result.map((h, i) => {
-        // hit coords are in rotated analysis-scale pixels → convert to canvas-scale
-        const cx = (h.x + tW / 2) / ANALYSIS_SCALE
-        const cy = (h.y + tH / 2) / ANALYSIS_SCALE
+        // hit coords are CENTER positions in analysis-scale pixels → convert to canvas-scale
+        const cx = h.x / ANALYSIS_SCALE
+        const cy = h.y / ANALYSIS_SCALE
         // canvas coords → doc coords (undo rotation)
         const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
         return { x: doc.x, y: doc.y, score: h.score, accepted: true, idx: i }
@@ -1020,8 +1020,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         const threshold = tpl.threshold || 0.50
         for (const h of hits) {
           if (h.score < threshold) continue
-          const cx = (h.x + tpl.w / 2) / ANALYSIS_SCALE
-          const cy = (h.y + tpl.h / 2) / ANALYSIS_SCALE
+          const cx = h.x / ANALYSIS_SCALE
+          const cy = h.y / ANALYSIS_SCALE
           const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
           allMarkers.push({
             x: doc.x, y: doc.y,
