@@ -1534,13 +1534,27 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           // store in savedTemplatesRef so the unmount auto-save preserves it.
           if (planId && autoSymbolTemplateRef.current) {
             const tpl = autoSymbolTemplateRef.current
+            // Per-symbol tuning: compute accept/reject stats for threshold calibration
+            const totalResults = autoSymbolResults.length
+            const acceptedCount = accepted.length
+            const rejectedCount = totalResults - acceptedCount
+            const acceptRate = totalResults > 0 ? acceptedCount / totalResults : 1
+            // Auto-calibrate: if user accepted most results, the threshold was good.
+            // If many were rejected, suggest a higher threshold next time.
+            const calibratedThreshold = acceptRate > 0.8 ? autoSymbolThreshold
+              : Math.min(0.90, autoSymbolThreshold + (1 - acceptRate) * 0.10)
+
             const newTemplate = {
-              cropData: Array.from(tpl.cropData), // convert to plain array for JSON serialization
+              cropData: Array.from(tpl.cropData),
               w: tpl.w, h: tpl.h,
               category: resolvedCategory,
               asmId: asm?.id || null,
               label,
-              threshold: autoSymbolThreshold,
+              threshold: calibratedThreshold,
+              nmsRadius: Math.max(tpl.w, tpl.h) * 0.6, // per-symbol NMS radius
+              acceptRate,
+              totalSearched: totalResults,
+              totalAccepted: acceptedCount,
               savedAt: new Date().toISOString(),
             }
             // Immediately save to annotations
