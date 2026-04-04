@@ -304,8 +304,8 @@ self.onmessage = (e) => {
     const tplArea = trimW * trimH
     const stride = tplArea > 2500 ? 4 : tplArea > 900 ? 3 : 2
 
-    // 5. Multi-scale levels — catches symbols at ±10% different size
-    const SCALE_LEVELS = [0.92, 1.00, 1.08]
+    // 5. Scale: single scale only (multi-scale was 3x slower for minimal gain)
+    const SCALE_LEVELS = [1.00]
 
     // 6. Multi-rotation matching (0°, 90°, 180°, 270° + mirror)
     // Electrical symbols appear in multiple orientations on plans.
