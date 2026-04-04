@@ -66,6 +66,77 @@ function toHue(rgba, width, height) {
   return hue
 }
 
+// ── CLAHE — Contrast Limited Adaptive Histogram Equalization ────────────────
+// Enhances local contrast on low-contrast drawings without blowing out highlights.
+// Divides image into tiles, equalizes each tile's histogram with clip limit,
+// then bilinearly interpolates between tiles for smooth result.
+function applyCLAHE(gray, w, h, tileSize = 32, clipLimit = 3.0) {
+  const out = new Float32Array(w * h)
+  const tilesX = Math.ceil(w / tileSize)
+  const tilesY = Math.ceil(h / tileSize)
+  const BINS = 256
+
+  // Build per-tile CDF lookup tables
+  const cdfs = new Array(tilesX * tilesY)
+  for (let ty = 0; ty < tilesY; ty++) {
+    for (let tx = 0; tx < tilesX; tx++) {
+      const x0 = tx * tileSize, y0 = ty * tileSize
+      const x1 = Math.min(x0 + tileSize, w), y1 = Math.min(y0 + tileSize, h)
+      const tileW = x1 - x0, tileH = y1 - y0
+      const nPixels = tileW * tileH
+
+      // Histogram
+      const hist = new Uint32Array(BINS)
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const bin = Math.min(BINS - 1, Math.max(0, Math.round(gray[y * w + x] * (BINS - 1))))
+          hist[bin]++
+        }
+      }
+
+      // Clip histogram
+      const limit = Math.max(1, Math.round(clipLimit * nPixels / BINS))
+      let excess = 0
+      for (let i = 0; i < BINS; i++) {
+        if (hist[i] > limit) { excess += hist[i] - limit; hist[i] = limit }
+      }
+      const perBin = Math.floor(excess / BINS)
+      for (let i = 0; i < BINS; i++) hist[i] += perBin
+
+      // CDF
+      const cdf = new Float32Array(BINS)
+      cdf[0] = hist[0]
+      for (let i = 1; i < BINS; i++) cdf[i] = cdf[i - 1] + hist[i]
+      const cdfMin = cdf[0]
+      const scale = nPixels - cdfMin
+      for (let i = 0; i < BINS; i++) cdf[i] = scale > 0 ? (cdf[i] - cdfMin) / scale : i / (BINS - 1)
+
+      cdfs[ty * tilesX + tx] = cdf
+    }
+  }
+
+  // Bilinear interpolation between tile CDFs
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const bin = Math.min(BINS - 1, Math.max(0, Math.round(gray[y * w + x] * (BINS - 1))))
+      // Which tile center is this pixel nearest to?
+      const fcx = (x + 0.5) / tileSize - 0.5
+      const fcy = (y + 0.5) / tileSize - 0.5
+      const tx0 = Math.max(0, Math.floor(fcx)), ty0 = Math.max(0, Math.floor(fcy))
+      const tx1 = Math.min(tilesX - 1, tx0 + 1), ty1 = Math.min(tilesY - 1, ty0 + 1)
+      const fx = fcx - tx0, fy = fcy - ty0
+
+      // Bilinear interpolation of 4 surrounding tile CDFs
+      const v00 = cdfs[ty0 * tilesX + tx0][bin]
+      const v10 = cdfs[ty0 * tilesX + tx1][bin]
+      const v01 = cdfs[ty1 * tilesX + tx0][bin]
+      const v11 = cdfs[ty1 * tilesX + tx1][bin]
+      out[y * w + x] = (1 - fx) * (1 - fy) * v00 + fx * (1 - fy) * v10 + (1 - fx) * fy * v01 + fx * fy * v11
+    }
+  }
+  return out
+}
+
 // ── Rotate grayscale image 90° clockwise ────────────────────────────────────
 function rotate90(src, w, h) {
   // 90° CW: new width = h, new height = w
@@ -275,10 +346,12 @@ self.onmessage = (e) => {
     const effectiveThreshold = threshold || 0.55
     const t0 = performance.now()
 
-    // 1. Extract channels from RGBA
-    const imgGray = toGray(imgData, imgW, imgH)
+    // 1. Extract channels from RGBA + CLAHE contrast normalization
+    const imgGrayRaw = toGray(imgData, imgW, imgH)
+    const imgGray = applyCLAHE(imgGrayRaw, imgW, imgH)
     const imgSat = toSaturation(imgData, imgW, imgH)
-    const tplGray = toGray(tplData, tplW, tplH)
+    const tplGrayRaw = toGray(tplData, tplW, tplH)
+    const tplGray = applyCLAHE(tplGrayRaw, tplW, tplH)
     const tplSat = toSaturation(tplData, tplW, tplH)
 
     // 2. Auto-trim on saturation (if template is colorful) or grayscale variance
