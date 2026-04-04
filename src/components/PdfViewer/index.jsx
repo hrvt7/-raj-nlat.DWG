@@ -1036,15 +1036,19 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
         if (!mountedRef.current) return
 
-        // Convert coords and filter by threshold
+        // Convert coords and filter by threshold + hard-negative memory
         const dd = unrotatedDimsRef.current
         const rr = rotationRef.current
         const threshold = tpl.threshold || 0.50
+        const negatives = tpl.rejectedPositions || []
+        const NEG_RADIUS = 20 // PDF units — reject hits near previously rejected positions
         for (const h of hits) {
           if (h.score < threshold) continue
           const cx = h.x / ANALYSIS_SCALE
           const cy = h.y / ANALYSIS_SCALE
           const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
+          // Phase 4: Skip if near a hard-negative position
+          if (negatives.some(n => Math.sqrt((doc.x - n.x) ** 2 + (doc.y - n.y) ** 2) < NEG_RADIUS)) continue
           allMarkers.push({
             x: doc.x, y: doc.y,
             category: tpl.category,
@@ -1566,12 +1570,17 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             const calibratedThreshold = acceptRate > 0.8 ? autoSymbolThreshold
               : Math.min(0.90, autoSymbolThreshold + (1 - acceptRate) * 0.10)
 
+            // Phase 4: Hard-negative memory — save rejected positions for future filtering
+            const rejected = autoSymbolResults.filter(r => !r.accepted)
+            const rejectedPositions = rejected.map(r => ({ x: Math.round(r.x), y: Math.round(r.y) }))
+
             const newTemplate = {
               cropData: Array.from(tpl.cropData),
               w: tpl.w, h: tpl.h,
               category: resolvedCategory,
               asmId: asm?.id || null,
               label,
+              rejectedPositions, // hard-negative memory
               threshold: calibratedThreshold,
               nmsRadius: Math.max(tpl.w, tpl.h) * 0.6, // per-symbol NMS radius
               acceptRate,
