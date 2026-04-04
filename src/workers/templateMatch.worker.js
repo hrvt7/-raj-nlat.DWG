@@ -253,16 +253,14 @@ function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
 
 // ── Non-Maximum Suppression ─────────────────────────────────────────────────
 function nonMaxSuppression(detections, tW, tH, overlapThreshold) {
-  // Use center-distance NMS instead of IoU — more robust for rotated matches.
+  // Center-distance NMS — hits are already center-of-match positions.
   // Two hits within minDist of each other are considered the same symbol;
   // the higher-scoring one wins.
   const minDist = Math.max(tW, tH) * 0.6
   const kept = []
   outer: for (const d of detections) {
-    const dcx = d.x + tW / 2, dcy = d.y + tH / 2
     for (const k of kept) {
-      const kcx = k.x + tW / 2, kcy = k.y + tH / 2
-      const dist = Math.sqrt((dcx - kcx) ** 2 + (dcy - kcy) ** 2)
+      const dist = Math.sqrt((d.x - k.x) ** 2 + (d.y - k.y) ** 2)
       if (dist < minDist) continue outer
     }
     kept.push(d)
@@ -350,8 +348,10 @@ self.onmessage = (e) => {
         )
 
         for (const h of variantHits) {
-          // Center the hit position to match the original template's center
-          allHits.push({ x: h.x + (sW - trimW) / 2, y: h.y + (sH - trimH) / 2, score: h.score })
+          // Convert top-left hit position to center-of-match position.
+          // Use the VARIANT dimensions (sW/sH), not the original template dimensions,
+          // so rotated variants produce correct center positions.
+          allHits.push({ x: h.x + sW / 2, y: h.y + sH / 2, score: h.score })
         }
       }
     }
