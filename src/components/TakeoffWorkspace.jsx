@@ -770,7 +770,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       let matchedAsm = null
       let autoPrice = 0
 
-      if (g.key.startsWith('kt_asm_')) {
+      if (g.key.startsWith('ASM-')) {
+        // Direct assembly ID from AssemblyDropdown (measure mode)
+        matchedAsm = assemblies.find(a => a.id === g.key) || null
+      } else if (g.key.startsWith('kt_asm_')) {
         // Assembly-driven cable tray key: kt_asm_{assemblyId}
         const asmId = g.key.replace('kt_asm_', '')
         matchedAsm = assemblies.find(a => a.id === asmId) || null

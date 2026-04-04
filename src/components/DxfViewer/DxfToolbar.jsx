@@ -156,6 +156,7 @@ const ASM_CATEGORY_GROUPS = [
   { key: 'elosztok', label: 'Elosztók / Védelem' },
   { key: 'gyengaram', label: 'Gyengeáram' },
   { key: 'tuzjelzo', label: 'Tűzjelző' },
+  { key: 'kabeltalca', label: 'Kábeltálca' },
 ]
 export const ASM_COLORS_MAP = {
   'szerelvenyek': '#4CC9F0',
@@ -163,6 +164,7 @@ export const ASM_COLORS_MAP = {
   'elosztok': '#FF6B6B',
   'gyengaram': '#A78BFA',
   'tuzjelzo': '#FF8C42',
+  'kabeltalca': '#78909C',
   '_special': '#FFD166',
 }
 const SPECIAL_ITEMS = [
@@ -171,7 +173,7 @@ const SPECIAL_ITEMS = [
   { key: 'other', label: 'Egyéb', color: '#71717A' },
 ]
 
-export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies }) {
+export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies, measureMode }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef(null)
   const popupRef = useRef(null)
@@ -205,8 +207,9 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies 
     }
   }, [open, updatePopupPos])
 
-  // Only show countSelectable, non-variant assemblies
-  const mainAssemblies = (assemblies || []).filter(a => !a.variantOf && a.countSelectable)
+  // In measure mode: show ALL non-variant assemblies (for linear measurement pricing)
+  // In count mode: only show countSelectable assemblies
+  const mainAssemblies = (assemblies || []).filter(a => !a.variantOf && (measureMode || a.countSelectable))
 
   // Find the active item — could be an assembly or a special item
   const activeAsm = mainAssemblies.find(a => a.id === activeCategory)
