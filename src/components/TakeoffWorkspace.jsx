@@ -770,11 +770,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       let matchedAsm = null
       let autoPrice = 0
 
-      if (g.key.startsWith('kt_')) {
-        // Cable tray key format: kt_{width}_{height} e.g. kt_100_60
+      if (g.key.startsWith('kt_asm_')) {
+        // Assembly-driven cable tray key: kt_asm_{assemblyId}
+        const asmId = g.key.replace('kt_asm_', '')
+        matchedAsm = assemblies.find(a => a.id === asmId) || null
+      } else if (g.key.startsWith('kt_')) {
+        // Hardcoded cable tray key: kt_{width}_{height} e.g. kt_100_60
         const targetWidth = parseInt(g.key.split('_')[1], 10)
         if (targetWidth) {
-          // Exact width match only — no nearest/approximate matching
           const exact = cableTrayAsms.find(c => c.width === targetWidth && !c.asm.variantOf)
             || cableTrayAsms.find(c => c.width === targetWidth)
           if (exact) {
