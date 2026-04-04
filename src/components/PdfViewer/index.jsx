@@ -388,19 +388,27 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       unrotatedDimsRef.current = { w: unrotVp.width / effectiveScale, h: unrotVp.height / effectiveScale }
       const canvas = pdfCanvasRef.current
       if (!canvas) return
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-      viewRef.current.pageWidth = viewport.width / effectiveScale
-      viewRef.current.pageHeight = viewport.height / effectiveScale
-      renderScaleRef.current = effectiveScale
 
-      const ctx = canvas.getContext('2d')
-      const renderTask = page.render({ canvasContext: ctx, viewport })
+      // Double-buffer: render to off-screen canvas, then swap to avoid black flash
+      const offscreen = document.createElement('canvas')
+      offscreen.width = viewport.width
+      offscreen.height = viewport.height
+      const offCtx = offscreen.getContext('2d')
+
+      const renderTask = page.render({ canvasContext: offCtx, viewport })
       renderPageRef.current = renderTask
       await renderTask.promise
       renderPageRef.current = null
 
       if (renderId !== renderIdRef.current) return
+
+      // Swap: copy finished render to display canvas in one operation
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      viewRef.current.pageWidth = viewport.width / effectiveScale
+      viewRef.current.pageHeight = viewport.height / effectiveScale
+      renderScaleRef.current = effectiveScale
+      canvas.getContext('2d').drawImage(offscreen, 0, 0)
 
       // Fit view initially (only on page/rotation change, not zoom-driven re-render)
       if (!opts.zoomDriven && containerRef.current) {
