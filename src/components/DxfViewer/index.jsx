@@ -216,8 +216,8 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     if (!panel) { cb(null); return }
 
     const ROUTING_FACTOR = 1.25
-    let lightM = 0, socketM = 0, switchM = 0, otherM = 0
-    let lightN = 0, socketN = 0, switchN = 0, otherN = 0
+    let lightM = 0, socketM = 0, switchM = 0, dataM = 0, fireM = 0, otherM = 0
+    let lightN = 0, socketN = 0, switchN = 0, dataN = 0, fireN = 0, otherN = 0
 
     for (const m of markers) {
       if (m.category === 'panel') continue
@@ -226,16 +226,18 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       if (m.category === 'junction' || m.category === 'other') continue
 
       const dist = (Math.abs(m.x - panel.x) + Math.abs(m.y - panel.y)) * sf.factor * ROUTING_FACTOR
-      const asm = (assembliesProp || []).find(a => a.id === m.category)
+      const asm = m.asmId ? (assembliesProp || []).find(a => a.id === m.asmId) : null
       const asmCat = asm?.category
       if (asmCat === 'vilagitas' || m.category === 'light') { lightM += dist; lightN++ }
       else if (m.category === 'socket' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('dugalj'))) { socketM += dist; socketN++ }
       else if (m.category === 'switch' || (asmCat === 'szerelvenyek' && (asm?.name || '').toLowerCase().includes('kapcsol'))) { switchM += dist; switchN++ }
+      else if (asmCat === 'gyengaram') { dataM += dist; dataN++ }
+      else if (asmCat === 'tuzjelzo') { fireM += dist; fireN++ }
       else { otherM += dist; otherN++ }
     }
 
-    const totalM = lightM + socketM + switchM + otherM
-    const deviceCount = lightN + socketN + switchN + otherN
+    const totalM = lightM + socketM + switchM + dataM + fireM + otherM
+    const deviceCount = lightN + socketN + switchN + dataN + fireN + otherN
     if (deviceCount === 0) { cb(null); return }
 
     cb({
@@ -246,6 +248,8 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         light_m: Math.round(lightM * 10) / 10,
         socket_m: Math.round(socketM * 10) / 10,
         switch_m: Math.round(switchM * 10) / 10,
+        data_m: Math.round(dataM * 10) / 10,
+        fire_m: Math.round(fireM * 10) / 10,
         other_m: Math.round(otherM * 10) / 10,
       },
       method: `Kézi jelölés alapján (${deviceCount} eszköz, Manhattan-távolság × ${ROUTING_FACTOR})`,

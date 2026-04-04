@@ -913,11 +913,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Save (per-plan or quote) ──────────────────────────────────────────────
   const handleSave = async () => {
     setSaveError(null) // clear previous error immediately on new click
-    if (!takeoffRows.length) {
-      setSaveError('Nincs felvett elem — jelölj ki elemeket a tervrajzon!')
+    if (!takeoffRows.length && !measurementItems.length) {
+      setSaveError('Nincs felvett elem — jelölj ki elemeket vagy végezz mérést a tervrajzon!')
       return
     }
-    if (!pricing) {
+    if (!pricing && !measurementItems.length) {
       setSaveError('Árkalkuláció nem elérhető — ellenőrizd az assemblyket!')
       return
     }
