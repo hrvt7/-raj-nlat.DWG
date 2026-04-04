@@ -5,7 +5,7 @@ import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged, getPlans
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
 import { renderPageImageData } from '../../utils/templateMatching.js'
-import { classifyPage, extractTextItems, findNearbyText, textContextScore } from '../../utils/pdfVectorAnalysis.js'
+import { generateCandidateRegions } from '../../utils/pdfVectorAnalysis.js'
 import templateMatchWorkerUrl from '../../workers/templateMatch.worker.js?url'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasToDoc, drawMarker, drawMeasureLine } from './pdfUtils.js'
@@ -870,17 +870,45 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   // ── Auto Symbol: run template match via Web Worker (with search ID for race safety) ──
   // IMPORTANT: must be declared BEFORE handleMouseUp which references it
+  // Helper: convert doc-coords searchArea → analysis-pixel scaledArea for worker
+  const docAreaToScaledArea = useCallback((area, ANALYSIS_SCALE) => {
+    const dd = unrotatedDimsRef.current
+    const rr = rotationRef.current
+    const sc1 = docToCanvas(area.x, area.y, rr, dd.w, dd.h)
+    const sc2 = docToCanvas(area.x + area.w, area.y + area.h, rr, dd.w, dd.h)
+    return {
+      x: Math.round(Math.min(sc1.x, sc2.x) * ANALYSIS_SCALE),
+      y: Math.round(Math.min(sc1.y, sc2.y) * ANALYSIS_SCALE),
+      w: Math.round(Math.abs(sc2.x - sc1.x) * ANALYSIS_SCALE),
+      h: Math.round(Math.abs(sc2.y - sc1.y) * ANALYSIS_SCALE),
+    }
+  }, [])
+
+  // Helper: run a single NCC worker search and return hits
+  const runWorkerSearch = useCallback((imgData, imgW, imgH, cropData, tW, tH, scaledArea) => {
+    return new Promise((resolve, reject) => {
+      if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
+      const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
+      autoSymbolWorkerRef.current = worker
+      worker.onmessage = (e) => {
+        if (e.data.type === 'result') resolve(e.data.hits)
+        else reject(new Error(e.data.message || 'Worker hiba'))
+      }
+      worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
+      worker.postMessage({
+        imgData, imgW, imgH,
+        tplData: cropData, tplW: tW, tplH: tH,
+        threshold: 0.30,
+        searchArea: scaledArea,
+      })
+    })
+  }, [])
+
   const runAutoSymbolSearch = useCallback(async (threshold, searchArea) => {
     if (!autoSymbolTemplateRef.current || !pdfDoc) return
     const mySearchId = ++autoSymbolSearchIdRef.current
     setAutoSymbolSearching(true)
     setAutoSymbolError(null)
-    // Phase 3: Log page classification (vector/mixed/raster)
-    try {
-      const pageObj = await pdfDoc.getPage(pageNum)
-      const cls = await classifyPage(pageObj)
-      console.log(`[AutoSymbol] Page ${pageNum}: ${cls.type} (${cls.vectorOps} vector ops, ${cls.imageOps} image ops, ratio ${cls.ratio.toFixed(2)})`)
-    } catch { /* non-blocking */ }
     setAutoSymbolResults([])
     try {
       const ANALYSIS_SCALE = 300 / 72 // 300 DPI high-res raster for template matching
@@ -888,75 +916,69 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE, rotationRef.current)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
 
-      // Abort any previous worker
-      if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
-      const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
-      autoSymbolWorkerRef.current = worker
+      let allHits = []
 
-      const result = await new Promise((resolve, reject) => {
-        worker.onmessage = (e) => {
-          if (e.data.type === 'result') resolve(e.data.hits)
-          else reject(new Error(e.data.message || 'Worker hiba'))
-        }
-        worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
-        // Convert search area from doc coords → rotated canvas coords → analysis pixels
-        let scaledArea = null
-        if (searchArea) {
-          const dd = unrotatedDimsRef.current
-          const rr = rotationRef.current
-          const sc1 = docToCanvas(searchArea.x, searchArea.y, rr, dd.w, dd.h)
-          const sc2 = docToCanvas(searchArea.x + searchArea.w, searchArea.y + searchArea.h, rr, dd.w, dd.h)
-          scaledArea = {
-            x: Math.round(Math.min(sc1.x, sc2.x) * ANALYSIS_SCALE),
-            y: Math.round(Math.min(sc1.y, sc2.y) * ANALYSIS_SCALE),
-            w: Math.round(Math.abs(sc2.x - sc1.x) * ANALYSIS_SCALE),
-            h: Math.round(Math.abs(sc2.y - sc1.y) * ANALYSIS_SCALE),
+      if (searchArea) {
+        // User-selected area search — use exactly as before
+        const scaledArea = docAreaToScaledArea(searchArea, ANALYSIS_SCALE)
+        allHits = await runWorkerSearch(imageData.data, width, height, cropData, tW, tH, scaledArea)
+      } else {
+        // Full-page search — try vector-aware candidate generation first
+        let usedCandidates = false
+        try {
+          const templateSize = Math.max(tW, tH) / ANALYSIS_SCALE // convert analysis px → PDF units
+          const candidates = await generateCandidateRegions(page, templateSize)
+          if (candidates && candidates.regions.length > 0) {
+            // Search each candidate region sequentially (reuses same image data)
+            usedCandidates = true
+            for (const region of candidates.regions) {
+              if (!mountedRef.current || autoSymbolSearchIdRef.current !== mySearchId) return
+              const scaledArea = docAreaToScaledArea(region, ANALYSIS_SCALE)
+              const regionHits = await runWorkerSearch(imageData.data, width, height, cropData, tW, tH, scaledArea)
+              allHits.push(...regionHits)
+            }
+            console.log(`[AutoSymbol] Vector-aware search: ${candidates.regions.length} regions → ${allHits.length} raw hits`)
           }
+        } catch (err) {
+          console.warn('[AutoSymbol] Candidate generation failed, using full-page fallback:', err.message)
         }
-        // Always search at a LOW threshold (0.30) to collect ALL potential hits.
-        // The UI threshold slider then filters this cached list instantly.
-        worker.postMessage({
-          imgData: imageData.data,
-          imgW: width, imgH: height,
-          tplData: cropData,
-          tplW: tW, tplH: tH,
-          threshold: 0.30,
-          searchArea: scaledArea,
-        })
-      })
 
-      // Stale/unmount guard — discard result if component unmounted or newer search started
+        // Fallback: if no candidates or candidate search found nothing → full-page scan
+        if (!usedCandidates || allHits.length === 0) {
+          if (usedCandidates) console.log('[AutoSymbol] Candidate regions yielded 0 hits — falling back to full-page search')
+          allHits = await runWorkerSearch(imageData.data, width, height, cropData, tW, tH, null)
+        }
+      }
+
+      // Stale/unmount guard
       if (!mountedRef.current || autoSymbolSearchIdRef.current !== mySearchId) return
+
+      // Combined NMS in analysis pixel coords — matches worker NMS behavior exactly.
+      // This eliminates NMS fragmentation from multi-region search: all hits compete
+      // in a single suppression pass, same as if full-page search had been used.
+      // minDist uses untrimmed template size (≥ trimmed), which is conservative
+      // (suppresses more, not less — strictly reduces false positives vs baseline).
+      const nmsMinDist = Math.max(tW, tH) * 0.6
+      allHits.sort((a, b) => b.score - a.score)
+      const nmsHits = []
+      for (const h of allHits) {
+        const tooClose = nmsHits.some(k => Math.sqrt((h.x - k.x) ** 2 + (h.y - k.y) ** 2) < nmsMinDist)
+        if (!tooClose) nmsHits.push(h)
+      }
 
       // Convert from analysis-scale rotated pixel coords → canvas coords → doc coords
       const dd = unrotatedDimsRef.current
       const rr = rotationRef.current
-      const rawResults = result.map((h, i) => {
+      const rawResults = nmsHits.map((h, i) => {
         const cx = h.x / ANALYSIS_SCALE
         const cy = h.y / ANALYSIS_SCALE
         const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
         return { x: doc.x, y: doc.y, score: h.score, accepted: true, idx: i }
       })
 
-      // Phase 3: Text-assisted context scoring (non-blocking, best-effort)
-      let results = rawResults
-      try {
-        const textItems = await extractTextItems(page)
-        if (textItems.length > 0) {
-          const category = autoSymbolCategory || 'light'
-          results = rawResults.map(h => {
-            const nearby = findNearbyText(textItems, h.x, h.y, 60)
-            const ctxScore = textContextScore(nearby, category)
-            // Blend: 80% NCC score + 20% text context
-            const blendedScore = h.score * 0.8 + ctxScore * 0.2
-            return { ...h, score: blendedScore, nccScore: h.score, ctxScore }
-          })
-        }
-      } catch { /* text extraction failed — use raw NCC scores */ }
-
       // Cache ALL hits — the threshold slider filters this list instantly (no re-search)
-      autoSymbolAllHitsRef.current = results
-      const filtered = results.filter(h => h.score >= threshold).map(h => ({ ...h, accepted: true }))
+      autoSymbolAllHitsRef.current = rawResults
+      const filtered = rawResults.filter(h => h.score >= threshold).map(h => ({ ...h, accepted: true }))
       setAutoSymbolResults(filtered)
       setAutoSymbolPhase('done')
       if (filtered.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken. Próbáld alacsonyabb küszöbbel.')
@@ -968,7 +990,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     } finally {
       if (mountedRef.current && autoSymbolSearchIdRef.current === mySearchId) setAutoSymbolSearching(false)
     }
-  }, [pdfDoc, pageNum])
+  }, [pdfDoc, pageNum, docAreaToScaledArea, runWorkerSearch])
 
   // ── Batch search: run all saved templates from other plans in the same project ──
   const runBatchProjectSearch = useCallback(async () => {
@@ -1036,19 +1058,15 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
         if (!mountedRef.current) return
 
-        // Convert coords and filter by threshold + hard-negative memory
+        // Convert coords and filter by threshold
         const dd = unrotatedDimsRef.current
         const rr = rotationRef.current
         const threshold = tpl.threshold || 0.50
-        const negatives = tpl.rejectedPositions || []
-        const NEG_RADIUS = 20 // PDF units — reject hits near previously rejected positions
         for (const h of hits) {
           if (h.score < threshold) continue
           const cx = h.x / ANALYSIS_SCALE
           const cy = h.y / ANALYSIS_SCALE
           const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
-          // Phase 4: Skip if near a hard-negative position
-          if (negatives.some(n => Math.sqrt((doc.x - n.x) ** 2 + (doc.y - n.y) ** 2) < NEG_RADIUS)) continue
           allMarkers.push({
             x: doc.x, y: doc.y,
             category: tpl.category,
@@ -1563,16 +1581,11 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             // Per-symbol tuning: compute accept/reject stats for threshold calibration
             const totalResults = autoSymbolResults.length
             const acceptedCount = accepted.length
-            const rejectedCount = totalResults - acceptedCount
             const acceptRate = totalResults > 0 ? acceptedCount / totalResults : 1
             // Auto-calibrate: if user accepted most results, the threshold was good.
             // If many were rejected, suggest a higher threshold next time.
             const calibratedThreshold = acceptRate > 0.8 ? autoSymbolThreshold
               : Math.min(0.90, autoSymbolThreshold + (1 - acceptRate) * 0.10)
-
-            // Phase 4: Hard-negative memory — save rejected positions for future filtering
-            const rejected = autoSymbolResults.filter(r => !r.accepted)
-            const rejectedPositions = rejected.map(r => ({ x: Math.round(r.x), y: Math.round(r.y) }))
 
             const newTemplate = {
               cropData: Array.from(tpl.cropData),
@@ -1580,7 +1593,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
               category: resolvedCategory,
               asmId: asm?.id || null,
               label,
-              rejectedPositions, // hard-negative memory
               threshold: calibratedThreshold,
               nmsRadius: Math.max(tpl.w, tpl.h) * 0.6, // per-symbol NMS radius
               acceptRate,
