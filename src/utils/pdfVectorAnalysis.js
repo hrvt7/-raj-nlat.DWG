@@ -98,7 +98,7 @@ export async function extractColoredPaths(page) {
   let pathActive = false
 
   const coloredPaths = []
-  const MIN_SAT = 0.15 // minimum saturation to consider "colored"
+  const MIN_SAT = 0.35 // minimum saturation to consider "colored" (filters tinted text, keeps vivid symbols)
 
   for (let i = 0; i < fnArray.length; i++) {
     const fn = fnArray[i]
@@ -284,13 +284,13 @@ export function detectTitleBlock(textItems, pageDims) {
  * @param {number} templateSize - approximate symbol size (max of w,h in PDF units)
  * @param {object} [options]
  * @param {number} [options.maxRegions=20] - cap on candidate regions
- * @param {number} [options.minPathsPerRegion=2] - minimum colored paths to form a region
+ * @param {number} [options.minPathsPerRegion=3] - minimum colored paths to form a region
  * @param {number} [options.padding=0] - extra padding around each region (PDF units)
  * @returns {Promise<{ regions: Array<{x,y,w,h}>, pageType: string, stats: object } | null>}
  *   null if page is raster or analysis fails (caller should use full-page search)
  */
 export async function generateCandidateRegions(page, templateSize, options = {}) {
-  const { maxRegions = 20, minPathsPerRegion = 2, padding = 0 } = options
+  const { maxRegions = 20, minPathsPerRegion = 3, padding = 0 } = options
   const t0 = performance.now()
 
   try {

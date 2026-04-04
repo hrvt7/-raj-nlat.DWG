@@ -953,27 +953,32 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // Stale/unmount guard
       if (!mountedRef.current || autoSymbolSearchIdRef.current !== mySearchId) return
 
+      // Combined NMS in analysis pixel coords — matches worker NMS behavior exactly.
+      // This eliminates NMS fragmentation from multi-region search: all hits compete
+      // in a single suppression pass, same as if full-page search had been used.
+      // minDist uses untrimmed template size (≥ trimmed), which is conservative
+      // (suppresses more, not less — strictly reduces false positives vs baseline).
+      const nmsMinDist = Math.max(tW, tH) * 0.6
+      allHits.sort((a, b) => b.score - a.score)
+      const nmsHits = []
+      for (const h of allHits) {
+        const tooClose = nmsHits.some(k => Math.sqrt((h.x - k.x) ** 2 + (h.y - k.y) ** 2) < nmsMinDist)
+        if (!tooClose) nmsHits.push(h)
+      }
+
       // Convert from analysis-scale rotated pixel coords → canvas coords → doc coords
       const dd = unrotatedDimsRef.current
       const rr = rotationRef.current
-      const rawResults = allHits.map((h, i) => {
+      const rawResults = nmsHits.map((h, i) => {
         const cx = h.x / ANALYSIS_SCALE
         const cy = h.y / ANALYSIS_SCALE
         const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
         return { x: doc.x, y: doc.y, score: h.score, accepted: true, idx: i }
       })
 
-      // Deduplicate hits from overlapping candidate regions
-      const deduped = []
-      const dedupDist = Math.max(tW, tH) / ANALYSIS_SCALE * 0.6 // same as worker NMS radius in PDF units
-      for (const h of rawResults.sort((a, b) => b.score - a.score)) {
-        const tooClose = deduped.some(d => Math.sqrt((h.x - d.x) ** 2 + (h.y - d.y) ** 2) < dedupDist)
-        if (!tooClose) deduped.push(h)
-      }
-
       // Cache ALL hits — the threshold slider filters this list instantly (no re-search)
-      autoSymbolAllHitsRef.current = deduped
-      const filtered = deduped.filter(h => h.score >= threshold).map(h => ({ ...h, accepted: true }))
+      autoSymbolAllHitsRef.current = rawResults
+      const filtered = rawResults.filter(h => h.score >= threshold).map(h => ({ ...h, accepted: true }))
       setAutoSymbolResults(filtered)
       setAutoSymbolPhase('done')
       if (filtered.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken. Próbáld alacsonyabb küszöbbel.')
