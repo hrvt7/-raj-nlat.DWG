@@ -1508,8 +1508,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           cropData={autoSymbolTemplateRef.current.cropData}
           width={autoSymbolTemplateRef.current.w}
           height={autoSymbolTemplateRef.current.h}
-          onConfirm={(cleanedData) => {
-            autoSymbolTemplateRef.current = { ...autoSymbolTemplateRef.current, cropData: cleanedData }
+          onConfirm={(finalData, finalW, finalH) => {
+            autoSymbolTemplateRef.current = { cropData: finalData, w: finalW, h: finalH }
             setAutoSymbolPhase('areaSelect')
             setAutoSymbolSearchArea(null)
           }}
