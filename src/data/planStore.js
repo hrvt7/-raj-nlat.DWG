@@ -133,7 +133,9 @@ export async function savePlan(plan, fileBlob) {
             setTimeout(() => tryUpload(attempt + 1), 5000)
           } else {
             console.warn('[planStore] remote blob backup failed after retry:', err.message)
-            updatePlanMeta(plan.id, { remoteBackupAt: null })
+            // Record failure time instead of permanently suppressing with null.
+            // The plan will retry backup on next save or when user re-uploads.
+            updatePlanMeta(plan.id, { remoteBackupFailed: new Date().toISOString() })
           }
         })
       }
@@ -190,11 +192,8 @@ export async function getPlanFile(planId) {
   // On-demand remote blob recovery when local is missing
   if (supabaseConfigured) {
     const meta = getPlanMeta(planId)
-    // Skip remote attempt if backup is known to have failed (remoteBackupAt === null)
-    if (meta?.remoteBackupAt === null) {
-      console.info('[planStore] skipping remote recovery — backup previously failed for', planId)
-      return null
-    }
+    // Always attempt remote recovery — permanent suppression was removed.
+    // The backup may have succeeded on a later save or from another device.
     try {
       const remote = await downloadPlanBlob(planId, meta?.fileType)
       if (remote && remote.size > 0) {
