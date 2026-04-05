@@ -21,7 +21,7 @@ export default function PdfToolbar({
   autoSymbolThreshold, autoSymbolCategory, autoSymbolLabel,
   onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
   onAutoSymbolAcceptAll, onAutoSymbolRejectAll, onAutoSymbolCategoryChange, onAutoSymbolLabelChange, onAutoSymbolFinalize,
-  onBatchProjectSearch, batchSearching, batchProgress,
+  onBatchProjectSearch, batchSearching, batchProgress, onBatchCancel,
   saveState,
 }) {
   const TOOLS = [
@@ -94,6 +94,12 @@ export default function PdfToolbar({
         )}
         {batchProgress && (
           <span style={{ fontFamily: 'DM Mono', fontSize: 9, color: '#4CC9F0', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{batchProgress}</span>
+        )}
+        {batchSearching && onBatchCancel && (
+          <button onClick={onBatchCancel} title="Keresés megszakítása" style={{
+            padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 10, fontFamily: 'DM Mono',
+            background: 'rgba(255,107,107,0.12)', border: '1px solid rgba(255,107,107,0.3)', color: '#FF6B6B',
+          }}>✕ Mégse</button>
         )}
         <button onClick={onAutoSymbolToggle} title="Auto szimbólum keresés (BETA)" style={{
           padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
