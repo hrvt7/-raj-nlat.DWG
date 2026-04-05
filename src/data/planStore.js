@@ -36,6 +36,20 @@ const parseCacheStore = localforage.createInstance({
 
 const LS_KEY = 'takeoffpro_plans_meta'
 
+/**
+ * Clear all user-sensitive plan data from IndexedDB.
+ * Called on logout to prevent the next user from seeing previous user's files.
+ * Safe to call at any time — next login recovers from remote backup.
+ */
+export async function clearAllLocalPlanData() {
+  await Promise.allSettled([
+    planFileStore.clear(),
+    planThumbStore.clear(),
+    planAnnotStore.clear(),
+    parseCacheStore.clear(),
+  ])
+}
+
 // ─── Plan metadata schema versioning ─────────────────────────────────────────
 // v1 = current shape (array of plan meta objects), stored in versioned envelope.
 // Legacy (v0) = raw array without envelope — still accepted on load.
@@ -119,7 +133,9 @@ export async function savePlan(plan, fileBlob) {
             setTimeout(() => tryUpload(attempt + 1), 5000)
           } else {
             console.warn('[planStore] remote blob backup failed after retry:', err.message)
-            updatePlanMeta(plan.id, { remoteBackupAt: null })
+            // Record failure time instead of permanently suppressing with null.
+            // The plan will retry backup on next save or when user re-uploads.
+            updatePlanMeta(plan.id, { remoteBackupFailed: new Date().toISOString() })
           }
         })
       }
@@ -176,11 +192,8 @@ export async function getPlanFile(planId) {
   // On-demand remote blob recovery when local is missing
   if (supabaseConfigured) {
     const meta = getPlanMeta(planId)
-    // Skip remote attempt if backup is known to have failed (remoteBackupAt === null)
-    if (meta?.remoteBackupAt === null) {
-      console.info('[planStore] skipping remote recovery — backup previously failed for', planId)
-      return null
-    }
+    // Always attempt remote recovery — permanent suppression was removed.
+    // The backup may have succeeded on a later save or from another device.
     try {
       const remote = await downloadPlanBlob(planId, meta?.fileType)
       if (remote && remote.size > 0) {
