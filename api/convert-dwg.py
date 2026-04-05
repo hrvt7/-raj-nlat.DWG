@@ -4,45 +4,43 @@ import json, traceback, os, sys
 from urllib.request import urlopen, Request
 import urllib.error
 
-# Import shared security helpers — with fallback for Vercel bundling edge cases
+# Import shared security helpers — fail-closed if unavailable
 try:
-     from security_helpers import send_cors_headers, check_origin, check_rate_limit, check_body_size, check_required_env, require_auth, safe_error_response, rate_limit_response
+    from security_helpers import send_cors_headers, check_origin, check_rate_limit, check_body_size, check_required_env, require_auth, safe_error_response, rate_limit_response
 except ImportError:
-    # Inline fallback if _security.py not available in function bundle
-    def send_cors_headers(handler, origin=None):
-        handler.send_header('Access-Control-Allow-Origin', os.environ.get('ALLOWED_ORIGINS', '*').split(',')[0].strip() if not origin else origin)
-        handler.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        handler.send_header('Access-Control-Allow-Headers', 'Content-Type')
-    def check_origin(handler): return True
-    def check_rate_limit(handler, limit=30): return True
-    def check_body_size(handler, max_bytes=5*1024*1024): return True
-    def check_required_env(handler, *env_vars):
-        missing = [v for v in env_vars if not os.environ.get(v)]
-        if missing:
-            handler.send_response(503)
-            handler.send_header('Content-Type', 'application/json')
-            handler.end_headers()
-            handler.wfile.write(json.dumps({'success': False, 'error': 'Service temporarily unavailable'}).encode())
-            return False
-        return True
-    def safe_error_response(handler, code, msg, exc=None):
-        if exc: print(f"[API ERROR] {msg}: {traceback.format_exc()}", file=sys.stderr)
+    # FAIL-CLOSED: if security_helpers is missing, ALL checks reject.
+    # This prevents silent security bypass from bundling issues.
+    import sys as _sys
+    print("[convert-dwg] CRITICAL: security_helpers import failed — all requests will be rejected", file=_sys.stderr)
+
+    def _fail_closed_response(handler, code, msg):
         handler.send_response(code)
         handler.send_header('Content-Type', 'application/json')
         handler.end_headers()
         handler.wfile.write(json.dumps({'success': False, 'error': msg}).encode())
+
+    def send_cors_headers(handler, origin=None):
+        handler.send_header('Access-Control-Allow-Origin', 'null')
+        handler.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        handler.send_header('Access-Control-Allow-Headers', 'Content-Type')
+    def check_origin(handler):
+        _fail_closed_response(handler, 403, 'Biztonsági modul nem elérhető')
+        return False
+    def check_rate_limit(handler, limit=30):
+        _fail_closed_response(handler, 503, 'Biztonsági modul nem elérhető')
+        return False
+    def check_body_size(handler, max_bytes=5*1024*1024): return True  # body size check is non-critical
+    def check_required_env(handler, *env_vars):
+        _fail_closed_response(handler, 503, 'Service temporarily unavailable')
+        return False
+    def safe_error_response(handler, code, msg, exc=None):
+        if exc: print(f"[API ERROR] {msg}: {traceback.format_exc()}", file=_sys.stderr)
+        _fail_closed_response(handler, code, msg)
     def require_auth(handler):
-        """Fail-closed fallback: reject all requests when security_helpers is unavailable."""
-        handler.send_response(401)
-        handler.send_header('Content-Type', 'application/json')
-        handler.end_headers()
-        handler.wfile.write(json.dumps({'success': False, 'error': 'Hitelesítés nem elérhető'}).encode())
+        _fail_closed_response(handler, 401, 'Hitelesítés nem elérhető')
         return False
     def rate_limit_response(handler):
-        handler.send_response(429)
-        handler.send_header('Content-Type', 'application/json')
-        handler.end_headers()
-        handler.wfile.write(json.dumps({'success': False, 'error': 'Too many requests'}).encode())
+        _fail_closed_response(handler, 429, 'Too many requests')
 
 CLOUDCONVERT_API_KEY = os.environ.get('CLOUDCONVERT_API_KEY', '')
 

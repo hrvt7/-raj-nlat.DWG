@@ -903,9 +903,15 @@ function SaaSShell() {
       showToast('⚠', `${pruned} régi ajánlat archiválva (max ${max} tárolható helyben).`, '#FFD166')
     }
     window.addEventListener('takeoffpro:quotes-pruned', pruneHandler)
+    // Backup failure warning — fires when plan blob upload fails after retry
+    const backupHandler = () => {
+      showToast('⚠', 'Rajzfájl felhő mentése sikertelen — később újrapróbáljuk.', '#FF6B6B')
+    }
+    window.addEventListener('takeoffpro:backup-failed', backupHandler)
     return () => {
       window.removeEventListener('storage', handler)
       window.removeEventListener('takeoffpro:quotes-pruned', pruneHandler)
+      window.removeEventListener('takeoffpro:backup-failed', backupHandler)
     }
   }, [showToast])
 
