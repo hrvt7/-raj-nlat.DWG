@@ -282,14 +282,23 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // Async merge: load store state, keep detection markers from store that aren't in ref
       getPlanAnnotations(planId).then(stored => {
         const storedMarkers = normalizeMarkers(stored?.markers || [])
-        // Detection markers from store that are NOT already in our ref (by id)
+        // Detection markers from store that are NOT already in our ref (by id or position)
         const localIds = new Set(localMarkers.map(m => m.id))
-        const externalDetections = storedMarkers.filter(
-          m => m.source === 'detection' && !localIds.has(m.id)
-        )
-        // Manual-first dedup: if a manual local marker and a detection marker
-        // occupy the same spot, the manual marker wins.
-        const merged = deduplicateMarkersManualFirst([...localMarkers, ...externalDetections])
+        const externalDetections = storedMarkers.filter(m => {
+          if (m.source !== 'detection') return false
+          if (localIds.has(m.id)) return false
+          // Skip if a local marker of the same category already sits nearby
+          // (the local marker is authoritative — user placed or already accepted it)
+          const tooClose = localMarkers.some(lm =>
+            lm.category === m.category &&
+            Math.hypot(lm.x - m.x, lm.y - m.y) < 15
+          )
+          return !tooClose
+        })
+        // Append external detections without re-deduplicating local markers.
+        // localMarkers are authoritative — their positions must be preserved exactly
+        // as the user placed them, even if some are close together.
+        const merged = [...localMarkers, ...externalDetections]
         savePlanAnnotations(planId, {
           markers: merged,
           measurements: measuresRef.current,

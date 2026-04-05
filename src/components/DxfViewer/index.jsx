@@ -174,11 +174,17 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
       getPlanAnnotations(planId).then(stored => {
         const storedMarkers = normalizeMarkers(stored?.markers || [])
         const localIds = new Set(localMarkers.map(m => m.id))
-        const externalDetections = storedMarkers.filter(
-          m => m.source === 'detection' && !localIds.has(m.id)
-        )
-        // Manual-first dedup: manual markers always win over detection markers at same spot.
-        const merged = deduplicateMarkersManualFirst([...localMarkers, ...externalDetections])
+        const externalDetections = storedMarkers.filter(m => {
+          if (m.source !== 'detection') return false
+          if (localIds.has(m.id)) return false
+          const tooClose = localMarkers.some(lm =>
+            lm.category === m.category &&
+            Math.hypot(lm.x - m.x, lm.y - m.y) < 15
+          )
+          return !tooClose
+        })
+        // Append without re-deduplicating local markers — their positions are authoritative
+        const merged = [...localMarkers, ...externalDetections]
         savePlanAnnotations(planId, {
           ...stored,  // preserve cableReviewed, referencePanels, etc.
           markers: merged,
