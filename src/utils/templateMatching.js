@@ -162,7 +162,11 @@ export function nonMaxSuppression(detections, tW, tH, overlapThreshold = 0.3) {
  * @returns {Promise<{imageData: ImageData, width: number, height: number}>}
  */
 export async function renderPageImageData(pdfPage, scale = 1, rotation = 0) {
-  const viewport = pdfPage.getViewport({ scale, rotation })
+  // Always render at 0° rotation. The rotation parameter is ignored —
+  // rotation is handled at the view layer (unified viewport transform).
+  // The template matching worker tries all 6 orientations internally,
+  // so the analysis raster doesn't need to be pre-rotated.
+  const viewport = pdfPage.getViewport({ scale, rotation: 0 })
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(viewport.width)
   canvas.height = Math.round(viewport.height)

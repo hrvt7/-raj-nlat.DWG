@@ -21,29 +21,32 @@ describe('docToCanvas', () => {
     expect(docToCanvas(100, 200, 0, W, H)).toEqual({ x: 100, y: 200 })
   })
 
-  it('R=90: doc(dx,dy) → canvas(dy, W-dx)', () => {
+  it('R=90: center-rotation CW', () => {
     const c = docToCanvas(100, 200, 90, W, H)
-    expect(c).toEqual({ x: 200, y: 400 }) // (200, 500-100)
+    // Rotated 90° CW around center (250, 400)
+    expect(c.x).toBeCloseTo(450, 5)
+    expect(c.y).toBeCloseTo(250, 5)
   })
 
-  it('R=180: doc(dx,dy) → canvas(W-dx, H-dy)', () => {
+  it('R=180: center-rotation 180°', () => {
     const c = docToCanvas(100, 200, 180, W, H)
-    expect(c).toEqual({ x: 400, y: 600 }) // (500-100, 800-200)
+    expect(c.x).toBeCloseTo(400, 5)
+    expect(c.y).toBeCloseTo(600, 5)
   })
 
-  it('R=270: doc(dx,dy) → canvas(H-dy, dx)', () => {
+  it('R=270: center-rotation CCW', () => {
     const c = docToCanvas(100, 200, 270, W, H)
-    expect(c).toEqual({ x: 600, y: 100 }) // (800-200, 100)
+    expect(c.x).toBeCloseTo(50, 5)
+    expect(c.y).toBeCloseTo(550, 5)
   })
 
-  it('origin (0,0) at R=90', () => {
-    const c = docToCanvas(0, 0, 90, W, H)
-    expect(c).toEqual({ x: 0, y: 500 }) // top-left doc → bottom-left of rotated canvas
-  })
-
-  it('bottom-right corner at R=90', () => {
-    const c = docToCanvas(W, H, 90, W, H)
-    expect(c).toEqual({ x: 800, y: 0 }) // bottom-right doc → top-right of rotated canvas (H×W)
+  it('page center stays fixed at any rotation', () => {
+    const cx = W / 2, cy = H / 2
+    for (const rot of [0, 45, 90, 135, 180, 270]) {
+      const c = docToCanvas(cx, cy, rot, W, H)
+      expect(c.x).toBeCloseTo(cx, 5)
+      expect(c.y).toBeCloseTo(cy, 5)
+    }
   })
 })
 
@@ -53,19 +56,23 @@ describe('canvasToDoc', () => {
     expect(canvasToDoc(100, 200, 0, W, H)).toEqual({ x: 100, y: 200 })
   })
 
-  it('R=90: canvas(cx,cy) → doc(W-cy, cx)', () => {
-    const d = canvasToDoc(200, 400, 90, W, H)
-    expect(d).toEqual({ x: 100, y: 200 }) // (500-400, 200)
+  it('R=90: inverse of center-rotation CW', () => {
+    // canvasToDoc undoes the rotation — roundtrip tested separately
+    const d = canvasToDoc(450, 250, 90, W, H)
+    expect(d.x).toBeCloseTo(100, 5)
+    expect(d.y).toBeCloseTo(200, 5)
   })
 
-  it('R=180: canvas(cx,cy) → doc(W-cx, H-cy)', () => {
+  it('R=180: inverse of center-rotation 180°', () => {
     const d = canvasToDoc(400, 600, 180, W, H)
-    expect(d).toEqual({ x: 100, y: 200 }) // (500-400, 800-600)
+    expect(d.x).toBeCloseTo(100, 5)
+    expect(d.y).toBeCloseTo(200, 5)
   })
 
-  it('R=270: canvas(cx,cy) → doc(cy, H-cx)', () => {
-    const d = canvasToDoc(600, 100, 270, W, H)
-    expect(d).toEqual({ x: 100, y: 200 }) // (100, 800-600)
+  it('R=270: inverse of center-rotation CCW', () => {
+    const d = canvasToDoc(50, 550, 270, W, H)
+    expect(d.x).toBeCloseTo(100, 5)
+    expect(d.y).toBeCloseTo(200, 5)
   })
 })
 
@@ -158,79 +165,81 @@ describe('distance preservation (rotation is isometric)', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════
-describe('backward compat migration: legacy canvas coords → doc coords', () => {
-  // Simulates loading legacy annotations saved at a specific rotation
-  // and converting them to rotation-invariant doc coords.
-
-  it('legacy marker at R=0 migrates to same coords (identity)', () => {
-    const legacy = { x: 100, y: 200 }
-    const doc = canvasToDoc(legacy.x, legacy.y, 0, W, H)
-    expect(doc).toEqual({ x: 100, y: 200 })
+describe('arbitrary rotation: non-90° angles work', () => {
+  it('R=45: center stays fixed, corners rotate', () => {
+    const cx = W / 2, cy = H / 2
+    const c = docToCanvas(cx, cy, 45, W, H)
+    expect(c.x).toBeCloseTo(cx, 5)
+    expect(c.y).toBeCloseTo(cy, 5)
   })
 
-  it('legacy marker at R=90 migrates correctly', () => {
-    // Marker was placed at canvas(200, 400) when page was rotated 90°
-    // This corresponds to doc(100, 200)
-    const legacy = { x: 200, y: 400 }
-    const doc = canvasToDoc(legacy.x, legacy.y, 90, W, H)
-    expect(doc).toEqual({ x: 100, y: 200 })
+  it('R=45: roundtrip preserves point', () => {
+    const p = { x: 100, y: 200 }
+    const canvas = docToCanvas(p.x, p.y, 45, W, H)
+    const doc = canvasToDoc(canvas.x, canvas.y, 45, W, H)
+    expect(doc.x).toBeCloseTo(p.x, 10)
+    expect(doc.y).toBeCloseTo(p.y, 10)
   })
 
-  it('legacy marker at R=180 migrates correctly', () => {
-    // Canvas(400, 600) at R=180 → doc(100, 200)
-    const legacy = { x: 400, y: 600 }
-    const doc = canvasToDoc(legacy.x, legacy.y, 180, W, H)
-    expect(doc).toEqual({ x: 100, y: 200 })
+  it('R=22.5: distance preserved', () => {
+    const p1 = { x: 100, y: 200 }
+    const p2 = { x: 300, y: 500 }
+    const docDist = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+    const c1 = docToCanvas(p1.x, p1.y, 22.5, W, H)
+    const c2 = docToCanvas(p2.x, p2.y, 22.5, W, H)
+    const canvasDist = Math.sqrt((c2.x - c1.x) ** 2 + (c2.y - c1.y) ** 2)
+    expect(canvasDist).toBeCloseTo(docDist, 10)
   })
 
-  it('legacy marker at R=270 migrates correctly', () => {
-    // Canvas(600, 100) at R=270 → doc(100, 200)
-    const legacy = { x: 600, y: 100 }
-    const doc = canvasToDoc(legacy.x, legacy.y, 270, W, H)
-    expect(doc).toEqual({ x: 100, y: 200 })
+  it('R=135: roundtrip preserves point', () => {
+    const p = { x: 350, y: 600 }
+    const canvas = docToCanvas(p.x, p.y, 135, W, H)
+    const doc = canvasToDoc(canvas.x, canvas.y, 135, W, H)
+    expect(doc.x).toBeCloseTo(p.x, 10)
+    expect(doc.y).toBeCloseTo(p.y, 10)
   })
 
-  it('migrated doc coords render correctly at any rotation', () => {
-    // Start: legacy canvas(200, 400) saved at R=90
-    // Migrate to doc coords
-    const doc = canvasToDoc(200, 400, 90, W, H) // → (100, 200)
-    expect(doc).toEqual({ x: 100, y: 200 })
-
-    // Now render at R=0 → should appear at (100, 200) on unrotated canvas
-    expect(docToCanvas(doc.x, doc.y, 0, W, H)).toEqual({ x: 100, y: 200 })
-
-    // Render at R=90 → should appear at (200, 400) (same as original placement)
-    expect(docToCanvas(doc.x, doc.y, 90, W, H)).toEqual({ x: 200, y: 400 })
-
-    // Render at R=180 → consistent transform
-    expect(docToCanvas(doc.x, doc.y, 180, W, H)).toEqual({ x: 400, y: 600 })
-
-    // Render at R=270 → consistent transform
-    expect(docToCanvas(doc.x, doc.y, 270, W, H)).toEqual({ x: 600, y: 100 })
+  it('R=-30: negative rotation works', () => {
+    const p = { x: 200, y: 300 }
+    const canvas = docToCanvas(p.x, p.y, -30, W, H)
+    const doc = canvasToDoc(canvas.x, canvas.y, -30, W, H)
+    expect(doc.x).toBeCloseTo(p.x, 10)
+    expect(doc.y).toBeCloseTo(p.y, 10)
   })
 })
 
 // ══════════════════════════════════════════════════════════════════════════
-describe('canvas dimension expectations', () => {
-  // After rotation, the canvas dimensions should match expected values.
-  // R=0/180: canvas is W×H, R=90/270: canvas is H×W.
+describe('center-rotation properties', () => {
+  // With center-rotation, the page center is the fixed point.
+  // All rotations preserve this center and distances from it.
 
-  it('R=0: top-right corner maps to doc(W, 0)', () => {
+  it('R=0: identity on any point', () => {
     expect(canvasToDoc(W, 0, 0, W, H)).toEqual({ x: W, y: 0 })
   })
 
-  it('R=90: canvas top-right (H, 0) maps to doc(W, H)', () => {
-    // Canvas is H×W. Top-right = (H, 0)
-    expect(canvasToDoc(H, 0, 90, W, H)).toEqual({ x: W, y: H })
+  it('R=180: opposite corner maps to opposite corner', () => {
+    const c = canvasToDoc(W, H, 180, W, H)
+    expect(c.x).toBeCloseTo(0, 5)
+    expect(c.y).toBeCloseTo(0, 5)
   })
 
-  it('R=180: canvas bottom-right (W, H) maps to doc(0, 0)', () => {
-    expect(canvasToDoc(W, H, 180, W, H)).toEqual({ x: 0, y: 0 })
+  it('page center is fixed at any angle', () => {
+    for (const rot of [0, 30, 45, 60, 90, 120, 180, 270, 315]) {
+      const c = docToCanvas(W / 2, H / 2, rot, W, H)
+      expect(c.x).toBeCloseTo(W / 2, 5)
+      expect(c.y).toBeCloseTo(H / 2, 5)
+    }
   })
 
-  it('R=270: canvas bottom-left (0, W) maps to doc(W, H)', () => {
-    // Canvas is H×W. Bottom-left = (0, W)
-    expect(canvasToDoc(0, W, 270, W, H)).toEqual({ x: W, y: H })
+  it('distance from center preserved at any angle', () => {
+    const p = { x: 100, y: 200 }
+    const cx = W / 2, cy = H / 2
+    const origDist = Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2)
+    for (const rot of [0, 33, 45, 90, 127, 180, 270]) {
+      const c = docToCanvas(p.x, p.y, rot, W, H)
+      const rotDist = Math.sqrt((c.x - cx) ** 2 + (c.y - cy) ** 2)
+      expect(rotDist).toBeCloseTo(origDist, 5)
+    }
   })
 })
 

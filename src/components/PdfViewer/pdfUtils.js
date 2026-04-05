@@ -46,32 +46,37 @@ export function formatDist(m) {
   return `${m.toFixed(1)} m`
 }
 
-// ── Rotation-invariant coordinate helpers ─────────────────────────────────
+// ── Unified viewport coordinate helpers ───────────────────────────────────
 // W, H are UNROTATED page dimensions (at 1× scale).
-// Rotation is CW in degrees (0, 90, 180, 270).
+// Rotation is CW in degrees — supports any angle (0, 22.5, 45, 90, …).
 //
 // docToCanvas: unrotated document coords → rotated canvas coords
 // canvasToDoc: rotated canvas coords → unrotated document coords
 //
+// Rotation is around the page center (W/2, H/2).
 // These ensure markers are stored in rotation-invariant (doc) space and
-// rendered correctly regardless of the current rotation.
+// rendered correctly regardless of the current rotation angle.
 
 export function docToCanvas(dx, dy, rot, W, H) {
-  switch (rot) {
-    case 90:  return { x: dy,     y: W - dx }
-    case 180: return { x: W - dx, y: H - dy }
-    case 270: return { x: H - dy, y: dx }
-    default:  return { x: dx,     y: dy }
-  }
+  if (rot === 0) return { x: dx, y: dy }
+  const rad = rot * Math.PI / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const cx = W / 2, cy = H / 2
+  // Rotate around page center
+  const rx = cos * (dx - cx) - sin * (dy - cy) + cx
+  const ry = sin * (dx - cx) + cos * (dy - cy) + cy
+  return { x: rx, y: ry }
 }
 
 export function canvasToDoc(cx, cy, rot, W, H) {
-  switch (rot) {
-    case 90:  return { x: W - cy, y: cx }
-    case 180: return { x: W - cx, y: H - cy }
-    case 270: return { x: cy,     y: H - cx }
-    default:  return { x: cx,     y: cy }
-  }
+  if (rot === 0) return { x: cx, y: cy }
+  // Inverse rotation = rotate by -angle
+  const rad = -rot * Math.PI / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const pcx = W / 2, pcy = H / 2
+  const dx = cos * (cx - pcx) - sin * (cy - pcy) + pcx
+  const dy = sin * (cx - pcx) + cos * (cy - pcy) + pcy
+  return { x: dx, y: dy }
 }
 
 // ─── Drawing helpers (same as DXF overlay) ──────────────────────────────────
