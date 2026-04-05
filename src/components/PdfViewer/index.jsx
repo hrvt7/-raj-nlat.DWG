@@ -124,20 +124,53 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     cb(enriched)
   }, [])
 
-  // ── Dirty / save state tracking ──
+  // ── Dirty / save state tracking + debounced auto-save ──
   // saveState: 'clean' | 'dirty' | 'saved' — drives toolbar indicator
   const [saveState, setSaveState] = useState('clean')
   const saveStateTimerRef = useRef(null)
+  const debounceSaveTimerRef = useRef(null)
   const dirtyRef = useRef(false)
+
+  // Persist current annotation state to IDB. Reads from refs (always current).
+  const persistAnnotations = useCallback(() => {
+    if (!planId || !hydratedRef.current) return
+    const payload = {
+      markers: markersRef.current,
+      measurements: measuresRef.current,
+      scale: scaleRef.current,
+      ceilingHeight, socketHeight, switchHeight,
+      assignments: assignmentsRef.current,
+      quoteOverrides: quoteOverridesRef.current,
+      rotation: rotationRef.current,
+      coordVersion: 2,
+    }
+    getPlanAnnotations(planId).then(stored => {
+      savePlanAnnotations(planId, {
+        ...stored,
+        ...payload,
+        savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
+        symbolFamilies: stored?.symbolFamilies || [],
+      }, { silent: true })
+      dirtyRef.current = false
+      if (onDirtyChange) onDirtyChange(false)
+      setSaveState('saved')
+      if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
+      saveStateTimerRef.current = setTimeout(() => setSaveState('clean'), 3000)
+    }).catch(() => {})
+  }, [planId, ceilingHeight, socketHeight, switchHeight, onDirtyChange])
+
   const markDirty = useCallback(() => {
     if (!dirtyRef.current) {
       dirtyRef.current = true
       if (onDirtyChange) onDirtyChange(true)
     }
     setSaveState('dirty')
-    // Clear any "saved" auto-dismiss timer
     if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
-  }, [onDirtyChange])
+    // Debounced auto-save: persist 2 seconds after last change
+    if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
+    debounceSaveTimerRef.current = setTimeout(persistAnnotations, 2000)
+  }, [onDirtyChange, persistAnnotations])
+
   // Call after successful save to show "saved" briefly then revert to "clean"
   const markSaved = useCallback(() => {
     dirtyRef.current = false
@@ -293,6 +326,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   // first unmount fires before the async annotation restore completes.
   useEffect(() => {
     return () => {
+      // Cancel any pending debounced save — we'll save immediately here
+      if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
       if (!planId) return
       if (!hydratedRef.current) return // not yet hydrated — don't overwrite IDB
       const localMarkers = markersRef.current
