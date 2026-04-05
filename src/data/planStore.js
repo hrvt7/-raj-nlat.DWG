@@ -136,6 +136,12 @@ export async function savePlan(plan, fileBlob) {
             // Record failure time instead of permanently suppressing with null.
             // The plan will retry backup on next save or when user re-uploads.
             updatePlanMeta(plan.id, { remoteBackupFailed: new Date().toISOString() })
+            // Surface the error so App.jsx can show a toast
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('takeoffpro:backup-failed', {
+                detail: { planId: plan.id, error: err.message }
+              }))
+            }
           }
         })
       }
