@@ -268,65 +268,16 @@ function nonMaxSuppression(detections, tW, tH, overlapThreshold) {
   return kept
 }
 
-// ── Image cache for batch search ────────────────────────────────────────────
-// When the caller sends { type: 'init', imgData, imgW, imgH }, we extract
-// channels and build SATs once. Subsequent { type: 'search', tplData, ... }
-// messages reuse the cached data. This eliminates N × channel extraction and
-// N × SAT rebuild in batch search (same image, different templates).
-//
-// Legacy mode (no type field): receives imgData + tplData in one message,
-// processes everything from scratch. Single Auto Symbol search uses this.
-let _cachedImgW = 0, _cachedImgH = 0
-let _cachedImgGray = null, _cachedImgSat = null
-let _cachedSatGray = null, _cachedSatSatCh = null
-
-function initImageCache(imgData, imgW, imgH) {
-  _cachedImgGray = toGray(imgData, imgW, imgH)
-  _cachedImgSat = toSaturation(imgData, imgW, imgH)
-  _cachedSatGray = buildSAT(_cachedImgGray, imgW, imgH)
-  _cachedSatSatCh = buildSAT(_cachedImgSat, imgW, imgH)
-  _cachedImgW = imgW
-  _cachedImgH = imgH
-}
-
 // ── Main ────────────────────────────────────────────────────────────────────
 self.onmessage = (e) => {
   try {
-    const msg = e.data
-
-    // ── Init message: cache image channels + SATs for batch reuse ──
-    if (msg.type === 'init') {
-      const t0 = performance.now()
-      initImageCache(msg.imgData, msg.imgW, msg.imgH)
-      const elapsed = Math.round(performance.now() - t0)
-      console.log(`[TemplateMatch] Image cached: ${msg.imgW}×${msg.imgH} | channels + SATs in ${elapsed}ms`)
-      self.postMessage({ type: 'init-done' })
-      return
-    }
-
-    // ── Search message (batch mode): uses cached image ──
-    // ── Legacy message (no type): full standalone search ──
-    const isBatchSearch = msg.type === 'search'
-    const { tplData, tplW, tplH, threshold, searchArea } = isBatchSearch ? msg : msg
+    const { imgData, imgW, imgH, tplData, tplW, tplH, threshold, searchArea } = e.data
     const effectiveThreshold = threshold || 0.55
     const t0 = performance.now()
 
-    // 1. Extract channels from RGBA — use cache if available, else compute
-    let imgGray, imgSat, satGray, satSatCh, imgW, imgH
-    if (isBatchSearch && _cachedImgGray) {
-      imgGray = _cachedImgGray; imgSat = _cachedImgSat
-      satGray = _cachedSatGray; satSatCh = _cachedSatSatCh
-      imgW = _cachedImgW; imgH = _cachedImgH
-    } else {
-      // Legacy mode: compute everything from scratch
-      const { imgData: legacyImgData, imgW: legacyImgW, imgH: legacyImgH } = msg
-      imgW = legacyImgW; imgH = legacyImgH
-      imgGray = toGray(legacyImgData, imgW, imgH)
-      imgSat = toSaturation(legacyImgData, imgW, imgH)
-      satGray = buildSAT(imgGray, imgW, imgH)
-      satSatCh = buildSAT(imgSat, imgW, imgH)
-    }
-
+    // 1. Extract channels from RGBA
+    const imgGray = toGray(imgData, imgW, imgH)
+    const imgSat = toSaturation(imgData, imgW, imgH)
     const tplGray = toGray(tplData, tplW, tplH)
     const tplSat = toSaturation(tplData, tplW, tplH)
 
@@ -343,7 +294,9 @@ self.onmessage = (e) => {
     const tGray = cropRegion(tplGray, tplW, offX, offY, trimW, trimH)
     const tSat = cropRegion(tplSat, tplW, offX, offY, trimW, trimH)
 
-    // 3. SATs for image channels — already built above (from cache or legacy path)
+    // 3. Build SATs for image channels
+    const satGray = buildSAT(imgGray, imgW, imgH)
+    const satSatCh = buildSAT(imgSat, imgW, imgH)
 
     // 4. Adaptive stride (same as original v7)
     const tplArea = trimW * trimH
