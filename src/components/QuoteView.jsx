@@ -375,7 +375,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
         }}>← Vissza</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: C.text, lineHeight: 1.2 }}>{editName || quote.projectName}</div>
-          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>{quote.id}</div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: C.muted, marginTop: 2 }}>{quote.quoteNumber || quote.id}</div>
         </div>
         <QuoteStatusBadge status={quote.status} />
       </div>
@@ -887,7 +887,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
             {/* Read-only fields */}
             {[
               ['Dátum',       new Date(quote.createdAt || Date.now()).toLocaleDateString('hu-HU')],
-              ['Ajánlat ID',  quote.id],
+              ['Ajánlat szám', quote.quoteNumber || quote.id],
               ['ÁFA kulcs',   `${vatPct}%`],
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingBottom: 10, marginBottom: 10, borderBottom: `1px solid ${C.border}30` }}>

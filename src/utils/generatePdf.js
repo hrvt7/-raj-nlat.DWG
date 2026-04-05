@@ -265,7 +265,7 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
 <html lang="hu">
 <head>
   <meta charset="UTF-8" />
-  <title>Árajánlat – ${escHtml(quote.id || '')}</title>
+  <title>Árajánlat – ${escHtml(quote.quoteNumber || quote.id || '')}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:ital,wght@0,400;0,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -428,7 +428,7 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
     </div>
     <div class="header-right">
       <div class="doc-type-label">Árajánlat</div>
-      <div class="doc-id">${escHtml(quote.id || '')}</div>
+      <div class="doc-id">${escHtml(quote.quoteNumber || quote.id || '')}</div>
       <div class="doc-date">${fmtDate(createdAt)}</div>
     </div>
   </div>

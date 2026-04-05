@@ -14,7 +14,7 @@ export function buildQuoteRow(quote, userId) {
   const grossFt = Math.round(netFt * (1 + vat / 100))
   return {
     user_id:        userId,
-    quote_number:   quote.id,
+    quote_number:   quote.id,  // internal collision-safe ID used as DB unique key
     status:         quote.status || 'draft',
     client_name:    quote.client_name || quote.clientName || '',
     project_name:   quote.project_name || quote.projectName || '',
