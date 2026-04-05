@@ -6,6 +6,7 @@ import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '.
 import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
 import { renderPageImageData } from '../../utils/templateMatching.js'
 import { generateCandidateRegions } from '../../utils/pdfVectorAnalysis.js'
+import { upsertTemplateIntoFamilies, migrateTemplatesToFamilies, familiesToFlatTemplates } from '../../utils/symbolFamily.js'
 import templateMatchWorkerUrl from '../../workers/templateMatch.worker.js?url'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasToDoc, drawMarker, drawMeasureLine } from './pdfUtils.js'
@@ -1596,29 +1597,40 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             const calibratedThreshold = acceptRate > 0.8 ? autoSymbolThreshold
               : Math.min(0.90, autoSymbolThreshold + (1 - acceptRate) * 0.10)
 
-            const newTemplate = {
+            const newTemplateData = {
               cropData: Array.from(tpl.cropData),
               w: tpl.w, h: tpl.h,
               category: resolvedCategory,
               asmId: asm?.id || null,
               label,
               threshold: calibratedThreshold,
-              nmsRadius: Math.max(tpl.w, tpl.h) * 0.6, // per-symbol NMS radius
+              nmsRadius: Math.max(tpl.w, tpl.h) * 0.6,
               acceptRate,
               totalSearched: totalResults,
               totalAccepted: acceptedCount,
               savedAt: new Date().toISOString(),
+              sourcePlanId: planId,
             }
-            // Immediately save to annotations
+            // Dual-write: save to BOTH savedTemplates (legacy) AND symbolFamilies (new)
             getPlanAnnotations(planId).then(ann => {
-              const existing = ann?.savedTemplates || []
-              const isDupe = existing.some(t => t.category === resolvedCategory && t.asmId === (asm?.id || null) && Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5)
+              // Legacy savedTemplates — flat dedup by category+asmId+size
+              const existingTpls = ann?.savedTemplates || []
+              const isDupe = existingTpls.some(t => t.category === resolvedCategory && t.asmId === (asm?.id || null) && Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5)
               if (!isDupe) {
-                savedTemplatesRef.current = [...existing, newTemplate]
-                savePlanAnnotations(planId, { ...ann, savedTemplates: savedTemplatesRef.current }, { silent: true })
+                savedTemplatesRef.current = [...existingTpls, newTemplateData]
               } else {
-                savedTemplatesRef.current = existing
+                savedTemplatesRef.current = existingTpls
               }
+
+              // Symbol Families — auto-grouping by category+asmId, multi-variant support
+              const existingFamilies = ann?.symbolFamilies || migrateTemplatesToFamilies(existingTpls)
+              const { families: updatedFamilies } = upsertTemplateIntoFamilies(existingFamilies, newTemplateData)
+
+              savePlanAnnotations(planId, {
+                ...ann,
+                savedTemplates: savedTemplatesRef.current,
+                symbolFamilies: updatedFamilies,
+              }, { silent: true })
             }).catch(() => {})
           }
           // Reset auto symbol
