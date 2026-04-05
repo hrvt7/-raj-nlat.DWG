@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test'
 import { resolve } from 'path'
 
-const CORRUPT_DXF_PATH = resolve(__dirname, 'fixtures', 'corrupt.dxf')
+const CORRUPT_DXF_PATH = resolve(import.meta.dirname, 'fixtures', 'corrupt.dxf')
 const PROJECT_ID = 'E2E-CORRUPT-PRJ-001'
 
 /**

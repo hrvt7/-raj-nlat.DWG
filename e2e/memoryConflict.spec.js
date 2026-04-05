@@ -20,7 +20,7 @@ import { resolve } from 'path'
 
 // ── DXF fixture: 1 recognized block + 1 opaque block ────────────────────────
 const DXF_FIXTURE = readFileSync(
-  resolve(__dirname, 'fixtures', 'unknown-plan.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'unknown-plan.dxf'),
   'utf-8',
 )
 

@@ -161,7 +161,7 @@ export function nonMaxSuppression(detections, tW, tH, overlapThreshold = 0.3) {
  * @param {number} scale   - render scale (1 = native PDF coordinates)
  * @returns {Promise<{imageData: ImageData, width: number, height: number}>}
  */
-export async function renderPageImageData(pdfPage, scale = 1, rotation = 0) {
+export async function renderPageImageData(pdfPage, scale = 1, _rotation = 0) {
   // Always render at 0° rotation. The rotation parameter is ignored —
   // rotation is handled at the view layer (unified viewport transform).
   // The template matching worker tries all 6 orientations internally,

@@ -19,7 +19,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
-const PDF_FIXTURE = readFileSync(resolve(__dirname, 'fixtures', 'smoke-plan.pdf'))
+const PDF_FIXTURE = readFileSync(resolve(import.meta.dirname, 'fixtures', 'smoke-plan.pdf'))
 
 const PLAN_ID = 'E2E-PDF-REOPEN-PLN-001'
 const PROJECT_ID = 'E2E-PDF-REOPEN-PRJ-001'

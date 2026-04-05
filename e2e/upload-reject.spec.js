@@ -5,7 +5,7 @@
 import { test, expect } from '@playwright/test'
 import { resolve } from 'path'
 
-const TXT_FIXTURE_PATH = resolve(__dirname, 'fixtures', 'notes.txt')
+const TXT_FIXTURE_PATH = resolve(import.meta.dirname, 'fixtures', 'notes.txt')
 const PROJECT_ID = 'E2E-REJECT-PRJ-001'
 
 /**

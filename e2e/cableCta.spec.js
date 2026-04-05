@@ -15,12 +15,12 @@ import { resolve } from 'path'
 
 // ── Load DXF fixtures ─────────────────────────────────────────────────────────
 const DXF_5INSERTS = readFileSync(
-  resolve(__dirname, 'fixtures', 'smoke-plan.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'smoke-plan.dxf'),
   'utf-8',
 )
 
 const DXF_1INSERT = readFileSync(
-  resolve(__dirname, 'fixtures', 'cable-weak.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'cable-weak.dxf'),
   'utf-8',
 )
 

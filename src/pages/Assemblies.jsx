@@ -61,12 +61,8 @@ export default function AssembliesPage({ activeTrade, session }) {
     return [...tags].sort()
   }, [assemblies])
 
-  // AI chat handler — not yet implemented, show clear feedback
-  const handleAiSubmit = () => {
-    if (!aiPrompt.trim()) return
-    toast.show('AI Assembly Builder hamarosan elérhető — ez a funkció még fejlesztés alatt áll.', 'info')
-    setAiPrompt('')
-  }
+  // AI chat handler — not yet implemented (references removed to fix lint errors)
+  // const handleAiSubmit = () => { ... }
 
   const handleCreate = () => {
     const id = generateAssemblyId(assemblies)

@@ -124,13 +124,27 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     cb(enriched)
   }, [])
 
-  // ── Dirty state tracking (unsaved local changes) ──
+  // ── Dirty / save state tracking ──
+  // saveState: 'clean' | 'dirty' | 'saved' — drives toolbar indicator
+  const [saveState, setSaveState] = useState('clean')
+  const saveStateTimerRef = useRef(null)
   const dirtyRef = useRef(false)
   const markDirty = useCallback(() => {
     if (!dirtyRef.current) {
       dirtyRef.current = true
       if (onDirtyChange) onDirtyChange(true)
     }
+    setSaveState('dirty')
+    // Clear any "saved" auto-dismiss timer
+    if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
+  }, [onDirtyChange])
+  // Call after successful save to show "saved" briefly then revert to "clean"
+  const markSaved = useCallback(() => {
+    dirtyRef.current = false
+    if (onDirtyChange) onDirtyChange(false)
+    setSaveState('saved')
+    if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
+    saveStateTimerRef.current = setTimeout(() => setSaveState('clean'), 3000)
   }, [onDirtyChange])
 
   // ── Count panel + estimation ──
@@ -155,8 +169,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     getPlanAnnotations(planId).then(stored => {
       if (!stored) return
       savePlanAnnotations(planId, { ...stored, assignments, quoteOverrides }, { silent: true })
+      markSaved()
     }).catch(() => {})
-  }, [assignments, quoteOverrides, planId])
+  }, [assignments, quoteOverrides, planId, markSaved])
 
   // ── Load saved annotations on mount ──
   useEffect(() => {
@@ -196,9 +211,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       if (!ann.coordVersion || ann.coordVersion < 2) {
         migrationRef.current = { rotation: ann.rotation || 0 }
       }
-      // Reset dirty after hydration from store
+      // Reset dirty/save state after hydration from store
       dirtyRef.current = false
       if (onDirtyChange) onDirtyChange(false)
+      setSaveState('clean')
       hydratedRef.current = true // annotation restore complete — auto-save now safe
     })
   }, [planId])
@@ -1591,6 +1607,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         onBatchProjectSearch={projectId ? runBatchProjectSearch : null}
         batchSearching={batchSearching}
         batchProgress={batchProgress}
+        saveState={saveState}
         onAutoSymbolFinalize={() => {
           // Finalize: add accepted results as markers to the existing PDF takeoff flow
           const accepted = autoSymbolResults.filter(r => r.accepted)

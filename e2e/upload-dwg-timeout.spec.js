@@ -13,7 +13,7 @@
 import { test, expect } from '@playwright/test'
 import { resolve } from 'path'
 
-const DWG_FIXTURE_PATH = resolve(__dirname, 'fixtures', 'corrupt.dwg')
+const DWG_FIXTURE_PATH = resolve(import.meta.dirname, 'fixtures', 'corrupt.dwg')
 const PROJECT_ID = 'E2E-DWG-TIMEOUT-PRJ-001'
 
 /**
