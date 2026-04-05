@@ -89,6 +89,53 @@ function mirrorH(src, w, h) {
   return dst
 }
 
+// ── Rotate grayscale image by arbitrary angle (bilinear interpolation) ──────
+// Returns { data, w, h } where w×h is the bounding box of the rotated image.
+// Background (outside source bounds) is filled with the image border mean.
+function rotateArbitrary(src, srcW, srcH, angleDeg) {
+  if (angleDeg === 0) return { data: src, w: srcW, h: srcH }
+  const rad = angleDeg * Math.PI / 180
+  const cosA = Math.cos(rad), sinA = Math.sin(rad)
+  const absCos = Math.abs(cosA), absSin = Math.abs(sinA)
+  const dstW = Math.ceil(srcW * absCos + srcH * absSin)
+  const dstH = Math.ceil(srcW * absSin + srcH * absCos)
+  const dst = new Float32Array(dstW * dstH)
+
+  // Compute border mean for background fill
+  let borderSum = 0, borderCount = 0
+  for (let x = 0; x < srcW; x++) { borderSum += src[x]; borderSum += src[(srcH - 1) * srcW + x]; borderCount += 2 }
+  for (let y = 1; y < srcH - 1; y++) { borderSum += src[y * srcW]; borderSum += src[y * srcW + srcW - 1]; borderCount += 2 }
+  const bgVal = borderCount > 0 ? borderSum / borderCount : 0
+
+  // Center of source and destination
+  const scx = srcW / 2, scy = srcH / 2
+  const dcx = dstW / 2, dcy = dstH / 2
+
+  // Inverse rotation: for each dst pixel, find src position
+  for (let dy = 0; dy < dstH; dy++) {
+    for (let dx = 0; dx < dstW; dx++) {
+      const rx = dx - dcx, ry = dy - dcy
+      // Rotate back by -angle
+      const sx = cosA * rx + sinA * ry + scx
+      const sy = -sinA * rx + cosA * ry + scy
+      // Bilinear interpolation
+      if (sx < 0 || sx >= srcW - 1 || sy < 0 || sy >= srcH - 1) {
+        dst[dy * dstW + dx] = bgVal
+      } else {
+        const x0 = Math.floor(sx), y0 = Math.floor(sy)
+        const fx = sx - x0, fy = sy - y0
+        const x1 = Math.min(x0 + 1, srcW - 1), y1 = Math.min(y0 + 1, srcH - 1)
+        dst[dy * dstW + dx] =
+          src[y0 * srcW + x0] * (1 - fx) * (1 - fy) +
+          src[y0 * srcW + x1] * fx * (1 - fy) +
+          src[y1 * srcW + x0] * (1 - fx) * fy +
+          src[y1 * srcW + x1] * fx * fy
+      }
+    }
+  }
+  return { data: dst, w: dstW, h: dstH }
+}
+
 // ── Bilinear resize (grayscale Float32Array) ────────────────────────────────
 function resizeGray(src, srcW, srcH, dstW, dstH) {
   const dst = new Float32Array(dstW * dstH)
@@ -302,57 +349,100 @@ self.onmessage = (e) => {
     const tplArea = trimW * trimH
     const stride = tplArea > 2500 ? 4 : tplArea > 900 ? 3 : 2
 
-    // 5. Scale: single scale only (multi-scale was 3x slower for minimal gain)
-    const SCALE_LEVELS = [1.00]
+    // 5. Coarse-to-fine multi-angle matching
+    //
+    // Coarse: 12 angles (0° to 330° every 30°) + mirror of each = 24 variants
+    // Fine:   for each coarse angle with hits, try ±15° in 5° steps (6 extra)
+    //
+    // This catches symbols at any orientation, not just 0/90/180/270.
+    // The mirror variants handle reflected symbols (e.g. left-facing vs right-facing).
+    const COARSE_STEP = 30
+    const FINE_STEP = 5
+    const FINE_RANGE = 15 // ±15° around each coarse hit angle
 
-    // 6. Multi-rotation matching (0°, 90°, 180°, 270° + mirror)
-    // Electrical symbols appear in multiple orientations on plans.
-    // This replaces multi-scale (rotation is more important than ±10% scale).
-    // Generate rotated + mirrored variants of the trimmed template
-    const variants = []
-    // 0° (original)
-    variants.push({ grayTpl: tGray, satTpl: tSat, w: trimW, h: trimH, label: '0°' })
-    // 90° CW
-    { const rg = rotate90(tGray, trimW, trimH); const rs = rotate90(tSat, trimW, trimH); variants.push({ grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, label: '90°' }) }
-    // 180°
-    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); variants.push({ grayTpl: rg2.data, satTpl: rs2.data, w: rg2.w, h: rg2.h, label: '180°' }) }
-    // 270° CW (= 90° CCW)
-    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rg3 = rotate90(rg2.data, rg2.w, rg2.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); const rs3 = rotate90(rs2.data, rs2.w, rs2.h); variants.push({ grayTpl: rg3.data, satTpl: rs3.data, w: rg3.w, h: rg3.h, label: '270°' }) }
-    // Mirror (horizontal flip of original)
-    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); variants.push({ grayTpl: mg, satTpl: ms, w: trimW, h: trimH, label: 'mirror' }) }
-    // Mirror + 90°
-    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); const rg = rotate90(mg, trimW, trimH); const rs = rotate90(ms, trimW, trimH); variants.push({ grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, label: 'mirror+90°' }) }
+    // Helper: generate a variant from angle + optional mirror
+    function makeVariant(gSrc, sSrc, srcW, srcH, angle, mirrored) {
+      let gData = gSrc, sData = sSrc, w = srcW, h = srcH
+      if (mirrored) {
+        gData = mirrorH(gData, w, h)
+        sData = mirrorH(sData, w, h)
+      }
+      if (angle === 0) {
+        return { grayTpl: gData, satTpl: sData, w, h, angle, mirrored }
+      }
+      // Use fast rotate90 for exact 90° multiples, arbitrary rotation otherwise
+      if (angle === 90) {
+        const rg = rotate90(gData, w, h), rs = rotate90(sData, w, h)
+        return { grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, angle, mirrored }
+      }
+      if (angle === 180) {
+        const rg1 = rotate90(gData, w, h), rg2 = rotate90(rg1.data, rg1.w, rg1.h)
+        const rs1 = rotate90(sData, w, h), rs2 = rotate90(rs1.data, rs1.w, rs1.h)
+        return { grayTpl: rg2.data, satTpl: rs2.data, w: rg2.w, h: rg2.h, angle, mirrored }
+      }
+      if (angle === 270) {
+        const rg1 = rotate90(gData, w, h), rg2 = rotate90(rg1.data, rg1.w, rg1.h), rg3 = rotate90(rg2.data, rg2.w, rg2.h)
+        const rs1 = rotate90(sData, w, h), rs2 = rotate90(rs1.data, rs1.w, rs1.h), rs3 = rotate90(rs2.data, rs2.w, rs2.h)
+        return { grayTpl: rg3.data, satTpl: rs3.data, w: rg3.w, h: rg3.h, angle, mirrored }
+      }
+      // Arbitrary angle — bilinear rotation
+      const rg = rotateArbitrary(gData, w, h, angle)
+      const rs = rotateArbitrary(sData, w, h, angle)
+      return { grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, angle, mirrored }
+    }
 
+    // Helper: run one variant and return hits with center positions
+    function searchVariant(variant) {
+      const sW = variant.w, sH = variant.h
+      if (sW < 4 || sH < 4 || sW >= imgW || sH >= imgH) return []
+      const variantHits = matchDualChannel(
+        imgGray, imgSat, imgW, imgH,
+        variant.grayTpl, variant.satTpl, sW, sH,
+        satGray, satSatCh,
+        effectiveThreshold, stride, searchArea
+      )
+      return variantHits.map(h => ({
+        x: h.x + sW / 2, y: h.y + sH / 2, score: h.score,
+        angle: variant.angle, mirrored: variant.mirrored
+      }))
+    }
+
+    // ── Phase 1: Coarse search (every 30°, normal + mirror) ──
     let allHits = []
-    for (const variant of variants) {
-      for (const scale of SCALE_LEVELS) {
-        // Scale the template variant
-        const sW = Math.round(variant.w * scale)
-        const sH = Math.round(variant.h * scale)
-        if (sW < 4 || sH < 4 || sW >= imgW || sH >= imgH) continue
+    const coarseAngles = []
+    for (let a = 0; a < 360; a += COARSE_STEP) coarseAngles.push(a)
 
-        let sGray, sSat
-        if (scale === 1.0) {
-          sGray = variant.grayTpl; sSat = variant.satTpl
-        } else {
-          sGray = resizeGray(variant.grayTpl, variant.w, variant.h, sW, sH)
-          sSat = resizeGray(variant.satTpl, variant.w, variant.h, sW, sH)
-        }
+    const coarseHitAngles = new Set() // angles that produced hits — for fine refinement
 
-        // Single-pass matching at the effective threshold and adaptive stride
-        const variantHits = matchDualChannel(
-          imgGray, imgSat, imgW, imgH,
-          sGray, sSat, sW, sH,
-          satGray, satSatCh,
-          effectiveThreshold, stride, searchArea
-        )
+    for (const angle of coarseAngles) {
+      // Normal
+      const vNorm = makeVariant(tGray, tSat, trimW, trimH, angle, false)
+      const normHits = searchVariant(vNorm)
+      if (normHits.length > 0) coarseHitAngles.add(angle)
+      allHits.push(...normHits)
 
-        for (const h of variantHits) {
-          // Convert top-left hit position to center-of-match position.
-          // Use the VARIANT dimensions (sW/sH), not the original template dimensions,
-          // so rotated variants produce correct center positions.
-          allHits.push({ x: h.x + sW / 2, y: h.y + sH / 2, score: h.score })
-        }
+      // Mirror
+      const vMirr = makeVariant(tGray, tSat, trimW, trimH, angle, true)
+      const mirrHits = searchVariant(vMirr)
+      if (mirrHits.length > 0) coarseHitAngles.add(angle)
+      allHits.push(...mirrHits)
+    }
+
+    // ── Phase 2: Fine refinement around coarse hit angles ──
+    // Only runs for angles that produced hits in coarse phase.
+    // Tests ±FINE_RANGE in FINE_STEP increments, skipping already-tested coarse angles.
+    const fineAnglesSearched = new Set(coarseAngles)
+    for (const hitAngle of coarseHitAngles) {
+      for (let offset = -FINE_RANGE; offset <= FINE_RANGE; offset += FINE_STEP) {
+        const fineAngle = ((hitAngle + offset) % 360 + 360) % 360
+        if (fineAnglesSearched.has(fineAngle)) continue
+        fineAnglesSearched.add(fineAngle)
+
+        const vNorm = makeVariant(tGray, tSat, trimW, trimH, fineAngle, false)
+        allHits.push(...searchVariant(vNorm))
+
+        const vMirr = makeVariant(tGray, tSat, trimW, trimH, fineAngle, true)
+        allHits.push(...searchVariant(vMirr))
       }
     }
 
@@ -368,7 +458,9 @@ self.onmessage = (e) => {
 
     const elapsed = Math.round(performance.now() - t0)
     const colorMode = tplSatStd > 0.03 ? 'color(60%)+gray(40%)' : 'gray-only'
-    console.log(`[TemplateMatch v7] ${allHits.length} raw (${variants.length} orientations) → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
+    const totalAngles = fineAnglesSearched.size
+    const fineCount = totalAngles - coarseAngles.length
+    console.log(`[TemplateMatch v8] ${allHits.length} raw (${coarseAngles.length} coarse + ${fineCount} fine angles × 2 mirror) → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
 
     self.postMessage({ type: 'result', hits })
   } catch (err) {
