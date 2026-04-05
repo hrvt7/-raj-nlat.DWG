@@ -34,15 +34,13 @@ describe('Auto Symbol pipeline architecture', () => {
     expect(workerSrc).toContain('toSaturation')
   })
 
-  it('uses coarse-to-fine multi-angle search (30° coarse + fine refinement)', () => {
-    expect(workerSrc).toContain('COARSE_STEP')
-    expect(workerSrc).toContain('FINE_STEP')
-    expect(workerSrc).toContain('FINE_RANGE')
-    expect(workerSrc).toContain('coarseHitAngles')
-    expect(workerSrc).toContain('rotateArbitrary')
-    expect(workerSrc).toContain('makeVariant')
-    // Mirror support preserved
-    expect(workerSrc).toContain('mirrorH')
+  it('has 6 orientation variants (0°, 90°, 180°, 270°, mirror, mirror+90°)', () => {
+    expect(workerSrc).toContain("label: '0°'")
+    expect(workerSrc).toContain("label: '90°'")
+    expect(workerSrc).toContain("label: '180°'")
+    expect(workerSrc).toContain("label: '270°'")
+    expect(workerSrc).toContain("label: 'mirror'")
+    expect(workerSrc).toContain("label: 'mirror+90°'")
   })
 
   it('uses auto-trim on template foreground', () => {
