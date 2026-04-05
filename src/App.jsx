@@ -894,8 +894,17 @@ function SaaSShell() {
       if (e.key.includes('plans_meta'))    setPlanRev(r => r + 1)
     }
     window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
-  }, [])
+    // Quote pruning warning — fires when saveQuote trims old quotes beyond MAX_QUOTES
+    const pruneHandler = (e) => {
+      const { pruned, max } = e.detail || {}
+      showToast('⚠', `${pruned} régi ajánlat archiválva (max ${max} tárolható helyben).`, '#FFD166')
+    }
+    window.addEventListener('takeoffpro:quotes-pruned', pruneHandler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener('takeoffpro:quotes-pruned', pruneHandler)
+    }
+  }, [showToast])
 
   const SIDEBAR_FULL = 220
   const SIDEBAR_COLLAPSED = 60
