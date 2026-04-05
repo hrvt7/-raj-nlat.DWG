@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test'
 import { resolve } from 'path'
 
-const CORRUPT_PDF_PATH = resolve(__dirname, 'fixtures', 'corrupt.pdf')
+const CORRUPT_PDF_PATH = resolve(import.meta.dirname, 'fixtures', 'corrupt.pdf')
 const PROJECT_ID = 'E2E-CORRUPT-PDF-PRJ-001'
 
 /**

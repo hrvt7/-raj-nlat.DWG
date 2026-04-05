@@ -16,7 +16,7 @@ import { resolve } from 'path'
 // ── Load DXF fixture ──────────────────────────────────────────────────────────
 // smoke-plan.dxf: 5 inserts (DUGALJ_2P_F ×3 at 100,200/300,400/500,600 + KAPCSOLO_1G ×2)
 const DXF_FIXTURE = readFileSync(
-  resolve(__dirname, 'fixtures', 'smoke-plan.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'smoke-plan.dxf'),
   'utf-8',
 )
 

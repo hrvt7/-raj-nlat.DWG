@@ -19,12 +19,12 @@ import { readFileSync } from 'fs'
 // The corrupt.dwg fixture is a tiny non-DXF binary — its content doesn't
 // matter because route interception returns the real DXF text as the
 // "converted" result.  What matters is the .dwg extension.
-const DWG_FIXTURE_PATH = resolve(__dirname, 'fixtures', 'corrupt.dwg')
+const DWG_FIXTURE_PATH = resolve(import.meta.dirname, 'fixtures', 'corrupt.dwg')
 
 // The real DXF fixture that will be returned as the "converted" output.
 // 5 INSERT entities → 2 unique blocks → auto-matched → recognizable state.
 const CONVERTED_DXF_TEXT = readFileSync(
-  resolve(__dirname, 'fixtures', 'smoke-plan.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'smoke-plan.dxf'),
   'utf-8',
 )
 

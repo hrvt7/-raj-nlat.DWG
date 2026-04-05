@@ -18,7 +18,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
 const DXF_FIXTURE = readFileSync(
-  resolve(__dirname, 'fixtures', 'bulk-skip-plan.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'bulk-skip-plan.dxf'),
   'utf-8',
 )
 

@@ -9,8 +9,8 @@ import { test, expect } from '@playwright/test'
 import { resolve } from 'path'
 import { readFileSync } from 'fs'
 
-const UNSUPPORTED_PATH = resolve(__dirname, 'fixtures', 'notes.txt')
-const CORRUPT_DXF_PATH = resolve(__dirname, 'fixtures', 'corrupt.dxf')
+const UNSUPPORTED_PATH = resolve(import.meta.dirname, 'fixtures', 'notes.txt')
+const CORRUPT_DXF_PATH = resolve(import.meta.dirname, 'fixtures', 'corrupt.dxf')
 const PROJECT_ID = 'E2E-DROPREJECT-PRJ-001'
 
 /**

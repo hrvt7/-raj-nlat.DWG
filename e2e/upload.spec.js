@@ -5,7 +5,7 @@
 import { test, expect } from '@playwright/test'
 import { resolve } from 'path'
 
-const DXF_FIXTURE_PATH = resolve(__dirname, 'fixtures', 'smoke-plan.dxf')
+const DXF_FIXTURE_PATH = resolve(import.meta.dirname, 'fixtures', 'smoke-plan.dxf')
 const PROJECT_ID = 'E2E-UPLOAD-PRJ-001'
 
 /**

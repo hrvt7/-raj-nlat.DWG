@@ -17,10 +17,10 @@ import { resolve } from 'path'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 const EXPLODED_DXF = readFileSync(
-  resolve(__dirname, 'fixtures', 'exploded-plan.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'exploded-plan.dxf'),
   'utf-8',
 )
-const PDF_FIXTURE_PATH = resolve(__dirname, 'fixtures', 'smoke-plan.pdf')
+const PDF_FIXTURE_PATH = resolve(import.meta.dirname, 'fixtures', 'smoke-plan.pdf')
 
 const PLAN_ID = 'E2E-EXPLODED-PLN-001'
 const PROJECT_ID = 'E2E-EXPLODED-PRJ-001'

@@ -9,7 +9,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
 const DXF_FIXTURE = readFileSync(
-  resolve(__dirname, 'fixtures', 'smoke-plan.dxf'),
+  resolve(import.meta.dirname, 'fixtures', 'smoke-plan.dxf'),
   'utf-8',
 )
 

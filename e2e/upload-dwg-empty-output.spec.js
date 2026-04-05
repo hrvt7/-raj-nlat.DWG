@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test'
 import { resolve } from 'path'
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
-const DWG_FIXTURE_PATH = resolve(__dirname, 'fixtures', 'corrupt.dwg')
+const DWG_FIXTURE_PATH = resolve(import.meta.dirname, 'fixtures', 'corrupt.dwg')
 
 const PROJECT_ID = 'E2E-DWG-EMPTY-PRJ-001'
 const FAKE_DOWNLOAD_URL = 'https://fake-cc-cdn.test/empty-output.dxf'

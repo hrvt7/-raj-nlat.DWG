@@ -11,7 +11,7 @@ import { resolve } from 'path'
 
 // ── Load the tiny PDF fixture ──────────────────────────────────────────────
 const PDF_FIXTURE = readFileSync(
-  resolve(__dirname, 'fixtures', 'smoke-plan.pdf'),
+  resolve(import.meta.dirname, 'fixtures', 'smoke-plan.pdf'),
 )
 
 const PLAN_ID = 'E2E-PDF-PLN-001'
