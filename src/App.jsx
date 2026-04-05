@@ -567,36 +567,63 @@ function SaaSShell() {
           if (remote) { saveSettings(remote); setSettings(loadSettings()) }
         }
 
-        // Quotes: remote wins if it has more quotes than local
+        // Quotes: union merge by ID — keeps all unique quotes from both sources,
+        // preferring the version with the later updatedAt when both have the same ID.
+        // This replaces the old count-based merge which could discard newer local quotes.
         {
           const rows = await loadQuotesRemote()
-          const mapped = (rows || []).map(r => r.pricing_data).filter(Boolean)
-          const local = loadQuotes()
-          if (mapped.length > 0 && mapped.length > local.length) {
-            saveQuotes(mapped); setQuotes(loadQuotes())
+          const remoteQuotes = (rows || []).map(r => r.pricing_data).filter(Boolean)
+          const localQuotes = loadQuotes()
+          if (remoteQuotes.length > 0) {
+            const merged = new Map()
+            // Local first — local is authoritative for recently-edited quotes
+            for (const q of localQuotes) { if (q.id) merged.set(q.id, q) }
+            // Remote — add missing quotes, update if remote is newer
+            for (const q of remoteQuotes) {
+              if (!q.id) continue
+              const existing = merged.get(q.id)
+              if (!existing) {
+                merged.set(q.id, q) // new from remote
+              } else {
+                // Prefer the one with later updatedAt (or createdAt fallback)
+                const remoteTime = q.updatedAt || q.createdAt || ''
+                const localTime = existing.updatedAt || existing.createdAt || ''
+                if (remoteTime > localTime) merged.set(q.id, q)
+              }
+            }
+            const unionQuotes = Array.from(merged.values())
+              .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+            if (unionQuotes.length !== localQuotes.length || unionQuotes.some((q, i) => q.id !== localQuotes[i]?.id)) {
+              saveQuotes(unionQuotes); setQuotes(loadQuotes())
+            }
           }
         }
 
-        // Catalog blobs: remote wins if it has more items than local
-        const mergeArray = async (loadRemoteFn, loadLocalFn, saveLocalFn, onUpdate) => {
+        // Catalog blobs: remote wins if local is empty (new device / cleared cache).
+        // If both have data, keep local — it's the most recently edited version.
+        // This replaces the old count-based merge which could discard local edits.
+        const mergeCatalog = async (loadRemoteFn, loadLocalFn, saveLocalFn, onUpdate) => {
           const remote = await loadRemoteFn()
           if (!Array.isArray(remote) || remote.length === 0) return
           const local = loadLocalFn()
-          if (remote.length > local.length) {
+          if (!local || local.length === 0) {
+            // Local is empty — recover from remote (new device scenario)
             saveLocalFn(remote)
             onUpdate()
           }
+          // If both have data, local wins (user's most recent edits are local)
         }
-        await mergeArray(loadAssembliesRemote, loadAssemblies, saveAssemblies, () => setAsmRev(r => r + 1))
-        await mergeArray(loadMaterialsRemote, loadMaterials, saveMaterials, () => setMaterials(loadMaterials()))
-        await mergeArray(loadWorkItemsRemote, loadWorkItems, saveWorkItems, () => setWorkItems(loadWorkItems()))
+        await mergeCatalog(loadAssembliesRemote, loadAssemblies, saveAssemblies, () => setAsmRev(r => r + 1))
+        await mergeCatalog(loadMaterialsRemote, loadMaterials, saveMaterials, () => setMaterials(loadMaterials()))
+        await mergeCatalog(loadWorkItemsRemote, loadWorkItems, saveWorkItems, () => setWorkItems(loadWorkItems()))
 
-        // Envelope blobs: remote wins if it has more items
+        // Project/plan metadata: remote wins if local is empty (new device).
+        // If both have data, local wins — local metadata reflects the latest user actions.
         {
           const remoteProjects = await loadProjectsRemote()
           if (Array.isArray(remoteProjects) && remoteProjects.length > 0) {
             const localProjects = loadProjects()
-            if (remoteProjects.length > localProjects.length) {
+            if (!localProjects || localProjects.length === 0) {
               saveAllProjects(remoteProjects); setProjRev(r => r + 1)
             }
           }
@@ -605,7 +632,7 @@ function SaaSShell() {
           const remotePlans = await loadPlansRemote()
           if (Array.isArray(remotePlans) && remotePlans.length > 0) {
             const localPlans = loadPlans()
-            if (remotePlans.length > localPlans.length) {
+            if (!localPlans || localPlans.length === 0) {
               saveAllPlansMeta(remotePlans); setPlanRev(r => r + 1)
             }
           }

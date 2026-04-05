@@ -104,13 +104,20 @@ describe('unwrapVersioned', () => {
 })
 
 describe('wrapVersioned', () => {
-  it('wraps data in envelope with version', () => {
+  it('wraps data in envelope with version and timestamp', () => {
     const data = [{ id: 'Q-1' }]
-    expect(wrapVersioned(data, 1)).toEqual({ _v: 1, data })
+    const result = wrapVersioned(data, 1)
+    expect(result._v).toBe(1)
+    expect(result.data).toEqual(data)
+    expect(result._updatedAt).toBeTruthy()
+    expect(new Date(result._updatedAt).getFullYear()).toBeGreaterThanOrEqual(2026)
   })
 
-  it('wraps empty array', () => {
-    expect(wrapVersioned([], 1)).toEqual({ _v: 1, data: [] })
+  it('wraps empty array with timestamp', () => {
+    const result = wrapVersioned([], 1)
+    expect(result._v).toBe(1)
+    expect(result.data).toEqual([])
+    expect(result._updatedAt).toBeTruthy()
   })
 })
 
