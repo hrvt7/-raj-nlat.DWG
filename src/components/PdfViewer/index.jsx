@@ -107,6 +107,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const autoSymbolWorkerRef = useRef(null) // Web Worker instance
   const [batchSearching, setBatchSearching] = useState(false)
   const [batchProgress, setBatchProgress] = useState('')
+  const batchCancelRef = useRef(false)
   const savedTemplatesRef = useRef([]) // preserved through unmount save
   const autoSymbolSearchIdRef = useRef(0) // monotonic counter to detect stale results
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
@@ -995,10 +996,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     setAutoSymbolError(null)
     setAutoSymbolResults([])
     try {
+      const searchT0 = performance.now()
       const ANALYSIS_SCALE = 300 / 72 // 300 DPI high-res raster for template matching
       const page = await pdfDoc.getPage(pageNum)
       const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
+      console.log(`[AutoSymbol] Template: ${tW}×${tH}px (${(tW * tH).toLocaleString()} px²) | Page: ${width}×${height}px`)
 
       let allHits = []
 
@@ -1037,6 +1040,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // Stale/unmount guard
       if (!mountedRef.current || autoSymbolSearchIdRef.current !== mySearchId) return
 
+      const searchElapsed = Math.round(performance.now() - searchT0)
+      console.log(`[AutoSymbol] Search complete: ${allHits.length} raw hits | ${searchElapsed}ms`)
+
       // Combined NMS in analysis pixel coords — matches worker NMS behavior exactly.
       // This eliminates NMS fragmentation from multi-region search: all hits compete
       // in a single suppression pass, same as if full-page search had been used.
@@ -1074,6 +1080,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   // ── Batch search: family-aware search across all plans in the same project ──
   const runBatchProjectSearch = useCallback(async () => {
     if (!pdfDoc || !planId || !projectId) return
+    batchCancelRef.current = false
     setBatchSearching(true)
     setBatchProgress('Template-ek betöltése…')
     try {
@@ -1104,8 +1111,11 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // 3. Family-aware search: primary-first, secondary fallback
       const SECONDARY_THRESHOLD = 2 // if primary finds < 2 hits, try secondaries
       const allMarkers = []
+      const batchT0 = performance.now()
 
       for (let fi = 0; fi < families.length; fi++) {
+        // Cancel check between families
+        if (batchCancelRef.current || !mountedRef.current) break
         const family = families[fi]
         const sorted = sortVariantsByPerformance(family)
         const threshold = family.preferredThreshold || 0.50
@@ -1130,6 +1140,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         // Secondary fallback: if primary found < SECONDARY_THRESHOLD hits
         if (primaryAbove.length < SECONDARY_THRESHOLD && sorted.length > 1) {
           for (let vi = 1; vi < sorted.length; vi++) {
+            if (batchCancelRef.current) break
             const variant = sorted[vi]
             setBatchProgress(`Keresés: ${family.name} variáns ${vi + 1}/${sorted.length} (${fi + 1}/${families.length})…`)
             const varCrop = new Uint8ClampedArray(variant.cropData)
@@ -1167,6 +1178,17 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
         // Update family stats
         updateFamilyStats(family, nmsHits.length)
+      }
+
+      const batchElapsed = Math.round(performance.now() - batchT0)
+      console.log(`[BatchSearch] ${families.length} families → ${allMarkers.length} raw markers | ${batchElapsed}ms | page ${width}×${height}px`)
+
+      // Cancelled → clean up and exit without writing partial results
+      if (batchCancelRef.current) {
+        setBatchProgress('Keresés megszakítva')
+        setTimeout(() => setBatchProgress(''), 2000)
+        setBatchSearching(false)
+        return
       }
 
       // 4. Cross-family dedup (same-category hits at same location)
@@ -1643,6 +1665,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         onBatchProjectSearch={projectId ? runBatchProjectSearch : null}
         batchSearching={batchSearching}
         batchProgress={batchProgress}
+        onBatchCancel={() => { batchCancelRef.current = true; if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate() }}
         saveState={saveState}
         onAutoSymbolFinalize={() => {
           // Finalize: add accepted results as markers to the existing PDF takeoff flow
