@@ -6,6 +6,7 @@ import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '.
 import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
 import { renderPageImageData } from '../../utils/templateMatching.js'
 import { generateCandidateRegions } from '../../utils/pdfVectorAnalysis.js'
+import { upsertTemplateIntoFamilies, migrateTemplatesToFamilies, familiesToFlatTemplates, mergeFamiliesFromPlans, sortVariantsByPerformance, updateVariantStats, updateFamilyStats } from '../../utils/symbolFamily.js'
 import templateMatchWorkerUrl from '../../workers/templateMatch.worker.js?url'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasToDoc, drawMarker, drawMeasureLine } from './pdfUtils.js'
@@ -1001,29 +1002,25 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     }
   }, [pdfDoc, pageNum, docAreaToScaledArea, runWorkerSearch])
 
-  // ── Batch search: run all saved templates from other plans in the same project ──
+  // ── Batch search: family-aware search across all plans in the same project ──
   const runBatchProjectSearch = useCallback(async () => {
     if (!pdfDoc || !planId || !projectId) return
     setBatchSearching(true)
     setBatchProgress('Template-ek betöltése…')
     try {
-      // 1. Collect templates from all OTHER plans in the same project
+      // 1. Load families from all OTHER plans in the same project
       const projectPlans = getPlansByProject(projectId).filter(p => p.id !== planId)
-      const allTemplates = []
+      const familyArrays = []
       for (const plan of projectPlans) {
         const ann = await getPlanAnnotations(plan.id)
-        if (ann?.savedTemplates?.length) {
-          for (const tpl of ann.savedTemplates) {
-            // Deduplicate by category+asmId+size
-            const isDupe = allTemplates.some(t =>
-              t.category === tpl.category && t.asmId === tpl.asmId &&
-              Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5
-            )
-            if (!isDupe) allTemplates.push(tpl)
-          }
-        }
+        // Prefer symbolFamilies; fall back to migrating savedTemplates
+        const planFamilies = ann?.symbolFamilies?.length
+          ? ann.symbolFamilies
+          : migrateTemplatesToFamilies(ann?.savedTemplates || [])
+        if (planFamilies.length) familyArrays.push(planFamilies)
       }
-      if (allTemplates.length === 0) {
+      const families = mergeFamiliesFromPlans(familyArrays)
+      if (families.length === 0) {
         setBatchProgress('')
         setBatchSearching(false)
         setAutoSymbolError('Nincs mentett szimbólum ebben a projektben. Először használd az Auto szimbólum keresést egy másik rajzon.')
@@ -1034,65 +1031,89 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const ANALYSIS_SCALE = 300 / 72
       const page = await pdfDoc.getPage(pageNum)
       const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE, rotationRef.current)
+      const dd = unrotatedDimsRef.current
+      const rr = rotationRef.current
 
-      // 3. Run search for each template sequentially
+      // 3. Family-aware search: primary-first, secondary fallback
+      const SECONDARY_THRESHOLD = 2 // if primary finds < 2 hits, try secondaries
       const allMarkers = []
-      for (let i = 0; i < allTemplates.length; i++) {
-        const tpl = allTemplates[i]
-        setBatchProgress(`Keresés: ${tpl.label || tpl.category} (${i + 1}/${allTemplates.length})…`)
 
-        // Reconstruct RGBA data from stored array
-        const cropData = new Uint8ClampedArray(tpl.cropData)
+      for (let fi = 0; fi < families.length; fi++) {
+        const family = families[fi]
+        const sorted = sortVariantsByPerformance(family)
+        const threshold = family.preferredThreshold || 0.50
 
-        // Abort previous worker
-        if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
-        const worker = new Worker(templateMatchWorkerUrl, { type: 'module' })
-        autoSymbolWorkerRef.current = worker
+        setBatchProgress(`Keresés: ${family.name} (${fi + 1}/${families.length})…`)
 
-        const hits = await new Promise((resolve, reject) => {
-          worker.onmessage = (e) => {
-            if (e.data.type === 'result') resolve(e.data.hits)
-            else reject(new Error(e.data.message || 'Worker hiba'))
-          }
-          worker.onerror = (e) => reject(new Error(e.message || 'Worker összeomlott'))
-          worker.postMessage({
-            imgData: imageData.data,
-            imgW: width, imgH: height,
-            tplData: cropData,
-            tplW: tpl.w, tplH: tpl.h,
-            threshold: 0.30,
-            searchArea: null,
-          })
-        })
-
+        // Run primary variant
+        const primary = sorted[0]
+        const primaryCrop = new Uint8ClampedArray(primary.cropData)
+        const primaryHits = await runWorkerSearch(imageData.data, width, height, primaryCrop, primary.w, primary.h, null)
         if (!mountedRef.current) return
 
-        // Convert coords and filter by threshold
-        const dd = unrotatedDimsRef.current
-        const rr = rotationRef.current
-        const threshold = tpl.threshold || 0.50
-        for (const h of hits) {
+        const primaryAbove = primaryHits.filter(h => h.score >= threshold)
+        let familyHits = [...primaryHits] // keep all at low threshold for combined NMS
+        let primaryHitCount = primaryAbove.length
+        let primaryAvgScore = primaryAbove.length > 0
+          ? primaryAbove.reduce((s, h) => s + h.score, 0) / primaryAbove.length : 0
+
+        // Update primary variant stats
+        updateVariantStats(primary, primaryHitCount, primaryAvgScore)
+
+        // Secondary fallback: if primary found < SECONDARY_THRESHOLD hits
+        if (primaryAbove.length < SECONDARY_THRESHOLD && sorted.length > 1) {
+          for (let vi = 1; vi < sorted.length; vi++) {
+            const variant = sorted[vi]
+            setBatchProgress(`Keresés: ${family.name} variáns ${vi + 1}/${sorted.length} (${fi + 1}/${families.length})…`)
+            const varCrop = new Uint8ClampedArray(variant.cropData)
+            const varHits = await runWorkerSearch(imageData.data, width, height, varCrop, variant.w, variant.h, null)
+            if (!mountedRef.current) return
+
+            const varAbove = varHits.filter(h => h.score >= threshold)
+            updateVariantStats(variant, varAbove.length,
+              varAbove.length > 0 ? varAbove.reduce((s, h) => s + h.score, 0) / varAbove.length : 0)
+            familyHits.push(...varHits)
+          }
+        }
+
+        // Combined NMS in analysis pixel coords (within family)
+        const nmsMinDist = Math.max(primary.w, primary.h) * 0.6
+        familyHits.sort((a, b) => b.score - a.score)
+        const nmsHits = []
+        for (const h of familyHits) {
           if (h.score < threshold) continue
+          const tooClose = nmsHits.some(k => Math.sqrt((h.x - k.x) ** 2 + (h.y - k.y) ** 2) < nmsMinDist)
+          if (!tooClose) nmsHits.push(h)
+        }
+
+        // Convert to doc coords and collect as markers
+        for (const h of nmsHits) {
           const cx = h.x / ANALYSIS_SCALE
           const cy = h.y / ANALYSIS_SCALE
           const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
           allMarkers.push({
             x: doc.x, y: doc.y,
-            category: tpl.category,
-            asmId: tpl.asmId,
-            label: tpl.label,
+            category: family.category,
+            asmId: family.asmId,
+            label: family.name,
             score: h.score,
             source: 'batch_detection',
           })
         }
+
+        // Update family stats
+        updateFamilyStats(family, nmsHits.length)
       }
 
-      // 4. Deduplicate (same spot = keep highest score)
+      // 4. Cross-family dedup (same-category hits at same location)
       allMarkers.sort((a, b) => b.score - a.score)
-      const dedupDist = 15 // PDF coord pixels
+      const dedupDist = 15
       const unique = []
       for (const m of allMarkers) {
-        const tooClose = unique.some(u => Math.sqrt((m.x - u.x) ** 2 + (m.y - u.y) ** 2) < dedupDist)
+        const tooClose = unique.some(u =>
+          u.category === m.category &&
+          Math.sqrt((m.x - u.x) ** 2 + (m.y - u.y) ** 2) < dedupDist
+        )
         if (!tooClose) unique.push(m)
       }
 
@@ -1113,10 +1134,16 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         }))
       }
 
+      // 6. Persist updated family stats back to current plan annotations
+      try {
+        const ann = await getPlanAnnotations(planId)
+        savePlanAnnotations(planId, { ...ann, symbolFamilies: families }, { silent: true })
+      } catch { /* best-effort stats persist */ }
+
       markDirty()
       setRenderTick(t => t + 1)
       if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
-      setBatchProgress(`✓ ${unique.length} szimbólum találva`)
+      setBatchProgress(`✓ ${unique.length} szimbólum találva (${families.length} család)`)
       setTimeout(() => setBatchProgress(''), 3000)
     } catch (err) {
       console.error('[BatchSearch] failed:', err)
@@ -1596,29 +1623,40 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
             const calibratedThreshold = acceptRate > 0.8 ? autoSymbolThreshold
               : Math.min(0.90, autoSymbolThreshold + (1 - acceptRate) * 0.10)
 
-            const newTemplate = {
+            const newTemplateData = {
               cropData: Array.from(tpl.cropData),
               w: tpl.w, h: tpl.h,
               category: resolvedCategory,
               asmId: asm?.id || null,
               label,
               threshold: calibratedThreshold,
-              nmsRadius: Math.max(tpl.w, tpl.h) * 0.6, // per-symbol NMS radius
+              nmsRadius: Math.max(tpl.w, tpl.h) * 0.6,
               acceptRate,
               totalSearched: totalResults,
               totalAccepted: acceptedCount,
               savedAt: new Date().toISOString(),
+              sourcePlanId: planId,
             }
-            // Immediately save to annotations
+            // Dual-write: save to BOTH savedTemplates (legacy) AND symbolFamilies (new)
             getPlanAnnotations(planId).then(ann => {
-              const existing = ann?.savedTemplates || []
-              const isDupe = existing.some(t => t.category === resolvedCategory && t.asmId === (asm?.id || null) && Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5)
+              // Legacy savedTemplates — flat dedup by category+asmId+size
+              const existingTpls = ann?.savedTemplates || []
+              const isDupe = existingTpls.some(t => t.category === resolvedCategory && t.asmId === (asm?.id || null) && Math.abs(t.w - tpl.w) < 5 && Math.abs(t.h - tpl.h) < 5)
               if (!isDupe) {
-                savedTemplatesRef.current = [...existing, newTemplate]
-                savePlanAnnotations(planId, { ...ann, savedTemplates: savedTemplatesRef.current }, { silent: true })
+                savedTemplatesRef.current = [...existingTpls, newTemplateData]
               } else {
-                savedTemplatesRef.current = existing
+                savedTemplatesRef.current = existingTpls
               }
+
+              // Symbol Families — auto-grouping by category+asmId, multi-variant support
+              const existingFamilies = ann?.symbolFamilies || migrateTemplatesToFamilies(existingTpls)
+              const { families: updatedFamilies } = upsertTemplateIntoFamilies(existingFamilies, newTemplateData)
+
+              savePlanAnnotations(planId, {
+                ...ann,
+                savedTemplates: savedTemplatesRef.current,
+                symbolFamilies: updatedFamilies,
+              }, { silent: true })
             }).catch(() => {})
           }
           // Reset auto symbol
