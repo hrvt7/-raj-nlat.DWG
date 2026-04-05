@@ -541,12 +541,47 @@ export function saveQuote(quote) {
   return quote
 }
 
+/**
+ * Generate a collision-safe internal quote ID.
+ * Format: QT-{year}-{random6} — e.g. QT-2026-a3f8b1
+ *
+ * Uses crypto.randomUUID or Math.random fallback for the random part.
+ * NOT based on quote count — safe after prune/delete/cross-device.
+ *
+ * The human-readable sequential number (quoteNumber) is generated
+ * separately by generateQuoteNumber() for display purposes only.
+ */
 export function generateQuoteId() {
   const year = new Date().getFullYear()
+  let rand
+  try {
+    rand = crypto.randomUUID().replace(/-/g, '').slice(0, 6)
+  } catch {
+    rand = Math.random().toString(36).slice(2, 8)
+  }
+  return `QT-${year}-${rand}`
+}
+
+/**
+ * Generate a human-readable sequential quote number for display.
+ * Format: QT-{year}-{NNN} — e.g. QT-2026-042
+ *
+ * Finds the highest existing number for the year and increments.
+ * This is display-only — not used as persistence key.
+ */
+export function generateQuoteNumber() {
+  const year = new Date().getFullYear()
   const quotes = loadQuotes()
-  const yearQuotes = quotes.filter(q => q.id?.startsWith(`QT-${year}`))
-  const num = String(yearQuotes.length + 1).padStart(3, '0')
-  return `QT-${year}-${num}`
+  let maxNum = 0
+  const prefix = `QT-${year}-`
+  for (const q of quotes) {
+    const num = q.quoteNumber || q.id || ''
+    if (num.startsWith(prefix)) {
+      const n = parseInt(num.slice(prefix.length), 10)
+      if (n > maxNum) maxNum = n
+    }
+  }
+  return `QT-${year}-${String(maxNum + 1).padStart(3, '0')}`
 }
 
 // ─── Project Template System ──────────────────────────────────────────────────

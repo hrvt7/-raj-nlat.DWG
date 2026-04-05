@@ -16,7 +16,7 @@
  * via the `overrides` parameter — these are spread last and win.
  */
 
-import { generateQuoteId } from '../data/store.js'
+import { generateQuoteId, generateQuoteNumber } from '../data/store.js'
 import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
 
 /**
@@ -50,7 +50,8 @@ export function createQuote({ displayName, clientName, outputMode, pricing, pric
 
   return {
     // ── Identity ──────────────────────────────────────────────────────────
-    id:               generateQuoteId(),
+    id:               generateQuoteId(),       // collision-safe internal key
+    quoteNumber:      generateQuoteNumber(),   // human-readable sequential display number
     projectName:      displayName,
     project_name:     displayName,
     name:             displayName,

@@ -45,5 +45,14 @@ export function unwrapVersioned(parsed, currentVersion, fallback = []) {
  * @returns {{ _v: number, data: * }}
  */
 export function wrapVersioned(data, version) {
-  return { _v: version, data }
+  return { _v: version, data, _updatedAt: new Date().toISOString() }
+}
+
+/**
+ * Extract the _updatedAt timestamp from a versioned envelope.
+ * Returns null if not present (legacy data).
+ */
+export function getEnvelopeTimestamp(raw) {
+  if (raw && typeof raw === 'object' && raw._updatedAt) return raw._updatedAt
+  return null
 }
