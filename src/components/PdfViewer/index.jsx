@@ -428,7 +428,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const dpr = window.devicePixelRatio || 1
     const currentZoom = viewRef.current.zoom || 1
     // Desired scale = zoom × dpr (each "CSS pixel" of the page = this many bitmap pixels)
-    // Capped to avoid excessive memory usage on extreme zoom
+    // Capped to avoid excessive memory usage on extreme zoom.
+    // Also cap so canvas dimensions stay within browser limits (~16384px max dimension).
     const MIN_SCALE = 2
     const MAX_SCALE = 6
     const desiredScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, currentZoom * dpr))
@@ -446,9 +447,17 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       const page = await doc.getPage(num)
       if (renderId !== renderIdRef.current) return
 
-      const effectiveScale = desiredScale
+      // Cap scale so canvas dimensions don't exceed browser limits.
+      // Most browsers fail silently (blank canvas) above ~16384px in any dimension
+      // or ~268M total pixels. We cap at 16000px to leave headroom.
+      const MAX_CANVAS_DIM = 16000
+      const testVp = page.getViewport({ scale: desiredScale, rotation: 0 })
+      let effectiveScale = desiredScale
+      if (testVp.width > MAX_CANVAS_DIM || testVp.height > MAX_CANVAS_DIM) {
+        const dimScale = MAX_CANVAS_DIM / Math.max(testVp.width, testVp.height)
+        effectiveScale = Math.max(MIN_SCALE, desiredScale * dimScale)
+      }
       // Always render at 0° — rotation is applied as a view-layer canvas transform.
-      // This enables arbitrary rotation angles (not just 0/90/180/270).
       const viewport = page.getViewport({ scale: effectiveScale, rotation: 0 })
       unrotatedDimsRef.current = { w: viewport.width / effectiveScale, h: viewport.height / effectiveScale }
       const canvas = pdfCanvasRef.current
@@ -456,9 +465,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
       // Double-buffer: render to off-screen canvas, then swap to avoid black flash
       const offscreen = document.createElement('canvas')
-      offscreen.width = viewport.width
-      offscreen.height = viewport.height
+      offscreen.width = Math.round(viewport.width)
+      offscreen.height = Math.round(viewport.height)
       const offCtx = offscreen.getContext('2d')
+      if (!offCtx) { console.warn('[PdfViewer] Canvas too large, skipping render'); return }
 
       const renderTask = page.render({ canvasContext: offCtx, viewport })
       renderPageRef.current = renderTask
@@ -468,8 +478,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       if (renderId !== renderIdRef.current) return
 
       // Swap: copy finished render to display canvas in one operation
-      canvas.width = viewport.width
-      canvas.height = viewport.height
+      canvas.width = Math.round(viewport.width)
+      canvas.height = Math.round(viewport.height)
       viewRef.current.pageWidth = viewport.width / effectiveScale
       viewRef.current.pageHeight = viewport.height / effectiveScale
       renderScaleRef.current = effectiveScale
@@ -567,13 +577,18 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const cw = containerRef.current.clientWidth
     const ch = containerRef.current.clientHeight
     const dpr = window.devicePixelRatio || 1
-    canvas.width = cw * dpr
-    canvas.height = ch * dpr
-    canvas.style.width = cw + 'px'
-    canvas.style.height = ch + 'px'
+    const targetW = Math.round(cw * dpr)
+    const targetH = Math.round(ch * dpr)
+    // Only resize canvas if dimensions actually changed — avoids costly realloc + layout reflow
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW
+      canvas.height = targetH
+      canvas.style.width = cw + 'px'
+      canvas.style.height = ch + 'px'
+    }
 
     const ctx = canvas.getContext('2d')
-    ctx.scale(dpr, dpr)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0) // reset + scale in one call (faster than resetTransform + scale)
     ctx.clearRect(0, 0, cw, ch)
 
     const v = viewRef.current
