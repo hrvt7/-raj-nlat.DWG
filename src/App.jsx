@@ -903,8 +903,15 @@ function SaaSShell() {
       showToast('⚠', `${pruned} régi ajánlat archiválva (max ${max} tárolható helyben).`, '#FFD166')
     }
     window.addEventListener('takeoffpro:quotes-pruned', pruneHandler)
-    // Backup failure warning — fires when plan blob upload fails after retry
+    // Backup failure warning — fires when plan blob upload fails after retry.
+    // Suppressed for the first 15s after mount to avoid trust-breaking error on
+    // initial import (local save succeeded, remote backup is best-effort).
+    const mountTime = Date.now()
     const backupHandler = () => {
+      if (Date.now() - mountTime < 15000) {
+        console.info('[App] Suppressed early backup-failed toast (first import grace period)')
+        return
+      }
       showToast('⚠', 'Rajzfájl felhő mentése sikertelen — később újrapróbáljuk.', '#FF6B6B')
     }
     window.addEventListener('takeoffpro:backup-failed', backupHandler)
