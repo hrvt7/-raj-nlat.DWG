@@ -88,8 +88,8 @@ describe('batch search uses persistent worker', () => {
 })
 
 describe('accuracy safety contract', () => {
-  it('NCC formula present (pre-mean-subtracted)', () => {
-    expect(workerSrc).toContain('function nccAtPosition(img, iW, tplNorm, tW, tH, x, y, iMean, iStd, tStd, N)')
+  it('NCC formula unchanged', () => {
+    expect(workerSrc).toContain('function nccAtPosition(img, iW, tpl, tW, tH, x, y, iMean, iStd, tMean, tStd, N)')
   })
 
   it('matchDualChannel signature unchanged', () => {
