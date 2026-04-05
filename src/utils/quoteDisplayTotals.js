@@ -26,7 +26,7 @@ export function quoteDisplayTotals({ outputMode, totalLabor, totalMaterials, cab
   const materials = Math.round(Number(totalMaterials) || 0)
   const cable = Math.round(Number(cableCost) || 0)
   const markup = Number(markupPct) || 0
-  const vat = Number(vatPct) || 27
+  const vat = vatPct != null ? Number(vatPct) : 27 // nullish-safe: 0% VAT is valid
   const isMargin = markupType === 'margin'
 
   // Helper: apply markup or margin to a subtotal

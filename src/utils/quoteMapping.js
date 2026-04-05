@@ -10,7 +10,7 @@
  */
 export function buildQuoteRow(quote, userId) {
   const netFt = Math.round(quote.gross || quote.summary?.grandTotal || 0)
-  const vat = quote.vatPercent || 27
+  const vat = quote.vatPercent != null ? Number(quote.vatPercent) : 27
   const grossFt = Math.round(netFt * (1 + vat / 100))
   return {
     user_id:        userId,

@@ -25,7 +25,7 @@ function escHtml(s) {
 // ─── HTML builder (exported for testing) ─────────────────────────────────────
 // Returns the full HTML string without opening a window or triggering print.
 export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputMode = 'combined', groupBy = 'none') {
-  const vatPct    = Number(quote.vatPercent) || Number(settings?.labor?.vat_percent) || 27
+  const vatPct    = quote.vatPercent != null ? Number(quote.vatPercent) : (settings?.labor?.vat_percent != null ? Number(settings.labor.vat_percent) : 27)
   const markupPct = Number(quote.pricingData?.markup_pct) || 0
 
   // Use shared helper for outputMode-aware totals (consistent with UI)
@@ -102,8 +102,8 @@ export function buildQuoteHtml(quote, settings, detailLevel = 'summary', outputM
       const wallInfo = a.wallSplits
         ? Object.entries(a.wallSplits).filter(([, n]) => n > 0).map(([k, n]) => `${WALL_LABELS[k] || k}: ${n}`).join(', ')
         : ''
-      const matCost = Math.round(a.materialCost || 0)
-      const laborCost = Math.round(a.laborCost || (a.totalPrice || 0) - matCost)
+      const matCost = Math.round(a.totalMaterials ?? a.materialCost ?? 0)
+      const laborCost = Math.round(a.totalLabor ?? a.laborCost ?? (a.totalPrice || 0) - matCost)
       const displayTotal = isLaborOnly ? laborCost : (a.totalPrice || 0)
       return `<tr>
         <td class="asm-name">${escHtml(a.name || '—')}</td>

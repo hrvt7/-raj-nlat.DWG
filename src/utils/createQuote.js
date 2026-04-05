@@ -38,7 +38,7 @@ export function createQuote({ displayName, clientName, outputMode, pricing, pric
   const modeDefaults = OUTPUT_MODE_INCLEXCL[mode] || OUTPUT_MODE_INCLEXCL.combined
 
   // ── vatPercent: always sourced from settings, stored on quote ────────────
-  const vatPercent = Number(settings?.labor?.vat_percent) || 27
+  const vatPercent = settings?.labor?.vat_percent != null ? Number(settings.labor.vat_percent) : 27
 
   // ── Pricing totals (rounded) ────────────────────────────────────────────
   const total         = Math.round(Number(pricing?.total) || 0)
