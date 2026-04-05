@@ -124,8 +124,25 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     cb(enriched)
   }, [])
 
+  // ── Count panel + estimation ──
+  const [countPanelOpen, setCountPanelOpen] = useState(false)
+  const [estimationOpen, setEstimationOpen] = useState(false)
+  const [ceilingHeight, setCeilingHeight] = useState(3.0)
+  const [socketHeight, setSocketHeight] = useState(0.3)
+  const [switchHeight, setSwitchHeight] = useState(1.2)
+  const [showCableRoutes, setShowCableRoutes] = useState(false)
+
+  // ── Lifted estimation state (persisted with plan annotations) ──
+  const [assignments, setAssignments] = useState({})
+  const [quoteOverrides, setQuoteOverrides] = useState({})
+  const assignmentsRef = useRef({})
+  const quoteOverridesRef = useRef({})
+  useEffect(() => { assignmentsRef.current = assignments }, [assignments])
+  useEffect(() => { quoteOverridesRef.current = quoteOverrides }, [quoteOverrides])
+
   // ── Dirty / save state tracking + debounced auto-save ──
-  // saveState: 'clean' | 'dirty' | 'saved' — drives toolbar indicator
+  // NOTE: must be declared AFTER ceilingHeight/socketHeight/switchHeight
+  // to avoid TDZ in production builds (Vite minifier reorders declarations).
   const [saveState, setSaveState] = useState('clean')
   const saveStateTimerRef = useRef(null)
   const debounceSaveTimerRef = useRef(null)
@@ -179,22 +196,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
     saveStateTimerRef.current = setTimeout(() => setSaveState('clean'), 3000)
   }, [onDirtyChange])
-
-  // ── Count panel + estimation ──
-  const [countPanelOpen, setCountPanelOpen] = useState(false)
-  const [estimationOpen, setEstimationOpen] = useState(false)
-  const [ceilingHeight, setCeilingHeight] = useState(3.0)
-  const [socketHeight, setSocketHeight] = useState(0.3)
-  const [switchHeight, setSwitchHeight] = useState(1.2)
-  const [showCableRoutes, setShowCableRoutes] = useState(false)
-
-  // ── Lifted estimation state (persisted with plan annotations) ──
-  const [assignments, setAssignments] = useState({})
-  const [quoteOverrides, setQuoteOverrides] = useState({})
-  const assignmentsRef = useRef({})
-  const quoteOverridesRef = useRef({})
-  useEffect(() => { assignmentsRef.current = assignments }, [assignments])
-  useEffect(() => { quoteOverridesRef.current = quoteOverrides }, [quoteOverrides])
   // Persist assignments/quoteOverrides to IDB on every change so explicit parent save
   // reads fresh data (prevents race with unmount auto-save)
   useEffect(() => {
