@@ -145,7 +145,7 @@ export default function QuotePortal({ token }) {
 
   const { quote_data: q, company_data: company } = shareData
 
-  const vatPct    = q.vatPercent || 27
+  const vatPct    = q.vatPercent != null ? Number(q.vatPercent) : 27
   const netto     = q.gross || 0
   const vat       = Math.round(netto * vatPct / 100)
   const brutto    = netto + vat

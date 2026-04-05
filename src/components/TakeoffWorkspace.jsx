@@ -97,7 +97,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Calc tab state (ported from EstimationPanel popup) ──────────────────
   const [markupType, setMarkupType] = useState(settings?.labor?.markup_type || 'markup') // 'markup' | 'margin'
   const [cablePricePerM, setCablePricePerM] = useState(settings?.labor?.cable_price_per_m || 800)
-  const vatPercent = settings?.labor?.vat_percent || 27
+  const vatPercent = settings?.labor?.vat_percent ?? 27
 
   // ── Unit override ────────────────────────────────────────────────────────
   const [unitOverride, setUnitOverride] = useState(null) // null = auto, or 'mm'|'cm'|'m'|'inches'|'feet'

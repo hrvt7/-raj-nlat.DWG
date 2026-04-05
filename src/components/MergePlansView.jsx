@@ -306,7 +306,7 @@ function ManualMergeTab({ plans, onCreateQuote, onSwitchToDxf, onSaveBundle, act
   const costEstimate = useMemo(() => {
     const settings  = loadSettings()
     const hourlyRate = Number(settings?.labor?.hourly_rate) || 9000
-    const vatPct     = Number(settings?.labor?.vat_percent)  || 27
+    const vatPct     = settings?.labor?.vat_percent != null ? Number(settings.labor.vat_percent) : 27
 
     const takeoffRows = Object.entries(countByCategory)
       .map(([cat, qty]) => ({ asmId: assignments[cat], qty, variantId: null, wallSplits: null }))
@@ -623,7 +623,7 @@ function DxfAnalysisTab({ plans, onCreateQuote, onSaveBundle, activeBundleId, on
   const costEstimate = useMemo(() => {
     const settings = loadSettings()
     const hourlyRate = Number(settings?.labor?.hourly_rate) || 9000
-    const vatPct     = Number(settings?.labor?.vat_percent)  || 27
+    const vatPct     = settings?.labor?.vat_percent != null ? Number(settings.labor.vat_percent) : 27
 
     // Convert assemblyType→count map into takeoffRows format
     const takeoffRows = Object.entries(mergeResult.total)
@@ -1130,7 +1130,7 @@ function PdfRecognitionTab({ plans, onCreateQuote, onSaveBundle, activeBundleId,
   const costEstimate = useMemo(() => {
     const settings = loadSettings()
     const hourlyRate = Number(settings?.labor?.hourly_rate) || 9000
-    const vatPct     = Number(settings?.labor?.vat_percent)  || 27
+    const vatPct     = settings?.labor?.vat_percent != null ? Number(settings.labor.vat_percent) : 27
 
     // Build takeoffRows: each PDF-recognised type + user assignment overrides
     const takeoffRows = Object.entries(aggregated)

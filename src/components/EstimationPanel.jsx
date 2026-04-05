@@ -909,7 +909,7 @@ function QuoteTab({
   onCreateQuote, measurements = [], scale = {}, unassignedCategories = [], settings = {},
 }) {
   const hasAssignments = Object.values(assignments).some(v => v?.assemblyId)
-  const vatPercent = settings?.labor?.vat_percent || 27
+  const vatPercent = settings?.labor?.vat_percent ?? 27
 
   const setOverride = (key, value) => {
     onQuoteOverridesChange?.(prev => ({ ...prev, [key]: value }))

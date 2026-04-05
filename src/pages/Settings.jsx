@@ -180,7 +180,7 @@ function LaborTab({ settings, update }) {
   const minFt = hrFt / 60
   const markupPct  = parseFloat(l.markup_percent) || 15
   const markupType = l.markup_type || 'markup'
-  const vatPct     = parseFloat(l.vat_percent) || 27
+  const vatPct     = l.vat_percent != null ? parseFloat(l.vat_percent) : 27
 
   // Live comparison: same subtotal shown with markup vs margin math
   const DEMO = 100000

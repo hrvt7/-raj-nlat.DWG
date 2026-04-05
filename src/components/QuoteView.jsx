@@ -67,7 +67,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
   }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
 
   // ── Derived pricing from editable rate + markup ────────────────────────────
-  const vatPct = Number(quote.vatPercent) || Number(settings?.labor?.vat_percent) || 27
+  const vatPct = quote.vatPercent != null ? Number(quote.vatPercent) : (settings?.labor?.vat_percent != null ? Number(settings.labor.vat_percent) : 27)
   // Guard: empty input falls back to stored rate, then 9000 — prevents silent zero labor
   const effectiveRate = editRate === '' ? (Number(quote.pricingData?.hourlyRate) || 9000) : Number(editRate)
 
@@ -629,8 +629,8 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
                 </thead>
                 <tbody>
                   {(quote.assemblySummary || []).map((a, i) => {
-                    const matCost   = Math.round(a.materialCost || 0)
-                    const laborCost = Math.round(a.laborCost || (a.totalPrice || 0) - matCost)
+                    const matCost   = Math.round(a.totalMaterials ?? a.materialCost ?? 0)
+                    const laborCost = Math.round(a.totalLabor ?? a.laborCost ?? (a.totalPrice || 0) - matCost)
                     return (
                       <tr key={a.id || i} style={{ borderBottom: `1px solid ${C.border}20` }}>
                         <td style={{ padding: '10px 14px', fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: C.text }}>{a.name}</td>
