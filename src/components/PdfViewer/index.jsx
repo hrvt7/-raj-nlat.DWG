@@ -907,22 +907,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   // IMPORTANT: must be declared BEFORE handleMouseUp which references it
   // Helper: convert doc-coords searchArea → analysis-pixel scaledArea for worker
   const docAreaToScaledArea = useCallback((area, ANALYSIS_SCALE) => {
-    const dd = unrotatedDimsRef.current
-    const rr = rotationRef.current
-    // Transform all 4 corners of the doc-space rectangle to get the AABB
-    // in rotated analysis space (handles arbitrary rotation angles)
-    const corners = [
-      docToCanvas(area.x, area.y, rr, dd.w, dd.h),
-      docToCanvas(area.x + area.w, area.y, rr, dd.w, dd.h),
-      docToCanvas(area.x, area.y + area.h, rr, dd.w, dd.h),
-      docToCanvas(area.x + area.w, area.y + area.h, rr, dd.w, dd.h),
-    ]
-    const xs = corners.map(c => c.x), ys = corners.map(c => c.y)
+    // Analysis raster is at 0° — doc coords map directly to analysis pixels
     return {
-      x: Math.round(Math.min(...xs) * ANALYSIS_SCALE),
-      y: Math.round(Math.min(...ys) * ANALYSIS_SCALE),
-      w: Math.round((Math.max(...xs) - Math.min(...xs)) * ANALYSIS_SCALE),
-      h: Math.round((Math.max(...ys) - Math.min(...ys)) * ANALYSIS_SCALE),
+      x: Math.round(area.x * ANALYSIS_SCALE),
+      y: Math.round(area.y * ANALYSIS_SCALE),
+      w: Math.round(area.w * ANALYSIS_SCALE),
+      h: Math.round(area.h * ANALYSIS_SCALE),
     }
   }, [])
 
@@ -955,7 +945,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     try {
       const ANALYSIS_SCALE = 300 / 72 // 300 DPI high-res raster for template matching
       const page = await pdfDoc.getPage(pageNum)
-      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE, rotationRef.current)
+      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE)
       const { cropData, w: tW, h: tH } = autoSymbolTemplateRef.current
 
       let allHits = []
@@ -1008,14 +998,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         if (!tooClose) nmsHits.push(h)
       }
 
-      // Convert from analysis-scale rotated pixel coords → canvas coords → doc coords
-      const dd = unrotatedDimsRef.current
-      const rr = rotationRef.current
+      // Convert from analysis-scale pixel coords → doc coords (analysis raster is at 0°)
       const rawResults = nmsHits.map((h, i) => {
-        const cx = h.x / ANALYSIS_SCALE
-        const cy = h.y / ANALYSIS_SCALE
-        const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
-        return { x: doc.x, y: doc.y, score: h.score, accepted: true, idx: i }
+        return { x: h.x / ANALYSIS_SCALE, y: h.y / ANALYSIS_SCALE, score: h.score, accepted: true, idx: i }
       })
 
       // Cache ALL hits — the threshold slider filters this list instantly (no re-search)
@@ -1062,9 +1047,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // 2. Render current page for matching
       const ANALYSIS_SCALE = 300 / 72
       const page = await pdfDoc.getPage(pageNum)
-      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE, rotationRef.current)
-      const dd = unrotatedDimsRef.current
-      const rr = rotationRef.current
+      const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE)
 
       // 3. Family-aware search: primary-first, secondary fallback
       const SECONDARY_THRESHOLD = 2 // if primary finds < 2 hits, try secondaries
@@ -1118,13 +1101,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           if (!tooClose) nmsHits.push(h)
         }
 
-        // Convert to doc coords and collect as markers
+        // Convert to doc coords and collect as markers (analysis raster is at 0°)
         for (const h of nmsHits) {
-          const cx = h.x / ANALYSIS_SCALE
-          const cy = h.y / ANALYSIS_SCALE
-          const doc = canvasToDoc(cx, cy, rr, dd.w, dd.h)
           allMarkers.push({
-            x: doc.x, y: doc.y,
+            x: h.x / ANALYSIS_SCALE, y: h.y / ANALYSIS_SCALE,
             category: family.category,
             asmId: family.asmId,
             label: family.name,
@@ -1199,21 +1179,16 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       // Convert screen coords to PDF doc coords, then render an on-demand analysis crop
       const ANALYSIS_SCALE = 300 / 72 // ~300 DPI — match the search raster
       const v = viewRef.current
-      // Screen → doc coords → rotated canvas coords for the crop rectangle
+      // Screen → doc coords (rotation-invariant) for the crop rectangle
       const doc1 = screenToPdf(x1, y1)
       const doc2 = screenToPdf(x2, y2)
-      const d = unrotatedDimsRef.current
-      const rot = rotationRef.current
-      // Convert doc coords to canvas coords (handles rotation)
-      const c1 = docToCanvas(doc1.x, doc1.y, rot, d.w, d.h)
-      const c2 = docToCanvas(doc2.x, doc2.y, rot, d.w, d.h)
-      const canvasX = Math.min(c1.x, c2.x), canvasY = Math.min(c1.y, c2.y)
-      const canvasW = Math.abs(c2.x - c1.x), canvasH = Math.abs(c2.y - c1.y)
-      // Crop from on-demand high-res analysis raster (rendered WITH rotation)
+      // Analysis raster is at 0° — crop directly in doc coords
+      const canvasX = Math.min(doc1.x, doc2.x), canvasY = Math.min(doc1.y, doc2.y)
+      const canvasW = Math.abs(doc2.x - doc1.x), canvasH = Math.abs(doc2.y - doc1.y)
       try {
         const analysisPage = await pdfDoc.getPage(pageNum)
-        const { imageData: fullImg, width: fullW } = await renderPageImageData(analysisPage, ANALYSIS_SCALE, rot)
-        // Scale canvas coords to analysis pixel coords
+        const { imageData: fullImg, width: fullW } = await renderPageImageData(analysisPage, ANALYSIS_SCALE)
+        // Scale doc coords to analysis pixel coords
         const ax = Math.round(canvasX * ANALYSIS_SCALE), ay = Math.round(canvasY * ANALYSIS_SCALE)
         const tW = Math.round(canvasW * ANALYSIS_SCALE), tH = Math.round(canvasH * ANALYSIS_SCALE)
         if (tW < 4 || tH < 4) { setAutoSymbolRect(null); setAutoSymbolError('A minta túl kicsi — jelölj ki nagyobb területet.'); return }
