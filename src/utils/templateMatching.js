@@ -162,14 +162,45 @@ export function nonMaxSuppression(detections, tW, tH, overlapThreshold = 0.3) {
  * @returns {Promise<{imageData: ImageData, width: number, height: number}>}
  */
 export async function renderPageImageData(pdfPage, scale = 1, rotation = 0) {
-  const viewport = pdfPage.getViewport({ scale, rotation })
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(viewport.width)
-  canvas.height = Math.round(viewport.height)
-  const ctx = canvas.getContext('2d')
-  await pdfPage.render({ canvasContext: ctx, viewport }).promise
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  return { imageData, width: canvas.width, height: canvas.height }
+  // pdf.js only supports 0/90/180/270 natively. For arbitrary angles,
+  // render at 0° then apply canvas rotation.
+  const nearest90 = Math.round(rotation / 90) * 90
+  const isExact90 = rotation === nearest90 && [0, 90, 180, 270].includes(nearest90 % 360)
+
+  if (isExact90) {
+    // Fast path: exact 90° multiples handled natively by pdf.js
+    const viewport = pdfPage.getViewport({ scale, rotation: ((rotation % 360) + 360) % 360 })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(viewport.width)
+    canvas.height = Math.round(viewport.height)
+    const ctx = canvas.getContext('2d')
+    await pdfPage.render({ canvasContext: ctx, viewport }).promise
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    return { imageData, width: canvas.width, height: canvas.height }
+  }
+
+  // Arbitrary angle: render at 0°, then rotate via canvas transform
+  const viewport0 = pdfPage.getViewport({ scale, rotation: 0 })
+  const srcW = Math.round(viewport0.width), srcH = Math.round(viewport0.height)
+  const srcCanvas = document.createElement('canvas')
+  srcCanvas.width = srcW; srcCanvas.height = srcH
+  await pdfPage.render({ canvasContext: srcCanvas.getContext('2d'), viewport: viewport0 }).promise
+
+  // Compute rotated bounding box
+  const rad = rotation * Math.PI / 180
+  const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad))
+  const dstW = Math.ceil(srcW * cos + srcH * sin)
+  const dstH = Math.ceil(srcW * sin + srcH * cos)
+
+  const dstCanvas = document.createElement('canvas')
+  dstCanvas.width = dstW; dstCanvas.height = dstH
+  const dctx = dstCanvas.getContext('2d')
+  dctx.translate(dstW / 2, dstH / 2)
+  dctx.rotate(rad)
+  dctx.drawImage(srcCanvas, -srcW / 2, -srcH / 2)
+
+  const imageData = dctx.getImageData(0, 0, dstW, dstH)
+  return { imageData, width: dstW, height: dstH }
 }
 
 /**

@@ -63,7 +63,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const [activeCategory, setActiveCategory] = useState('ASM-001')
 
   // ── Page rotation ──
-  const [rotation, setRotation] = useState(0) // 0, 90, 180, 270
+  const [rotation, setRotation] = useState(0) // degrees, any angle (0, 45, 90, etc.)
   const rotationRef = useRef(0)
   useEffect(() => { rotationRef.current = rotation }, [rotation])
 
@@ -394,9 +394,10 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       if (renderId !== renderIdRef.current) return
 
       const effectiveScale = desiredScale
-      const viewport = page.getViewport({ scale: effectiveScale, rotation: rotationRef.current })
-      const unrotVp = page.getViewport({ scale: effectiveScale, rotation: 0 })
-      unrotatedDimsRef.current = { w: unrotVp.width / effectiveScale, h: unrotVp.height / effectiveScale }
+      // Always render at 0° — rotation is applied as a view-layer canvas transform.
+      // This enables arbitrary rotation angles (not just 0/90/180/270).
+      const viewport = page.getViewport({ scale: effectiveScale, rotation: 0 })
+      unrotatedDimsRef.current = { w: viewport.width / effectiveScale, h: viewport.height / effectiveScale }
       const canvas = pdfCanvasRef.current
       if (!canvas) return
 
@@ -427,7 +428,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         const ch = containerRef.current.clientHeight
         const pw = viewport.width / effectiveScale
         const ph = viewport.height / effectiveScale
-        const zoom = Math.min(cw / pw, ch / ph) * 0.92
+        // Rotated bounding box: the visible footprint of a rotated rectangle
+        const rad = Math.abs(rotationRef.current * Math.PI / 180)
+        const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad))
+        const rotW = pw * cos + ph * sin
+        const rotH = pw * sin + ph * cos
+        const zoom = Math.min(cw / rotW, ch / rotH) * 0.92
         viewRef.current.zoom = zoom
         viewRef.current.offsetX = (cw - pw * zoom) / 2
         viewRef.current.offsetY = (ch - ph * zoom) / 2
@@ -521,34 +527,53 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     const d = unrotatedDimsRef.current
     const rot = rotationRef.current
     // ── One-time migration of legacy canvas-coord annotations to doc coords ──
+    // Legacy annotations (coordVersion < 2) were stored in pdf.js rotated viewport coords.
+    // That coordinate system used corner-origin transforms, not center-rotation.
+    // We must use the LEGACY conversion here, not the new general rotation math.
     if (migrationRef.current && d.w > 0) {
       const mig = migrationRef.current
       migrationRef.current = null
+      const legacyCanvasToDoc = (cx, cy, rot, W, H) => {
+        switch (rot) {
+          case 90:  return { x: W - cy, y: cx }
+          case 180: return { x: W - cx, y: H - cy }
+          case 270: return { x: cy,     y: H - cx }
+          default:  return { x: cx,     y: cy }
+        }
+      }
       markersRef.current = markersRef.current.map(m => {
-        const doc = canvasToDoc(m.x, m.y, mig.rotation, d.w, d.h)
+        const doc = legacyCanvasToDoc(m.x, m.y, mig.rotation, d.w, d.h)
         return { ...m, x: doc.x, y: doc.y }
       })
       measuresRef.current = measuresRef.current.map(seg => {
-        const doc1 = canvasToDoc(seg.x1, seg.y1, mig.rotation, d.w, d.h)
-        const doc2 = canvasToDoc(seg.x2, seg.y2, mig.rotation, d.w, d.h)
+        const doc1 = legacyCanvasToDoc(seg.x1, seg.y1, mig.rotation, d.w, d.h)
+        const doc2 = legacyCanvasToDoc(seg.x2, seg.y2, mig.rotation, d.w, d.h)
         return { ...seg, x1: doc1.x, y1: doc1.y, x2: doc2.x, y2: doc2.y }
       })
       if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
       notifyMeasurements()
     }
-    // proj: unrotated doc coords → screen coords (via docToCanvas + zoom/offset)
+    // proj: unrotated doc coords → screen coords (via rotation around page center + zoom/offset)
     const proj = (dx, dy) => {
       const c = docToCanvas(dx, dy, rot, d.w, d.h)
       return { x: c.x * v.zoom + v.offsetX, y: c.y * v.zoom + v.offsetY }
     }
     const sf = scaleRef.current
 
-    // Draw PDF canvas at current transform
+    // Draw PDF canvas at current transform (rotation applied as canvas transform)
     if (pdfCanvasRef.current) {
       ctx.save()
       ctx.translate(v.offsetX, v.offsetY)
+      ctx.scale(v.zoom, v.zoom)
+      // Rotate around page center (doc coords)
+      if (rot !== 0) {
+        const pcx = d.w / 2, pcy = d.h / 2
+        ctx.translate(pcx, pcy)
+        ctx.rotate(rot * Math.PI / 180)
+        ctx.translate(-pcx, -pcy)
+      }
       const rs = renderScaleRef.current || 3
-      ctx.scale(v.zoom / rs, v.zoom / rs) // PDF rendered at dynamic scale
+      ctx.scale(1 / rs, 1 / rs) // PDF rendered at renderScale, scale down to doc-space
       ctx.drawImage(pdfCanvasRef.current, 0, 0)
       ctx.restore()
     }
@@ -884,13 +909,20 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const docAreaToScaledArea = useCallback((area, ANALYSIS_SCALE) => {
     const dd = unrotatedDimsRef.current
     const rr = rotationRef.current
-    const sc1 = docToCanvas(area.x, area.y, rr, dd.w, dd.h)
-    const sc2 = docToCanvas(area.x + area.w, area.y + area.h, rr, dd.w, dd.h)
+    // Transform all 4 corners of the doc-space rectangle to get the AABB
+    // in rotated analysis space (handles arbitrary rotation angles)
+    const corners = [
+      docToCanvas(area.x, area.y, rr, dd.w, dd.h),
+      docToCanvas(area.x + area.w, area.y, rr, dd.w, dd.h),
+      docToCanvas(area.x, area.y + area.h, rr, dd.w, dd.h),
+      docToCanvas(area.x + area.w, area.y + area.h, rr, dd.w, dd.h),
+    ]
+    const xs = corners.map(c => c.x), ys = corners.map(c => c.y)
     return {
-      x: Math.round(Math.min(sc1.x, sc2.x) * ANALYSIS_SCALE),
-      y: Math.round(Math.min(sc1.y, sc2.y) * ANALYSIS_SCALE),
-      w: Math.round(Math.abs(sc2.x - sc1.x) * ANALYSIS_SCALE),
-      h: Math.round(Math.abs(sc2.y - sc1.y) * ANALYSIS_SCALE),
+      x: Math.round(Math.min(...xs) * ANALYSIS_SCALE),
+      y: Math.round(Math.min(...ys) * ANALYSIS_SCALE),
+      w: Math.round((Math.max(...xs) - Math.min(...xs)) * ANALYSIS_SCALE),
+      h: Math.round((Math.max(...ys) - Math.min(...ys)) * ANALYSIS_SCALE),
     }
   }, [])
 
