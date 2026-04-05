@@ -366,11 +366,118 @@ self.onmessage = (e) => {
       h.y -= offY
     }
 
+    // 8. Hue post-filter: reject hits where the color doesn't match the template.
+    // Only active when the template has a clear dominant color (high saturation).
+    // Grayscale or low-saturation templates bypass this filter entirely.
+    const HUE_SAT_GATE = 0.15        // min saturation to count a pixel as "colored"
+    const HUE_MIN_COLORED_RATIO = 0.2 // at least 20% of template pixels must be colored
+    const HUE_DOMINANCE_RATIO = 0.40  // dominant hue must be ≥40% of colored pixels
+    const HUE_MAX_DISTANCE = 0.12     // max cyclic hue distance (0-0.5 scale) ~43° on color wheel
+
+    let hueFilterActive = false
+    let tplDominantHue = 0
+    let hueFilteredCount = 0
+
+    // Compute template dominant hue from the TRIMMED region of the original RGBA
+    {
+      const N = trimW * trimH
+      // Build hue histogram (12 buckets, 30° each)
+      const BUCKETS = 12
+      const hueBuckets = new Uint32Array(BUCKETS)
+      let coloredCount = 0
+
+      for (let y = 0; y < trimH; y++) {
+        for (let x = 0; x < trimW; x++) {
+          const srcIdx = ((offY + y) * tplW + (offX + x))
+          const r = tplData[srcIdx * 4] / 255
+          const g = tplData[srcIdx * 4 + 1] / 255
+          const b = tplData[srcIdx * 4 + 2] / 255
+          const max = Math.max(r, g, b), min = Math.min(r, g, b)
+          const chroma = max - min
+          const l = (max + min) / 2
+          const sat = (max === min) ? 0 : chroma / (1 - Math.abs(2 * l - 1))
+          if (sat < HUE_SAT_GATE) continue
+          coloredCount++
+          // Compute hue 0-1
+          let h = 0
+          if (max === r) h = ((g - b) / chroma + 6) % 6
+          else if (max === g) h = (b - r) / chroma + 2
+          else h = (r - g) / chroma + 4
+          h = h / 6
+          const bucket = Math.min(BUCKETS - 1, Math.floor(h * BUCKETS))
+          hueBuckets[bucket]++
+        }
+      }
+
+      const coloredRatio = coloredCount / N
+      if (coloredRatio >= HUE_MIN_COLORED_RATIO) {
+        // Find dominant bucket
+        let maxBucket = 0, maxCount = 0
+        for (let i = 0; i < BUCKETS; i++) {
+          if (hueBuckets[i] > maxCount) { maxCount = hueBuckets[i]; maxBucket = i }
+        }
+        const dominance = maxCount / coloredCount
+        if (dominance >= HUE_DOMINANCE_RATIO) {
+          hueFilterActive = true
+          tplDominantHue = (maxBucket + 0.5) / BUCKETS // center of bucket
+        }
+      }
+    }
+
+    // Apply hue filter to NMS hits
+    let finalHits = hits
+    if (hueFilterActive) {
+      const imgHue = toHue(imgData, imgW, imgH)
+      finalHits = hits.filter(hit => {
+        // Sample patch at hit position (hit.x/y are center coords in full-image space)
+        // Convert back to top-left for patch extraction
+        const px = Math.round(hit.x + offX - trimW / 2)
+        const py = Math.round(hit.y + offY - trimH / 2)
+        // Count colored pixels and build hue histogram for the patch
+        const BUCKETS = 12
+        const patchBuckets = new Uint32Array(BUCKETS)
+        let patchColored = 0
+        for (let y = Math.max(0, py); y < Math.min(imgH, py + trimH); y++) {
+          for (let x = Math.max(0, px); x < Math.min(imgW, px + trimW); x++) {
+            const hv = imgHue[y * imgW + x]
+            if (hv < 0) continue // achromatic
+            // Also check saturation
+            const sv = imgSat[y * imgW + x]
+            if (sv < HUE_SAT_GATE) continue
+            patchColored++
+            const bucket = Math.min(BUCKETS - 1, Math.floor(hv * BUCKETS))
+            patchBuckets[bucket]++
+          }
+        }
+
+        // If patch has too few colored pixels, can't validate → keep the hit
+        if (patchColored < trimW * trimH * 0.1) return true
+
+        // Find patch dominant hue
+        let pMaxBucket = 0, pMaxCount = 0
+        for (let i = 0; i < BUCKETS; i++) {
+          if (patchBuckets[i] > pMaxCount) { pMaxCount = patchBuckets[i]; pMaxBucket = i }
+        }
+        const patchHue = (pMaxBucket + 0.5) / BUCKETS
+
+        // Cyclic hue distance (0 to 0.5)
+        let hueDist = Math.abs(tplDominantHue - patchHue)
+        if (hueDist > 0.5) hueDist = 1 - hueDist
+
+        if (hueDist > HUE_MAX_DISTANCE) {
+          hueFilteredCount++
+          return false // reject: wrong color
+        }
+        return true // accept: color matches
+      })
+    }
+
     const elapsed = Math.round(performance.now() - t0)
     const colorMode = tplSatStd > 0.03 ? 'color(60%)+gray(40%)' : 'gray-only'
-    console.log(`[TemplateMatch v7] ${allHits.length} raw (${variants.length} orientations) → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
+    const hueInfo = hueFilterActive ? ` | hue-filter: ${hueFilteredCount} rejected` : ' | hue-filter: OFF'
+    console.log(`[TemplateMatch v8] ${allHits.length} raw (${variants.length} orientations) → ${hits.length} NMS → ${finalHits.length} final | ${colorMode}${hueInfo} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
 
-    self.postMessage({ type: 'result', hits })
+    self.postMessage({ type: 'result', hits: finalHits })
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message || 'Worker error' })
   }
