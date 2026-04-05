@@ -13,7 +13,6 @@ import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasTo
 export { docToCanvas, canvasToDoc } from './pdfUtils.js'
 import PdfScrollbars from './PdfScrollbars.jsx'
 import PdfToolbar from './PdfToolbar.jsx'
-import TemplateEditor from './TemplateEditor.jsx'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -89,7 +88,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
   // ── Auto Symbol POC state ──
   const [autoSymbolActive, setAutoSymbolActive] = useState(false)
-  const [autoSymbolPhase, setAutoSymbolPhase] = useState('idle') // idle | picking | editing | areaSelect | searching | done
+  const [autoSymbolPhase, setAutoSymbolPhase] = useState('idle') // idle | picking | areaSelect | searching | done
   const [autoSymbolRect, _setAutoSymbolRect] = useState(null) // {x1,y1,x2,y2} in screen coords during pick
   const autoSymbolRectRef = useRef(null)
   const setAutoSymbolRect = (v) => { autoSymbolRectRef.current = v; _setAutoSymbolRect(v) }
@@ -1196,11 +1195,12 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         fullCanvas.getContext('2d').putImageData(fullImg, 0, 0)
         cropCtx.drawImage(fullCanvas, ax, ay, tW, tH, 0, 0, tW, tH)
         const croppedData = cropCtx.getImageData(0, 0, tW, tH)
-        // Store raw RGBA and open template editor for cleanup before search
+        // Store raw RGBA for worker (worker does its own toGray)
         autoSymbolTemplateRef.current = { cropData: croppedData.data, w: tW, h: tH }
         setAutoSymbolRect(null)
-        // Go to template editing phase — user can clean up noise
-        setAutoSymbolPhase('editing')
+        // Go to area selection phase
+        setAutoSymbolPhase('areaSelect')
+        setAutoSymbolSearchArea(null)
       } catch (err) {
         console.error('[AutoSymbol] crop failed:', err)
         setAutoSymbolRect(null)
@@ -1502,23 +1502,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       background: C.bg, borderRadius: 10, border: `1px solid ${C.border}`,
       ...style,
     }}>
-      {/* Template cleanup editor modal */}
-      {autoSymbolPhase === 'editing' && autoSymbolTemplateRef.current && (
-        <TemplateEditor
-          cropData={autoSymbolTemplateRef.current.cropData}
-          width={autoSymbolTemplateRef.current.w}
-          height={autoSymbolTemplateRef.current.h}
-          onConfirm={(finalData, finalW, finalH) => {
-            autoSymbolTemplateRef.current = { cropData: finalData, w: finalW, h: finalH }
-            setAutoSymbolPhase('areaSelect')
-            setAutoSymbolSearchArea(null)
-          }}
-          onSkip={() => {
-            setAutoSymbolPhase('areaSelect')
-            setAutoSymbolSearchArea(null)
-          }}
-        />
-      )}
       {/* Toolbar */}
       <PdfToolbar
         activeTool={activeTool} onToolChange={t => { setActiveTool(t); activeStartRef.current = null }}
