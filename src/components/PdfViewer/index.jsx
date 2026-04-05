@@ -1118,18 +1118,44 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         return
       }
 
-      // 2. Render current page for matching
+      // 2. Render current page + init persistent batch worker
       const ANALYSIS_SCALE = 300 / 72
       const page = await pdfDoc.getPage(pageNum)
       const { imageData, width, height } = await renderPageImageData(page, ANALYSIS_SCALE)
 
+      // Create a persistent worker for the entire batch session.
+      // Send image data ONCE via 'init' — worker caches channels + SATs.
+      // Each template search uses 'search' message (template only, no image copy).
+      if (autoSymbolWorkerRef.current) autoSymbolWorkerRef.current.terminate()
+      const batchWorker = new Worker(templateMatchWorkerUrl, { type: 'module' })
+      autoSymbolWorkerRef.current = batchWorker
+
+      // Init: send image data once, worker caches gray/sat channels + SATs
+      await new Promise((resolve, reject) => {
+        batchWorker.onmessage = (e) => { if (e.data.type === 'init-done') resolve() }
+        batchWorker.onerror = (e) => reject(new Error(e.message))
+        batchWorker.postMessage({ type: 'init', imgData: imageData.data, imgW: width, imgH: height })
+      })
+      if (!mountedRef.current || batchCancelRef.current) { batchWorker.terminate(); return }
+
+      // Helper: run search on the persistent batch worker (no image copy)
+      const batchSearch = (cropData, tW, tH, scaledArea) => {
+        return new Promise((resolve, reject) => {
+          batchWorker.onmessage = (e) => {
+            if (e.data.type === 'result') resolve(e.data.hits)
+            else reject(new Error(e.data.message || 'Worker hiba'))
+          }
+          batchWorker.onerror = (e) => reject(new Error(e.message))
+          batchWorker.postMessage({ type: 'search', tplData: cropData, tplW: tW, tplH: tH, threshold: 0.30, searchArea: scaledArea })
+        })
+      }
+
       // 3. Family-aware search: primary-first, secondary fallback
-      const SECONDARY_THRESHOLD = 2 // if primary finds < 2 hits, try secondaries
+      const SECONDARY_THRESHOLD = 2
       const allMarkers = []
       const batchT0 = performance.now()
 
       for (let fi = 0; fi < families.length; fi++) {
-        // Cancel check between families
         if (batchCancelRef.current || !mountedRef.current) break
         const family = families[fi]
         const sorted = sortVariantsByPerformance(family)
@@ -1137,29 +1163,28 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
 
         setBatchProgress(`Keresés: ${family.name} (${fi + 1}/${families.length})…`)
 
-        // Run primary variant
+        // Run primary variant (no image copy — uses cached worker data)
         const primary = sorted[0]
         const primaryCrop = new Uint8ClampedArray(primary.cropData)
-        const primaryHits = await runWorkerSearch(imageData.data, width, height, primaryCrop, primary.w, primary.h, null)
+        const primaryHits = await batchSearch(primaryCrop, primary.w, primary.h, null)
         if (!mountedRef.current) return
 
         const primaryAbove = primaryHits.filter(h => h.score >= threshold)
-        let familyHits = [...primaryHits] // keep all at low threshold for combined NMS
+        let familyHits = [...primaryHits]
         let primaryHitCount = primaryAbove.length
         let primaryAvgScore = primaryAbove.length > 0
           ? primaryAbove.reduce((s, h) => s + h.score, 0) / primaryAbove.length : 0
 
-        // Update primary variant stats
         updateVariantStats(primary, primaryHitCount, primaryAvgScore)
 
-        // Secondary fallback: if primary found < SECONDARY_THRESHOLD hits
+        // Secondary fallback
         if (primaryAbove.length < SECONDARY_THRESHOLD && sorted.length > 1) {
           for (let vi = 1; vi < sorted.length; vi++) {
             if (batchCancelRef.current) break
             const variant = sorted[vi]
             setBatchProgress(`Keresés: ${family.name} variáns ${vi + 1}/${sorted.length} (${fi + 1}/${families.length})…`)
             const varCrop = new Uint8ClampedArray(variant.cropData)
-            const varHits = await runWorkerSearch(imageData.data, width, height, varCrop, variant.w, variant.h, null)
+            const varHits = await batchSearch(varCrop, variant.w, variant.h, null)
             if (!mountedRef.current) return
 
             const varAbove = varHits.filter(h => h.score >= threshold)
@@ -1251,6 +1276,11 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       setBatchProgress('Keresés sikertelen: ' + err.message)
       setTimeout(() => setBatchProgress(''), 5000)
     } finally {
+      // Terminate batch worker — next batch will create a fresh one
+      if (autoSymbolWorkerRef.current) {
+        autoSymbolWorkerRef.current.terminate()
+        autoSymbolWorkerRef.current = null
+      }
       setBatchSearching(false)
     }
   }, [pdfDoc, pageNum, planId, projectId, assembliesProp, markDirty])
