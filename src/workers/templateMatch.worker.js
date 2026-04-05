@@ -159,12 +159,16 @@ function satSum(sat, w, x1, y1, x2, y2) {
   return sat[(y2+1)*sw+(x2+1)] - sat[y1*sw+(x2+1)] - sat[(y2+1)*sw+x1] + sat[y1*sw+x1]
 }
 
-// ── Single-channel NCC ──────────────────────────────────────────────────────
-function nccAtPosition(img, iW, tpl, tW, tH, x, y, iMean, iStd, tMean, tStd, N) {
+// ── Single-channel NCC (pre-mean-subtracted template) ───────────────────────
+// tplNorm = tpl[i] - tMean, precomputed once per template.
+// Saves one subtraction per pixel per position (mathematically identical).
+function nccAtPosition(img, iW, tplNorm, tW, tH, x, y, iMean, iStd, tStd, N) {
   let ncc = 0
   for (let ty = 0; ty < tH; ty++) {
+    const rowOff = (y + ty) * iW + x
+    const tplRowOff = ty * tW
     for (let tx = 0; tx < tW; tx++) {
-      ncc += (img[(y + ty) * iW + (x + tx)] - iMean) * (tpl[ty * tW + tx] - tMean)
+      ncc += (img[rowOff + tx] - iMean) * tplNorm[tplRowOff + tx]
     }
   }
   return ncc / (N * iStd * tStd)
@@ -175,20 +179,22 @@ function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
                            satGray, satSatCh, threshold, stride, searchArea) {
   const N = tW * tH
 
-  // Template stats — grayscale
+  // Template stats + pre-mean-subtracted arrays — grayscale
   let tSumG = 0
   for (let i = 0; i < N; i++) tSumG += tplGray[i]
   const tMeanG = tSumG / N
+  const tplNormG = new Float32Array(N) // tplGray[i] - tMeanG, precomputed once
   let tVarG = 0
-  for (let i = 0; i < N; i++) { const d = tplGray[i] - tMeanG; tVarG += d * d }
+  for (let i = 0; i < N; i++) { const d = tplGray[i] - tMeanG; tplNormG[i] = d; tVarG += d * d }
   const tStdG = Math.sqrt(tVarG / N)
 
-  // Template stats — saturation
+  // Template stats + pre-mean-subtracted arrays — saturation
   let tSumS = 0
   for (let i = 0; i < N; i++) tSumS += tplSat[i]
   const tMeanS = tSumS / N
+  const tplNormS = new Float32Array(N) // tplSat[i] - tMeanS, precomputed once
   let tVarS = 0
-  for (let i = 0; i < N; i++) { const d = tplSat[i] - tMeanS; tVarS += d * d }
+  for (let i = 0; i < N; i++) { const d = tplSat[i] - tMeanS; tplNormS[i] = d; tVarS += d * d }
   const tStdS = Math.sqrt(tVarS / N)
 
   // Determine if template has significant color content
@@ -207,7 +213,6 @@ function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
   for (let y = startY; y <= endY; y += stride) {
     for (let x = startX; x <= endX; x += stride) {
       // Quick check: if template is colorful, skip patches with no color
-      // Quick check: if template is colorful, skip patches with no color
       if (hasColor) {
         const patchSatSum = satSum(satSatCh.sat, iW, x, y, x + tW - 1, y + tH - 1)
         const patchSatMean = patchSatSum / N
@@ -223,7 +228,7 @@ function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
         const iVarG = pSum2G / N - iMeanG * iMeanG
         const iStdG = Math.sqrt(Math.max(0, iVarG))
         if (iStdG > 0.01) {
-          scoreG = nccAtPosition(imgGray, iW, tplGray, tW, tH, x, y, iMeanG, iStdG, tMeanG, tStdG, N)
+          scoreG = nccAtPosition(imgGray, iW, tplNormG, tW, tH, x, y, iMeanG, iStdG, tStdG, N)
         }
       }
 
@@ -236,7 +241,7 @@ function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
         const iVarS = pSum2S / N - iMeanS * iMeanS
         const iStdS = Math.sqrt(Math.max(0, iVarS))
         if (iStdS > 0.01) {
-          scoreS = nccAtPosition(imgSat, iW, tplSat, tW, tH, x, y, iMeanS, iStdS, tMeanS, tStdS, N)
+          scoreS = nccAtPosition(imgSat, iW, tplNormS, tW, tH, x, y, iMeanS, iStdS, tStdS, N)
         }
       }
 
