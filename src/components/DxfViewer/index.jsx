@@ -108,7 +108,25 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   const activeToolRef = useRef(null)
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
   const hydratedRef = useRef(false) // true once async annotation restore completes
+  const debounceSaveTimerRef = useRef(null)
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
+
+  // ── Debounced auto-save: persist annotations 2s after last change ──
+  const debouncedSave = useCallback(() => {
+    if (!planId || !hydratedRef.current) return
+    if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
+    debounceSaveTimerRef.current = setTimeout(() => {
+      getPlanAnnotations(planId).then(stored => {
+        savePlanAnnotations(planId, {
+          ...stored,
+          markers: markersRef.current,
+          measurements: measuresRef.current,
+          scale: scaleRef.current,
+          ceilingHeight, switchHeight, socketHeight,
+        }, { silent: true })
+      }).catch(() => {})
+    }, 2000)
+  }, [planId, ceilingHeight, switchHeight, socketHeight])
 
   // ── Load saved annotations on mount ──
   useEffect(() => {
@@ -168,6 +186,8 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   // fast mount/unmount from writing empty markers over stored data.
   useEffect(() => {
     return () => {
+      // Cancel any pending debounced save — we'll save immediately here
+      if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
       if (!planId) return
       if (!hydratedRef.current) return // not yet hydrated — don't overwrite IDB
       const localMarkers = markersRef.current
@@ -470,6 +490,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         asmId: asm ? asm.id : null, source: 'manual',
       })]
       setRenderTick(t => t + 1)
+      debouncedSave()
     }
 
     if (tool === 'measure') {
@@ -489,6 +510,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         activeStartRef.current = null
         notifyMeasurements()
         setRenderTick(t => t + 1)
+        debouncedSave()
       }
     }
 
@@ -569,20 +591,23 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     if (activeTool === 'count' && markersRef.current.length > 0) {
       markersRef.current = markersRef.current.slice(0, -1)
       setRenderTick(t => t + 1)
+      debouncedSave()
     }
     if (activeTool === 'measure' && measuresRef.current.length > 0) {
       measuresRef.current = measuresRef.current.slice(0, -1)
       notifyMeasurements()
       setRenderTick(t => t + 1)
+      debouncedSave()
     }
-  }, [activeTool, notifyMeasurements])
+  }, [activeTool, notifyMeasurements, debouncedSave])
 
   const handleClearAll = useCallback(() => {
     if (activeTool === 'count') markersRef.current = []
     if (activeTool === 'measure') { measuresRef.current = []; notifyMeasurements() }
     activeStartRef.current = null
     setRenderTick(t => t + 1)
-  }, [activeTool])
+    debouncedSave()
+  }, [activeTool, debouncedSave])
 
   // ── Scale calibration submit ──
   const handleCalibSubmit = useCallback(() => {
