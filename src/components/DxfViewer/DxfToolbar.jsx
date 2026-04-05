@@ -342,6 +342,7 @@ export default function DxfToolbar({
   assemblies,
   scale, markerCount, measureCount,
   onUndo, onClearAll,
+  saveState,
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', background: C.bgCard, borderBottom: `1px solid ${C.border}` }}>
@@ -418,6 +419,24 @@ export default function DxfToolbar({
         <MiniBtn onClick={onFitView} title="Illesztés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></MiniBtn>
         <MiniBtn onClick={onZoomOut} title="Kicsinyítés"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg></MiniBtn>
       </div>
+
+      {/* Save state indicator — parity with PDF toolbar */}
+      {saveState && saveState !== 'clean' && (
+        <div style={{
+          marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4,
+          fontSize: 11, fontFamily: 'DM Mono', fontWeight: 500, padding: '2px 8px',
+          borderRadius: 6, userSelect: 'none', transition: 'opacity 0.3s',
+          color: saveState === 'dirty' ? '#FFD166' : '#00E5A0',
+          background: saveState === 'dirty' ? 'rgba(255,209,102,0.08)' : 'rgba(0,229,160,0.08)',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: 3,
+            background: saveState === 'dirty' ? '#FFD166' : '#00E5A0',
+            display: 'inline-block',
+          }} />
+          {saveState === 'dirty' ? 'Nem mentett' : 'Mentve'}
+        </div>
+      )}
     </div>
   )
 }

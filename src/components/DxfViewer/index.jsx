@@ -109,11 +109,15 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
   const hydratedRef = useRef(false) // true once async annotation restore completes
   const debounceSaveTimerRef = useRef(null)
+  const saveStateTimerRef = useRef(null)
+  const [saveState, setSaveState] = useState('clean')
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
 
   // ── Debounced auto-save: persist annotations 2s after last change ──
   const debouncedSave = useCallback(() => {
     if (!planId || !hydratedRef.current) return
+    setSaveState('dirty')
+    if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
     if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
     debounceSaveTimerRef.current = setTimeout(() => {
       getPlanAnnotations(planId).then(stored => {
@@ -124,6 +128,9 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
           scale: scaleRef.current,
           ceilingHeight, switchHeight, socketHeight,
         }, { silent: true })
+        setSaveState('saved')
+        if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
+        saveStateTimerRef.current = setTimeout(() => setSaveState('clean'), 3000)
       }).catch(() => {})
     }, 2000)
   }, [planId, ceilingHeight, switchHeight, socketHeight])
@@ -704,6 +711,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         measureCount={measuresRef.current.length}
         onUndo={handleUndo}
         onClearAll={handleClearAll}
+        saveState={saveState}
       />
 
       {/* ── Canvas area ── */}
