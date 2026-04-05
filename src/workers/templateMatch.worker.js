@@ -159,7 +159,23 @@ function satSum(sat, w, x1, y1, x2, y2) {
   return sat[(y2+1)*sw+(x2+1)] - sat[y1*sw+(x2+1)] - sat[(y2+1)*sw+x1] + sat[y1*sw+x1]
 }
 
-// ── Single-channel NCC ──────────────────────────────────────────────────────
+// ── Extract mask from RGBA alpha channel ────────────────────────────────────
+// Returns Uint8Array where 1 = valid pixel, 0 = masked (erased by user).
+// If no pixels are masked, returns null (no mask needed — fast path).
+function extractMask(rgba, width, height) {
+  const mask = new Uint8Array(width * height)
+  let hasMasked = false
+  for (let i = 0; i < width * height; i++) {
+    if (rgba[i * 4 + 3] > 127) {
+      mask[i] = 1
+    } else {
+      hasMasked = true
+    }
+  }
+  return hasMasked ? mask : null
+}
+
+// ── Single-channel NCC (standard — no mask) ─────────────────────────────────
 function nccAtPosition(img, iW, tpl, tW, tH, x, y, iMean, iStd, tMean, tStd, N) {
   let ncc = 0
   for (let ty = 0; ty < tH; ty++) {
@@ -170,30 +186,69 @@ function nccAtPosition(img, iW, tpl, tW, tH, x, y, iMean, iStd, tMean, tStd, N) 
   return ncc / (N * iStd * tStd)
 }
 
-// ── Dual-channel matching ───────────────────────────────────────────────────
-function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
-                           satGray, satSatCh, threshold, stride, searchArea) {
-  const N = tW * tH
+// ── Masked NCC — only correlates unmasked pixels ────────────────────────────
+function maskedNccAtPosition(img, iW, tpl, tW, tH, mask, x, y, tMean, tStd, N) {
+  // Compute image patch stats for unmasked pixels only
+  let iSum = 0
+  for (let ty = 0; ty < tH; ty++) {
+    for (let tx = 0; tx < tW; tx++) {
+      if (!mask[ty * tW + tx]) continue
+      iSum += img[(y + ty) * iW + (x + tx)]
+    }
+  }
+  const iMean = iSum / N
+  let iVar = 0
+  for (let ty = 0; ty < tH; ty++) {
+    for (let tx = 0; tx < tW; tx++) {
+      if (!mask[ty * tW + tx]) continue
+      const d = img[(y + ty) * iW + (x + tx)] - iMean
+      iVar += d * d
+    }
+  }
+  const iStd = Math.sqrt(iVar / N)
+  if (iStd < 0.01) return 0
 
-  // Template stats — grayscale
+  let ncc = 0
+  for (let ty = 0; ty < tH; ty++) {
+    for (let tx = 0; tx < tW; tx++) {
+      if (!mask[ty * tW + tx]) continue
+      ncc += (img[(y + ty) * iW + (x + tx)] - iMean) * (tpl[ty * tW + tx] - tMean)
+    }
+  }
+  return ncc / (N * iStd * tStd)
+}
+
+// ── Dual-channel matching ───────────────────────────────────────────────────
+// mask: optional Uint8Array (1=valid, 0=masked). null = no mask (all pixels valid).
+function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
+                           satGray, satSatCh, threshold, stride, searchArea, mask) {
+  const totalPx = tW * tH
+  // If mask present, N = unmasked pixel count; else N = all pixels
+  let N = totalPx
+  if (mask) {
+    N = 0
+    for (let i = 0; i < totalPx; i++) if (mask[i]) N++
+    if (N < 4) return [] // too few unmasked pixels
+  }
+
+  // Template stats — grayscale (over unmasked pixels only)
   let tSumG = 0
-  for (let i = 0; i < N; i++) tSumG += tplGray[i]
+  for (let i = 0; i < totalPx; i++) { if (mask && !mask[i]) continue; tSumG += tplGray[i] }
   const tMeanG = tSumG / N
   let tVarG = 0
-  for (let i = 0; i < N; i++) { const d = tplGray[i] - tMeanG; tVarG += d * d }
+  for (let i = 0; i < totalPx; i++) { if (mask && !mask[i]) continue; const d = tplGray[i] - tMeanG; tVarG += d * d }
   const tStdG = Math.sqrt(tVarG / N)
 
-  // Template stats — saturation
+  // Template stats — saturation (over unmasked pixels only)
   let tSumS = 0
-  for (let i = 0; i < N; i++) tSumS += tplSat[i]
+  for (let i = 0; i < totalPx; i++) { if (mask && !mask[i]) continue; tSumS += tplSat[i] }
   const tMeanS = tSumS / N
   let tVarS = 0
-  for (let i = 0; i < N; i++) { const d = tplSat[i] - tMeanS; tVarS += d * d }
+  for (let i = 0; i < totalPx; i++) { if (mask && !mask[i]) continue; const d = tplSat[i] - tMeanS; tVarS += d * d }
   const tStdS = Math.sqrt(tVarS / N)
 
   // Determine if template has significant color content
   const hasColor = tStdS > 0.03
-  // Weight: if template is colorful, saturation channel dominates
   const wSat = hasColor ? 0.6 : 0.0
   const wGray = hasColor ? 0.4 : 1.0
 
@@ -210,33 +265,41 @@ function matchDualChannel(imgGray, imgSat, iW, iH, tplGray, tplSat, tW, tH,
       // Quick check: if template is colorful, skip patches with no color
       if (hasColor) {
         const patchSatSum = satSum(satSatCh.sat, iW, x, y, x + tW - 1, y + tH - 1)
-        const patchSatMean = patchSatSum / N
-        if (patchSatMean < tMeanS * 0.2) continue // too little color → skip
+        const patchSatMean = patchSatSum / totalPx
+        if (patchSatMean < tMeanS * 0.2) continue
       }
 
       // Grayscale NCC
       let scoreG = 0
       if (tStdG > 0.01) {
-        const pSumG = satSum(satGray.sat, iW, x, y, x + tW - 1, y + tH - 1)
-        const pSum2G = satSum(satGray.sat2, iW, x, y, x + tW - 1, y + tH - 1)
-        const iMeanG = pSumG / N
-        const iVarG = pSum2G / N - iMeanG * iMeanG
-        const iStdG = Math.sqrt(Math.max(0, iVarG))
-        if (iStdG > 0.01) {
-          scoreG = nccAtPosition(imgGray, iW, tplGray, tW, tH, x, y, iMeanG, iStdG, tMeanG, tStdG, N)
+        if (mask) {
+          scoreG = maskedNccAtPosition(imgGray, iW, tplGray, tW, tH, mask, x, y, tMeanG, tStdG, N)
+        } else {
+          const pSumG = satSum(satGray.sat, iW, x, y, x + tW - 1, y + tH - 1)
+          const pSum2G = satSum(satGray.sat2, iW, x, y, x + tW - 1, y + tH - 1)
+          const iMeanG = pSumG / N
+          const iVarG = pSum2G / N - iMeanG * iMeanG
+          const iStdG = Math.sqrt(Math.max(0, iVarG))
+          if (iStdG > 0.01) {
+            scoreG = nccAtPosition(imgGray, iW, tplGray, tW, tH, x, y, iMeanG, iStdG, tMeanG, tStdG, N)
+          }
         }
       }
 
       // Saturation NCC
       let scoreS = 0
       if (hasColor && tStdS > 0.01) {
-        const pSumS = satSum(satSatCh.sat, iW, x, y, x + tW - 1, y + tH - 1)
-        const pSum2S = satSum(satSatCh.sat2, iW, x, y, x + tW - 1, y + tH - 1)
-        const iMeanS = pSumS / N
-        const iVarS = pSum2S / N - iMeanS * iMeanS
-        const iStdS = Math.sqrt(Math.max(0, iVarS))
-        if (iStdS > 0.01) {
-          scoreS = nccAtPosition(imgSat, iW, tplSat, tW, tH, x, y, iMeanS, iStdS, tMeanS, tStdS, N)
+        if (mask) {
+          scoreS = maskedNccAtPosition(imgSat, iW, tplSat, tW, tH, mask, x, y, tMeanS, tStdS, N)
+        } else {
+          const pSumS = satSum(satSatCh.sat, iW, x, y, x + tW - 1, y + tH - 1)
+          const pSum2S = satSum(satSatCh.sat2, iW, x, y, x + tW - 1, y + tH - 1)
+          const iMeanS = pSumS / N
+          const iVarS = pSum2S / N - iMeanS * iMeanS
+          const iStdS = Math.sqrt(Math.max(0, iVarS))
+          if (iStdS > 0.01) {
+            scoreS = nccAtPosition(imgSat, iW, tplSat, tW, tH, x, y, iMeanS, iStdS, tMeanS, tStdS, N)
+          }
         }
       }
 
@@ -275,11 +338,12 @@ self.onmessage = (e) => {
     const effectiveThreshold = threshold || 0.55
     const t0 = performance.now()
 
-    // 1. Extract channels from RGBA
+    // 1. Extract channels from RGBA + optional mask from alpha channel
     const imgGray = toGray(imgData, imgW, imgH)
     const imgSat = toSaturation(imgData, imgW, imgH)
     const tplGray = toGray(tplData, tplW, tplH)
     const tplSat = toSaturation(tplData, tplW, tplH)
+    const rawMask = extractMask(tplData, tplW, tplH) // null if no masked pixels
 
     // 2. Auto-trim on saturation (if template is colorful) or grayscale variance
     let tplSatStd = 0
@@ -290,9 +354,18 @@ self.onmessage = (e) => {
       tplSatStd > 0.03 ? tplSat : tplGray, tplW, tplH, 3, trimThreshold
     )
 
-    // Crop both channels to the trimmed region
+    // Crop both channels + mask to the trimmed region
     const tGray = cropRegion(tplGray, tplW, offX, offY, trimW, trimH)
     const tSat = cropRegion(tplSat, tplW, offX, offY, trimW, trimH)
+    // Crop mask using same region (reuse cropRegion with Float32→Uint8 adaptor)
+    let tMask = null
+    if (rawMask) {
+      const maskF = new Float32Array(tplW * tplH)
+      for (let i = 0; i < rawMask.length; i++) maskF[i] = rawMask[i]
+      const croppedMaskF = cropRegion(maskF, tplW, offX, offY, trimW, trimH)
+      tMask = new Uint8Array(trimW * trimH)
+      for (let i = 0; i < tMask.length; i++) tMask[i] = croppedMaskF[i] > 0.5 ? 1 : 0
+    }
 
     // 3. Build SATs for image channels
     const satGray = buildSAT(imgGray, imgW, imgH)
@@ -309,19 +382,35 @@ self.onmessage = (e) => {
     // Electrical symbols appear in multiple orientations on plans.
     // This replaces multi-scale (rotation is more important than ±10% scale).
     // Generate rotated + mirrored variants of the trimmed template
+    // Helper: rotate/mirror mask (reuses Float32 rotate90/mirrorH, converts Uint8↔Float32)
+    function rotateMask90(m, w, h) {
+      if (!m) return null
+      const f = new Float32Array(w * h); for (let i = 0; i < m.length; i++) f[i] = m[i]
+      const r = rotate90(f, w, h)
+      const out = new Uint8Array(r.w * r.h); for (let i = 0; i < out.length; i++) out[i] = r.data[i] > 0.5 ? 1 : 0
+      return out
+    }
+    function mirrorMask(m, w, h) {
+      if (!m) return null
+      const f = new Float32Array(w * h); for (let i = 0; i < m.length; i++) f[i] = m[i]
+      const r = mirrorH(f, w, h)
+      const out = new Uint8Array(w * h); for (let i = 0; i < out.length; i++) out[i] = r[i] > 0.5 ? 1 : 0
+      return out
+    }
+
     const variants = []
     // 0° (original)
-    variants.push({ grayTpl: tGray, satTpl: tSat, w: trimW, h: trimH, label: '0°' })
+    variants.push({ grayTpl: tGray, satTpl: tSat, mask: tMask, w: trimW, h: trimH, label: '0°' })
     // 90° CW
-    { const rg = rotate90(tGray, trimW, trimH); const rs = rotate90(tSat, trimW, trimH); variants.push({ grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, label: '90°' }) }
+    { const rg = rotate90(tGray, trimW, trimH); const rs = rotate90(tSat, trimW, trimH); const rm = rotateMask90(tMask, trimW, trimH); variants.push({ grayTpl: rg.data, satTpl: rs.data, mask: rm, w: rg.w, h: rg.h, label: '90°' }) }
     // 180°
-    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); variants.push({ grayTpl: rg2.data, satTpl: rs2.data, w: rg2.w, h: rg2.h, label: '180°' }) }
-    // 270° CW (= 90° CCW)
-    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rg3 = rotate90(rg2.data, rg2.w, rg2.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); const rs3 = rotate90(rs2.data, rs2.w, rs2.h); variants.push({ grayTpl: rg3.data, satTpl: rs3.data, w: rg3.w, h: rg3.h, label: '270°' }) }
-    // Mirror (horizontal flip of original)
-    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); variants.push({ grayTpl: mg, satTpl: ms, w: trimW, h: trimH, label: 'mirror' }) }
+    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); const rm1 = rotateMask90(tMask, trimW, trimH); const rm2 = rm1 ? rotateMask90(rm1, rg1.w, rg1.h) : null; variants.push({ grayTpl: rg2.data, satTpl: rs2.data, mask: rm2, w: rg2.w, h: rg2.h, label: '180°' }) }
+    // 270° CW
+    { const rg1 = rotate90(tGray, trimW, trimH); const rg2 = rotate90(rg1.data, rg1.w, rg1.h); const rg3 = rotate90(rg2.data, rg2.w, rg2.h); const rs1 = rotate90(tSat, trimW, trimH); const rs2 = rotate90(rs1.data, rs1.w, rs1.h); const rs3 = rotate90(rs2.data, rs2.w, rs2.h); const rm1 = rotateMask90(tMask, trimW, trimH); const rm2 = rm1 ? rotateMask90(rm1, rg1.w, rg1.h) : null; const rm3 = rm2 ? rotateMask90(rm2, rg2.w, rg2.h) : null; variants.push({ grayTpl: rg3.data, satTpl: rs3.data, mask: rm3, w: rg3.w, h: rg3.h, label: '270°' }) }
+    // Mirror
+    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); const mm = mirrorMask(tMask, trimW, trimH); variants.push({ grayTpl: mg, satTpl: ms, mask: mm, w: trimW, h: trimH, label: 'mirror' }) }
     // Mirror + 90°
-    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); const rg = rotate90(mg, trimW, trimH); const rs = rotate90(ms, trimW, trimH); variants.push({ grayTpl: rg.data, satTpl: rs.data, w: rg.w, h: rg.h, label: 'mirror+90°' }) }
+    { const mg = mirrorH(tGray, trimW, trimH); const ms = mirrorH(tSat, trimW, trimH); const mm = mirrorMask(tMask, trimW, trimH); const rg = rotate90(mg, trimW, trimH); const rs = rotate90(ms, trimW, trimH); const rm = mm ? rotateMask90(mm, trimW, trimH) : null; variants.push({ grayTpl: rg.data, satTpl: rs.data, mask: rm, w: rg.w, h: rg.h, label: 'mirror+90°' }) }
 
     let allHits = []
     for (const variant of variants) {
@@ -340,11 +429,12 @@ self.onmessage = (e) => {
         }
 
         // Single-pass matching at the effective threshold and adaptive stride
+        // Pass variant mask for mask-aware NCC (null if no mask → standard fast path)
         const variantHits = matchDualChannel(
           imgGray, imgSat, imgW, imgH,
           sGray, sSat, sW, sH,
           satGray, satSatCh,
-          effectiveThreshold, stride, searchArea
+          effectiveThreshold, stride, searchArea, variant.mask
         )
 
         for (const h of variantHits) {
@@ -368,7 +458,8 @@ self.onmessage = (e) => {
 
     const elapsed = Math.round(performance.now() - t0)
     const colorMode = tplSatStd > 0.03 ? 'color(60%)+gray(40%)' : 'gray-only'
-    console.log(`[TemplateMatch v7] ${allHits.length} raw (${variants.length} orientations) → ${hits.length} NMS | ${colorMode} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
+    const maskInfo = rawMask ? ' | MASKED' : ''
+    console.log(`[TemplateMatch v7] ${allHits.length} raw (${variants.length} orientations) → ${hits.length} NMS | ${colorMode}${maskInfo} | trim ${tplW}x${tplH}→${trimW}x${trimH} | ${elapsed}ms | threshold=${effectiveThreshold} stride=${stride}`)
 
     self.postMessage({ type: 'result', hits })
   } catch (err) {
