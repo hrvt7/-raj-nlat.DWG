@@ -36,6 +36,20 @@ const parseCacheStore = localforage.createInstance({
 
 const LS_KEY = 'takeoffpro_plans_meta'
 
+/**
+ * Clear all user-sensitive plan data from IndexedDB.
+ * Called on logout to prevent the next user from seeing previous user's files.
+ * Safe to call at any time — next login recovers from remote backup.
+ */
+export async function clearAllLocalPlanData() {
+  await Promise.allSettled([
+    planFileStore.clear(),
+    planThumbStore.clear(),
+    planAnnotStore.clear(),
+    parseCacheStore.clear(),
+  ])
+}
+
 // ─── Plan metadata schema versioning ─────────────────────────────────────────
 // v1 = current shape (array of plan meta objects), stored in versioned envelope.
 // Legacy (v0) = raw array without envelope — still accepted on load.
