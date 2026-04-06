@@ -5,6 +5,7 @@ import DxfToolbar, { COUNT_CATEGORIES } from './DxfToolbar.jsx'
 import DxfLayerPanel from './DxfLayerPanel.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
 import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
+import usePlanAnnotationSave from '../../hooks/usePlanAnnotationSave.js'
 import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
 
 const C = {
@@ -108,32 +109,20 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   const activeToolRef = useRef(null)
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
   const hydratedRef = useRef(false) // true once async annotation restore completes
-  const debounceSaveTimerRef = useRef(null)
-  const saveStateTimerRef = useRef(null)
-  const [saveState, setSaveState] = useState('clean')
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
 
-  // ── Debounced auto-save: persist annotations 2s after last change ──
-  const debouncedSave = useCallback(() => {
-    if (!planId || !hydratedRef.current) return
-    setSaveState('dirty')
-    if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
-    if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
-    debounceSaveTimerRef.current = setTimeout(() => {
-      getPlanAnnotations(planId).then(stored => {
-        savePlanAnnotations(planId, {
-          ...stored,
-          markers: markersRef.current,
-          measurements: measuresRef.current,
-          scale: scaleRef.current,
-          ceilingHeight, switchHeight, socketHeight,
-        }, { silent: true })
-        setSaveState('saved')
-        if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
-        saveStateTimerRef.current = setTimeout(() => setSaveState('clean'), 3000)
-      }).catch(() => {})
-    }, 2000)
-  }, [planId, ceilingHeight, switchHeight, socketHeight])
+  // ── Debounced auto-save: shared hook with PdfViewer ──
+  const buildDxfPayload = useCallback(() => ({
+    markers: markersRef.current,
+    measurements: measuresRef.current,
+    scale: scaleRef.current,
+    ceilingHeight, switchHeight, socketHeight,
+  }), [ceilingHeight, switchHeight, socketHeight])
+
+  const { saveState, markDirty: debouncedSave, debounceSaveTimerRef } = usePlanAnnotationSave({
+    planId, hydratedRef,
+    buildPayload: buildDxfPayload,
+  })
 
   // ── Load saved annotations on mount ──
   useEffect(() => {
