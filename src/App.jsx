@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 
 import Landing from './Landing.jsx'
 import { supabase, supabaseConfigured, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, saveProjectsRemote, savePlansRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesWithTime, loadMaterialsWithTime, loadWorkItemsWithTime, loadProjectsWithTime, loadPlansWithTime, createQuoteShare } from './supabase.js'
 import { getLocalTimestamp, LS_KEYS } from './data/store.js'
+import { mergeQuotesByUnion, decideBlobMerge, decideSettingsMerge } from './utils/crossDeviceMerge.js'
 import Sidebar from './components/Sidebar.jsx'
 import QuoteView from './components/QuoteView.jsx'
 
@@ -562,112 +563,43 @@ function SaaSShell() {
 
     ;(async () => {
       try {
-        // Settings: remote wins if local is empty/default, else newer wins.
-        // Settings is a plain object (not versioned envelope), so we use
-        // a simple "recoverable" check: if local is empty → remote wins.
-        // If both have data, remote wins (settings are saved immediately on change).
+        // Settings: merge decision via crossDeviceMerge (pure function)
         {
           const remote = await loadSettingsRemote()
-          if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
-            const localRaw = localStorage.getItem('takeoffpro_settings')
-            const localEmpty = !localRaw || localRaw === '{}' || localRaw === 'null'
-            if (localEmpty) {
-              saveSettings(remote); setSettings(loadSettings())
-            } else {
-              // Both have data — settings don't have envelope timestamps,
-              // so remote wins (it reflects the last device that saved)
-              saveSettings(remote); setSettings(loadSettings())
-            }
+          const decision = decideSettingsMerge(localStorage.getItem('takeoffpro_settings'), remote)
+          if (decision.action === 'use-remote') {
+            saveSettings(decision.data); setSettings(loadSettings())
           }
         }
 
-        // Quotes: union merge by ID — keeps all unique quotes from both sources,
-        // preferring the version with the later updatedAt when both have the same ID.
-        // This replaces the old count-based merge which could discard newer local quotes.
+        // Quotes: union merge by ID (pure decision function)
         {
           const rows = await loadQuotesRemote()
           const remoteQuotes = (rows || []).map(r => r.pricing_data).filter(Boolean)
-          const localQuotes = loadQuotes()
-          if (remoteQuotes.length > 0) {
-            const merged = new Map()
-            // Local first — local is authoritative for recently-edited quotes
-            for (const q of localQuotes) { if (q.id) merged.set(q.id, q) }
-            // Remote — add missing quotes, update if remote is newer
-            for (const q of remoteQuotes) {
-              if (!q.id) continue
-              const existing = merged.get(q.id)
-              if (!existing) {
-                merged.set(q.id, q) // new from remote
-              } else {
-                // Prefer the one with later updatedAt (or createdAt fallback)
-                const remoteTime = q.updatedAt || q.createdAt || ''
-                const localTime = existing.updatedAt || existing.createdAt || ''
-                if (remoteTime > localTime) merged.set(q.id, q)
-              }
-            }
-            const unionQuotes = Array.from(merged.values())
-              .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-            if (unionQuotes.length !== localQuotes.length || unionQuotes.some((q, i) => q.id !== localQuotes[i]?.id)) {
-              saveQuotes(unionQuotes); setQuotes(loadQuotes())
-            }
-          }
+          const merged = mergeQuotesByUnion(loadQuotes(), remoteQuotes)
+          if (merged) { saveQuotes(merged); setQuotes(loadQuotes()) }
         }
 
-        // Catalog blobs: deterministic newer-wins merge.
-        // Compares local envelope _updatedAt with remote blob _savedAt.
-        // The fresher one wins. No count-based or non-empty shortcuts.
-        const mergeByTimestamp = async (loadRemoteWithTimeFn, loadLocalFn, saveLocalFn, lsKey, onUpdate) => {
+        // Catalog blobs: timestamp-based newer-wins (pure decision function)
+        const reconcileBlob = async (loadRemoteWithTimeFn, loadLocalFn, saveLocalFn, lsKey, onUpdate) => {
           const { data: remoteData, savedAt: remoteSavedAt } = await loadRemoteWithTimeFn()
-          if (!Array.isArray(remoteData) || remoteData.length === 0) return // no remote → keep local
-          const local = loadLocalFn()
-          if (!local || local.length === 0) {
-            // Local empty → remote wins (new device / cleared cache)
-            saveLocalFn(remoteData); onUpdate(); return
-          }
-          // Both have data → compare timestamps
-          const localTime = getLocalTimestamp(lsKey)
-          if (!localTime && !remoteSavedAt) {
-            // Both missing timestamps (legacy) → remote wins (canonical store)
-            saveLocalFn(remoteData); onUpdate(); return
-          }
-          if (!localTime) {
-            // Local has no timestamp (legacy), remote does → remote wins
-            saveLocalFn(remoteData); onUpdate(); return
-          }
-          if (!remoteSavedAt) {
-            // Remote has no timestamp (legacy), local does → local wins (fresher known)
-            return
-          }
-          // Both have timestamps → newer wins
-          if (remoteSavedAt > localTime) {
-            saveLocalFn(remoteData); onUpdate()
-          }
-          // else: local is newer or same → keep local
+          const decision = decideBlobMerge(loadLocalFn(), getLocalTimestamp(lsKey), remoteData, remoteSavedAt)
+          if (decision.action === 'use-remote') { saveLocalFn(decision.data); onUpdate() }
         }
-        await mergeByTimestamp(loadAssembliesWithTime, loadAssemblies, saveAssemblies, LS_KEYS.ASSEMBLIES, () => setAsmRev(r => r + 1))
-        await mergeByTimestamp(loadMaterialsWithTime, loadMaterials, saveMaterials, LS_KEYS.MATERIALS, () => setMaterials(loadMaterials()))
-        await mergeByTimestamp(loadWorkItemsWithTime, loadWorkItems, saveWorkItems, LS_KEYS.WORK_ITEMS, () => setWorkItems(loadWorkItems()))
+        await reconcileBlob(loadAssembliesWithTime, loadAssemblies, saveAssemblies, LS_KEYS.ASSEMBLIES, () => setAsmRev(r => r + 1))
+        await reconcileBlob(loadMaterialsWithTime, loadMaterials, saveMaterials, LS_KEYS.MATERIALS, () => setMaterials(loadMaterials()))
+        await reconcileBlob(loadWorkItemsWithTime, loadWorkItems, saveWorkItems, LS_KEYS.WORK_ITEMS, () => setWorkItems(loadWorkItems()))
 
-        // Project/plan metadata: same newer-wins policy
+        // Project/plan metadata: same newer-wins via decideBlobMerge
         {
-          const { data: remoteProjects, savedAt: rProjTime } = await loadProjectsWithTime()
-          if (Array.isArray(remoteProjects) && remoteProjects.length > 0) {
-            const localProjects = loadProjects()
-            const lProjTime = getLocalTimestamp('takeoffpro_projects_meta')
-            if (!localProjects || localProjects.length === 0 || !lProjTime || (rProjTime && rProjTime > lProjTime)) {
-              saveAllProjects(remoteProjects); setProjRev(r => r + 1)
-            }
-          }
+          const { data: rProj, savedAt: rProjTime } = await loadProjectsWithTime()
+          const d = decideBlobMerge(loadProjects(), getLocalTimestamp('takeoffpro_projects_meta'), rProj, rProjTime)
+          if (d.action === 'use-remote') { saveAllProjects(d.data); setProjRev(r => r + 1) }
         }
         {
-          const { data: remotePlans, savedAt: rPlanTime } = await loadPlansWithTime()
-          if (Array.isArray(remotePlans) && remotePlans.length > 0) {
-            const localPlans = loadPlans()
-            const lPlanTime = getLocalTimestamp('takeoffpro_plans_meta')
-            if (!localPlans || localPlans.length === 0 || !lPlanTime || (rPlanTime && rPlanTime > lPlanTime)) {
-              saveAllPlansMeta(remotePlans); setPlanRev(r => r + 1)
-            }
-          }
+          const { data: rPlans, savedAt: rPlanTime } = await loadPlansWithTime()
+          const d = decideBlobMerge(loadPlans(), getLocalTimestamp('takeoffpro_plans_meta'), rPlans, rPlanTime)
+          if (d.action === 'use-remote') { saveAllPlansMeta(d.data); setPlanRev(r => r + 1) }
         }
       } catch (err) {
         console.warn('[App] Remote read-back failed (non-blocking):', err.message)

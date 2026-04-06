@@ -1,101 +1,153 @@
 /**
  * Cross-device merge determinism regression tests.
  *
- * Verifies the unified newer-wins merge policy:
- * - Quotes: union by ID + newer updatedAt wins (unchanged)
- * - Catalog blobs: timestamp-based newer-wins
- * - No count-based merge
- * - No "local non-empty wins" shortcut
- * - No "remote always wins" shortcut
+ * Tests the extracted crossDeviceMerge module directly:
+ * - mergeQuotesByUnion: union by ID + newer updatedAt wins
+ * - decideBlobMerge: timestamp-based newer-wins for catalog blobs
+ * - decideSettingsMerge: remote-wins for settings
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { mergeQuotesByUnion, decideBlobMerge, decideSettingsMerge } from '../utils/crossDeviceMerge.js'
 
 const appSrc = readFileSync(resolve(import.meta.dirname, '..', 'App.jsx'), 'utf-8')
-const supabaseSrc = readFileSync(resolve(import.meta.dirname, '..', 'supabase.js'), 'utf-8')
 
-// Simulate the mergeByTimestamp logic from App.jsx
-function mergeByTimestamp(localData, localTime, remoteData, remoteSavedAt) {
-  if (!Array.isArray(remoteData) || remoteData.length === 0) return { winner: 'local', reason: 'no remote' }
-  if (!localData || localData.length === 0) return { winner: 'remote', reason: 'local empty' }
-  if (!localTime && !remoteSavedAt) return { winner: 'remote', reason: 'both no timestamp (legacy)' }
-  if (!localTime) return { winner: 'remote', reason: 'local no timestamp' }
-  if (!remoteSavedAt) return { winner: 'local', reason: 'remote no timestamp' }
-  if (remoteSavedAt > localTime) return { winner: 'remote', reason: 'remote newer' }
-  return { winner: 'local', reason: 'local newer or same' }
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. QUOTE UNION MERGE
+// ═══════════════════════════════════════════════════════════════════════════
 
-describe('newer-wins merge for catalog blobs', () => {
-  it('local newer than remote → local wins', () => {
-    const r = mergeByTimestamp(
-      [{ id: 'A' }], '2026-04-06T12:00:00Z',
-      [{ id: 'A' }], '2026-04-05T10:00:00Z'
-    )
-    expect(r.winner).toBe('local')
+describe('mergeQuotesByUnion', () => {
+  it('newer remote version wins for same ID', () => {
+    const local = [{ id: 'Q1', updatedAt: '2026-04-01T10:00:00Z', name: 'Old' }]
+    const remote = [{ id: 'Q1', updatedAt: '2026-04-05T10:00:00Z', name: 'Fresh' }]
+    const result = mergeQuotesByUnion(local, remote)
+    expect(result).not.toBeNull()
+    expect(result[0].name).toBe('Fresh')
   })
 
-  it('remote newer than local → remote wins', () => {
-    const r = mergeByTimestamp(
-      [{ id: 'A' }], '2026-04-05T10:00:00Z',
-      [{ id: 'A' }], '2026-04-06T12:00:00Z'
-    )
-    expect(r.winner).toBe('remote')
+  it('disjoint quotes from both sources kept', () => {
+    const local = [{ id: 'QA', createdAt: '2026-04-01T10:00:00Z' }]
+    const remote = [{ id: 'QB', createdAt: '2026-04-02T10:00:00Z' }]
+    const result = mergeQuotesByUnion(local, remote)
+    expect(result).not.toBeNull()
+    expect(result.length).toBe(2)
   })
 
-  it('only local exists → local kept', () => {
-    const r = mergeByTimestamp([{ id: 'A' }], '2026-04-05T10:00:00Z', [], null)
-    expect(r.winner).toBe('local')
+  it('local newer than remote → local kept for that ID', () => {
+    const local = [{ id: 'Q1', updatedAt: '2026-04-06T12:00:00Z', name: 'Local' }]
+    const remote = [{ id: 'Q1', updatedAt: '2026-04-03T10:00:00Z', name: 'Remote' }]
+    const result = mergeQuotesByUnion(local, remote)
+    // No change since local is newer and same set
+    expect(result).toBeNull()
   })
 
-  it('only remote exists → remote used', () => {
-    const r = mergeByTimestamp([], null, [{ id: 'A' }], '2026-04-05T10:00:00Z')
-    expect(r.winner).toBe('remote')
+  it('empty remote → no change', () => {
+    const local = [{ id: 'Q1', createdAt: '2026-04-01T10:00:00Z' }]
+    expect(mergeQuotesByUnion(local, [])).toBeNull()
   })
 
-  it('empty remote does not wipe valid local', () => {
-    const r = mergeByTimestamp([{ id: 'A' }], '2026-04-05T10:00:00Z', [], null)
-    expect(r.winner).toBe('local')
-    expect(r.reason).toBe('no remote')
-  })
-
-  it('missing local timestamp + valid remote → remote wins', () => {
-    const r = mergeByTimestamp([{ id: 'A' }], null, [{ id: 'B' }], '2026-04-05T10:00:00Z')
-    expect(r.winner).toBe('remote')
-  })
-
-  it('valid local timestamp + missing remote → local wins', () => {
-    const r = mergeByTimestamp([{ id: 'A' }], '2026-04-05T10:00:00Z', [{ id: 'B' }], null)
-    expect(r.winner).toBe('local')
-  })
-
-  it('both missing timestamps (legacy) → remote wins as canonical', () => {
-    const r = mergeByTimestamp([{ id: 'A' }], null, [{ id: 'B' }], null)
-    expect(r.winner).toBe('remote')
+  it('empty local + remote → uses remote', () => {
+    const remote = [{ id: 'Q1', createdAt: '2026-04-01T10:00:00Z' }]
+    const result = mergeQuotesByUnion([], remote)
+    expect(result).not.toBeNull()
+    expect(result.length).toBe(1)
   })
 })
 
-describe('source code policy verification', () => {
-  it('no count-based merge in App.jsx', () => {
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. BLOB MERGE (TIMESTAMP-BASED)
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('decideBlobMerge', () => {
+  it('local newer → keep-local', () => {
+    const d = decideBlobMerge([{ id: 'A' }], '2026-04-06T12:00:00Z', [{ id: 'A' }], '2026-04-05T10:00:00Z')
+    expect(d.action).toBe('keep-local')
+  })
+
+  it('remote newer → use-remote', () => {
+    const d = decideBlobMerge([{ id: 'A' }], '2026-04-05T10:00:00Z', [{ id: 'A' }], '2026-04-06T12:00:00Z')
+    expect(d.action).toBe('use-remote')
+  })
+
+  it('only local → keep-local', () => {
+    const d = decideBlobMerge([{ id: 'A' }], '2026-04-05T10:00:00Z', [], null)
+    expect(d.action).toBe('keep-local')
+  })
+
+  it('only remote → use-remote', () => {
+    const d = decideBlobMerge([], null, [{ id: 'A' }], '2026-04-05T10:00:00Z')
+    expect(d.action).toBe('use-remote')
+  })
+
+  it('empty remote does not wipe valid local', () => {
+    const d = decideBlobMerge([{ id: 'A' }], '2026-04-05T10:00:00Z', [], null)
+    expect(d.action).toBe('keep-local')
+    expect(d.reason).toBe('no remote data')
+  })
+
+  it('missing local timestamp + valid remote → use-remote', () => {
+    const d = decideBlobMerge([{ id: 'A' }], null, [{ id: 'B' }], '2026-04-05T10:00:00Z')
+    expect(d.action).toBe('use-remote')
+  })
+
+  it('valid local + missing remote timestamp → keep-local', () => {
+    const d = decideBlobMerge([{ id: 'A' }], '2026-04-05T10:00:00Z', [{ id: 'B' }], null)
+    expect(d.action).toBe('keep-local')
+  })
+
+  it('both legacy (no timestamps) → use-remote as canonical', () => {
+    const d = decideBlobMerge([{ id: 'A' }], null, [{ id: 'B' }], null)
+    expect(d.action).toBe('use-remote')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. SETTINGS MERGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('decideSettingsMerge', () => {
+  it('remote available → use-remote', () => {
+    const d = decideSettingsMerge('{}', { labor: { hourly_rate: 12000 } })
+    expect(d.action).toBe('use-remote')
+  })
+
+  it('remote empty → keep-local', () => {
+    const d = decideSettingsMerge('{"labor":{}}', {})
+    expect(d.action).toBe('keep-local')
+  })
+
+  it('remote null → keep-local', () => {
+    const d = decideSettingsMerge('{"labor":{}}', null)
+    expect(d.action).toBe('keep-local')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. APP.JSX SOURCE CONTRACT
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('App.jsx uses crossDeviceMerge module', () => {
+  it('imports from crossDeviceMerge', () => {
+    expect(appSrc).toContain('crossDeviceMerge')
+  })
+
+  it('uses decideBlobMerge for catalog reconciliation', () => {
+    expect(appSrc).toContain('decideBlobMerge')
+  })
+
+  it('uses mergeQuotesByUnion for quotes', () => {
+    expect(appSrc).toContain('mergeQuotesByUnion')
+  })
+
+  it('no inline merge logic remaining', () => {
+    // The old inline Map-based merge should be gone
+    expect(appSrc).not.toContain('const merged = new Map()')
+    // The old inline mergeByTimestamp function should be gone
+    expect(appSrc).not.toContain('const mergeByTimestamp = async')
+  })
+
+  it('no count-based merge', () => {
     expect(appSrc).not.toContain('remote.length > local.length')
-    expect(appSrc).not.toContain('mapped.length > local.length')
-  })
-
-  it('uses mergeByTimestamp for catalogs', () => {
-    expect(appSrc).toContain('mergeByTimestamp')
-    expect(appSrc).toContain('getLocalTimestamp')
-  })
-
-  it('remote blob saves include _savedAt timestamp', () => {
-    expect(supabaseSrc).toContain("_savedAt: new Date().toISOString()")
-  })
-
-  it('loadUserBlobWithTime returns data + savedAt', () => {
-    expect(supabaseSrc).toContain('loadUserBlobWithTime')
-    expect(supabaseSrc).toContain('savedAt')
-  })
-
-  it('quotes merge still uses union by ID', () => {
-    expect(appSrc).toContain('merged.set(q.id, q)')
   })
 })
