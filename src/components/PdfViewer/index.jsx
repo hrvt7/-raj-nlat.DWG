@@ -13,6 +13,7 @@ import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasTo
 export { docToCanvas, canvasToDoc } from './pdfUtils.js'
 import PdfScrollbars from './PdfScrollbars.jsx'
 import PdfToolbar from './PdfToolbar.jsx'
+import usePlanAnnotationSave from '../../hooks/usePlanAnnotationSave.js'
 
 const C = {
   bg: '#09090B', bgCard: '#111113', border: '#1E1E22',
@@ -142,61 +143,33 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => { quoteOverridesRef.current = quoteOverrides }, [quoteOverrides])
 
   // ── Dirty / save state tracking + debounced auto-save ──
+  // Uses shared hook — same save semantics as DxfViewer.
   // NOTE: must be declared AFTER ceilingHeight/socketHeight/switchHeight
-  // to avoid TDZ in production builds (Vite minifier reorders declarations).
-  const [saveState, setSaveState] = useState('clean')
-  const saveStateTimerRef = useRef(null)
-  const debounceSaveTimerRef = useRef(null)
-  const dirtyRef = useRef(false)
+  // to avoid TDZ in production builds.
+  const buildPdfPayload = useCallback(() => ({
+    markers: markersRef.current,
+    measurements: measuresRef.current,
+    scale: scaleRef.current,
+    ceilingHeight, socketHeight, switchHeight,
+    assignments: assignmentsRef.current,
+    quoteOverrides: quoteOverridesRef.current,
+    rotation: rotationRef.current,
+    coordVersion: 2,
+  }), [ceilingHeight, socketHeight, switchHeight])
 
-  // Persist current annotation state to IDB. Reads from refs (always current).
-  const persistAnnotations = useCallback(() => {
-    if (!planId || !hydratedRef.current) return
-    const payload = {
-      markers: markersRef.current,
-      measurements: measuresRef.current,
-      scale: scaleRef.current,
-      ceilingHeight, socketHeight, switchHeight,
-      assignments: assignmentsRef.current,
-      quoteOverrides: quoteOverridesRef.current,
-      rotation: rotationRef.current,
-      coordVersion: 2,
-    }
-    getPlanAnnotations(planId).then(stored => {
-      savePlanAnnotations(planId, {
-        ...stored,
-        ...payload,
-        savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
-        symbolFamilies: stored?.symbolFamilies || [],
-      }, { silent: true })
-      dirtyRef.current = false
-      if (onDirtyChange) onDirtyChange(false)
-      setSaveState('saved')
-      if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
-      saveStateTimerRef.current = setTimeout(() => setSaveState('clean'), 3000)
-    }).catch(() => {})
-  }, [planId, ceilingHeight, socketHeight, switchHeight, onDirtyChange])
+  const mergePdfWithStored = useCallback((stored, payload) => ({
+    ...stored,
+    ...payload,
+    savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
+    symbolFamilies: stored?.symbolFamilies || [],
+  }), [])
 
-  const markDirty = useCallback(() => {
-    if (!dirtyRef.current) {
-      dirtyRef.current = true
-      if (onDirtyChange) onDirtyChange(true)
-    }
-    setSaveState('dirty')
-    if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
-    // Debounced auto-save: persist 2 seconds after last change
-    if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
-    debounceSaveTimerRef.current = setTimeout(persistAnnotations, 2000)
-  }, [onDirtyChange, persistAnnotations])
-
-  // Call after successful save to show "saved" briefly then revert to "clean"
-  const markSaved = useCallback(() => {
-    dirtyRef.current = false
-    if (onDirtyChange) onDirtyChange(false)
-    setSaveState('saved')
-    if (saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current)
-    saveStateTimerRef.current = setTimeout(() => setSaveState('clean'), 3000)
-  }, [onDirtyChange])
+  const { saveState, markDirty, markSaved, debounceSaveTimerRef, setSaveState } = usePlanAnnotationSave({
+    planId, hydratedRef,
+    buildPayload: buildPdfPayload,
+    mergeWithStored: mergePdfWithStored,
+    onDirtyChange,
+  })
   // Persist assignments/quoteOverrides to IDB on every change so explicit parent save
   // reads fresh data (prevents race with unmount auto-save)
   useEffect(() => {
@@ -246,8 +219,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
       if (!ann.coordVersion || ann.coordVersion < 2) {
         migrationRef.current = { rotation: ann.rotation || 0 }
       }
-      // Reset dirty/save state after hydration from store
-      dirtyRef.current = false
+      // Reset save state after hydration from store
       if (onDirtyChange) onDirtyChange(false)
       setSaveState('clean')
       hydratedRef.current = true // annotation restore complete — auto-save now safe
