@@ -173,7 +173,7 @@ const SPECIAL_ITEMS = [
   { key: 'other', label: 'Egyéb', color: '#71717A' },
 ]
 
-export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies, measureMode, onCreateNew }) {
+export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies, measureMode }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef(null)
   const popupRef = useRef(null)
@@ -297,27 +297,6 @@ export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies,
           <AsmBtn key={s.key} id={s.key} label={s.label} color={s.color} />
         ))}
       </div>
-
-      {/* Create new assembly — workspace entry point */}
-      {onCreateNew && (
-        <div style={{ borderTop: '1px solid #1E1E22', padding: 4, marginTop: 2 }}>
-          <button
-            onMouseDown={e => { e.stopPropagation(); e.preventDefault() }}
-            onClick={() => { setOpen(false); onCreateNew() }}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 10px', borderRadius: 5, cursor: 'pointer',
-              background: 'transparent', border: 'none',
-              color: C.accent, fontSize: 11, fontFamily: 'DM Mono', fontWeight: 600,
-              textAlign: 'left', transition: 'background 0.1s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,229,160,0.08)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-          >
-            ＋ Új assembly
-          </button>
-        </div>
-      )}
     </div>,
     document.body
   )
@@ -363,7 +342,7 @@ export default function DxfToolbar({
   assemblies,
   scale, markerCount, measureCount,
   onUndo, onClearAll,
-  saveState, onCreateAssembly,
+  saveState,
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '5px 8px', background: C.bgCard, borderBottom: `1px solid ${C.border}` }}>
@@ -388,7 +367,7 @@ export default function DxfToolbar({
 
       {/* Assembly/Category picker when counting — assembly-first when available */}
       {activeTool === 'count' && assemblies?.length > 0 && (
-        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} onCreateNew={onCreateAssembly} />
+        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
       )}
       {activeTool === 'count' && (!assemblies || !assemblies.length) && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />

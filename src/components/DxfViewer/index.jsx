@@ -23,7 +23,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, onMarkersChange, focusTarget, assemblies: assembliesProp, onCreateAssembly, pendingAutoSelect, onAutoSelectConsumed }, ref) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, onMarkersChange, focusTarget, assemblies: assembliesProp }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -72,15 +72,6 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     const mainAsms = (assembliesProp || []).filter(a => !a.variantOf)
     return mainAsms.length > 0 ? mainAsms[0].id : 'socket'
   })
-
-  // Auto-select newly created assembly from workspace modal
-  useEffect(() => {
-    if (pendingAutoSelect) {
-      setActiveCategory(pendingAutoSelect)
-      if (onAutoSelectConsumed) onAutoSelectConsumed()
-    }
-  }, [pendingAutoSelect, onAutoSelectConsumed])
-
   const [layers, setLayers] = useState([])
   const [layerVisibility, setLayerVisibility] = useState({})
   const [layersPanelOpen, setLayersPanelOpen] = useState(false)
@@ -721,7 +712,6 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         onUndo={handleUndo}
         onClearAll={handleClearAll}
         saveState={saveState}
-        onCreateAssembly={onCreateAssembly}
       />
 
       {/* ── Canvas area ── */}
