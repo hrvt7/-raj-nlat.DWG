@@ -165,8 +165,11 @@ async function upsertUserBlob(table, dataArray) {
   requireConfig('upsertUserBlob:' + table)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
+  // Wrap data with _savedAt timestamp for cross-device freshness comparison.
+  // The timestamp lives inside the JSONB data column — no schema change needed.
+  const blob = { _items: dataArray, _savedAt: new Date().toISOString() }
   const { error } = await supabase.from(table).upsert(
-    { user_id: user.id, data: dataArray }, { onConflict: 'user_id' }
+    { user_id: user.id, data: blob }, { onConflict: 'user_id' }
   )
   if (error) throw error
 }
@@ -174,17 +177,36 @@ async function loadUserBlob(table) {
   requireConfig('loadUserBlob:' + table)
   const { data, error } = await supabase.from(table).select('data').single()
   if (error && error.code !== 'PGRST116') throw error
-  return data?.data || null
+  const blob = data?.data
+  if (!blob) return null
+  // Handle both new format { _items, _savedAt } and legacy raw array
+  if (blob._items && blob._savedAt) return blob._items
+  return blob // legacy: raw array stored directly
+}
+/** Load user blob WITH savedAt timestamp for merge decisions */
+export async function loadUserBlobWithTime(table) {
+  requireConfig('loadUserBlobWithTime:' + table)
+  const { data, error } = await supabase.from(table).select('data').single()
+  if (error && error.code !== 'PGRST116') throw error
+  const blob = data?.data
+  if (!blob) return { data: null, savedAt: null }
+  if (blob._items && blob._savedAt) return { data: blob._items, savedAt: blob._savedAt }
+  return { data: blob, savedAt: null } // legacy: no timestamp
 }
 export const loadWorkItemsRemote   = () => loadUserBlob('work_items')
+export const loadWorkItemsWithTime = () => loadUserBlobWithTime('work_items')
 export const saveWorkItemsRemote   = (d) => upsertUserBlob('work_items', d)
 export const loadMaterialsRemote   = () => loadUserBlob('materials')
+export const loadMaterialsWithTime = () => loadUserBlobWithTime('materials')
 export const saveMaterialsRemote   = (d) => upsertUserBlob('materials', d)
 export const loadAssembliesRemote  = () => loadUserBlob('assemblies')
+export const loadAssembliesWithTime = () => loadUserBlobWithTime('assemblies')
 export const saveAssembliesRemote  = (d) => upsertUserBlob('assemblies', d)
 export const loadProjectsRemote    = () => loadUserBlob('projects')
+export const loadProjectsWithTime  = () => loadUserBlobWithTime('projects')
 export const saveProjectsRemote    = (d) => upsertUserBlob('projects', d)
 export const loadPlansRemote       = () => loadUserBlob('plans_meta')
+export const loadPlansWithTime     = () => loadUserBlobWithTime('plans_meta')
 export const savePlansRemote       = (d) => upsertUserBlob('plans_meta', d)
 
 // ── Plan annotations (per-plan, keyed by user_id + plan_id) ─────────────────

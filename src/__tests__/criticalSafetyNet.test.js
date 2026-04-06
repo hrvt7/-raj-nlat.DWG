@@ -72,10 +72,11 @@ describe('Remote save/load — buildQuoteRow DB column parity', () => {
     expect(row.quote_number).toBeUndefined()
   })
 
-  it('upsertUserBlob sends only user_id + data', () => {
+  it('upsertUserBlob sends user_id + data blob with _savedAt', () => {
     const supabaseSrc = readSrc('supabase.js')
-    // upsertUserBlob should produce { user_id, data } — no extra fields
-    expect(supabaseSrc).toContain("{ user_id: user.id, data: dataArray }")
+    // upsertUserBlob wraps data with _savedAt for cross-device freshness comparison
+    expect(supabaseSrc).toContain("{ user_id: user.id, data: blob }")
+    expect(supabaseSrc).toContain("_savedAt")
   })
 })
 
@@ -211,16 +212,17 @@ describe('Logout → login → recovery chain contract', () => {
   it('hydration effect reads all 7 entities from remote after login', () => {
     const appSrc = readSrc('App.jsx')
     const hydrationSection = appSrc.slice(
-      appSrc.indexOf('Cross-device merge'),
+      appSrc.indexOf('Cross-device merge') || appSrc.indexOf('deterministic newer-wins'),
       appSrc.indexOf('Remote read-back failed')
     )
     expect(hydrationSection).toContain('loadSettingsRemote')
     expect(hydrationSection).toContain('loadQuotesRemote')
-    expect(hydrationSection).toContain('loadAssembliesRemote')
-    expect(hydrationSection).toContain('loadMaterialsRemote')
-    expect(hydrationSection).toContain('loadWorkItemsRemote')
-    expect(hydrationSection).toContain('loadProjectsRemote')
-    expect(hydrationSection).toContain('loadPlansRemote')
+    // Catalog blobs use timestamped loaders for deterministic merge
+    expect(hydrationSection).toContain('loadAssembliesWithTime')
+    expect(hydrationSection).toContain('loadMaterialsWithTime')
+    expect(hydrationSection).toContain('loadWorkItemsWithTime')
+    expect(hydrationSection).toContain('loadProjectsWithTime')
+    expect(hydrationSection).toContain('loadPlansWithTime')
   })
 
   it('quotes recovery maps pricing_data for full quote reconstruction', () => {
