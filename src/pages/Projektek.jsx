@@ -593,7 +593,7 @@ function PlanCard({ plan, thumb, selected, onSelect, onOpen, onDelete, openingId
   const detected = plan.detectedCount || 0
   const hasScale = plan.hasScale
   const hasCalc = plan.calcTotal != null && plan.calcTotal > 0
-  const backupStatus = supabaseConfigured ? (plan.remoteBackupAt === null ? 'failed' : plan.remoteBackupAt ? 'ok' : null) : null
+  const backupStatus = supabaseConfigured ? (plan.remoteBackupFailed ? 'failed' : plan.remoteBackupAt ? 'ok' : null) : null
   const calcTotal = plan.calcTotal || 0
   const calcItems = plan.calcItemCount || 0
 
@@ -1026,8 +1026,8 @@ function ProjectDetailView({ projectId, onBack, onOpenFile, onLegendPanel, onMer
     try {
       // Check if cloud recovery will be attempted — show feedback if so
       const hasLocal = await hasPlanFileLocally(plan.id)
-      const backupKnownFailed = plan.remoteBackupAt === null
-      const attemptingRecovery = !hasLocal && supabaseConfigured && !backupKnownFailed
+      // Always attempt recovery when local is missing — the old null-suppression was removed.
+      const attemptingRecovery = !hasLocal && supabaseConfigured
       if (attemptingRecovery) {
         toast.show('A tervfájl visszaállítása a felhőből…', 'info', 8000)
       }
