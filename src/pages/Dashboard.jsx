@@ -235,8 +235,8 @@ export default function Dashboard({ quotes, settings, onNavigate, onOpenQuote, o
             </Card>
           )}
 
-          {/* Demo path guidance */}
-          {quotes.length <= 2 && (
+          {/* Demo path guidance — hidden from UI, code preserved */}
+          {false && quotes.length <= 2 && (
             <Card style={{ padding: 18, border: `1px solid rgba(0,229,160,0.15)`, background: 'rgba(0,229,160,0.03)' }}>
               <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.accent, marginBottom: 10 }}>
                 Javasolt munkafolyamat
