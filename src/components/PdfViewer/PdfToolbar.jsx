@@ -28,6 +28,7 @@ export default function PdfToolbar({
     { id: 'count', label: 'Számlálás', key: 'C' },
     { id: 'measure', label: 'Mérés', key: 'M' },
     { id: 'calibrate', label: 'Skála', key: 'S' },
+    { id: 'auto-symbol', label: 'Keresés', key: 'A' },
   ]
 
   return (
@@ -47,9 +48,11 @@ export default function PdfToolbar({
 
       {/* Tool buttons */}
       {TOOLS.map(t => {
-        const on = activeTool === t.id
+        const isAutoSymbol = t.id === 'auto-symbol'
+        const on = isAutoSymbol ? autoSymbolActive : activeTool === t.id
+        const handleClick = isAutoSymbol ? onAutoSymbolToggle : () => onToolChange(on ? null : t.id)
         return (
-          <button key={t.id} onClick={() => onToolChange(on ? null : t.id)} title={`${t.label} (${t.key})`} style={{
+          <button key={t.id} onClick={handleClick} title={`${t.label} (${t.key})`} style={{
             padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne', fontWeight: 600,
             display: 'flex', alignItems: 'center', gap: 5,
             background: on ? 'rgba(0,229,160,0.12)' : 'transparent',
@@ -60,6 +63,7 @@ export default function PdfToolbar({
             {t.id === 'count' && markerCount > 0 && <span style={{ background: C.accent, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{markerCount}</span>}
             {t.id === 'measure' && measureCount > 0 && <span style={{ background: C.yellow, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{measureCount}</span>}
             {t.id === 'calibrate' && scale.calibrated && <span style={{ background: C.blue, color: C.bg, borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 700, fontFamily: 'DM Mono' }}>✓</span>}
+            {isAutoSymbol && autoSymbolCount > 0 && <span style={{ background: C.accent, color: C.bg, borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{autoSymbolCount}</span>}
           </button>
         )
       })}
@@ -78,9 +82,10 @@ export default function PdfToolbar({
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
 
-      {/* ── Auto Symbol + Batch Search ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8, borderLeft: `1px solid ${C.border}`, paddingLeft: 8 }}>
-        {onBatchProjectSearch && !autoSymbolActive && (
+      {/* ── Auto Symbol status + Batch Search (Korábbi hidden from UI, code preserved) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
+        {/* Korábbi button — hidden from user UI, code preserved for future use */}
+        {false && onBatchProjectSearch && !autoSymbolActive && (
           <button onClick={onBatchProjectSearch} disabled={batchSearching} title="Korábbi szimbólumok keresése a projekt más rajzairól" style={{
             padding: '5px 10px', borderRadius: 6, cursor: batchSearching ? 'wait' : 'pointer', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
             display: 'flex', alignItems: 'center', gap: 5,
@@ -101,16 +106,6 @@ export default function PdfToolbar({
             background: 'rgba(255,107,107,0.12)', border: '1px solid rgba(255,107,107,0.3)', color: '#FF6B6B',
           }}>✕ Mégse</button>
         )}
-        <button onClick={onAutoSymbolToggle} title="Auto szimbólum keresés (BETA)" style={{
-          padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'Syne', fontWeight: 600,
-          display: 'flex', alignItems: 'center', gap: 5,
-          background: autoSymbolActive ? 'rgba(255,140,66,0.12)' : 'transparent',
-          border: `1px solid ${autoSymbolActive ? 'rgba(255,140,66,0.3)' : 'transparent'}`,
-          color: autoSymbolActive ? '#FF8C42' : C.text, transition: 'all 0.12s',
-        }}>
-          ⚡ Auto
-          {autoSymbolCount > 0 && <span style={{ background: '#FF8C42', color: '#09090B', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono' }}>{autoSymbolCount}</span>}
-        </button>
         {autoSymbolActive && autoSymbolPhase === 'picking' && (
           <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: '#FF8C42' }}>① Jelölj ki mintát ↓</span>
         )}
