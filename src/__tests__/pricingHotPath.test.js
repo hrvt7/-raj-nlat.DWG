@@ -147,11 +147,11 @@ describe('fullCalc byAssembly — dedup optimization (in fullCalc.js)', () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe('Pricing hot path — master call unchanged', () => {
-  it('pricing useMemo still calls computePricing with all takeoffRows', () => {
-    const pricingMemo = workspaceSrc.indexOf('const pricing = useMemo(')
-    expect(pricingMemo).toBeGreaterThan(-1)
-
-    const block = workspaceSrc.slice(pricingMemo, pricingMemo + 250)
-    expect(block).toContain('computePricing({ takeoffRows, assemblies, workItems, materials')
+  it('pricing pipeline is orchestrated via usePricingPipeline hook', () => {
+    // Pricing was extracted from TakeoffWorkspace to hooks/usePricingPipeline.js
+    expect(workspaceSrc).toContain('usePricingPipeline')
+    // The hook file contains the actual computePricing call
+    const hookSrc = fs.readFileSync(path.resolve(__dirname, '..', 'hooks', 'usePricingPipeline.js'), 'utf-8')
+    expect(hookSrc).toContain('computePricing({ takeoffRows, assemblies, workItems, materials')
   })
 })

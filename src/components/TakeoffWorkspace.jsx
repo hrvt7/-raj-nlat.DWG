@@ -54,9 +54,8 @@ import { C } from './takeoff/designTokens.js'
 // ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
 import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, detectDxfCableLengths } from '../utils/blockRecognition.js'
 import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows } from '../utils/takeoffRows.js'
-import { computeFullCalc, computeUnitCostByAsmByWall, applyMarkupToSubtotal } from '../utils/fullCalc.js'
-
-// computePricing is imported from '../utils/pricing.js' — shared with MergePlansView
+import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
+import usePricingPipeline from '../hooks/usePricingPipeline.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
 import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
@@ -739,127 +738,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   }, [referencePanels, planId])
 
   // ── Derived: pricing ──────────────────────────────────────────────────────
-  const pricing = useMemo(() => {
-    if (!takeoffRows.length) return null
-    return computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode })
-  }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode])
-
-  // ── Measurement cost (auto-pricing from assembly + manual fallback) ─────
-  const measurementItems = useMemo(() => {
-    if (!pdfMeasurements.length) return []
-    const groups = {}
-    for (const seg of pdfMeasurements) {
-      const key = seg.category || '_general'
-      if (!groups[key]) groups[key] = { key, label: seg.category || 'Általános mérés', totalDist: 0, totalMeters: 0, count: 0 }
-      groups[key].totalDist += seg.dist
-      groups[key].totalMeters += seg.distMeters || 0
-      groups[key].count++
-    }
-    // Pre-build cable tray assembly index: extract width from each kabeltalca assembly name
-    // e.g. "Kábeltálca 100mm rendszer (10m)" → width=100, "Kábeltálca 200×60" → width=200
-    const cableTrayAsms = assemblies
-      .filter(a => a.category === 'kabeltalca')
-      .map(a => {
-        const m = a.name?.match(/(\d{2,4})\s*(?:mm|×)/)
-        return m ? { asm: a, width: parseInt(m[1], 10) } : null
-      })
-      .filter(Boolean)
-
-    return Object.values(groups).map(g => {
-      // Try to find a matching assembly for this measurement category
-      let matchedAsm = null
-      let autoPrice = 0
-
-      if (g.key.startsWith('ASM-')) {
-        // Direct assembly ID from AssemblyDropdown (measure mode)
-        matchedAsm = assemblies.find(a => a.id === g.key) || null
-      } else if (g.key.startsWith('kt_asm_')) {
-        // Assembly-driven cable tray key: kt_asm_{assemblyId}
-        const asmId = g.key.replace('kt_asm_', '')
-        matchedAsm = assemblies.find(a => a.id === asmId) || null
-      } else if (g.key.startsWith('kt_')) {
-        // Hardcoded cable tray key: kt_{width}_{height} e.g. kt_100_60
-        const targetWidth = parseInt(g.key.split('_')[1], 10)
-        if (targetWidth) {
-          const exact = cableTrayAsms.find(c => c.width === targetWidth && !c.asm.variantOf)
-            || cableTrayAsms.find(c => c.width === targetWidth)
-          if (exact) {
-            matchedAsm = exact.asm
-          }
-        }
-      }
-
-      if (matchedAsm) {
-        // Compute per-meter cost from the assembly
-        const asmPricing = computePricing({
-          takeoffRows: [{ asmId: matchedAsm.id, qty: 1, variantId: null, wallSplits: null }],
-          assemblies, workItems, materials, context, markup: 0, hourlyRate, cableEstimate: null, difficultyMode,
-        })
-        // Assembly base qty in meters (components with unit='m')
-        const asmBaseQty = (matchedAsm.components || []).find(c => c.unit === 'm')?.qty || 10
-        autoPrice = asmPricing.total / Math.max(asmBaseQty, 1)
-      }
-      const effectivePrice = measurementPrices[g.key] !== undefined && measurementPrices[g.key] > 0
-        ? measurementPrices[g.key]
-        : autoPrice
-      return {
-        ...g,
-        label: matchedAsm ? matchedAsm.name : g.label,
-        matchedAsmId: matchedAsm?.id || null,
-        autoPrice,
-        pricePerUnit: effectivePrice,
-        cost: (g.totalMeters || 0) * effectivePrice,
-        isAutoPriced: effectivePrice === autoPrice && autoPrice > 0,
-      }
-    })
-  }, [pdfMeasurements, measurementPrices, assemblies, workItems, materials, context, hourlyRate, difficultyMode])
-
-  const measurementCostTotal = useMemo(() => {
-    return measurementItems.reduce((s, item) => s + item.cost, 0)
-  }, [measurementItems])
-
-  // ── Extended calc (markup/margin, cable $/m, VAT — extracted to utils/fullCalc.js) ──
-  const fullCalc = useMemo(() => {
-    let base = computeFullCalc({
-      pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent,
-      context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode,
-    })
-    // When there are no takeoff rows but measurements exist, create a minimal calc
-    // so the Kalkuláció tab shows measurement lines instead of an empty state.
-    if (!base && measurementItems.length > 0) {
-      const markupPct = markup * 100
-      base = {
-        materialCost: 0, laborCost: 0, laborHours: 0, lines: [],
-        cableTotalM: 0, cablePricePerM: 0, cableCost: 0,
-        subtotal: 0, markupType, markupPct, markupAmount: 0,
-        grandTotal: 0, bruttoTotal: 0, vatPercent,
-        bySystem: {}, byAssembly: {},
-      }
-    }
-    if (!base) return null
-    // Add measurement costs to the total
-    if (measurementCostTotal > 0) {
-      base.subtotal += measurementCostTotal
-      base.measurementCost = measurementCostTotal
-      // Recalculate grand total with shared markup helper (single source of truth)
-      base.grandTotal = applyMarkupToSubtotal(base.subtotal, base.markupPct / 100, base.markupType)
-      base.markupAmount = base.grandTotal - base.subtotal
-      base.bruttoTotal = base.grandTotal * (1 + base.vatPercent / 100)
-    } else {
-      base.measurementCost = 0
-    }
-    // Attach measurement line items for Kalkuláció tab + quote export
-    // Show all measurement items (even with 0 cost) so users see what they measured
-    base.measurementLines = measurementItems
-    return base
-  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal, measurementItems])
-
-  // ── Per-assembly unit cost (extracted to utils/fullCalc.js) ───────────────
-  const unitCostByAsmByWall = useMemo(() => {
-    return computeUnitCostByAsmByWall({
-      takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, difficultyMode,
-    })
-  }, [takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, difficultyMode])
+  // ── Pricing orchestration (extracted to hooks/usePricingPipeline.js) ──
+  const { pricing, measurementItems, measurementCostTotal, fullCalc, unitCostByAsmByWall } = usePricingPipeline({
+    takeoffRows, assemblies, workItems, materials, context, markup, markupType,
+    hourlyRate, vatPercent, cablePricePerM, cableEstimate, difficultyMode,
+    pdfMeasurements, measurementPrices,
+  })
 
   // ── Accept all high-confidence ────────────────────────────────────────────
   const acceptAllHighConf = () => {

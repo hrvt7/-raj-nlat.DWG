@@ -28,8 +28,8 @@ describe('Architecture Boundaries', () => {
     expect(workspaceSrc).toContain('asmOverrides')
   })
 
-  it('pricing pipeline is untouched (computePricing call unchanged)', () => {
-    expect(workspaceSrc).toContain('computePricing({ takeoffRows, assemblies, workItems, materials, context, markup, hourlyRate, cableEstimate, difficultyMode })')
+  it('pricing pipeline is orchestrated via usePricingPipeline hook', () => {
+    expect(workspaceSrc).toContain('usePricingPipeline')
   })
 
   it('cable estimation cascade is untouched', () => {
