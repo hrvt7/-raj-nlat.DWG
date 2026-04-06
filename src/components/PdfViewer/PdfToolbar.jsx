@@ -16,7 +16,7 @@ export default function PdfToolbar({
   /* onToggleEstimation, estimationOpen — removed with Részletek button */
   showCableRoutes, onToggleCableRoutes,
   rotation, onRotateLeft, onRotateRight,
-  assemblies,
+  assemblies, onCreateAssembly,
   autoSymbolActive, autoSymbolPhase, autoSymbolCount, autoSymbolAcceptedCount, autoSymbolSearching, autoSymbolError,
   autoSymbolThreshold, autoSymbolCategory, autoSymbolLabel,
   onAutoSymbolToggle, onAutoSymbolThresholdChange, onAutoSymbolClear, onAutoSymbolSearchFull,
@@ -70,13 +70,13 @@ export default function PdfToolbar({
 
       {/* Assembly/Category picker — shown for count + measure */}
       {activeTool === 'count' && assemblies?.length > 0 && (
-        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} />
+        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} onCreateNew={onCreateAssembly} />
       )}
       {activeTool === 'count' && (!assemblies || !assemblies.length) && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
       )}
       {activeTool === 'measure' && assemblies?.length > 0 && (
-        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} measureMode />
+        <AssemblyDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} assemblies={assemblies} measureMode onCreateNew={onCreateAssembly} />
       )}
       {activeTool === 'measure' && (!assemblies || !assemblies.length) && (
         <CategoryDropdown activeCategory={activeCategory} onCategoryChange={onCategoryChange} />
