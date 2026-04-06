@@ -40,6 +40,14 @@ export default function AssembliesPage({ activeTrade, session }) {
     }
   }, [session])
 
+  // Draft assembly — NOT persisted until user makes their first edit.
+  // This prevents empty "Új assembly" records from cluttering the store.
+  // NOTE: must be declared BEFORE effectiveAssemblies and filtered to avoid TDZ.
+  const [draftAsm, setDraftAsm] = useState(null)
+
+  // Effective assembly list: real + draft (if any)
+  const effectiveAssemblies = draftAsm ? [draftAsm, ...assemblies] : assemblies
+
   const filtered = useMemo(() => effectiveAssemblies.filter(a => {
     // Trade filter
     const matchTrade = !tradeCategories || tradeCategories.includes(a.category)
@@ -50,23 +58,19 @@ export default function AssembliesPage({ activeTrade, session }) {
     const matchVariant = !hideVariants || !a.variantOf
     const matchTag = !tagFilter || a.tags?.includes(tagFilter)
     return matchTrade && matchCat && matchSearch && matchVariant && matchTag
-  }), [assemblies, catFilter, search, hideVariants, tagFilter, tradeCategories])
+  }), [effectiveAssemblies, catFilter, search, hideVariants, tagFilter, tradeCategories])
 
   const drag = useDraggableOrder(filtered, 'tpro_asm_order', a => a.id)
 
   // Collect all unique tags
   const allTags = useMemo(() => {
     const tags = new Set()
-    assemblies.forEach(a => a.tags?.forEach(t => tags.add(t)))
+    effectiveAssemblies.forEach(a => a.tags?.forEach(t => tags.add(t)))
     return [...tags].sort()
-  }, [assemblies])
+  }, [effectiveAssemblies])
 
   // AI chat handler — not yet implemented (references removed to fix lint errors)
   // const handleAiSubmit = () => { ... }
-
-  // Draft assembly — NOT persisted until user makes their first edit.
-  // This prevents empty "Új assembly" records from cluttering the store.
-  const [draftAsm, setDraftAsm] = useState(null)
 
   const handleCreate = () => {
     const id = generateAssemblyId(assemblies)
@@ -80,9 +84,6 @@ export default function AssembliesPage({ activeTrade, session }) {
     setDraftAsm(newAsm)
     setSelectedId(id)
   }
-
-  // Effective assembly list: real + draft (if any)
-  const effectiveAssemblies = draftAsm ? [draftAsm, ...assemblies] : assemblies
 
   const handleUpdate = (updatedAsm) => {
     // If this is a draft being saved for the first time, promote it to real
