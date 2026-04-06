@@ -24,7 +24,7 @@ const C = {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, projectId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, onMeasurementsChange, focusTarget, onDirtyChange }) {
+export default function PdfViewerPanel({ file, style, planId, projectId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, onMeasurementsChange, focusTarget, onDirtyChange, onCreateAssembly, pendingAutoSelect, onAutoSelectConsumed }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -61,6 +61,14 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const [activeTool, setActiveTool] = useState(null)
   // activeCategory can be an assembly ID (ASM-xxx) or a special key (panel, junction, other)
   const [activeCategory, setActiveCategory] = useState('ASM-001')
+
+  // Auto-select newly created assembly from workspace modal
+  useEffect(() => {
+    if (pendingAutoSelect) {
+      setActiveCategory(pendingAutoSelect)
+      if (onAutoSelectConsumed) onAutoSelectConsumed()
+    }
+  }, [pendingAutoSelect, onAutoSelectConsumed])
 
   // ── Page rotation ──
   const [rotation, setRotation] = useState(0) // degrees, any angle (0, 45, 90, etc.)
@@ -1620,6 +1628,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         onRotateLeft={() => { setRotation(r => (r - 90 + 360) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
         onRotateRight={() => { setRotation(r => (r + 90) % 360); if (autoSymbolActive && autoSymbolPhase !== 'done') { autoSymbolTemplateRef.current = null; setAutoSymbolPhase('picking'); setAutoSymbolError('Forgatás után válassz új mintát.') } }}
         assemblies={assembliesProp}
+        onCreateAssembly={onCreateAssembly}
         autoSymbolActive={autoSymbolActive}
         autoSymbolPhase={autoSymbolPhase}
         autoSymbolCount={autoSymbolResults.length}

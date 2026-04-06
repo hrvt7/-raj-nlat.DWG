@@ -40,7 +40,7 @@ export default function AssembliesPage({ activeTrade, session }) {
     }
   }, [session])
 
-  const filtered = useMemo(() => assemblies.filter(a => {
+  const filtered = useMemo(() => effectiveAssemblies.filter(a => {
     // Trade filter
     const matchTrade = !tradeCategories || tradeCategories.includes(a.category)
     const matchCat = catFilter === 'all' || a.category === catFilter
@@ -64,6 +64,10 @@ export default function AssembliesPage({ activeTrade, session }) {
   // AI chat handler — not yet implemented (references removed to fix lint errors)
   // const handleAiSubmit = () => { ... }
 
+  // Draft assembly — NOT persisted until user makes their first edit.
+  // This prevents empty "Új assembly" records from cluttering the store.
+  const [draftAsm, setDraftAsm] = useState(null)
+
   const handleCreate = () => {
     const id = generateAssemblyId(assemblies)
     const now = new Date().toISOString()
@@ -71,15 +75,28 @@ export default function AssembliesPage({ activeTrade, session }) {
       id, name: 'Új assembly', category: 'szerelvenyek',
       description: '', components: [],
       createdAt: now, updatedAt: now,
+      _isDraft: true, // draft flag — removed on first persist
     }
-    const updated = [newAsm, ...assemblies]
-    persist(updated)
+    setDraftAsm(newAsm)
     setSelectedId(id)
   }
 
+  // Effective assembly list: real + draft (if any)
+  const effectiveAssemblies = draftAsm ? [draftAsm, ...assemblies] : assemblies
+
   const handleUpdate = (updatedAsm) => {
-    const updated = assemblies.map(a => a.id === updatedAsm.id
-      ? { ...updatedAsm, updatedAt: new Date().toISOString() } : a)
+    // If this is a draft being saved for the first time, promote it to real
+    const { _isDraft, ...clean } = updatedAsm
+    if (draftAsm && draftAsm.id === updatedAsm.id) {
+      const promoted = { ...clean, updatedAt: new Date().toISOString() }
+      const updated = [promoted, ...assemblies]
+      persist(updated)
+      setDraftAsm(null)
+      toast.show('Assembly létrehozva', 'success')
+      return
+    }
+    const updated = assemblies.map(a => a.id === clean.id
+      ? { ...clean, updatedAt: new Date().toISOString() } : a)
     persist(updated)
     toast.show('Assembly mentve', 'success')
   }

@@ -1041,6 +1041,8 @@ function SaaSShell() {
                 materials={materials}
                 initialFile={felmeresFile}
                 planId={felmeresOpenPlan?.id || null}
+                asmRev={asmRev}
+                onAssembliesChange={() => setAsmRev(r => r + 1)}
                 focusTarget={viewerFocusTarget}
                 onDirtyChange={handleViewerDirtyChange}
                 onSaved={() => {
