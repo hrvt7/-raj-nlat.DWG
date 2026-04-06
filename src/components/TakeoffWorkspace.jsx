@@ -25,8 +25,7 @@ const DxfViewerPanel = lazyRetry(() => import('./DxfViewer/index.jsx'))
 const PdfViewerPanel = lazyRetry(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText, parseDxfTextInWorker } from '../dxfParser.js'
 import { estimateCablesMST } from '../pdfTakeoff.js'
-import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote, saveAssemblies } from '../data/store.js'
-import { generateAssemblyId } from '../data/workItemsDb.js'
+import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote } from '../data/store.js'
 import { createQuote } from '../utils/createQuote.js'
 import { savePlan as savePlanBlob, savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
@@ -69,7 +68,7 @@ import UnknownBlockPanel from './takeoff/UnknownBlockPanel.jsx'
 import PricingPill from './takeoff/PricingPill.jsx'
 
 // ─── Main TakeoffWorkspace ────────────────────────────────────────────────────
-export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId, focusTarget, onDirtyChange, onQuoteFromPlan, asmRev, onAssembliesChange }) {
+export default function TakeoffWorkspace({ settings, materials: materialsProp, onSaved, onCancel, initialData, initialFile, planId, focusTarget, onDirtyChange, onQuoteFromPlan }) {
   // ── File & parse state ────────────────────────────────────────────────────
   const [file, setFile] = useState(null)
   const [parsedDxf, setParsedDxf] = useState(null)
@@ -296,7 +295,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const _asmLoad = useMemo(() => {
     try { return { data: loadAssemblies(), error: null } }
     catch (err) { return { data: [], error: `Szerelvénytár betöltése sikertelen: ${err.message}` } }
-  }, [asmRev]) // re-read when assemblies change (e.g. new assembly created from workspace)
+  }, [])
   const _wiLoad = useMemo(() => {
     try { return { data: loadWorkItems(), error: null } }
     catch (err) { return { data: [], error: `Munkatételek betöltése sikertelen: ${err.message}` } }
@@ -310,25 +309,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const workItems = _wiLoad.data
   const materials = _matLoad.data
   const dataLoadError = _asmLoad.error || _wiLoad.error || _matLoad.error
-
-  // ── Quick-create assembly from workspace (same store, no separate page needed) ──
-  const [showNewAsmModal, setShowNewAsmModal] = useState(false)
-  const [newAsmName, setNewAsmName] = useState('')
-  const [newAsmCategory, setNewAsmCategory] = useState('szerelvenyek')
-  const [pendingAutoSelect, setPendingAutoSelect] = useState(null) // new assembly ID to auto-select after asmRev bump
-  const handleCreateAssembly = useCallback(() => {
-    const name = newAsmName.trim()
-    if (!name) return
-    const id = generateAssemblyId(assemblies)
-    const now = new Date().toISOString()
-    const newAsm = { id, name, category: newAsmCategory, description: '', components: [], countSelectable: true, createdAt: now, updatedAt: now }
-    saveAssemblies([newAsm, ...assemblies])
-    setShowNewAsmModal(false)
-    setNewAsmName('')
-    setPendingAutoSelect(id) // will be consumed by viewer after assemblies refresh
-    // Notify parent to bump asmRev → workspace re-reads assemblies
-    if (onAssembliesChange) onAssembliesChange()
-  }, [newAsmName, newAsmCategory, assemblies, onAssembliesChange])
 
   // ── Helper: File → base64 string ──────────────────────────────────────────
   const fileToBase64 = useCallback((file) => new Promise((resolve, reject) => {
@@ -1184,35 +1164,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     <div data-testid="workspace-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <style>{`@keyframes slideProgress { 0%{transform:translateX(-100%)} 100%{transform:translateX(350%)} }`}</style>
 
-      {/* Quick-create assembly modal */}
-      {showNewAsmModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}
-          onClick={() => setShowNewAsmModal(false)}>
-          <div style={{ background: C.bg, borderRadius: 12, border: `1px solid ${C.border}`, padding: 20, width: 340 }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ color: C.text, fontWeight: 700, fontSize: 15, marginBottom: 12, fontFamily: 'Syne' }}>Új assembly</div>
-            <input value={newAsmName} onChange={e => setNewAsmName(e.target.value)} placeholder="Név (pl. Dugalj dupla)"
-              autoFocus onKeyDown={e => { if (e.key === 'Enter') handleCreateAssembly() }}
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.bgCard, color: C.text, fontSize: 13, fontFamily: 'DM Mono', marginBottom: 8, outline: 'none', boxSizing: 'border-box' }} />
-            <select value={newAsmCategory} onChange={e => setNewAsmCategory(e.target.value)}
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.bgCard, color: C.text, fontSize: 12, fontFamily: 'DM Mono', marginBottom: 12, outline: 'none', boxSizing: 'border-box' }}>
-              <option value="szerelvenyek">Szerelvények</option>
-              <option value="vilagitas">Világítás</option>
-              <option value="elosztok">Elosztók</option>
-              <option value="gyengaram">Gyengeáram</option>
-              <option value="tuzjelzo">Tűzjelző</option>
-              <option value="kabeltalca">Kábeltálca</option>
-            </select>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowNewAsmModal(false)}
-                style={{ padding: '6px 14px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.bgCard, color: C.muted, cursor: 'pointer', fontSize: 12, fontFamily: 'Syne' }}>Mégse</button>
-              <button onClick={handleCreateAssembly} disabled={!newAsmName.trim()}
-                style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: newAsmName.trim() ? C.accent : C.border, color: '#000', cursor: newAsmName.trim() ? 'pointer' : 'default', fontSize: 12, fontFamily: 'Syne', fontWeight: 700 }}>Létrehozás</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Sticky pricing bar ─────────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 0, padding: isMobile ? '10px 14px' : '12px 20px',
@@ -1342,9 +1293,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 file={viewerFile}
                 planId={planId}
                 assemblies={assemblies}
-                onCreateAssembly={() => setShowNewAsmModal(true)}
-                pendingAutoSelect={pendingAutoSelect}
-                onAutoSelectConsumed={() => setPendingAutoSelect(null)}
                 focusTarget={focusTarget}
                 onMarkersChange={(markers) => {
                   setPdfMarkers(markers)
@@ -1444,9 +1392,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   projectId={planId ? (getPlanMeta(planId)?.projectId || null) : null}
                   style={{ height: '100%', border: 'none', borderRadius: 0 }}
                   assemblies={assemblies}
-                  onCreateAssembly={() => setShowNewAsmModal(true)}
-                  pendingAutoSelect={pendingAutoSelect}
-                  onAutoSelectConsumed={() => setPendingAutoSelect(null)}
                   focusTarget={focusTarget}
                   onDirtyChange={onDirtyChange}
                   onMarkersChange={(markers) => {
