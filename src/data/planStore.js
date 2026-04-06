@@ -198,17 +198,37 @@ export async function getPlanFile(planId) {
   // On-demand remote blob recovery when local is missing
   if (supabaseConfigured) {
     const meta = getPlanMeta(planId)
-    // Always attempt remote recovery — permanent suppression was removed.
-    // The backup may have succeeded on a later save or from another device.
-    try {
-      const remote = await downloadPlanBlob(planId, meta?.fileType)
-      if (remote && remote.size > 0) {
-        await planFileStore.setItem(planId, remote)
-        return remote
+    const fileType = meta?.fileType
+    console.info(`[planStore] Local file missing for ${planId} (type: ${fileType || 'unknown'}) — attempting remote recovery`)
+    // Try with known fileType first, then try all common extensions as fallback
+    const typesToTry = fileType ? [fileType] : ['pdf', 'dxf', 'dwg']
+    // If fileType is known but download fails, also try other types (upload may have used different ext)
+    if (fileType && !typesToTry.includes('pdf') && !typesToTry.includes('dxf') && !typesToTry.includes('dwg')) {
+      typesToTry.push('pdf', 'dxf', 'dwg')
+    } else if (fileType) {
+      // Add remaining types as fallback
+      for (const ft of ['pdf', 'dxf', 'dwg']) {
+        if (!typesToTry.includes(ft)) typesToTry.push(ft)
       }
-    } catch (err) {
-      console.warn('[planStore] remote blob recovery failed:', err.message)
     }
+    for (const ft of typesToTry) {
+      try {
+        const remote = await downloadPlanBlob(planId, ft)
+        if (remote && remote.size > 0) {
+          console.info(`[planStore] Remote recovery succeeded for ${planId} (as .${ft})`)
+          await planFileStore.setItem(planId, remote)
+          // Update meta fileType if it was wrong or missing
+          if (ft !== fileType) updatePlanMeta(planId, { fileType: ft })
+          return remote
+        }
+      } catch (err) {
+        // 404/not-found is expected for wrong extension — only warn on unexpected errors
+        if (!err.message?.includes('not found') && !err.message?.includes('404') && !err.message?.includes('Object not found')) {
+          console.warn(`[planStore] remote blob recovery failed for ${planId}.${ft}:`, err.message)
+        }
+      }
+    }
+    console.warn(`[planStore] remote blob recovery exhausted all extensions for ${planId}`)
   }
   return null
 }
