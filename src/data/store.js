@@ -6,7 +6,7 @@ import { WORK_ITEMS_DEFAULT, ASSEMBLIES_DEFAULT } from './workItemsDb.js'
 import { guardedWrite } from './lsConcurrency.js'
 import { unwrapVersioned, wrapVersioned } from './schemaVersion.js'
 
-const LS_KEYS = {
+export const LS_KEYS = {
   SETTINGS:      'takeoffpro_settings',
   COMPANY_LOGO:  'takeoffpro_company_logo',
   WORK_ITEMS:    'takeoffpro_work_items',
@@ -270,6 +270,19 @@ export const DEFAULT_MATERIALS = [
 ]
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Get the _updatedAt timestamp from a localStorage versioned envelope.
+ * Returns ISO string or null if not available.
+ */
+export function getLocalTimestamp(lsKey) {
+  try {
+    const raw = localStorage.getItem(lsKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed?._updatedAt || null
+  } catch { return null }
+}
 
 /** localStorage quota tracking — warns when usage exceeds threshold */
 const LS_QUOTA_WARN_BYTES = 4 * 1024 * 1024  // 4 MB — warn before hitting 5 MB limit

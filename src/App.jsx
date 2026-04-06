@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react'
 import Landing from './Landing.jsx'
-import { supabase, supabaseConfigured, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, saveProjectsRemote, savePlansRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesRemote, loadMaterialsRemote, loadWorkItemsRemote, loadProjectsRemote, loadPlansRemote, createQuoteShare } from './supabase.js'
+import { supabase, supabaseConfigured, signIn, signUp, signOut, resetPassword, resendConfirmation, updatePassword, onAuthChange, saveQuoteRemote, saveSettingsRemote, saveAssembliesRemote, saveMaterialsRemote, saveWorkItemsRemote, saveProjectsRemote, savePlansRemote, loadSettingsRemote, loadQuotesRemote, loadAssembliesWithTime, loadMaterialsWithTime, loadWorkItemsWithTime, loadProjectsWithTime, loadPlansWithTime, createQuoteShare } from './supabase.js'
+import { getLocalTimestamp, LS_KEYS } from './data/store.js'
 import Sidebar from './components/Sidebar.jsx'
 import QuoteView from './components/QuoteView.jsx'
 
@@ -561,10 +562,23 @@ function SaaSShell() {
 
     ;(async () => {
       try {
-        // Settings: remote wins if local is empty/default
-        if (isSettingsRecoverable()) {
+        // Settings: remote wins if local is empty/default, else newer wins.
+        // Settings is a plain object (not versioned envelope), so we use
+        // a simple "recoverable" check: if local is empty → remote wins.
+        // If both have data, remote wins (settings are saved immediately on change).
+        {
           const remote = await loadSettingsRemote()
-          if (remote) { saveSettings(remote); setSettings(loadSettings()) }
+          if (remote && typeof remote === 'object' && Object.keys(remote).length > 0) {
+            const localRaw = localStorage.getItem('takeoffpro_settings')
+            const localEmpty = !localRaw || localRaw === '{}' || localRaw === 'null'
+            if (localEmpty) {
+              saveSettings(remote); setSettings(loadSettings())
+            } else {
+              // Both have data — settings don't have envelope timestamps,
+              // so remote wins (it reflects the last device that saved)
+              saveSettings(remote); setSettings(loadSettings())
+            }
+          }
         }
 
         // Quotes: union merge by ID — keeps all unique quotes from both sources,
@@ -599,40 +613,58 @@ function SaaSShell() {
           }
         }
 
-        // Catalog blobs: remote wins if local is empty (new device / cleared cache).
-        // If both have data, keep local — it's the most recently edited version.
-        // This replaces the old count-based merge which could discard local edits.
-        const mergeCatalog = async (loadRemoteFn, loadLocalFn, saveLocalFn, onUpdate) => {
-          const remote = await loadRemoteFn()
-          if (!Array.isArray(remote) || remote.length === 0) return
+        // Catalog blobs: deterministic newer-wins merge.
+        // Compares local envelope _updatedAt with remote blob _savedAt.
+        // The fresher one wins. No count-based or non-empty shortcuts.
+        const mergeByTimestamp = async (loadRemoteWithTimeFn, loadLocalFn, saveLocalFn, lsKey, onUpdate) => {
+          const { data: remoteData, savedAt: remoteSavedAt } = await loadRemoteWithTimeFn()
+          if (!Array.isArray(remoteData) || remoteData.length === 0) return // no remote → keep local
           const local = loadLocalFn()
           if (!local || local.length === 0) {
-            // Local is empty — recover from remote (new device scenario)
-            saveLocalFn(remote)
-            onUpdate()
+            // Local empty → remote wins (new device / cleared cache)
+            saveLocalFn(remoteData); onUpdate(); return
           }
-          // If both have data, local wins (user's most recent edits are local)
+          // Both have data → compare timestamps
+          const localTime = getLocalTimestamp(lsKey)
+          if (!localTime && !remoteSavedAt) {
+            // Both missing timestamps (legacy) → remote wins (canonical store)
+            saveLocalFn(remoteData); onUpdate(); return
+          }
+          if (!localTime) {
+            // Local has no timestamp (legacy), remote does → remote wins
+            saveLocalFn(remoteData); onUpdate(); return
+          }
+          if (!remoteSavedAt) {
+            // Remote has no timestamp (legacy), local does → local wins (fresher known)
+            return
+          }
+          // Both have timestamps → newer wins
+          if (remoteSavedAt > localTime) {
+            saveLocalFn(remoteData); onUpdate()
+          }
+          // else: local is newer or same → keep local
         }
-        await mergeCatalog(loadAssembliesRemote, loadAssemblies, saveAssemblies, () => setAsmRev(r => r + 1))
-        await mergeCatalog(loadMaterialsRemote, loadMaterials, saveMaterials, () => setMaterials(loadMaterials()))
-        await mergeCatalog(loadWorkItemsRemote, loadWorkItems, saveWorkItems, () => setWorkItems(loadWorkItems()))
+        await mergeByTimestamp(loadAssembliesWithTime, loadAssemblies, saveAssemblies, LS_KEYS.ASSEMBLIES, () => setAsmRev(r => r + 1))
+        await mergeByTimestamp(loadMaterialsWithTime, loadMaterials, saveMaterials, LS_KEYS.MATERIALS, () => setMaterials(loadMaterials()))
+        await mergeByTimestamp(loadWorkItemsWithTime, loadWorkItems, saveWorkItems, LS_KEYS.WORK_ITEMS, () => setWorkItems(loadWorkItems()))
 
-        // Project/plan metadata: remote wins if local is empty (new device).
-        // If both have data, local wins — local metadata reflects the latest user actions.
+        // Project/plan metadata: same newer-wins policy
         {
-          const remoteProjects = await loadProjectsRemote()
+          const { data: remoteProjects, savedAt: rProjTime } = await loadProjectsWithTime()
           if (Array.isArray(remoteProjects) && remoteProjects.length > 0) {
             const localProjects = loadProjects()
-            if (!localProjects || localProjects.length === 0) {
+            const lProjTime = getLocalTimestamp('takeoffpro_projects_meta')
+            if (!localProjects || localProjects.length === 0 || !lProjTime || (rProjTime && rProjTime > lProjTime)) {
               saveAllProjects(remoteProjects); setProjRev(r => r + 1)
             }
           }
         }
         {
-          const remotePlans = await loadPlansRemote()
+          const { data: remotePlans, savedAt: rPlanTime } = await loadPlansWithTime()
           if (Array.isArray(remotePlans) && remotePlans.length > 0) {
             const localPlans = loadPlans()
-            if (!localPlans || localPlans.length === 0) {
+            const lPlanTime = getLocalTimestamp('takeoffpro_plans_meta')
+            if (!localPlans || localPlans.length === 0 || !lPlanTime || (rPlanTime && rPlanTime > lPlanTime)) {
               saveAllPlansMeta(remotePlans); setPlanRev(r => r + 1)
             }
           }
