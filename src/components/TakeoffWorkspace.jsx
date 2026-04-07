@@ -1055,14 +1055,16 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 ) : (
                   <>
                     {takeoffRows.map(row => {
+                      const rowKey = row._sourceType === 'custom' ? row._customItemId : row.asmId
                       // Check if any items contributing to this row came from memory
-                      const memItem = effectiveItems.find(i =>
+                      const memItem = row._sourceType !== 'custom' ? effectiveItems.find(i =>
                         i.matchType === 'memory' &&
                         ((asmOverrides[i.blockName] !== undefined ? asmOverrides[i.blockName] : i.asmId) === row.asmId)
-                      )
+                      ) : null
                       return (
                       <TakeoffRow
-                        key={row.asmId}
+                        key={rowKey}
+                        row={row}
                         asmId={row.asmId}
                         qty={row.qty}
                         variantId={row.variantId}
@@ -1074,7 +1076,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
                         unitCostByWall={unitCostByAsmByWall[row.asmId] || {}}
-                        onDelete={(asmId) => {
+                        onDelete={(idOrAsmId) => {
+                          // Custom row deletion: remove markers by customItemId
+                          if (row._sourceType === 'custom') {
+                            setPdfMarkers(prev => prev.filter(m => m.customItemId !== idOrAsmId))
+                            return
+                          }
+                          // Assembly row deletion (existing logic)
+                          const asmId = idOrAsmId
                           // 1) Remove marker-sourced items for this assembly
                           setPdfMarkers(prev => prev.filter(m => {
                             const mid = m.asmId || (m.category?.startsWith('ASM-') ? m.category : null)

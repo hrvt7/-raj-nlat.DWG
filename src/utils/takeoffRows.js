@@ -27,7 +27,28 @@ export function buildRecognitionRows(effectiveItems, asmOverrides, qtyOverrides,
 export function buildMarkerRows(pdfMarkers, variantOverrides, wallSplits) {
   if (!pdfMarkers.length) return []
   const rowMap = {}
+  const customRows = []
   for (const m of pdfMarkers) {
+    // ── Custom markers: each gets its own takeoff row ──
+    if (m.sourceType === 'custom') {
+      const key = m.customItemId || m.id
+      const existing = customRows.find(r => r._customItemId === key)
+      if (existing) {
+        existing.qty += 1
+      } else {
+        customRows.push({
+          asmId: null,
+          _customItemId: key,
+          _sourceType: 'custom',
+          qty: 1,
+          variantId: null,
+          wallSplits: null,
+          _fromMarkers: true,
+        })
+      }
+      continue
+    }
+    // ── Assembly markers: existing logic ──
     const asmId = m.asmId || (m.category?.startsWith('ASM-') ? m.category : null)
     if (!asmId) continue
     if (!rowMap[asmId]) rowMap[asmId] = { asmId, qty: 0, variantId: variantOverrides[asmId] || null, _fromMarkers: true }
@@ -67,7 +88,7 @@ export function buildMarkerRows(pdfMarkers, variantOverrides, wallSplits) {
       row.wallSplits = null
     }
   }
-  return Object.values(rowMap)
+  return [...Object.values(rowMap), ...customRows]
 }
 
 /**
@@ -76,10 +97,16 @@ export function buildMarkerRows(pdfMarkers, variantOverrides, wallSplits) {
  */
 export function mergeTakeoffRows(recognitionRows, markerRows) {
   const rowMap = {}
+  const customRows = []
   for (const row of recognitionRows) {
     rowMap[row.asmId] = { ...row }
   }
   for (const row of markerRows) {
+    // Custom rows pass through directly (no merge by asmId)
+    if (row._sourceType === 'custom') {
+      customRows.push({ ...row })
+      continue
+    }
     if (rowMap[row.asmId]) {
       const existing = rowMap[row.asmId]
       existing.qty += row.qty
@@ -96,5 +123,5 @@ export function mergeTakeoffRows(recognitionRows, markerRows) {
       rowMap[row.asmId] = { ...row }
     }
   }
-  return Object.values(rowMap)
+  return [...Object.values(rowMap), ...customRows]
 }

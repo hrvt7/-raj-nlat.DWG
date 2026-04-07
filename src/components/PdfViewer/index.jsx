@@ -703,14 +703,21 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     if (activeTool === 'count') {
       // Determine color from assembly or special items
       const ASM_COLORS_MAP = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
-      const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A' }
-      const asm = (assembliesProp || []).find(a => a.id === activeCategory)
+      const SPECIAL_COLORS = { panel: '#FF6B6B', junction: '#4CC9F0', other: '#71717A', custom: '#A78BFA' }
+      const isCustom = activeCategory === 'custom'
+      const asm = isCustom ? null : (assembliesProp || []).find(a => a.id === activeCategory)
       const color = asm ? (ASM_COLORS_MAP[asm.category] || '#9CA3AF') : (SPECIAL_COLORS[activeCategory] || '#9CA3AF')
       // Resolve COUNT_CATEGORY key: when activeCategory is an assembly ID (ASM-xxx),
       // map it to the proper category key (socket/switch/light/panel) so EstimationPanel
       // can count and price them. Store assembly ID in asmId field.
       const resolvedCategory = asm ? resolveCountCategory(asm.id, assembliesProp) : activeCategory
-      markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, pageNum, category: resolvedCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
+      if (isCustom) {
+        // Custom marker: no assembly, explicit sourceType, stable grouping ID
+        const customItemId = '_CUSTOM_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6)
+        markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, pageNum, category: 'custom', color, asmId: null, source: 'manual', sourceType: 'custom', customItemId }))
+      } else {
+        markersRef.current.push(createMarker({ x: pdf.x, y: pdf.y, pageNum, category: resolvedCategory, color, asmId: asm ? asm.id : null, source: 'manual' }))
+      }
       markDirty()
       setRenderTick(t => t + 1)
       drawOverlay()
