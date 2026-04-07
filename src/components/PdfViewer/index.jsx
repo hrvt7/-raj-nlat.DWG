@@ -1,17 +1,16 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { COUNT_CATEGORIES, CategoryDropdown, AssemblyDropdown, CABLE_TRAY_COLOR } from '../DxfViewer/DxfToolbar.jsx'
 import EstimationPanel from '../EstimationPanel.jsx'
-import { savePlanAnnotations, getPlanAnnotations, onAnnotationsChanged } from '../../data/planStore.js'
-import { createMarker, normalizeMarkers, deduplicateMarkersManualFirst } from '../../utils/markerModel.js'
-import { loadCategoryAssemblyMap, applyDefaultAssignments } from '../../data/categoryAssemblyMap.js'
+import { savePlanAnnotations, getPlanAnnotations } from '../../data/planStore.js'
+import { createMarker } from '../../utils/markerModel.js'
 import { renderPageImageData } from '../../utils/templateMatching.js'
 import { upsertTemplateIntoFamilies, migrateTemplatesToFamilies } from '../../utils/symbolFamily.js'
 import pdfjsWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { resolveCountCategory, migrateMarkers, formatDist, docToCanvas, canvasToDoc, drawMarker, drawMeasureLine } from './pdfUtils.js'
+import { resolveCountCategory, formatDist, docToCanvas, canvasToDoc, drawMarker, drawMeasureLine } from './pdfUtils.js'
 export { docToCanvas, canvasToDoc } from './pdfUtils.js'
 import PdfScrollbars from './PdfScrollbars.jsx'
 import PdfToolbar from './PdfToolbar.jsx'
-import usePlanAnnotationSave from '../../hooks/usePlanAnnotationSave.js'
+import usePdfAnnotationLifecycle from '../../hooks/usePdfAnnotationLifecycle.js'
 import useAutoSymbolSearch from '../../hooks/useAutoSymbolSearch.js'
 
 const C = {
@@ -142,111 +141,18 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   useEffect(() => { assignmentsRef.current = assignments }, [assignments])
   useEffect(() => { quoteOverridesRef.current = quoteOverrides }, [quoteOverrides])
 
-  // ── Dirty / save state tracking + debounced auto-save ──
-  // Uses shared hook — same save semantics as DxfViewer.
-  // NOTE: must be declared AFTER ceilingHeight/socketHeight/switchHeight
-  // to avoid TDZ in production builds.
-  const buildPdfPayload = useCallback(() => ({
-    markers: markersRef.current,
-    measurements: measuresRef.current,
-    scale: scaleRef.current,
-    ceilingHeight, socketHeight, switchHeight,
-    assignments: assignmentsRef.current,
-    quoteOverrides: quoteOverridesRef.current,
-    rotation: rotationRef.current,
-    coordVersion: 2,
-  }), [ceilingHeight, socketHeight, switchHeight])
-
-  const mergePdfWithStored = useCallback((stored, payload) => ({
-    ...stored,
-    ...payload,
-    savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
-    symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : (stored?.symbolFamilies || []),
-  }), [])
-
-  const { saveState, markDirty, markSaved, debounceSaveTimerRef, setSaveState } = usePlanAnnotationSave({
-    planId, hydratedRef,
-    buildPayload: buildPdfPayload,
-    mergeWithStored: mergePdfWithStored,
-    onDirtyChange,
+  // ── Annotation lifecycle (extracted to hooks/usePdfAnnotationLifecycle.js) ──
+  const { saveState, markDirty, markSaved, debounceSaveTimerRef, setSaveState } = usePdfAnnotationLifecycle({
+    planId, assembliesProp, onDirtyChange,
+    markersRef, measuresRef, scaleRef, savedTemplatesRef, symbolFamiliesRef,
+    assignmentsRef, quoteOverridesRef, rotationRef, hydratedRef, migrationRef,
+    onMarkersChangeRef,
+    setCeilingHeight, setSocketHeight, setSwitchHeight,
+    setAssignments, setQuoteOverrides, setRotation, setScale,
+    setRenderTick, notifyMeasurements,
+    ceilingHeight, socketHeight, switchHeight, assignments, quoteOverrides,
   })
-  // Persist assignments/quoteOverrides to IDB on every change so explicit parent save
-  // reads fresh data (prevents race with unmount auto-save)
-  useEffect(() => {
-    if (!planId || !hydratedRef.current) return
-    getPlanAnnotations(planId).then(stored => {
-      if (!stored) return
-      savePlanAnnotations(planId, { ...stored, assignments, quoteOverrides }, { silent: true })
-      markSaved()
-    }).catch(() => {})
-  }, [assignments, quoteOverrides, planId, markSaved])
 
-  // ── Load saved annotations on mount ──
-  useEffect(() => {
-    if (!planId) return
-    hydratedRef.current = false // reset — auto-save guard active until restore finishes
-    getPlanAnnotations(planId).then(ann => {
-      if (ann.markers?.length) {
-        const normalized = normalizeMarkers(ann.markers)
-        // Migrate legacy ASM-xxx categories to COUNT_CATEGORY keys
-        markersRef.current = migrateMarkers(normalized, assembliesProp)
-        setRenderTick(t => t + 1)
-        if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
-      }
-      if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurements() }
-      savedTemplatesRef.current = ann.savedTemplates?.length ? ann.savedTemplates : []
-      symbolFamiliesRef.current = ann.symbolFamilies?.length ? ann.symbolFamilies : []
-      if (ann.scale?.calibrated) { setScale(ann.scale) }
-      if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
-      if (ann.socketHeight) setSocketHeight(ann.socketHeight)
-      if (ann.switchHeight) setSwitchHeight(ann.switchHeight)
-      let loadedAssignments = {}
-      if (ann.assignments && typeof ann.assignments === 'object') {
-        loadedAssignments = ann.assignments
-      }
-      // Auto-fill assignments from saved category→assembly defaults
-      // (detection markers come in with category like 'socket' but no assignment)
-      const defaults = loadCategoryAssemblyMap()
-      const merged = applyDefaultAssignments(loadedAssignments, defaults)
-      setAssignments(merged)
-      assignmentsRef.current = merged
-
-      if (ann.quoteOverrides && typeof ann.quoteOverrides === 'object') {
-        setQuoteOverrides(ann.quoteOverrides)
-        quoteOverridesRef.current = ann.quoteOverrides
-      }
-      if (ann.rotation != null) setRotation(ann.rotation)
-      // ── Backward compat: schedule migration if coords are legacy (canvas-space) ──
-      if (!ann.coordVersion || ann.coordVersion < 2) {
-        migrationRef.current = { rotation: ann.rotation || 0 }
-      }
-      // Reset save state after hydration from store
-      if (onDirtyChange) onDirtyChange(false)
-      setSaveState('clean')
-      hydratedRef.current = true // annotation restore complete — auto-save now safe
-    })
-  }, [planId])
-
-  // ── Subscribe to external annotation changes (e.g. DetectionReviewPanel apply) ──
-  useEffect(() => {
-    if (!planId) return
-    const unsub = onAnnotationsChanged(planId, ({ markers, assignments: extAssignments }) => {
-      markersRef.current = migrateMarkers(normalizeMarkers(markers), assembliesProp)
-      setRenderTick(t => t + 1)
-      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
-      // Auto-fill assignments from saved defaults when new detection markers arrive
-      const currentAsgn = extAssignments || assignmentsRef.current
-      const defaults = loadCategoryAssemblyMap()
-      const merged = applyDefaultAssignments(currentAsgn, defaults)
-      if (merged !== currentAsgn) {
-        setAssignments(merged)
-        assignmentsRef.current = merged
-      }
-    })
-    return unsub
-  // onMarkersChange accessed via stable ref — no dep needed
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planId])
 
   // ── Focus on target marker (from review panel locate) ──
   // Pending focus: saved when focusTarget arrives before PDF is rendered.
@@ -292,73 +198,6 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     }, 2000)
     return () => clearTimeout(timer)
   }, [focusTarget]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Auto-save annotations on unmount ──
-  // SAFETY: Merge with store to avoid overwriting externally-applied detection markers.
-  // The ref may be stale if DetectionReviewPanel applied markers while this viewer was open.
-  // GUARD: Skip auto-save if annotations were never hydrated from IDB. This prevents
-  // React StrictMode double-mount from writing empty markers over seeded data — the
-  // first unmount fires before the async annotation restore completes.
-  useEffect(() => {
-    return () => {
-      // Cancel any pending debounced save — we'll save immediately here
-      if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current)
-      if (!planId) return
-      if (!hydratedRef.current) return // not yet hydrated — don't overwrite IDB
-      const localMarkers = markersRef.current
-      // Async merge: load store state, keep detection markers from store that aren't in ref
-      getPlanAnnotations(planId).then(stored => {
-        const storedMarkers = normalizeMarkers(stored?.markers || [])
-        // Detection markers from store that are NOT already in our ref (by id or position)
-        const localIds = new Set(localMarkers.map(m => m.id))
-        const externalDetections = storedMarkers.filter(m => {
-          if (m.source !== 'detection') return false
-          if (localIds.has(m.id)) return false
-          // Skip if a local marker of the same category already sits nearby
-          // (the local marker is authoritative — user placed or already accepted it)
-          const tooClose = localMarkers.some(lm =>
-            lm.category === m.category &&
-            Math.hypot(lm.x - m.x, lm.y - m.y) < 15
-          )
-          return !tooClose
-        })
-        // Append external detections without re-deduplicating local markers.
-        // localMarkers are authoritative — their positions must be preserved exactly
-        // as the user placed them, even if some are close together.
-        const merged = [...localMarkers, ...externalDetections]
-        savePlanAnnotations(planId, {
-          markers: merged,
-          measurements: measuresRef.current,
-          scale: scaleRef.current,
-          ceilingHeight,
-          socketHeight,
-          switchHeight,
-          assignments: assignmentsRef.current,
-          quoteOverrides: quoteOverridesRef.current,
-          rotation: rotationRef.current,
-          coordVersion: 2, // markers/measurements in unrotated doc coords
-          savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
-          symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : (stored?.symbolFamilies || []),
-        }, { silent: true })
-      }).catch(() => {
-        // Fallback: save what we have if store read fails
-        savePlanAnnotations(planId, {
-          markers: localMarkers,
-          measurements: measuresRef.current,
-          scale: scaleRef.current,
-          ceilingHeight,
-          socketHeight,
-          switchHeight,
-          assignments: assignmentsRef.current,
-          quoteOverrides: quoteOverridesRef.current,
-          rotation: rotationRef.current,
-          coordVersion: 2,
-          savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : [],
-          symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : [],
-        }, { silent: true })
-      })
-    }
-  }, [planId, ceilingHeight, socketHeight, switchHeight])
 
   // ── Load PDF ──
   useEffect(() => {
