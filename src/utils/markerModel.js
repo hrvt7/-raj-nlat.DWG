@@ -101,6 +101,9 @@ export function normalizeMarker(m) {
     detectionRunId: m.detectionRunId ?? null,
     templateId:     m.templateId     ?? null,
     label:          m.label          ?? null,
+    // ── Custom item fields (must survive save/load round-trip) ──
+    sourceType:     m.sourceType     || 'assembly',
+    customItemId:   m.customItemId   ?? null,
     createdAt:    m.createdAt  || new Date().toISOString(),
   }
 }
