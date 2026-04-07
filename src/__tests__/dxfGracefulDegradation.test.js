@@ -62,11 +62,13 @@ describe('Architecture Boundaries', () => {
   })
 
   it('per-plan save snapshot includes measurement items', () => {
-    // The snapshotItems should include measurement line items (cable trays, manual measurements)
-    expect(workspaceSrc).toContain("_fromMeasurement: true,")
-    // Verify both the full-quote path AND the per-plan snapshot path have measurement items
-    const perPlanSection = workspaceSrc.split('calcPricingLines: snapshotItems')[0] || ''
-    expect(perPlanSection).toContain('for (const mi of measurementItems)')
+    // Snapshot item building (including measurement items) was extracted to saveHelpers.js
+    // Verify TakeoffWorkspace delegates to buildSnapshotItems
+    expect(workspaceSrc).toContain('buildSnapshotItems(')
+    // Verify the helper itself preserves _fromMeasurement flag
+    const helperSrc = readSrc('utils/saveHelpers.js')
+    expect(helperSrc).toContain('_fromMeasurement: true,')
+    expect(helperSrc).toContain('for (const mi of measurementItems)')
   })
 
   it('DxfBlockOverlay still rendered for DXF', () => {

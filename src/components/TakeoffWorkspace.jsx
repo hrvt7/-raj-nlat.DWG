@@ -42,7 +42,7 @@ import { toggleReferencePanelBlock } from '../utils/referencePanelStore.js'
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { buildBlockEvidence } from '../data/evidenceExtractor.js'
-import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId } from '../utils/reviewState.js'
+import { classifyAllItems, buildReviewSummary, computeQuoteReadiness } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
 import { suggestAssemblies } from '../utils/suggestAssemblies.js'
@@ -58,6 +58,7 @@ import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
 import { convertDwgToDxf } from '../utils/dwgConversionFlow.js'
+import { buildSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
 import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
@@ -640,26 +641,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         const _planSysType = _planMeta?.inferredMeta?.systemType || 'general'
         const _planFloor = _planMeta?.inferredMeta?.floor || null
         const _planFloorLabel = _planMeta?.inferredMeta?.floorLabel || null
-        const snapshotItems = (pricing.lines || []).map(line => ({
-          name: line.name, code: line.code || '', qty: line.qty, unit: line.unit, type: line.type,
-          systemType: line.systemType || 'general',
-          sourcePlanSystemType: _planSysType,
-          sourcePlanFloor: _planFloor,
-          sourcePlanFloorLabel: _planFloorLabel,
-          unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
-          hours: line.hours || 0, materialCost: line.materialCost || 0,
-        }))
-        // Include measurement items in per-plan snapshot (cable trays, manual measurements)
-        for (const mi of measurementItems) {
-          if (!mi.totalMeters || mi.totalMeters <= 0) continue
-          snapshotItems.push({
-            name: mi.label + (mi.isAutoPriced ? '' : ' (kézi ár)'),
-            code: mi.matchedAsmId || mi.key, qty: Math.round(mi.totalMeters * 10) / 10, unit: 'm',
-            type: 'material', systemType: 'general',
-            sourcePlanSystemType: _planSysType, sourcePlanFloor: _planFloor, sourcePlanFloorLabel: _planFloorLabel,
-            unitPrice: mi.pricePerUnit, hours: 0, materialCost: mi.cost, _fromMeasurement: true,
-          })
-        }
+        const snapshotItems = buildSnapshotItems(pricing.lines, measurementItems, _planSysType, _planFloor, _planFloorLabel)
         const snapshotAssembly = buildAssemblySummary(
           takeoffRows, pricing, assemblies, workItems, materials,
           context, markup, hourlyRate, difficultyMode, computePricing,
@@ -684,17 +666,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           calcCableCost: Math.round(fullCalc?.cableCost || 0),
         })
         // Learn from save — only train memory with reviewed/trusted items
-        // Gate: low-confidence auto-matches must NOT train memory to avoid
-        // false-trust feedback loop (0.62 partial match → 0.85 project memory)
-        if (memProjectId) {
-          for (const item of classifiedItems) {
-            if (item.reviewStatus === 'excluded') continue
-            const finalAsmId = getEffectiveAsmId(item, asmOverrides)
-            if (finalAsmId && shouldTrainMemory(item)) {
-              recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
-            }
-          }
-        }
+        trainMemoryFromSave(classifiedItems, asmOverrides, memProjectId, evidenceMap)
 
         // Show save-success strip instead of immediately navigating back
         if (onQuoteFromPlan) {
@@ -711,39 +683,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const _fqPlanSysType = _fqPlanMeta?.inferredMeta?.systemType || 'general'
       const _fqPlanFloor = _fqPlanMeta?.inferredMeta?.floor || null
       const _fqPlanFloorLabel = _fqPlanMeta?.inferredMeta?.floorLabel || null
-      const items = (pricing.lines || []).map(line => ({
-        name:        line.name,
-        code:        line.code || '',
-        qty:         line.qty,
-        unit:        line.unit,
-        type:        line.type,
-        systemType:  line.systemType || 'general',
-        sourcePlanSystemType: _fqPlanSysType,
-        sourcePlanFloor: _fqPlanFloor,
-        sourcePlanFloorLabel: _fqPlanFloorLabel,
-        unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
-        hours:       line.hours || 0,
-        materialCost: line.materialCost || 0,
-      }))
-      // Add measurement line items (cable trays, manual measurements) to the quote
-      for (const mi of measurementItems) {
-        if (!mi.totalMeters || mi.totalMeters <= 0) continue
-        items.push({
-          name:        mi.label + (mi.isAutoPriced ? '' : ' (kézi ár)'),
-          code:        mi.matchedAsmId || mi.key,
-          qty:         Math.round(mi.totalMeters * 10) / 10,
-          unit:        'm',
-          type:        'material',
-          systemType:  'general',
-          sourcePlanSystemType: _fqPlanSysType,
-          sourcePlanFloor: _fqPlanFloor,
-          sourcePlanFloorLabel: _fqPlanFloorLabel,
-          unitPrice:   mi.pricePerUnit,
-          hours:       0,
-          materialCost: mi.cost,
-          _fromMeasurement: true,
-        })
-      }
+      const items = buildSnapshotItems(pricing.lines, measurementItems, _fqPlanSysType, _fqPlanFloor, _fqPlanFloorLabel)
 
       const assemblySummary = buildAssemblySummary(
         takeoffRows, pricing, assemblies, workItems, materials,
@@ -785,15 +725,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       saveQuote(quote)
 
       // Learn from save — only train memory with reviewed/trusted items
-      if (memProjectId) {
-        for (const item of classifiedItems) {
-          if (item.reviewStatus === 'excluded') continue
-          const finalAsmId = getEffectiveAsmId(item, asmOverrides)
-          if (finalAsmId && shouldTrainMemory(item)) {
-            recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
-          }
-        }
-      }
+      trainMemoryFromSave(classifiedItems, asmOverrides, memProjectId, evidenceMap)
 
       onSaved?.(quote)
     } catch (err) {
