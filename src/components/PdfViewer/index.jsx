@@ -109,6 +109,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const [batchProgress, setBatchProgress] = useState('')
   const batchCancelRef = useRef(false)
   const savedTemplatesRef = useRef([]) // preserved through unmount save
+  const symbolFamiliesRef = useRef([]) // preserved through unmount/fallback save (mirrors savedTemplatesRef pattern)
   const autoSymbolSearchIdRef = useRef(0) // monotonic counter to detect stale results
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
   const mountedRef = useRef(true) // guard against setState after unmount
@@ -160,7 +161,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     ...stored,
     ...payload,
     savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
-    symbolFamilies: stored?.symbolFamilies || [],
+    symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : (stored?.symbolFamilies || []),
   }), [])
 
   const { saveState, markDirty, markSaved, debounceSaveTimerRef, setSaveState } = usePlanAnnotationSave({
@@ -193,7 +194,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
       }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurements() }
-      if (ann.savedTemplates?.length) { savedTemplatesRef.current = ann.savedTemplates }
+      savedTemplatesRef.current = ann.savedTemplates?.length ? ann.savedTemplates : []
+      symbolFamiliesRef.current = ann.symbolFamilies?.length ? ann.symbolFamilies : []
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
@@ -336,6 +338,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           rotation: rotationRef.current,
           coordVersion: 2, // markers/measurements in unrotated doc coords
           savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
+          symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : (stored?.symbolFamilies || []),
         }, { silent: true })
       }).catch(() => {
         // Fallback: save what we have if store read fails
@@ -349,7 +352,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           assignments: assignmentsRef.current,
           quoteOverrides: quoteOverridesRef.current,
           rotation: rotationRef.current,
-          coordVersion: 2, // markers/measurements in unrotated doc coords
+          coordVersion: 2,
+          savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : [],
+          symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : [],
         }, { silent: true })
       })
     }
@@ -1071,12 +1076,23 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     }, 400)
   }, [drawOverlay, pdfDoc, pageNum, renderPage])
 
-  // Filter cached hits when threshold changes — NO re-search needed (instant)
+  // Filter cached hits when threshold changes — NO re-search needed (instant).
+  // IMPORTANT: preserve existing accepted/rejected state for results that remain.
+  // Only new results (not previously visible) get accepted: true by default.
   useEffect(() => {
     if (autoSymbolPhase !== 'done' || autoSymbolAllHitsRef.current.length === 0) return
+    // Build a map of existing review decisions by idx (stable across threshold changes)
+    const prevDecisions = new Map()
+    for (const r of autoSymbolResults) {
+      if (r.idx != null) prevDecisions.set(r.idx, r.accepted)
+    }
     const filtered = autoSymbolAllHitsRef.current
       .filter(h => h.score >= autoSymbolThreshold)
-      .map((h, i) => ({ ...h, accepted: true, idx: i }))
+      .map((h, i) => ({
+        ...h, idx: h.idx ?? i,
+        // Preserve prior accept/reject decision; default to true for new results
+        accepted: prevDecisions.has(h.idx ?? i) ? prevDecisions.get(h.idx ?? i) : true,
+      }))
     setAutoSymbolResults(filtered)
     if (filtered.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken. Próbáld alacsonyabb küszöbbel.')
     else setAutoSymbolError(null)
@@ -1449,6 +1465,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
               // Symbol Families — auto-grouping by category+asmId, multi-variant support
               const existingFamilies = ann?.symbolFamilies || migrateTemplatesToFamilies(existingTpls)
               const { families: updatedFamilies } = upsertTemplateIntoFamilies(existingFamilies, newTemplateData)
+              symbolFamiliesRef.current = updatedFamilies
 
               savePlanAnnotations(planId, {
                 ...ann,
