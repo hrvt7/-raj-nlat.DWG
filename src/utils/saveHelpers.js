@@ -60,6 +60,46 @@ export function buildSnapshotItems(pricingLines, measurementItems, planSysType, 
   return items
 }
 
+// ─── 1b. buildCustomSnapshotItems ─────────────────────────────────────────────
+/**
+ * Build snapshot items from custom takeoff rows (Egyéni tételek).
+ * Custom items have no assembly BOM — pricing comes from user-entered meta.
+ * Output shape matches buildSnapshotItems for QuoteView/PDF compatibility.
+ *
+ * @param {Array} takeoffRows — all takeoff rows (assembly + custom)
+ * @param {Object} customItemMeta — { [customItemId]: { name, unit, unitPrice } }
+ * @param {string} planSysType
+ * @param {string|null} planFloor
+ * @param {string|null} planFloorLabel
+ * @returns {Array} items — custom snapshot items in standard shape
+ */
+export function buildCustomSnapshotItems(takeoffRows, customItemMeta, planSysType, planFloor, planFloorLabel) {
+  if (!customItemMeta) return []
+  const items = []
+  for (const row of takeoffRows) {
+    if (row._sourceType !== 'custom') continue
+    const meta = customItemMeta[row._customItemId]
+    if (!meta?.name) continue // skip unnamed custom items
+    const unitPrice = meta.unitPrice || 0
+    items.push({
+      name: meta.name,
+      code: row._customItemId || '',
+      qty: row.qty,
+      unit: meta.unit || 'db',
+      type: 'material', // V1 default — custom items are material-typed
+      systemType: 'general',
+      sourcePlanSystemType: planSysType || 'general',
+      sourcePlanFloor: planFloor || null,
+      sourcePlanFloorLabel: planFloorLabel || null,
+      unitPrice,
+      hours: 0,
+      materialCost: Math.round(row.qty * unitPrice),
+      _fromCustom: true,
+    })
+  }
+  return items
+}
+
 // ─── 2. trainMemoryFromSave ───────────────────────────────────────────────────
 /**
  * Train recognition memory from saved items. Only reviewed/trusted items are

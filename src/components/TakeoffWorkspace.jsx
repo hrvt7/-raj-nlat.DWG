@@ -60,7 +60,7 @@ import useTakeoffRowState from '../hooks/useTakeoffRowState.js'
 import useTakeoffBootstrap from '../hooks/useTakeoffBootstrap.js'
 import { takeoffToManualRows } from '../utils/takeoffToManualRows.js'
 import { materializeManualRowsToItems, computeManualTotals } from '../utils/manualPricingRow.js'
-import { buildSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
+import { buildSnapshotItems, buildCustomSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
 import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
@@ -478,7 +478,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         const _planSysType = _planMeta?.inferredMeta?.systemType || 'general'
         const _planFloor = _planMeta?.inferredMeta?.floor || null
         const _planFloorLabel = _planMeta?.inferredMeta?.floorLabel || null
-        const snapshotItems = buildSnapshotItems(pricing.lines, measurementItems, _planSysType, _planFloor, _planFloorLabel)
+        const snapshotItems = [
+          ...buildSnapshotItems(pricing.lines, measurementItems, _planSysType, _planFloor, _planFloorLabel),
+          ...buildCustomSnapshotItems(takeoffRows, customItemMeta, _planSysType, _planFloor, _planFloorLabel),
+        ]
         const snapshotAssembly = buildAssemblySummary(
           takeoffRows, pricing, assemblies, workItems, materials,
           context, markup, hourlyRate, difficultyMode, computePricing,
@@ -560,15 +563,18 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           },
         })
       } else {
-        // ── Assembly pricing: existing flow ──
-        const items = buildSnapshotItems(pricing.lines, measurementItems, _fqPlanSysType, _fqPlanFloor, _fqPlanFloorLabel)
+        // ── Assembly pricing: existing flow + custom items ──
+        const items = [
+          ...buildSnapshotItems(pricing.lines, measurementItems, _fqPlanSysType, _fqPlanFloor, _fqPlanFloorLabel),
+          ...buildCustomSnapshotItems(takeoffRows, customItemMeta, _fqPlanSysType, _fqPlanFloor, _fqPlanFloorLabel),
+        ]
         const assemblySummary = buildAssemblySummary(
           takeoffRows, pricing, assemblies, workItems, materials,
           context, markup, hourlyRate, difficultyMode, computePricing,
         )
         const financialPricing = fullCalc ? {
           total:        Math.round(fullCalc.grandTotal),
-          materialCost: Math.round((pricing?.materialCost || 0) + (fullCalc.measurementCost || 0)),
+          materialCost: Math.round((pricing?.materialCost || 0) + (fullCalc.measurementCost || 0) + (fullCalc.customItemsCost || 0)),
           laborCost:    Math.round(pricing?.laborCost || 0),
           laborHours:   pricing?.laborHours || 0,
         } : pricing
