@@ -58,6 +58,7 @@ import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
 import { convertDwgToDxf } from '../utils/dwgConversionFlow.js'
 import useTakeoffPlanAnnotations from '../hooks/useTakeoffPlanAnnotations.js'
+import useTakeoffSplitLayout from '../hooks/useTakeoffSplitLayout.js'
 import { buildSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
@@ -158,14 +159,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
-  // ── Mobile responsive state ───────────────────────────────────────────────
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
-  const [showDxfOnMobile, setShowDxfOnMobile] = useState(false)
-  useEffect(() => {
-    const fn = () => setIsMobile(window.innerWidth < 768)
-    window.addEventListener('resize', fn)
-    return () => window.removeEventListener('resize', fn)
-  }, [])
+  // ── Split layout + mobile shell (extracted to useTakeoffSplitLayout) ─────
+  const { isMobile, showDxfOnMobile, setShowDxfOnMobile, panelRatio, containerRef, handleDividerMouseDown } = useTakeoffSplitLayout()
 
   // ── Pre-fill from MergePlansView (DXF / PDF / Manual merge) ─────────────
   // When the user clicks "Ajánlat létrehozása" in MergePlansView, initialData
@@ -215,42 +210,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setDeletedItems, setReferencePanels, setCableReviewed,
     setRightTab,
   })
-
-  // ── Resizable split panel ─────────────────────────────────────────────────
-  // panelRatio: left panel width as % of the container (clamp 25–80)
-  const [panelRatio, setPanelRatio] = useState(58)
-  const containerRef = useRef(null)
-  const dragStateRef = useRef({ active: false, startX: 0, startRatio: 58 })
-
-  const handleDividerMouseDown = useCallback((e) => {
-    e.preventDefault()
-    dragStateRef.current = { active: true, startX: e.clientX, startRatio: panelRatio }
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }, [panelRatio])
-
-  useEffect(() => {
-    const onMove = (e) => {
-      if (!dragStateRef.current.active) return
-      const containerW = containerRef.current?.offsetWidth || 1
-      const dx = e.clientX - dragStateRef.current.startX
-      const delta = (dx / containerW) * 100
-      const newRatio = Math.min(80, Math.max(25, dragStateRef.current.startRatio + delta))
-      setPanelRatio(newRatio)
-    }
-    const onUp = () => {
-      if (!dragStateRef.current.active) return
-      dragStateRef.current.active = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-  }, [])
 
   // ── DWG conversion state ───────────────────────────────────────────────────
   const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
