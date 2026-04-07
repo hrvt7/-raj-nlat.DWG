@@ -27,12 +27,11 @@ import { parseDxfFile, parseDxfText, parseDxfTextInWorker } from '../dxfParser.j
 // estimateCablesMST now used inside useCableEstimation hook
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote } from '../data/store.js'
 import { createQuote } from '../utils/createQuote.js'
-import { savePlan as savePlanBlob, savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
+import { savePlan as savePlanBlob, savePlanAnnotations, getPlanAnnotations, updatePlanMeta, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
-import { normalizeMarkers } from '../utils/markerModel.js'
 import { computeDxfAudit } from '../utils/dxfAudit.js'
 import CableConfidenceCard, { CableModeBadge } from './CableConfidenceCard.jsx'
 import { computeCableAudit } from '../utils/cableAudit.js'
@@ -42,7 +41,7 @@ import { toggleReferencePanelBlock } from '../utils/referencePanelStore.js'
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { buildBlockEvidence } from '../data/evidenceExtractor.js'
-import { classifyAllItems, buildReviewSummary, computeQuoteReadiness, shouldTrainMemory, getEffectiveAsmId } from '../utils/reviewState.js'
+import { classifyAllItems, buildReviewSummary, computeQuoteReadiness } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
 import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
 import { suggestAssemblies } from '../utils/suggestAssemblies.js'
@@ -58,6 +57,9 @@ import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
 import { convertDwgToDxf } from '../utils/dwgConversionFlow.js'
+import useTakeoffPlanAnnotations from '../hooks/useTakeoffPlanAnnotations.js'
+import useTakeoffSplitLayout from '../hooks/useTakeoffSplitLayout.js'
+import { buildSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
 import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
@@ -157,14 +159,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
-  // ── Mobile responsive state ───────────────────────────────────────────────
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
-  const [showDxfOnMobile, setShowDxfOnMobile] = useState(false)
-  useEffect(() => {
-    const fn = () => setIsMobile(window.innerWidth < 768)
-    window.addEventListener('resize', fn)
-    return () => window.removeEventListener('resize', fn)
-  }, [])
+  // ── Split layout + mobile shell (extracted to useTakeoffSplitLayout) ─────
+  const { isMobile, showDxfOnMobile, setShowDxfOnMobile, panelRatio, containerRef, handleDividerMouseDown } = useTakeoffSplitLayout()
 
   // ── Pre-fill from MergePlansView (DXF / PDF / Manual merge) ─────────────
   // When the user clicks "Ajánlat létrehozása" in MergePlansView, initialData
@@ -207,73 +203,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     if (initialFile && !file) handleFile(initialFile)
   }, [initialFile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Restore saved annotations when opening a plan with a planId ───────────
-  useEffect(() => {
-    if (!planId || !file) return
-    ;(async () => {
-      const ann = await getPlanAnnotations(planId)
-      if (ann && ann.markers && ann.markers.length > 0) {
-        setPdfMarkers(normalizeMarkers(ann.markers))
-        if (ann.wallSplits) setWallSplits(ann.wallSplits)
-        if (ann.variantOverrides) setVariantOverrides(ann.variantOverrides)
-        if (ann.deletedItems) setDeletedItems(new Set(ann.deletedItems))
-        setRightTab('takeoff')
-      }
-      // Restore reference panels (manual cable mode)
-      if (ann?.referencePanels?.length > 0) {
-        setReferencePanels(ann.referencePanels)
-      }
-      // Restore cable review flag (suppress stale cable warnings on reopen)
-      if (ann?.cableReviewed) {
-        setCableReviewed(true)
-      }
-    })()
-  }, [planId, file]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Subscribe to external annotation changes (e.g. DetectionReviewPanel apply) ──
-  useEffect(() => {
-    if (!planId) return
-    const unsub = onAnnotationsChanged(planId, ({ markers }) => {
-      setPdfMarkers(normalizeMarkers(markers))
-    })
-    return unsub
-  }, [planId])
-
-  // ── Resizable split panel ─────────────────────────────────────────────────
-  // panelRatio: left panel width as % of the container (clamp 25–80)
-  const [panelRatio, setPanelRatio] = useState(58)
-  const containerRef = useRef(null)
-  const dragStateRef = useRef({ active: false, startX: 0, startRatio: 58 })
-
-  const handleDividerMouseDown = useCallback((e) => {
-    e.preventDefault()
-    dragStateRef.current = { active: true, startX: e.clientX, startRatio: panelRatio }
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }, [panelRatio])
-
-  useEffect(() => {
-    const onMove = (e) => {
-      if (!dragStateRef.current.active) return
-      const containerW = containerRef.current?.offsetWidth || 1
-      const dx = e.clientX - dragStateRef.current.startX
-      const delta = (dx / containerW) * 100
-      const newRatio = Math.min(80, Math.max(25, dragStateRef.current.startRatio + delta))
-      setPanelRatio(newRatio)
-    }
-    const onUp = () => {
-      if (!dragStateRef.current.active) return
-      dragStateRef.current.active = false
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-  }, [])
+  // ── Plan annotation lifecycle (hydrate + external sync) ───────────────────
+  useTakeoffPlanAnnotations({
+    planId, file,
+    setPdfMarkers, setWallSplits, setVariantOverrides,
+    setDeletedItems, setReferencePanels, setCableReviewed,
+    setRightTab,
+  })
 
   // ── DWG conversion state ───────────────────────────────────────────────────
   const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
@@ -640,26 +576,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         const _planSysType = _planMeta?.inferredMeta?.systemType || 'general'
         const _planFloor = _planMeta?.inferredMeta?.floor || null
         const _planFloorLabel = _planMeta?.inferredMeta?.floorLabel || null
-        const snapshotItems = (pricing.lines || []).map(line => ({
-          name: line.name, code: line.code || '', qty: line.qty, unit: line.unit, type: line.type,
-          systemType: line.systemType || 'general',
-          sourcePlanSystemType: _planSysType,
-          sourcePlanFloor: _planFloor,
-          sourcePlanFloorLabel: _planFloorLabel,
-          unitPrice: line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
-          hours: line.hours || 0, materialCost: line.materialCost || 0,
-        }))
-        // Include measurement items in per-plan snapshot (cable trays, manual measurements)
-        for (const mi of measurementItems) {
-          if (!mi.totalMeters || mi.totalMeters <= 0) continue
-          snapshotItems.push({
-            name: mi.label + (mi.isAutoPriced ? '' : ' (kézi ár)'),
-            code: mi.matchedAsmId || mi.key, qty: Math.round(mi.totalMeters * 10) / 10, unit: 'm',
-            type: 'material', systemType: 'general',
-            sourcePlanSystemType: _planSysType, sourcePlanFloor: _planFloor, sourcePlanFloorLabel: _planFloorLabel,
-            unitPrice: mi.pricePerUnit, hours: 0, materialCost: mi.cost, _fromMeasurement: true,
-          })
-        }
+        const snapshotItems = buildSnapshotItems(pricing.lines, measurementItems, _planSysType, _planFloor, _planFloorLabel)
         const snapshotAssembly = buildAssemblySummary(
           takeoffRows, pricing, assemblies, workItems, materials,
           context, markup, hourlyRate, difficultyMode, computePricing,
@@ -684,17 +601,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           calcCableCost: Math.round(fullCalc?.cableCost || 0),
         })
         // Learn from save — only train memory with reviewed/trusted items
-        // Gate: low-confidence auto-matches must NOT train memory to avoid
-        // false-trust feedback loop (0.62 partial match → 0.85 project memory)
-        if (memProjectId) {
-          for (const item of classifiedItems) {
-            if (item.reviewStatus === 'excluded') continue
-            const finalAsmId = getEffectiveAsmId(item, asmOverrides)
-            if (finalAsmId && shouldTrainMemory(item)) {
-              recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
-            }
-          }
-        }
+        trainMemoryFromSave(classifiedItems, asmOverrides, memProjectId, evidenceMap)
 
         // Show save-success strip instead of immediately navigating back
         if (onQuoteFromPlan) {
@@ -711,39 +618,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const _fqPlanSysType = _fqPlanMeta?.inferredMeta?.systemType || 'general'
       const _fqPlanFloor = _fqPlanMeta?.inferredMeta?.floor || null
       const _fqPlanFloorLabel = _fqPlanMeta?.inferredMeta?.floorLabel || null
-      const items = (pricing.lines || []).map(line => ({
-        name:        line.name,
-        code:        line.code || '',
-        qty:         line.qty,
-        unit:        line.unit,
-        type:        line.type,
-        systemType:  line.systemType || 'general',
-        sourcePlanSystemType: _fqPlanSysType,
-        sourcePlanFloor: _fqPlanFloor,
-        sourcePlanFloorLabel: _fqPlanFloorLabel,
-        unitPrice:   line.qty > 0 ? (line.materialCost || 0) / line.qty : 0,
-        hours:       line.hours || 0,
-        materialCost: line.materialCost || 0,
-      }))
-      // Add measurement line items (cable trays, manual measurements) to the quote
-      for (const mi of measurementItems) {
-        if (!mi.totalMeters || mi.totalMeters <= 0) continue
-        items.push({
-          name:        mi.label + (mi.isAutoPriced ? '' : ' (kézi ár)'),
-          code:        mi.matchedAsmId || mi.key,
-          qty:         Math.round(mi.totalMeters * 10) / 10,
-          unit:        'm',
-          type:        'material',
-          systemType:  'general',
-          sourcePlanSystemType: _fqPlanSysType,
-          sourcePlanFloor: _fqPlanFloor,
-          sourcePlanFloorLabel: _fqPlanFloorLabel,
-          unitPrice:   mi.pricePerUnit,
-          hours:       0,
-          materialCost: mi.cost,
-          _fromMeasurement: true,
-        })
-      }
+      const items = buildSnapshotItems(pricing.lines, measurementItems, _fqPlanSysType, _fqPlanFloor, _fqPlanFloorLabel)
 
       const assemblySummary = buildAssemblySummary(
         takeoffRows, pricing, assemblies, workItems, materials,
@@ -785,15 +660,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       saveQuote(quote)
 
       // Learn from save — only train memory with reviewed/trusted items
-      if (memProjectId) {
-        for (const item of classifiedItems) {
-          if (item.reviewStatus === 'excluded') continue
-          const finalAsmId = getEffectiveAsmId(item, asmOverrides)
-          if (finalAsmId && shouldTrainMemory(item)) {
-            recordConfirmation(item.blockName, finalAsmId, memProjectId, 'save_plan', evidenceMap?.get(item.blockName))
-          }
-        }
-      }
+      trainMemoryFromSave(classifiedItems, asmOverrides, memProjectId, evidenceMap)
 
       onSaved?.(quote)
     } catch (err) {
