@@ -336,6 +336,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           rotation: rotationRef.current,
           coordVersion: 2, // markers/measurements in unrotated doc coords
           savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
+          symbolFamilies: stored?.symbolFamilies || [],
         }, { silent: true })
       }).catch(() => {
         // Fallback: save what we have if store read fails
@@ -349,7 +350,9 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           assignments: assignmentsRef.current,
           quoteOverrides: quoteOverridesRef.current,
           rotation: rotationRef.current,
-          coordVersion: 2, // markers/measurements in unrotated doc coords
+          coordVersion: 2,
+          savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : [],
+          // symbolFamilies not available in fallback (IDB read failed), but savedTemplates preserved
         }, { silent: true })
       })
     }
@@ -1071,12 +1074,23 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     }, 400)
   }, [drawOverlay, pdfDoc, pageNum, renderPage])
 
-  // Filter cached hits when threshold changes — NO re-search needed (instant)
+  // Filter cached hits when threshold changes — NO re-search needed (instant).
+  // IMPORTANT: preserve existing accepted/rejected state for results that remain.
+  // Only new results (not previously visible) get accepted: true by default.
   useEffect(() => {
     if (autoSymbolPhase !== 'done' || autoSymbolAllHitsRef.current.length === 0) return
+    // Build a map of existing review decisions by idx (stable across threshold changes)
+    const prevDecisions = new Map()
+    for (const r of autoSymbolResults) {
+      if (r.idx != null) prevDecisions.set(r.idx, r.accepted)
+    }
     const filtered = autoSymbolAllHitsRef.current
       .filter(h => h.score >= autoSymbolThreshold)
-      .map((h, i) => ({ ...h, accepted: true, idx: i }))
+      .map((h, i) => ({
+        ...h, idx: h.idx ?? i,
+        // Preserve prior accept/reject decision; default to true for new results
+        accepted: prevDecisions.has(h.idx ?? i) ? prevDecisions.get(h.idx ?? i) : true,
+      }))
     setAutoSymbolResults(filtered)
     if (filtered.length === 0) setAutoSymbolError('Nincs találat ezen a küszöbértéken. Próbáld alacsonyabb küszöbbel.')
     else setAutoSymbolError(null)
