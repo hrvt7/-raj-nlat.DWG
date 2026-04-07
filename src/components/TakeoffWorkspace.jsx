@@ -27,12 +27,11 @@ import { parseDxfFile, parseDxfText, parseDxfTextInWorker } from '../dxfParser.j
 // estimateCablesMST now used inside useCableEstimation hook
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote } from '../data/store.js'
 import { createQuote } from '../utils/createQuote.js'
-import { savePlan as savePlanBlob, savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
+import { savePlan as savePlanBlob, savePlanAnnotations, getPlanAnnotations, updatePlanMeta, getPlanMeta } from '../data/planStore.js'
 import { getProject } from '../data/projectStore.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
-import { normalizeMarkers } from '../utils/markerModel.js'
 import { computeDxfAudit } from '../utils/dxfAudit.js'
 import CableConfidenceCard, { CableModeBadge } from './CableConfidenceCard.jsx'
 import { computeCableAudit } from '../utils/cableAudit.js'
@@ -58,6 +57,7 @@ import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
 import { convertDwgToDxf } from '../utils/dwgConversionFlow.js'
+import useTakeoffPlanAnnotations from '../hooks/useTakeoffPlanAnnotations.js'
 import { buildSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
@@ -208,37 +208,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     if (initialFile && !file) handleFile(initialFile)
   }, [initialFile]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Restore saved annotations when opening a plan with a planId ───────────
-  useEffect(() => {
-    if (!planId || !file) return
-    ;(async () => {
-      const ann = await getPlanAnnotations(planId)
-      if (ann && ann.markers && ann.markers.length > 0) {
-        setPdfMarkers(normalizeMarkers(ann.markers))
-        if (ann.wallSplits) setWallSplits(ann.wallSplits)
-        if (ann.variantOverrides) setVariantOverrides(ann.variantOverrides)
-        if (ann.deletedItems) setDeletedItems(new Set(ann.deletedItems))
-        setRightTab('takeoff')
-      }
-      // Restore reference panels (manual cable mode)
-      if (ann?.referencePanels?.length > 0) {
-        setReferencePanels(ann.referencePanels)
-      }
-      // Restore cable review flag (suppress stale cable warnings on reopen)
-      if (ann?.cableReviewed) {
-        setCableReviewed(true)
-      }
-    })()
-  }, [planId, file]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Subscribe to external annotation changes (e.g. DetectionReviewPanel apply) ──
-  useEffect(() => {
-    if (!planId) return
-    const unsub = onAnnotationsChanged(planId, ({ markers }) => {
-      setPdfMarkers(normalizeMarkers(markers))
-    })
-    return unsub
-  }, [planId])
+  // ── Plan annotation lifecycle (hydrate + external sync) ───────────────────
+  useTakeoffPlanAnnotations({
+    planId, file,
+    setPdfMarkers, setWallSplits, setVariantOverrides,
+    setDeletedItems, setReferencePanels, setCableReviewed,
+    setRightTab,
+  })
 
   // ── Resizable split panel ─────────────────────────────────────────────────
   // panelRatio: left panel width as % of the container (clamp 25–80)
