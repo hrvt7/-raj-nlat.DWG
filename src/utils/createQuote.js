@@ -14,6 +14,12 @@
  *
  * The caller passes path-specific overrides (items, source, fileName, etc.)
  * via the `overrides` parameter — these are spread last and win.
+ *
+ * V1 Hybrid pricing:
+ * - pricingMode: 'assembly' (default, backward compat) | 'manual'
+ * - manualRows: persisted edit source of truth for manual mode
+ * - items[]: always present as the compatibility/export layer
+ *   In manual mode, items[] is materialized from manualRows at save time.
  */
 
 import { generateQuoteId, generateQuoteNumber } from '../data/store.js'
@@ -30,7 +36,7 @@ import { OUTPUT_MODE_INCLEXCL } from '../data/quoteDefaults.js'
  * @param {object}  [opts.overrides]        — Path-specific fields spread last (items, source, fileName, etc.)
  * @returns {object} Fully-formed quote object ready for saveQuote()
  */
-export function createQuote({ displayName, clientName, outputMode, pricing, pricingParams, settings, overrides }) {
+export function createQuote({ displayName, clientName, outputMode, pricing, pricingParams, settings, overrides, pricingMode, manualRows }) {
   const mode = outputMode || 'combined'
   const quoteSettings = settings?.quote || {}
 
@@ -90,6 +96,12 @@ export function createQuote({ displayName, clientName, outputMode, pricing, pric
       markup_pct:     Number(pricingParams?.markupPct) || 0,
       markup_type:    pricingParams?.markupType || 'markup',
     },
+
+    // ── Hybrid pricing mode (V1) ────────────────────────────────────────
+    // Default: 'assembly' for backward compatibility with all existing quotes.
+    pricingMode:      pricingMode || 'assembly',
+    // manualRows: persisted edit source for manual mode. Absent/empty for assembly quotes.
+    manualRows:       (pricingMode === 'manual' && Array.isArray(manualRows)) ? manualRows : undefined,
 
     // ── Path-specific overrides (items, source, fileName, planId, etc.) ──
     ...overrides,

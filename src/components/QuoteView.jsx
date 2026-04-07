@@ -7,6 +7,8 @@ import { quoteDisplayTotals } from '../utils/quoteDisplayTotals.js'
 import { generateBOMRows, exportBOM } from '../utils/bomExport.js'
 import { createQuoteShare } from '../supabase.js'
 import { OUTPUT_MODE_INCLEXCL, OUTPUT_MODE_NOTES, GROUP_BY_OPTIONS, GROUP_BY_LABELS, groupItemsBySystem, groupItemsByFloor } from '../data/quoteDefaults.js'
+import ManualRowEditor from './ManualRowEditor.jsx'
+import { computeManualTotals, materializeManualRowsToItems } from '../utils/manualPricingRow.js'
 
 const PDF_LEVELS = [
   { key: 'compact',  label: 'Tömör',       icon: '▣', desc: 'Összesítő, KPI-k, pénzügyi táblázat' },
@@ -44,6 +46,10 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
   const [editValidity, setEditValidity] = useState(quote.validityText ?? '')
   const [editPaymentTerms, setEditPaymentTerms] = useState(quote.paymentTermsText ?? '')
 
+  // ── Manual pricing rows state (only active for pricingMode === 'manual') ──
+  const isManualMode = (quote.pricingMode || 'assembly') === 'manual'
+  const [manualRows, setManualRows] = useState(quote.manualRows || [])
+
   // ── Sync local state when quote prop changes (e.g. different quote opened, or after save) ──
   const prevQuoteRef = useRef(quote.id)
   useEffect(() => {
@@ -62,6 +68,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
       setEditExclusions(quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
       setEditValidity(quote.validityText ?? '')
       setEditPaymentTerms(quote.paymentTermsText ?? '')
+      setManualRows(quote.manualRows || [])
       prevQuoteRef.current = quote.id
     }
   }, [quote.id, quote.projectName, quote.clientName, quote.pricingData?.hourlyRate, quote.pricingData?.markup_pct, quote.outputMode])
@@ -86,6 +93,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
     || editExclusions !== (quote.exclusions ?? OUTPUT_MODE_INCLEXCL[quote.outputMode || 'combined']?.exclusions ?? '')
     || editValidity !== (quote.validityText ?? '')
     || editPaymentTerms !== (quote.paymentTermsText ?? '')
+    || (isManualMode && JSON.stringify(manualRows) !== JSON.stringify(quote.manualRows || []))
   // ── Navigation guard: warn before leaving with unsaved changes ───────────
   useEffect(() => {
     if (!isDirty) return
@@ -94,10 +102,12 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
     return () => window.removeEventListener('beforeunload', handler)
   }, [isDirty])
 
-  const totalHours = quote.totalHours || 0
-  const totalMaterials = Math.round(quote.totalMaterials || 0)
-  const cableCost = Math.round(quote.cableCost || 0)
-  const newTotalLabor = Math.round(totalHours * effectiveRate)
+  // ── Totals: manual mode computes from manualRows, assembly mode from stored snapshot ──
+  const _manualTotals = isManualMode ? computeManualTotals(manualRows, effectiveRate) : null
+  const totalHours = isManualMode ? (_manualTotals.totalHours || 0) : (quote.totalHours || 0)
+  const totalMaterials = isManualMode ? _manualTotals.totalMaterials : Math.round(quote.totalMaterials || 0)
+  const cableCost = isManualMode ? 0 : Math.round(quote.cableCost || 0)
+  const newTotalLabor = isManualMode ? _manualTotals.totalLabor : Math.round(totalHours * effectiveRate)
   const newSubtotal = totalMaterials + newTotalLabor + cableCost
   const markupType = quote.pricingData?.markup_type || 'markup'
   const markupPctRaw = Number(editMarkup) / 100
@@ -152,7 +162,9 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
       projectAddress: editProjectAddr,
       gross: net,
       totalLabor: newTotalLabor,
-      summary: { ...quote.summary, grandTotal: net },
+      totalMaterials: isManualMode ? _manualTotals.totalMaterials : quote.totalMaterials,
+      totalHours: isManualMode ? _manualTotals.totalHours : quote.totalHours,
+      summary: { ...quote.summary, grandTotal: net, totalWorkHours: totalHours },
       pricingData: {
         ...quote.pricingData,
         hourlyRate: effectiveRate,
@@ -163,6 +175,13 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
       validityText: editValidity,
       paymentTermsText: editPaymentTerms,
       updatedAt: new Date().toISOString(),
+    }
+    // Manual mode: persist manualRows + materialize items[] for compatibility
+    if (isManualMode) {
+      updated.manualRows = manualRows
+      updated.items = materializeManualRowsToItems(manualRows, effectiveRate)
+      // Clear assembly-specific fields that don't apply to manual quotes
+      updated.assemblySummary = []
     }
     onSaveQuote(updated)
     toast.show('Ajánlat mentve', 'success')
@@ -191,8 +210,16 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
     }
 
     // Build a live quote snapshot for PDF so it uses current edits (even unsaved)
+    const liveQuoteManual = isManualMode ? {
+      items: materializeManualRowsToItems(manualRows, effectiveRate),
+      assemblySummary: [],
+      manualRows,
+      totalMaterials: _manualTotals.totalMaterials,
+      totalHours: _manualTotals.totalHours,
+    } : {}
     const liveQuote = {
       ...quote,
+      ...liveQuoteManual,
       outputMode,
       groupBy,
       projectName: editName, project_name: editName, name: editName,
@@ -274,8 +301,16 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
 
   const buildLiveQuoteHtml = async () => {
     const { buildQuoteHtml } = await import('../utils/generatePdf.js')
+    const _lqManual = isManualMode ? {
+      items: materializeManualRowsToItems(manualRows, effectiveRate),
+      assemblySummary: [],
+      manualRows,
+      totalMaterials: _manualTotals.totalMaterials,
+      totalHours: _manualTotals.totalHours,
+    } : {}
     const liveQuote = {
       ...quote,
+      ..._lqManual,
       outputMode,
       groupBy,
       projectName: editName, project_name: editName, name: editName,
@@ -455,7 +490,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
         <div className="kpi-card" style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px' }}>
           <span style={labelStyle}>Munkaóra</span>
           <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: C.yellow, whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 5 }}>
-            <span>{(quote.totalHours || 0).toFixed(1)}</span>
+            <span>{totalHours.toFixed(1)}</span>
             <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.6 }}>ó</span>
           </div>
           <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted, marginTop: 6 }}>{fmt(effectiveRate)} Ft/ó óradíj</div>
@@ -601,11 +636,21 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
       {/* ── Main body: left (items) + right (sidebar) ────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 260px', gap: 20, alignItems: 'start' }}>
 
-        {/* LEFT – items table */}
+        {/* LEFT – items table (manual editor or assembly tables) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
+          {/* ── Manual mode: inline editable rows ─────────────────────────── */}
+          {isManualMode && (
+            <ManualRowEditor
+              rows={manualRows}
+              hourlyRate={effectiveRate}
+              onChange={setManualRows}
+            />
+          )}
+
+          {/* ── Assembly mode: read-only summary + items ──────────────────── */}
           {/* Assembly summary if available */}
-          {(quote.assemblySummary || []).length > 0 && (
+          {!isManualMode && (quote.assemblySummary || []).length > 0 && (
             <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
               <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 13, color: C.text }}>{outputMode === 'labor_only' ? 'Munkadíj összesítő' : 'Munkák összesítő'}</span>
@@ -654,8 +699,8 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
             </div>
           )}
 
-          {/* ── Items render: flat (none) or grouped (system/floor) ── */}
-          {(groupBy === 'system' || groupBy === 'floor') ? (
+          {/* ── Items render: flat (none) or grouped (system/floor) — assembly mode only ── */}
+          {!isManualMode && ((groupBy === 'system' || groupBy === 'floor') ? (
             // ── Grouped render (system or floor) ──
             (() => {
               const _grpColor = groupBy === 'floor' ? C.accent : C.yellow
@@ -759,7 +804,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
             />
           )}
             </>
-          )}
+          ))}
 
           {/* ── Inclusions / Exclusions block ───────────────────────────── */}
           <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginTop: 8 }}>
