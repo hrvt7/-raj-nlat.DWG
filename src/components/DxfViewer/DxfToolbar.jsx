@@ -171,6 +171,7 @@ const SPECIAL_ITEMS = [
   { key: 'panel', label: 'Elosztó (referencia)', color: '#FF6B6B' },
   { key: 'junction', label: 'Kötődoboz', color: '#4CC9F0' },
   { key: 'other', label: 'Egyéb', color: '#71717A' },
+  { key: 'custom', label: 'Egyéni tétel', color: '#A78BFA' },
 ]
 
 export function AssemblyDropdown({ activeCategory, onCategoryChange, assemblies, measureMode }) {

@@ -68,6 +68,10 @@ export function createMarker(fields) {
     templateId:     fields.templateId ?? null,
     label:          fields.label ?? null,
 
+    // ── source type (assembly vs custom) ──────────
+    sourceType:   fields.sourceType || 'assembly',   // 'assembly' | 'custom'
+    customItemId: fields.customItemId ?? null,        // stable grouping key for custom items
+
     // ── audit ──────────────────────────────────────
     createdAt:    fields.createdAt || new Date().toISOString(),
   }

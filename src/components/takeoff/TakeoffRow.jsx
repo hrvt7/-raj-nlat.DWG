@@ -10,9 +10,64 @@ export const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-// ─── Takeoff row ──────────────────────────────────────────────────────────────
-export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType }) {
+// ─── Custom takeoff row (Egyéni tétel) ────────────────────────────────────────
+function CustomTakeoffRow({ row, onDelete }) {
   const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        padding: '10px 14px', borderRadius: 8, marginBottom: 6,
+        background: C.bgCard,
+        border: `1px solid ${'#A78BFA'}40`,
+      }}
+    >
+      {hovered && onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(row._customItemId) }}
+          title="Egyéni tétel törlése"
+          style={{
+            position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
+            background: C.red, border: `2px solid ${C.bgCard}`, color: '#fff',
+            fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', lineHeight: 1, padding: 0, zIndex: 2,
+          }}
+        >&times;</button>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#A78BFA', flexShrink: 0 }} />
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+          Egyéni tétel
+          <span style={{
+            fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
+            padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+            background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
+          }}>
+            Egyéni
+          </span>
+        </div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, flexShrink: 0 }}>
+          {row.qty} db
+        </span>
+        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#A78BFA', minWidth: 72, textAlign: 'right', flexShrink: 0, fontStyle: 'italic' }}>
+          Ár: Phase B
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Takeoff row ──────────────────────────────────────────────────────────────
+export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row }) {
+  const [hovered, setHovered] = useState(false)
+
+  // ── Custom row render (hooks called above, safe) ──
+  if (row?._sourceType === 'custom') {
+    return <CustomTakeoffRow row={row} onDelete={onDelete} />
+  }
+
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
 
