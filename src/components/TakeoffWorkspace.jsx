@@ -117,6 +117,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [pdfMarkers, setPdfMarkers] = useState([])
   const [pdfMeasurements, setPdfMeasurements] = useState([]) // [{x1,y1,x2,y2,dist,category?}]
   const [measurementPrices, setMeasurementPrices] = useState({}) // { categoryKey: pricePerUnit(Ft) }
+  // ── Custom item meta (name, unit, unitPrice per customItemId) ──────────
+  const [customItemMeta, setCustomItemMeta] = useState({}) // { [customItemId]: { name, unit, unitPrice } }
   const prevMarkerCountRef = useRef(0)
   useEffect(() => {
     const asmMarkers = pdfMarkers.filter(m => m.asmId || (m.category && m.category.startsWith('ASM-')))
@@ -169,7 +171,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     planId, file,
     setPdfMarkers, setWallSplits, setVariantOverrides,
     setDeletedItems, setReferencePanels, setCableReviewed,
-    setRightTab,
+    setRightTab, setCustomItemMeta,
   })
 
   // ── DWG conversion state ───────────────────────────────────────────────────
@@ -388,7 +390,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const { pricing, measurementItems, measurementCostTotal, fullCalc, unitCostByAsmByWall } = usePricingPipeline({
     takeoffRows, assemblies, workItems, materials, context, markup, markupType,
     hourlyRate, vatPercent, cablePricePerM, cableEstimate, difficultyMode,
-    pdfMeasurements, measurementPrices,
+    pdfMeasurements, measurementPrices, customItemMeta,
   })
 
   // ── Accept all high-confidence ────────────────────────────────────────────
@@ -468,6 +470,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           deletedItems: [...deletedItems],
           referencePanels,
           cableReviewed: cableEstimate?._source === 'panel_assisted' || cableReviewed,
+          customItemMeta: Object.keys(customItemMeta).length > 0 ? customItemMeta : undefined,
         })
         // Persist pricing summary + snapshot for quote generation on plan metadata
         // Resolve plan-level system type from filename inference (fallback: 'general')
@@ -1065,6 +1068,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                       <TakeoffRow
                         key={rowKey}
                         row={row}
+                        customMeta={row._sourceType === 'custom' ? (customItemMeta[row._customItemId] || null) : undefined}
+                        onCustomMetaChange={(id, meta) => setCustomItemMeta(prev => ({ ...prev, [id]: meta }))}
                         asmId={row.asmId}
                         qty={row.qty}
                         variantId={row.variantId}

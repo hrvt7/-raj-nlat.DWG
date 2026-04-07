@@ -20,6 +20,7 @@ export default function usePricingPipeline({
   takeoffRows, assemblies, workItems, materials, context, markup, markupType,
   hourlyRate, vatPercent, cablePricePerM, cableEstimate, difficultyMode,
   pdfMeasurements, measurementPrices,
+  customItemMeta,
 }) {
   // ── Step 1: Core pricing from takeoff rows ──
   const pricing = useMemo(() => {
@@ -88,6 +89,18 @@ export default function usePricingPipeline({
     })
   }, [pdfMeasurements, measurementPrices, assemblies, workItems, materials, context, hourlyRate, difficultyMode])
 
+  // ── Step 2.5: Custom item cost total (Egyéni tételek) ──
+  const customItemsCost = useMemo(() => {
+    if (!customItemMeta || !takeoffRows.length) return 0
+    let total = 0
+    for (const row of takeoffRows) {
+      if (row._sourceType !== 'custom') continue
+      const meta = customItemMeta[row._customItemId]
+      if (meta?.unitPrice) total += row.qty * meta.unitPrice
+    }
+    return Math.round(total)
+  }, [takeoffRows, customItemMeta])
+
   // ── Step 3: Measurement cost total ──
   const measurementCostTotal = useMemo(() => {
     return measurementItems.reduce((s, item) => s + item.cost, 0)
@@ -99,8 +112,8 @@ export default function usePricingPipeline({
       pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent,
       context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode,
     })
-    // Minimal calc when only measurements exist (no takeoff rows)
-    if (!base && measurementItems.length > 0) {
+    // Minimal calc when only measurements or custom items exist (no assembly takeoff rows)
+    if (!base && (measurementItems.length > 0 || customItemsCost > 0)) {
       const markupPct = markup * 100
       base = {
         materialCost: 0, laborCost: 0, laborHours: 0, lines: [],
@@ -111,19 +124,22 @@ export default function usePricingPipeline({
       }
     }
     if (!base) return null
-    // Add measurement costs to the total
-    if (measurementCostTotal > 0) {
-      base.subtotal += measurementCostTotal
+    // Add measurement + custom item costs to the total
+    const extraCost = measurementCostTotal + customItemsCost
+    if (extraCost > 0) {
+      base.subtotal += extraCost
       base.measurementCost = measurementCostTotal
+      base.customItemsCost = customItemsCost
       base.grandTotal = applyMarkupToSubtotal(base.subtotal, base.markupPct / 100, base.markupType)
       base.markupAmount = base.grandTotal - base.subtotal
       base.bruttoTotal = base.grandTotal * (1 + base.vatPercent / 100)
     } else {
       base.measurementCost = 0
+      base.customItemsCost = 0
     }
     base.measurementLines = measurementItems
     return base
-  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal, measurementItems])
+  }, [pricing, cableEstimate, cablePricePerM, markup, markupType, vatPercent, context, takeoffRows, assemblies, workItems, materials, hourlyRate, difficultyMode, measurementCostTotal, measurementItems, customItemsCost])
 
   // ── Step 5: Per-assembly unit cost ──
   const unitCostByAsmByWall = useMemo(() => {

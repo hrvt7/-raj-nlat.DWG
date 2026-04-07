@@ -10,9 +10,25 @@ export const WALL_OPTS = [
   { key: 'concrete', label: 'Beton', color: '#FF6B6B' },
 ]
 
-// ─── Custom takeoff row (Egyéni tétel) ────────────────────────────────────────
-function CustomTakeoffRow({ row, onDelete }) {
+// ─── Inline mini-input ───────────────────────────────────────────────────────
+const miniInputStyle = {
+  background: '#0D0D0F', border: `1px solid #2A2A30`, borderRadius: 4,
+  color: '#E4E4E7', fontFamily: 'DM Mono', fontSize: 11,
+  padding: '3px 6px', outline: 'none', boxSizing: 'border-box',
+}
+
+// ─── Custom takeoff row (Egyéni tétel) — editable ─────────────────────────────
+function CustomTakeoffRow({ row, onDelete, meta, onMetaChange }) {
   const [hovered, setHovered] = useState(false)
+  const name = meta?.name || ''
+  const unit = meta?.unit || 'db'
+  const unitPrice = meta?.unitPrice ?? 0
+  const totalPrice = row.qty * unitPrice
+
+  const update = (field, value) => {
+    onMetaChange(row._customItemId, { ...meta, name, unit, unitPrice, [field]: value })
+  }
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -36,23 +52,53 @@ function CustomTakeoffRow({ row, onDelete }) {
           }}
         >&times;</button>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+
+      {/* ── Top row: dot / name input / badge / qty / total ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#A78BFA', flexShrink: 0 }} />
-        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-          Egyéni tétel
-          <span style={{
-            fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
-            padding: '1px 5px', borderRadius: 4, flexShrink: 0,
-            background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
-          }}>
-            Egyéni
-          </span>
-        </div>
-        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, flexShrink: 0 }}>
-          {row.qty} db
+        <input
+          value={name}
+          onChange={e => update('name', e.target.value)}
+          placeholder="Tétel megnevezése…"
+          style={{ ...miniInputStyle, flex: 1, fontFamily: 'Syne', fontWeight: 700, fontSize: 13 }}
+        />
+        <span style={{
+          fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
+          padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+          background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
+        }}>
+          Egyéni
         </span>
-        <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#A78BFA', minWidth: 72, textAlign: 'right', flexShrink: 0, fontStyle: 'italic' }}>
-          Ár: Phase B
+        <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: C.muted, flexShrink: 0 }}>
+          {row.qty} {unit}
+        </span>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: totalPrice > 0 ? '#A78BFA' : C.muted, minWidth: 72, textAlign: 'right', flexShrink: 0 }}>
+          {totalPrice > 0 ? `${Math.round(totalPrice).toLocaleString('hu-HU')} Ft` : '—'}
+        </div>
+      </div>
+
+      {/* ── Bottom row: unit + unitPrice inputs ── */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingLeft: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Egység:</span>
+          <input
+            value={unit}
+            onChange={e => update('unit', e.target.value)}
+            style={{ ...miniInputStyle, width: 50, textAlign: 'center' }}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Egységár:</span>
+          <input
+            type="number"
+            value={unitPrice || ''}
+            onChange={e => update('unitPrice', e.target.value === '' ? 0 : Number(e.target.value))}
+            placeholder="0"
+            min={0}
+            step={100}
+            style={{ ...miniInputStyle, width: 80, textAlign: 'right' }}
+          />
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.muted }}>Ft/{unit}</span>
         </div>
       </div>
     </div>
@@ -60,12 +106,12 @@ function CustomTakeoffRow({ row, onDelete }) {
 }
 
 // ─── Takeoff row ──────────────────────────────────────────────────────────────
-export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row }) {
+export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row, customMeta, onCustomMetaChange }) {
   const [hovered, setHovered] = useState(false)
 
   // ── Custom row render (hooks called above, safe) ──
   if (row?._sourceType === 'custom') {
-    return <CustomTakeoffRow row={row} onDelete={onDelete} />
+    return <CustomTakeoffRow row={row} onDelete={onDelete} meta={customMeta} onMetaChange={onCustomMetaChange} />
   }
 
   const asm = assemblies.find(a => a.id === asmId)
