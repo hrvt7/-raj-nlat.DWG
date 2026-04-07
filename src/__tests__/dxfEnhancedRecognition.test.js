@@ -14,9 +14,11 @@ beforeAll(() => {
 
 // ─── Architecture Boundaries ─────────────────────────────────────────────────
 describe('Architecture Boundaries', () => {
-  it('effectiveItems pipeline unchanged', () => {
-    expect(workspaceSrc).toContain('const effectiveItems = useMemo(() => {')
-    expect(workspaceSrc).toContain('.filter(i => !deletedItems.has(i.blockName))')
+  it('effectiveItems pipeline unchanged (extracted to useTakeoffRowState)', () => {
+    // Pipeline extracted to hook — verify workspace delegates and hook contains the logic
+    expect(workspaceSrc).toContain('useTakeoffRowState(')
+    const hookSrc = fs.readFileSync(path.resolve('src/hooks/useTakeoffRowState.js'), 'utf8')
+    expect(hookSrc).toContain('.filter(i => !deletedItems.has(i.blockName))')
   })
 
   it('takeoffRows pipeline unchanged', () => {
@@ -50,9 +52,10 @@ describe('Smoke Scenarios', () => {
     expect(workspaceSrc).toContain('CABLE_GENERIC_KW')
   })
 
-  it('takeoffRows uses extracted aggregation functions', () => {
-    expect(workspaceSrc).toContain("import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows }")
-    expect(workspaceSrc).toContain('buildRecognitionRows(effectiveItems')
-    expect(workspaceSrc).toContain('mergeTakeoffRows(recognitionTakeoffRows')
+  it('takeoffRows uses extracted aggregation functions (in useTakeoffRowState hook)', () => {
+    const hookSrc = fs.readFileSync(path.resolve('src/hooks/useTakeoffRowState.js'), 'utf8')
+    expect(hookSrc).toContain("import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows }")
+    expect(hookSrc).toContain('buildRecognitionRows(effectiveItems')
+    expect(hookSrc).toContain('mergeTakeoffRows(recognitionTakeoffRows')
   })
 })

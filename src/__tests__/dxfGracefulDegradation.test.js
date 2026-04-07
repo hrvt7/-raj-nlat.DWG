@@ -16,11 +16,13 @@ const readSrc = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf-8')
 describe('Architecture Boundaries', () => {
   const workspaceSrc = readSrc('components/TakeoffWorkspace.jsx')
 
-  it('recognition pipeline feeds into existing takeoffRows', () => {
-    // The existing effectiveItems → takeoffRows pipeline should remain intact
-    expect(workspaceSrc).toContain('const recognitionTakeoffRows = useMemo(')
-    expect(workspaceSrc).toContain('const markerTakeoffRows = useMemo(')
-    expect(workspaceSrc).toContain('const takeoffRows = useMemo(')
+  it('recognition pipeline feeds into existing takeoffRows (extracted to useTakeoffRowState)', () => {
+    // Pipeline extracted to hook — verify workspace delegates and hook contains the chain
+    expect(workspaceSrc).toContain('useTakeoffRowState(')
+    const hookSrc = readSrc('hooks/useTakeoffRowState.js')
+    expect(hookSrc).toContain('buildRecognitionRows(effectiveItems')
+    expect(hookSrc).toContain('buildMarkerRows(pdfMarkers')
+    expect(hookSrc).toContain('mergeTakeoffRows(recognitionTakeoffRows')
   })
 
   it('asmOverrides flow is preserved (RecognitionRow imported)', () => {
