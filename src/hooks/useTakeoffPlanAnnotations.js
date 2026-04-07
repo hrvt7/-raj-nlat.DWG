@@ -29,7 +29,7 @@ export default function useTakeoffPlanAnnotations({
   planId, file,
   setPdfMarkers, setWallSplits, setVariantOverrides,
   setDeletedItems, setReferencePanels, setCableReviewed,
-  setRightTab,
+  setRightTab, setCustomItemMeta,
 }) {
   // ── Restore saved annotations when opening a plan with a planId ───────────
   useEffect(() => {
@@ -50,6 +50,10 @@ export default function useTakeoffPlanAnnotations({
       // Restore cable review flag (suppress stale cable warnings on reopen)
       if (ann?.cableReviewed) {
         setCableReviewed(true)
+      }
+      // Restore custom item meta (name, unit, unitPrice per custom item)
+      if (ann?.customItemMeta && setCustomItemMeta) {
+        setCustomItemMeta(ann.customItemMeta)
       }
     })()
   }, [planId, file]) // eslint-disable-line react-hooks/exhaustive-deps
