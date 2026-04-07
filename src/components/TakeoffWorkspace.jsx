@@ -32,18 +32,15 @@ import { getProject } from '../data/projectStore.js'
 import { CONTEXT_FACTORS } from '../data/workItemsDb.js'
 import { computePricing } from '../utils/pricing.js'
 import { normalizeCableEstimate, shouldOverwrite, isCrossContextMarkerConflict, CABLE_SOURCE } from '../utils/cableModel.js'
-import { computeDxfAudit } from '../utils/dxfAudit.js'
 import CableConfidenceCard, { CableModeBadge } from './CableConfidenceCard.jsx'
-import { computeCableAudit } from '../utils/cableAudit.js'
 import ManualCableModePanel from './ManualCableModePanel.jsx'
 import { toggleReferencePanelBlock } from '../utils/referencePanelStore.js'
 // computePanelAssistedEstimate + saveReferencePanels now used inside useCableEstimation hook
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { buildBlockEvidence } from '../data/evidenceExtractor.js'
-import { classifyAllItems, buildReviewSummary, computeQuoteReadiness } from '../utils/reviewState.js'
 import { buildAssemblySummary } from '../utils/pricingContract.js'
-import { computeWorkflowStatus, getSaveGating, getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
+import { getSaveLabel, getSaveColor } from '../utils/workflowStatus.js'
 import { suggestAssemblies } from '../utils/suggestAssemblies.js'
 import { getAuthHeaders } from '../supabase.js'
 
@@ -59,6 +56,7 @@ import useCableEstimation from '../hooks/useCableEstimation.js'
 import { convertDwgToDxf } from '../utils/dwgConversionFlow.js'
 import useTakeoffPlanAnnotations from '../hooks/useTakeoffPlanAnnotations.js'
 import useTakeoffSplitLayout from '../hooks/useTakeoffSplitLayout.js'
+import useTakeoffReviewAuditState from '../hooks/useTakeoffReviewAuditState.js'
 import { buildSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
@@ -423,36 +421,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return { resolvedTypes, totalTypes, resolvedQty, totalQty, coveragePct }
   }, [effectiveItems, unknownItems])
 
-  // ── Review state classification ──────────────────────────────────────────
-  // Classify ALL recognized items (including deleted) so the review summary
-  // shows complete picture. effectiveItems only has non-deleted ones.
-  const classifiedItems = useMemo(() => {
-    return classifyAllItems(recognizedItems, asmOverrides, deletedItems)
-  }, [recognizedItems, asmOverrides, deletedItems])
-
-  const reviewSummary = useMemo(() => {
-    return buildReviewSummary(classifiedItems)
-  }, [classifiedItems])
-
-  const quoteReadiness = useMemo(() => {
-    const cableConf = cableEstimate?.confidence ?? null
-    return computeQuoteReadiness(reviewSummary, cableConf, { cableReviewed })
-  }, [reviewSummary, cableEstimate, cableReviewed])
-
-  // ── DXF Import Audit (structured quality summary) ────────────────────────
-  const dxfAudit = useMemo(() => {
-    if (!parsedDxf || isPdf) return null
-    return computeDxfAudit(parsedDxf, recognizedItems)
-  }, [parsedDxf, recognizedItems, isPdf])
-
-  // ── Cable Audit (structured cable confidence/transparency) ─────────────────
-  const cableAudit = useMemo(() => {
-    if (!parsedDxf || isPdf) return null
-    return computeCableAudit(parsedDxf, recognizedItems, cableEstimate, referencePanels)
-  }, [parsedDxf, recognizedItems, cableEstimate, isPdf, referencePanels])
-
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
-  // (workflowStatus is computed below takeoffRows because it needs takeoffRowCount)
   const recognitionTakeoffRows = useMemo(() => {
     return buildRecognitionRows(effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits)
   }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
@@ -466,17 +435,13 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     return mergeTakeoffRows(recognitionTakeoffRows, markerTakeoffRows)
   }, [recognitionTakeoffRows, markerTakeoffRows])
 
-  // ── Unified workflow status (single source for status/CTA/badges) ───────
-  const workflowStatus = useMemo(() => {
-    return computeWorkflowStatus({
-      dxfAudit, reviewSummary, quoteReadiness, cableAudit,
-      takeoffRowCount: takeoffRows.length,
-      isPdf, hasFile: !!parsedDxf || isPdf,
-      cableReviewed,
-    })
-  }, [dxfAudit, reviewSummary, quoteReadiness, cableAudit, takeoffRows.length, isPdf, parsedDxf, cableReviewed])
-
-  const saveGating = useMemo(() => getSaveGating(workflowStatus), [workflowStatus])
+  // ── Review / audit / workflow / save-gating derived state ─────────────────
+  const { classifiedItems, reviewSummary, dxfAudit, cableAudit, workflowStatus, saveGating } = useTakeoffReviewAuditState({
+    recognizedItems, asmOverrides, deletedItems,
+    cableEstimate, cableReviewed,
+    parsedDxf, isPdf,
+    referencePanels, takeoffRowCount: takeoffRows.length,
+  })
 
   // ── Auto-compute cable estimate for DXF (3-tier cascade) ────────────────
   // P1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
