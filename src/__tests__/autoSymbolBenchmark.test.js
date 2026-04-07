@@ -297,8 +297,8 @@ describe('Saved templates contract — ready for Phase 2', () => {
     expect(viewerSrc).toContain('Math.abs(t.w - tpl.w) < 5')
   })
 
-  it('batch project search loads templates from other plans', () => {
+  it('batch project search provided by useAutoSymbolSearch hook', () => {
     expect(viewerSrc).toContain('runBatchProjectSearch')
-    expect(viewerSrc).toContain('getPlansByProject')
+    expect(viewerSrc).toContain('useAutoSymbolSearch')
   })
 })
