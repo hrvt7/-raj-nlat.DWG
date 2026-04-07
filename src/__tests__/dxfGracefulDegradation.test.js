@@ -32,11 +32,8 @@ describe('Architecture Boundaries', () => {
     expect(workspaceSrc).toContain('usePricingPipeline')
   })
 
-  it('cable estimation cascade is untouched', () => {
-    expect(workspaceSrc).toContain('detectDxfCableLengths(effectiveParsedDxf)')
-    expect(workspaceSrc).toContain('estimateCablesMST(devices, scaleFactor)')
-    // Tier 3 fallback
-    expect(workspaceSrc).toContain("method: 'Becslés eszközszám alapján (nincs pozícióadat)'")
+  it('cable estimation is orchestrated via useCableEstimation hook', () => {
+    expect(workspaceSrc).toContain('useCableEstimation')
   })
 
   it('PDF path is not modified', () => {

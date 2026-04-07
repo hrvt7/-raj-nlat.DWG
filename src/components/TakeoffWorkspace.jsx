@@ -24,7 +24,7 @@ function lazyRetry(importFn) {
 const DxfViewerPanel = lazyRetry(() => import('./DxfViewer/index.jsx'))
 const PdfViewerPanel = lazyRetry(() => import('./PdfViewer/index.jsx'))
 import { parseDxfFile, parseDxfText, parseDxfTextInWorker } from '../dxfParser.js'
-import { estimateCablesMST } from '../pdfTakeoff.js'
+// estimateCablesMST now used inside useCableEstimation hook
 import { loadAssemblies, loadWorkItems, loadMaterials, saveQuote } from '../data/store.js'
 import { createQuote } from '../utils/createQuote.js'
 import { savePlan as savePlanBlob, savePlanAnnotations, getPlanAnnotations, updatePlanMeta, onAnnotationsChanged, getPlanMeta } from '../data/planStore.js'
@@ -37,8 +37,8 @@ import { computeDxfAudit } from '../utils/dxfAudit.js'
 import CableConfidenceCard, { CableModeBadge } from './CableConfidenceCard.jsx'
 import { computeCableAudit } from '../utils/cableAudit.js'
 import ManualCableModePanel from './ManualCableModePanel.jsx'
-import { saveReferencePanels, toggleReferencePanelBlock } from '../utils/referencePanelStore.js'
-import { computePanelAssistedEstimate } from '../utils/panelAssistedEstimate.js'
+import { toggleReferencePanelBlock } from '../utils/referencePanelStore.js'
+// computePanelAssistedEstimate + saveReferencePanels now used inside useCableEstimation hook
 import { normalizeDxfResult } from '../utils/dxfParseContract.js'
 import { lookupMemory, recordConfirmation } from '../data/recognitionMemory.js'
 import { buildBlockEvidence } from '../data/evidenceExtractor.js'
@@ -52,10 +52,11 @@ import { getAuthHeaders } from '../supabase.js'
 import { C } from './takeoff/designTokens.js'
 
 // ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
-import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, detectDxfCableLengths } from '../utils/blockRecognition.js'
+import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW } from '../utils/blockRecognition.js'
 import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows } from '../utils/takeoffRows.js'
 import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
+import useCableEstimation from '../hooks/useCableEstimation.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
 import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
@@ -101,14 +102,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── Unit override ────────────────────────────────────────────────────────
   const [unitOverride, setUnitOverride] = useState(null) // null = auto, or 'mm'|'cm'|'m'|'inches'|'feet'
 
-  // ── Cable estimate (auto) ─────────────────────────────────────────────────
+  // ── Cable estimate state (effects extracted to useCableEstimation hook below) ──
   const [cableEstimate, setCableEstimate] = useState(null)
-
-  // ── Manual cable mode + reference panels ─────────────────────────────────
   const [manualCableMode, setManualCableMode] = useState(false)
   const [referencePanels, setReferencePanels] = useState([])
-
-  // ── Cable review persistence — suppress stale cable warnings on reopen ──
   const [cableReviewed, setCableReviewed] = useState(false)
 
   // ── PDF manual markers (assembly-based counting from PdfViewer) ─────────
@@ -652,90 +649,11 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── Auto-compute cable estimate for DXF (3-tier cascade) ────────────────
   // P1: DXF layer geometry  (mért kábelvonalak, confidence 0.92)
-  // P2: MST becslés eszközpozíciók alapján  (confidence ~0.75)
-  // P3: Eszközszám × átlagos kábelhossz  (fallback, confidence 0.55)
-  // Guard: shouldOverwrite() prevents lower-priority estimates from replacing
-  // higher-priority ones (e.g. pdf_markers won't be overwritten by dxf_mst).
-  useEffect(() => {
-    if (!takeoffRows.length) {
-      // No data — clear DXF-origin estimates only (preserve PDF sources)
-      setCableEstimate(prev => {
-        if (prev?._source !== CABLE_SOURCE.PDF_TAKEOFF && prev?._source !== CABLE_SOURCE.PDF_MARKERS) return null
-        return prev
-      })
-      return
-    }
-
-    // ── Tier 1: tényleges kábelvonalak a DXF rétegeiből ──────────────────
-    const layerResult = detectDxfCableLengths(effectiveParsedDxf)
-    if (layerResult) {
-      const normalized = normalizeCableEstimate(layerResult, CABLE_SOURCE.DXF_LAYERS)
-      setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
-      return
-    }
-
-    // ── Tier 2: MST becslés ha vannak pozícióadatok ──────────────────────
-    const inserts = effectiveParsedDxf?.inserts
-    if (inserts?.length >= 2) {
-      const devices = inserts.map(ins => {
-        const recog = recognizedItems.find(r => r.blockName === ins.name)
-        const asmId = asmOverrides[ins.name] !== undefined ? asmOverrides[ins.name] : recog?.asmId
-        const type = asmId === 'ASM-003' ? 'light' : asmId === 'ASM-001' ? 'socket' : asmId === 'ASM-002' ? 'switch' : 'other'
-        return { type, x: ins.x, y: ins.y, name: ins.name }
-      })
-      const scaleFactor = effectiveParsedDxf?.units?.factor ?? 0.001
-      try {
-        const mstResult = estimateCablesMST(devices, scaleFactor)
-        if (mstResult && mstResult.cable_total_m > 0) {
-          mstResult.method = `MST becslés (${devices.length} eszközpozíció alapján)`
-          const normalized = normalizeCableEstimate(mstResult, CABLE_SOURCE.DXF_MST)
-          setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
-          return
-        }
-      } catch (_e) { /* fallthrough to device-count */ }
-    }
-
-    // ── Tier 3: eszközszám × átlag kábelhossz (fallback) ─────────────────
-    const lightQty  = takeoffRows.filter(r => r.asmId === 'ASM-003').reduce((s, r) => s + r.qty, 0)
-    const socketQty = takeoffRows.filter(r => r.asmId === 'ASM-001').reduce((s, r) => s + r.qty, 0)
-    const switchQty = takeoffRows.filter(r => r.asmId === 'ASM-002').reduce((s, r) => s + r.qty, 0)
-    const total = lightQty + socketQty + switchQty
-    if (!total) { setCableEstimate(null); return }
-
-    const lightM  = lightQty  * 8
-    const socketM = socketQty * 6
-    const switchM = switchQty * 4
-    const totalM  = lightM + socketM + switchM
-    const normalized = normalizeCableEstimate({
-      cable_total_m: totalM,
-      cable_by_type: { light_m: lightM, socket_m: socketM, switch_m: switchM, data_m: 0, fire_m: 0, other_m: 0 },
-      method: 'Becslés eszközszám alapján (nincs pozícióadat)',
-      confidence: 0.55,
-    }, CABLE_SOURCE.DEVICE_COUNT)
-    setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
-  }, [takeoffRows, effectiveParsedDxf, recognizedItems, asmOverrides])
-
-  // ── Panel-assisted cable estimate (manual cable mode) ───────────────────
-  // When user selects reference panels, compute nearest-panel estimate and
-  // let shouldOverwrite decide if it replaces current estimate.
-  useEffect(() => {
-    if (!referencePanels.length || !effectiveParsedDxf?.inserts?.length) return
-    const scaleFactor = effectiveParsedDxf?.units?.factor ?? 0.001
-    const panelEst = computePanelAssistedEstimate(
-      effectiveParsedDxf.inserts, recognizedItems, asmOverrides,
-      referencePanels, scaleFactor
-    )
-    if (panelEst) {
-      const normalized = normalizeCableEstimate(panelEst, CABLE_SOURCE.PANEL_ASSISTED)
-      setCableEstimate(prev => shouldOverwrite(prev, normalized) ? normalized : prev)
-    }
-  }, [referencePanels, effectiveParsedDxf, recognizedItems, asmOverrides])
-
-  // ── Persist reference panels when they change ──────────────────────────
-  useEffect(() => {
-    if (!planId) return
-    saveReferencePanels(planId, referencePanels)
-  }, [referencePanels, planId])
+  // ── Cable estimation effects (extracted to hooks/useCableEstimation.js) ──
+  useCableEstimation({
+    takeoffRows, effectiveParsedDxf, recognizedItems, asmOverrides,
+    setCableEstimate, referencePanels, planId,
+  })
 
   // ── Derived: pricing ──────────────────────────────────────────────────────
   // ── Pricing orchestration (extracted to hooks/usePricingPipeline.js) ──

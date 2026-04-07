@@ -44,9 +44,9 @@ describe('Architecture Boundaries', () => {
 
 // ─── Smoke Scenarios ─────────────────────────────────────────────────────────
 describe('Smoke Scenarios', () => {
-  it('DxfBlockOverlay imported, cable detection imported', () => {
+  it('DxfBlockOverlay imported, cable estimation extracted to hook', () => {
     expect(workspaceSrc).toContain('DxfBlockOverlay')
-    expect(workspaceSrc).toContain('detectDxfCableLengths')
+    expect(workspaceSrc).toContain('useCableEstimation')
     expect(workspaceSrc).toContain('CABLE_GENERIC_KW')
   })
 
