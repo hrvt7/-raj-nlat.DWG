@@ -7,8 +7,6 @@ import React, { useState, useRef, useCallback } from 'react'
 import { C, fmt } from './ui.jsx'
 import {
   createManualRow,
-  rowMaterialCost,
-  rowLaborCost,
   rowLineTotal,
   computeManualTotals,
 } from '../utils/manualPricingRow.js'
