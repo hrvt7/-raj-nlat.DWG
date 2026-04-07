@@ -230,6 +230,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setManualCableMode(false)
     setReferencePanels([])
     setPdfMarkers([])
+    setCustomItemMeta({})
     setDwgStatus(null)
     setDwgError(null)
     setViewerFile(null)
