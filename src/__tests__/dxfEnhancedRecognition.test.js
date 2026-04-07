@@ -29,9 +29,12 @@ describe('Architecture Boundaries', () => {
     expect(workspaceSrc).toContain("import { computePricing } from '../utils/pricing.js'")
   })
 
-  it('PDF path not touched', () => {
+  it('PDF path not touched (prefill extracted to useTakeoffBootstrap)', () => {
     expect(workspaceSrc).toContain('runPdfTakeoff')
-    expect(workspaceSrc).toContain("source === 'pdf_recognition'")
+    // pdf_recognition prefill moved to useTakeoffBootstrap hook
+    expect(workspaceSrc).toContain('useTakeoffBootstrap(')
+    const hookSrc = fs.readFileSync(path.resolve('src/hooks/useTakeoffBootstrap.js'), 'utf8')
+    expect(hookSrc).toContain("source === 'pdf_recognition'")
   })
 
   it('manual DXF tools preserved', () => {
