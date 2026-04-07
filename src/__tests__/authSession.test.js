@@ -48,7 +48,8 @@ describe('getAuthHeaders — contract verification', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('DWG convert fetchWithRetry — architecture', () => {
-  const workspaceSrc = readSrc('components/TakeoffWorkspace.jsx')
+  // DWG conversion logic extracted to utils/dwgConversionFlow.js
+  const workspaceSrc = readSrc('utils/dwgConversionFlow.js')
 
   it('401 retry is one-shot (flag prevents infinite loop)', () => {
     expect(workspaceSrc).toContain('let _auth401Retried = false')
@@ -132,7 +133,7 @@ describe('convert-dwg auth boundary — architecture', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('DWG convert error code display', () => {
-  const workspaceSrc = readSrc('components/TakeoffWorkspace.jsx')
+  const workspaceSrc = readSrc('utils/dwgConversionFlow.js')
 
   it('appends diagnostic [code] to error message', () => {
     expect(workspaceSrc).toContain("const errDetail = createJson.code ? ` [${createJson.code}]` : ''")

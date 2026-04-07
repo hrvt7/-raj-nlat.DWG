@@ -57,6 +57,7 @@ import { buildRecognitionRows, buildMarkerRows, mergeTakeoffRows } from '../util
 import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
+import { convertDwgToDxf } from '../utils/dwgConversionFlow.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
 import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
@@ -368,118 +369,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       let result
 
       if (ext === 'dwg') {
-        // ── CloudConvert DWG → DXF: direct-upload architecture ─────────────
-        // 1. Our server creates the CC job → returns upload URL (no file bytes to server)
-        // 2. Browser uploads directly to CloudConvert S3 (no Vercel body/timeout limits)
-        // 3. Browser polls our server for job status
-        // 4. Browser downloads DXF directly from CloudConvert CDN
+        // ── CloudConvert DWG → DXF (extracted to utils/dwgConversionFlow.js) ──
         setDwgStatus('converting')
         setDwgError(null)
         let dxfText = null
         try {
-          const apiUrl = import.meta.env.VITE_API_URL || ''
-
-          // ── Helper: fetch with retry + exponential backoff ──────────────
-          // On 401 (expired token): refresh session + retry once with new headers.
-          // On 5xx: retry up to MAX_RETRIES with exponential backoff.
-          const MAX_RETRIES = 3
-          let _auth401Retried = false  // one-shot flag — prevent infinite 401 loops
-          const isOwnApi = (url) => url.includes('/api/convert-dwg')
-          const fetchWithRetry = async (url, opts, retries = MAX_RETRIES) => {
-            for (let attempt = 0; attempt <= retries; attempt++) {
-              try {
-                const res = await fetch(url, opts)
-                // 401 = expired/invalid token — refresh and retry ONCE (only for our API, not CloudConvert)
-                if (res.status === 401 && !_auth401Retried && isOwnApi(url)) {
-                  _auth401Retried = true
-                  console.warn('DWG convert: 401 — refreshing token and retrying')
-                  const freshHeaders = await getAuthHeaders()
-                  return fetchWithRetry(url, { ...opts, headers: freshHeaders }, 0)
-                }
-                if (res.ok || res.status < 500) return res  // only retry on 5xx
-                if (attempt < retries) {
-                  const delay = Math.min(1000 * Math.pow(2, attempt), 8000) + Math.random() * 500
-                  console.warn(`DWG retry ${attempt + 1}/${retries} after ${Math.round(delay)}ms (HTTP ${res.status})`)
-                  await new Promise(r => setTimeout(r, delay))
-                  continue
-                }
-                return res  // last attempt, return whatever we got
-              } catch (netErr) {
-                if (attempt < retries) {
-                  const delay = Math.min(1000 * Math.pow(2, attempt), 8000) + Math.random() * 500
-                  console.warn(`DWG retry ${attempt + 1}/${retries} after ${Math.round(delay)}ms (${netErr.message})`)
-                  await new Promise(r => setTimeout(r, delay))
-                  continue
-                }
-                throw netErr
-              }
-            }
-          }
-
-          // Step 1: Create CloudConvert job (our server, tiny JSON request)
-          const authHeaders = await getAuthHeaders()
-          const createRes = await fetchWithRetry(`${apiUrl}/api/convert-dwg`, {
-            method: 'POST',
-            headers: authHeaders,
-            body: JSON.stringify({ filename: f.name }),
-          })
-          let createJson
-          try {
-            createJson = await createRes.json()
-          } catch {
-            throw new Error(
-              createRes.status === 503
-                ? 'A DWG konverzió szolgáltatás nem elérhető. Exportáld a tervrajzot PDF vagy DXF formátumba.'
-                : `A szerver nem JSON választ adott (HTTP ${createRes.status}). Próbáld újra később, vagy használj PDF/DXF formátumot.`
-            )
-          }
-          if (!createRes.ok || !createJson.success) {
-            const errDetail = createJson.code ? ` [${createJson.code}]` : ''
-            throw new Error((createJson.error || `Job létrehozása sikertelen (${createRes.status})`) + errDetail)
-          }
-          const { jobId, uploadUrl, uploadParams } = createJson
-
-          // Step 2: Upload file directly from browser to CloudConvert S3
-          // (file never passes through our Vercel function — no size or timeout issue)
-          const formData = new FormData()
-          for (const [key, val] of Object.entries(uploadParams)) {
-            formData.append(key, val)
-          }
-          formData.append('file', f)
-          const uploadRes = await fetchWithRetry(uploadUrl, { method: 'POST', body: formData })
-          if (!uploadRes.ok) {
-            throw new Error(`Fájl feltöltése CloudConvert-re sikertelen (HTTP ${uploadRes.status})`)
-          }
-
-          // Step 3: Poll via our server until conversion finishes (max 2 minutes)
-          let downloadUrl = null
-          const pollStart = Date.now()
-          const MAX_POLL_MS = 120_000
-          while (Date.now() - pollStart < MAX_POLL_MS) {
-            await new Promise(r => setTimeout(r, 3000))
-            const pollHeaders = await getAuthHeaders()
-            const pollRes = await fetchWithRetry(`${apiUrl}/api/convert-dwg`, {
-              method: 'POST',
-              headers: pollHeaders,
-              body: JSON.stringify({ jobId }),
-            }, 2)
-            let pollJson
-            try { pollJson = await pollRes.json() } catch {
-              throw new Error(`A szerver nem JSON választ adott a pollingra (HTTP ${pollRes.status}).`)
-            }
-            if (!pollRes.ok || !pollJson.success) {
-              throw new Error(pollJson.error || 'Státusz lekérdezése sikertelen')
-            }
-            if (pollJson.status === 'finished') { downloadUrl = pollJson.downloadUrl; break }
-            if (pollJson.status === 'error') throw new Error(pollJson.error || 'CloudConvert konverzió hiba')
-          }
-          if (!downloadUrl) throw new Error('CloudConvert időtúllépés (120 mp). Próbáld újra.')
-
-          // Step 4: Download converted DXF directly from CloudConvert CDN
-          const dxfRes = await fetchWithRetry(downloadUrl, {}, 2)
-          if (!dxfRes.ok) throw new Error(`DXF letöltése sikertelen (HTTP ${dxfRes.status})`)
-          dxfText = await dxfRes.text()
-
+          dxfText = await convertDwgToDxf(f, getAuthHeaders)
         } catch (convErr) {
           console.warn('DWG → DXF conversion failed:', convErr)
           setDwgStatus('failed')

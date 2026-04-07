@@ -236,10 +236,11 @@ describe('Logout → login → recovery chain contract', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('DWG convert flow — mock contract', () => {
-  const workspaceSrc = readSrc('components/TakeoffWorkspace.jsx')
+  // DWG conversion logic extracted to utils/dwgConversionFlow.js
+  const workspaceSrc = readSrc('utils/dwgConversionFlow.js')
 
   it('Step 1: POST /api/convert-dwg with { filename }', () => {
-    expect(workspaceSrc).toContain("body: JSON.stringify({ filename: f.name })")
+    expect(workspaceSrc).toContain("body: JSON.stringify({ filename: file.name })")
   })
 
   it('Step 1 response: expects { success, jobId, uploadUrl, uploadParams }', () => {
@@ -247,7 +248,7 @@ describe('DWG convert flow — mock contract', () => {
   })
 
   it('Step 2: FormData upload to CloudConvert S3 (uploadUrl)', () => {
-    expect(workspaceSrc).toContain("formData.append('file', f)")
+    expect(workspaceSrc).toContain("formData.append('file', file)")
     expect(workspaceSrc).toContain('const uploadRes = await fetchWithRetry(uploadUrl')
   })
 
@@ -259,22 +260,26 @@ describe('DWG convert flow — mock contract', () => {
 
   it('Step 4: Download DXF from downloadUrl', () => {
     expect(workspaceSrc).toContain('const dxfRes = await fetchWithRetry(downloadUrl')
-    expect(workspaceSrc).toContain('dxfText = await dxfRes.text()')
+    expect(workspaceSrc).toContain('return await dxfRes.text()')
   })
 
-  it('Success path: synthetic File + viewerFile + parse', () => {
-    expect(workspaceSrc).toContain("new File([dxfText], dxfName")
-    expect(workspaceSrc).toContain('setViewerFile(syntheticFile)')
-    expect(workspaceSrc).toContain('parseDxfTextInWorker(dxfText')
+  it('Success path: workspace uses convertDwgToDxf + parse', () => {
+    // Post-conversion handling (synthetic File, viewerFile, parse) stays in TakeoffWorkspace
+    const twSrc = readSrc('components/TakeoffWorkspace.jsx')
+    expect(twSrc).toContain('convertDwgToDxf')
+    expect(twSrc).toContain('setViewerFile(syntheticFile)')
+    expect(twSrc).toContain('parseDxfTextInWorker(dxfText')
   })
 
   it('Converted DXF is cached for reopen (no reconversion)', () => {
-    expect(workspaceSrc).toContain("savePlanBlob({ id: planId, name: dxfName, fileType: 'dxf' }, dxfBlob)")
+    const twSrc = readSrc('components/TakeoffWorkspace.jsx')
+    expect(twSrc).toContain("savePlanBlob({ id: planId, name: dxfName, fileType: 'dxf' }, dxfBlob)")
   })
 
   it('Error path: sets dwgStatus=failed + parsedDxf with _dwgFailed', () => {
-    expect(workspaceSrc).toContain("setDwgStatus('failed')")
-    expect(workspaceSrc).toContain('_dwgFailed: true')
+    const twSrc = readSrc('components/TakeoffWorkspace.jsx')
+    expect(twSrc).toContain("setDwgStatus('failed')")
+    expect(twSrc).toContain('_dwgFailed: true')
   })
 
   it('401 retry fires only once and only for own API', () => {
