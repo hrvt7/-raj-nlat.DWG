@@ -58,6 +58,8 @@ import useTakeoffSplitLayout from '../hooks/useTakeoffSplitLayout.js'
 import useTakeoffReviewAuditState from '../hooks/useTakeoffReviewAuditState.js'
 import useTakeoffRowState from '../hooks/useTakeoffRowState.js'
 import useTakeoffBootstrap from '../hooks/useTakeoffBootstrap.js'
+import { takeoffToManualRows } from '../utils/takeoffToManualRows.js'
+import { materializeManualRowsToItems, computeManualTotals } from '../utils/manualPricingRow.js'
 import { buildSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
@@ -100,6 +102,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [markupType, setMarkupType] = useState(settings?.labor?.markup_type || 'markup') // 'markup' | 'margin'
   const [cablePricePerM, setCablePricePerM] = useState(settings?.labor?.cable_price_per_m || 800)
   const vatPercent = settings?.labor?.vat_percent ?? 27
+  const [quotePricingMode, setQuotePricingMode] = useState('assembly') // 'assembly' | 'manual'
 
   // ── Unit override ────────────────────────────────────────────────────────
   const [unitOverride, setUnitOverride] = useState(null) // null = auto, or 'mm'|'cm'|'m'|'inches'|'feet'
@@ -444,7 +447,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       setSaveError('Nincs felvett elem — jelölj ki elemeket vagy végezz mérést a tervrajzon!')
       return
     }
-    if (!pricing && !measurementItems.length) {
+    if (quotePricingMode !== 'manual' && !pricing && !measurementItems.length) {
       setSaveError('Árkalkuláció nem elérhető — ellenőrizd az assemblyket!')
       return
     }
@@ -453,7 +456,9 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       // ── Per-plan save (Felmérés flow): merge-before-save to avoid partial overwrite ──
       // Read current store state first, then overlay only workspace-owned fields.
       // This preserves measurements, scale, cableRoutes, rotation etc. from the viewer.
-      if (planId) {
+      // NOTE: Manual pricing mode skips per-plan calc snapshot and goes directly
+      // to full-quote save, because manual mode doesn't use assembly BOM pricing.
+      if (planId && quotePricingMode !== 'manual') {
         const stored = (await getPlanAnnotations(planId)) || {}
         await savePlanAnnotations(planId, {
           ...stored,
@@ -512,45 +517,77 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const _fqPlanSysType = _fqPlanMeta?.inferredMeta?.systemType || 'general'
       const _fqPlanFloor = _fqPlanMeta?.inferredMeta?.floor || null
       const _fqPlanFloorLabel = _fqPlanMeta?.inferredMeta?.floorLabel || null
-      const items = buildSnapshotItems(pricing.lines, measurementItems, _fqPlanSysType, _fqPlanFloor, _fqPlanFloorLabel)
-
-      const assemblySummary = buildAssemblySummary(
-        takeoffRows, pricing, assemblies, workItems, materials,
-        context, markup, hourlyRate, difficultyMode, computePricing,
-      )
 
       const displayName = quoteName || `Ajánlat ${new Date().toLocaleDateString('hu-HU')}`
-      // ── Resolve output mode: prefer estimation panel override, then project default ──
       const planMeta = planId ? getPlanMeta(planId) : null
       const prjDefault = initialData?.quoteOverrides?._outputMode
         || (planMeta?.projectId ? (getProject(planMeta.projectId)?.defaultQuoteOutputMode || 'combined') : 'combined')
 
-      // Use fullCalc as the financial source of truth (includes measurementCost, markup, VAT)
-      const financialPricing = fullCalc ? {
-        total:        Math.round(fullCalc.grandTotal),
-        materialCost: Math.round((pricing?.materialCost || 0) + (fullCalc.measurementCost || 0)),
-        laborCost:    Math.round(pricing?.laborCost || 0),
-        laborHours:   pricing?.laborHours || 0,
-      } : pricing
-
-      const quote = createQuote({
-        displayName,
-        clientName,
-        outputMode: prjDefault,
-        pricing: financialPricing,
-        pricingParams: { hourlyRate, markupPct: markup, markupType },
-        settings,
-        overrides: {
-          items,
-          assemblySummary,
-          context,
-          cableEstimate,
-          cableCost: Math.round(fullCalc?.cableCost || 0),
-          source: 'takeoff-workspace',
-          fileName: file?.name,
-          bundleId: initialData?.bundleId || null,
-        },
-      })
+      let quote
+      if (quotePricingMode === 'manual') {
+        // ── Manual pricing: seed manualRows from takeoff, skip assembly BOM ──
+        const seededRows = takeoffToManualRows(takeoffRows, assemblies, {
+          systemType: _fqPlanSysType, floor: _fqPlanFloor, floorLabel: _fqPlanFloorLabel,
+        })
+        const manualTotals = computeManualTotals(seededRows, hourlyRate)
+        const manualItems = materializeManualRowsToItems(seededRows, hourlyRate)
+        quote = createQuote({
+          displayName,
+          clientName,
+          outputMode: prjDefault,
+          pricing: {
+            total: manualTotals.totalMaterials + manualTotals.totalLabor,
+            materialCost: manualTotals.totalMaterials,
+            laborCost: manualTotals.totalLabor,
+            laborHours: manualTotals.totalHours,
+          },
+          pricingParams: { hourlyRate, markupPct: markup, markupType },
+          settings,
+          pricingMode: 'manual',
+          manualRows: seededRows,
+          overrides: {
+            items: manualItems,
+            assemblySummary: [],
+            context,
+            cableEstimate,
+            cableCost: 0,
+            source: 'takeoff-workspace',
+            fileName: file?.name,
+            bundleId: initialData?.bundleId || null,
+          },
+        })
+      } else {
+        // ── Assembly pricing: existing flow ──
+        const items = buildSnapshotItems(pricing.lines, measurementItems, _fqPlanSysType, _fqPlanFloor, _fqPlanFloorLabel)
+        const assemblySummary = buildAssemblySummary(
+          takeoffRows, pricing, assemblies, workItems, materials,
+          context, markup, hourlyRate, difficultyMode, computePricing,
+        )
+        const financialPricing = fullCalc ? {
+          total:        Math.round(fullCalc.grandTotal),
+          materialCost: Math.round((pricing?.materialCost || 0) + (fullCalc.measurementCost || 0)),
+          laborCost:    Math.round(pricing?.laborCost || 0),
+          laborHours:   pricing?.laborHours || 0,
+        } : pricing
+        quote = createQuote({
+          displayName,
+          clientName,
+          outputMode: prjDefault,
+          pricing: financialPricing,
+          pricingParams: { hourlyRate, markupPct: markup, markupType },
+          settings,
+          overrides: {
+            items,
+            assemblySummary,
+            context,
+            cableEstimate,
+            cableCost: Math.round(fullCalc?.cableCost || 0),
+            source: 'takeoff-workspace',
+            fileName: file?.name,
+            bundleId: initialData?.bundleId || null,
+          },
+        })
+      }
       saveQuote(quote)
 
       // Learn from save — only train memory with reviewed/trusted items
@@ -1556,6 +1593,28 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         {saveGating.reason}
                       </div>
                     )}
+
+                    {/* ── Pricing mode toggle ── */}
+                    <div data-testid="pricing-mode-toggle" style={{
+                      display: 'flex', gap: 4, marginBottom: 8,
+                      background: C.bg, padding: 3, borderRadius: 8,
+                      border: `1px solid ${C.border}`,
+                    }}>
+                      {[
+                        { key: 'assembly', label: 'Assembly' },
+                        { key: 'manual',   label: 'Manuális' },
+                      ].map(m => (
+                        <button key={m.key} onClick={() => setQuotePricingMode(m.key)} style={{
+                          flex: 1, padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                          background: quotePricingMode === m.key ? C.accent : 'transparent',
+                          color: quotePricingMode === m.key ? '#09090B' : C.muted,
+                          fontFamily: 'Syne', fontWeight: 700, fontSize: 10,
+                          transition: 'all 0.15s',
+                        }}>
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
 
                     {/* ── Action: create quote ── */}
                     <button
