@@ -109,6 +109,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const [batchProgress, setBatchProgress] = useState('')
   const batchCancelRef = useRef(false)
   const savedTemplatesRef = useRef([]) // preserved through unmount save
+  const symbolFamiliesRef = useRef([]) // preserved through unmount/fallback save (mirrors savedTemplatesRef pattern)
   const autoSymbolSearchIdRef = useRef(0) // monotonic counter to detect stale results
   const [autoSymbolError, setAutoSymbolError] = useState(null) // string error message or null
   const mountedRef = useRef(true) // guard against setState after unmount
@@ -160,7 +161,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
     ...stored,
     ...payload,
     savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
-    symbolFamilies: stored?.symbolFamilies || [],
+    symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : (stored?.symbolFamilies || []),
   }), [])
 
   const { saveState, markDirty, markSaved, debounceSaveTimerRef, setSaveState } = usePlanAnnotationSave({
@@ -193,7 +194,8 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
         if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
       }
       if (ann.measurements?.length) { measuresRef.current = ann.measurements; notifyMeasurements() }
-      if (ann.savedTemplates?.length) { savedTemplatesRef.current = ann.savedTemplates }
+      savedTemplatesRef.current = ann.savedTemplates?.length ? ann.savedTemplates : []
+      symbolFamiliesRef.current = ann.symbolFamilies?.length ? ann.symbolFamilies : []
       if (ann.scale?.calibrated) { setScale(ann.scale) }
       if (ann.ceilingHeight) setCeilingHeight(ann.ceilingHeight)
       if (ann.socketHeight) setSocketHeight(ann.socketHeight)
@@ -336,7 +338,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           rotation: rotationRef.current,
           coordVersion: 2, // markers/measurements in unrotated doc coords
           savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : (stored?.savedTemplates || []),
-          symbolFamilies: stored?.symbolFamilies || [],
+          symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : (stored?.symbolFamilies || []),
         }, { silent: true })
       }).catch(() => {
         // Fallback: save what we have if store read fails
@@ -352,7 +354,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
           rotation: rotationRef.current,
           coordVersion: 2,
           savedTemplates: savedTemplatesRef.current.length > 0 ? savedTemplatesRef.current : [],
-          // symbolFamilies not available in fallback (IDB read failed), but savedTemplates preserved
+          symbolFamilies: symbolFamiliesRef.current.length > 0 ? symbolFamiliesRef.current : [],
         }, { silent: true })
       })
     }
@@ -1463,6 +1465,7 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
               // Symbol Families — auto-grouping by category+asmId, multi-variant support
               const existingFamilies = ann?.symbolFamilies || migrateTemplatesToFamilies(existingTpls)
               const { families: updatedFamilies } = upsertTemplateIntoFamilies(existingFamilies, newTemplateData)
+              symbolFamiliesRef.current = updatedFamilies
 
               savePlanAnnotations(planId, {
                 ...ann,
