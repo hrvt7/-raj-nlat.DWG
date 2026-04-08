@@ -359,18 +359,63 @@ export function parseDxfText(text) {
   }
 }
 
+// ── DXF codepage detection + encoding-aware decode ───────────────────────────
+// DXF files declare their encoding via $DWGCODEPAGE in the HEADER section.
+// Common values: ANSI_1250 (Central European), ANSI_1252 (Western), ANSI_932 (Japanese).
+// If the DXF is not UTF-8, we must decode with the correct encoding.
+const CODEPAGE_TO_ENCODING = {
+  'ANSI_1250': 'windows-1250',  // Hungarian, Czech, Polish, etc.
+  'ANSI_1251': 'windows-1251',  // Cyrillic
+  'ANSI_1252': 'windows-1252',  // Western European
+  'ANSI_1253': 'windows-1253',  // Greek
+  'ANSI_1254': 'windows-1254',  // Turkish
+  'ANSI_1255': 'windows-1255',  // Hebrew
+  'ANSI_1256': 'windows-1256',  // Arabic
+  'ANSI_932':  'shift-jis',     // Japanese
+  'ANSI_936':  'gbk',           // Simplified Chinese
+  'ANSI_949':  'euc-kr',        // Korean
+  'ANSI_950':  'big5',          // Traditional Chinese
+}
+
+/**
+ * Detect DXF codepage from raw bytes (first ~4KB of file).
+ * Looks for $DWGCODEPAGE header variable.
+ * @param {ArrayBuffer} buffer
+ * @returns {string} encoding label for TextDecoder (default: 'utf-8')
+ */
+function detectDxfEncoding(buffer) {
+  // Read first 4KB as ASCII to find DWGCODEPAGE (safe — codepage name is always ASCII)
+  const preview = new TextDecoder('ascii').decode(buffer.slice(0, Math.min(buffer.byteLength, 4096)))
+  const match = preview.match(/\$DWGCODEPAGE[\s\S]*?\n\s*3\s*\n\s*(\S+)/i)
+  if (match) {
+    const codepage = match[1].trim().toUpperCase()
+    const encoding = CODEPAGE_TO_ENCODING[codepage]
+    if (encoding) {
+      console.log(`[dxfParser] Detected codepage: ${codepage} → using ${encoding}`)
+      return encoding
+    }
+    // Unknown codepage — might already be UTF-8 or unsupported
+    if (codepage === 'UTF-8' || codepage === 'UTF8') return 'utf-8'
+    console.warn(`[dxfParser] Unknown codepage "${codepage}" — falling back to utf-8`)
+  }
+  return 'utf-8'
+}
+
 // ── parseDxfFile — main entry point ──────────────────────────────────────────
 // Large files (>5 MB) → Web Worker (non-blocking)
 // Small files (<5 MB) → main thread (fast, no worker overhead)
 export async function parseDxfFile(file, onProgress) {
   const LARGE_FILE_THRESHOLD = 5 * 1024 * 1024 // 5 MB
 
-  const text = await new Promise((resolve, reject) => {
+  // Read as binary first to detect encoding, then decode with correct codepage
+  const buffer = await new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload  = e => resolve(e.target.result)
     reader.onerror = reject
-    reader.readAsText(file, 'utf-8')
+    reader.readAsArrayBuffer(file)
   })
+  const encoding = detectDxfEncoding(buffer)
+  const text = new TextDecoder(encoding).decode(buffer)
 
   if (file.size > LARGE_FILE_THRESHOLD) {
     // Large file — use Web Worker to avoid freezing the UI
