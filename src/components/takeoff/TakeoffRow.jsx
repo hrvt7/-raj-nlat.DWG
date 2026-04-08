@@ -234,7 +234,7 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
         </div>
       </div>
 
-      {/* ── Per-wall-type split counters ── */}
+      {/* ── Per-wall-type split counters (inline editable) ── */}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
         {WALL_OPTS.map(w => {
           const n = effectiveSplits[w.key] || 0
@@ -254,9 +254,23 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
                 onClick={() => handleDelta(w.key, -1)}
                 style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >−</button>
-              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: active ? w.color : C.muted, minWidth: 16, textAlign: 'center', userSelect: 'none' }}>
-                {n}
-              </span>
+              <input
+                type="number"
+                value={n}
+                min={0}
+                onChange={(e) => {
+                  const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                  const base = wallSplits || { brick: qty }
+                  onSplitChange(asmId, { ...base, [w.key]: val })
+                }}
+                style={{
+                  width: 32, textAlign: 'center', fontFamily: 'DM Mono', fontSize: 12,
+                  color: active ? w.color : C.muted,
+                  background: 'transparent', border: 'none', outline: 'none',
+                  padding: 0, margin: 0, appearance: 'textfield',
+                  MozAppearance: 'textfield', WebkitAppearance: 'none',
+                }}
+              />
               <button
                 onClick={() => handleDelta(w.key, +1)}
                 style={{ width: 17, height: 17, borderRadius: 3, background: 'transparent', border: 'none', color: active ? w.color : C.muted, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -272,6 +286,19 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
           </select>
         )}
       </div>
+
+      {/* ── Baseline comparison: auto-detected qty vs current total ── */}
+      {wallSplits && totalQty !== qty && (
+        <div style={{
+          marginTop: 4, padding: '3px 8px', borderRadius: 4,
+          background: totalQty > qty ? 'rgba(255,209,102,0.08)' : 'rgba(255,107,107,0.08)',
+          border: `1px solid ${totalQty > qty ? 'rgba(255,209,102,0.25)' : 'rgba(255,107,107,0.25)'}`,
+          fontFamily: 'DM Mono', fontSize: 10,
+          color: totalQty > qty ? '#FFD166' : '#FF6B6B',
+        }}>
+          Összesen: {totalQty} db — automata találat: {qty} db ({totalQty > qty ? '+' : ''}{totalQty - qty})
+        </div>
+      )}
     </div>
   )
 }
