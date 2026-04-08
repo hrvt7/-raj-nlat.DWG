@@ -911,6 +911,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   assemblies={assemblies}
                   focusTarget={focusTarget}
                   onDirtyChange={onDirtyChange}
+                  activeTool={sharedActiveTool}
+                  activeCategory={sharedActiveCategory}
+                  onToolChange={setSharedActiveTool}
+                  onCategoryChange={setSharedActiveCategory}
                   onMarkersChange={(markers) => {
                     setPdfMarkers(markers)
                   }}

@@ -23,7 +23,7 @@ const C = {
 // PdfViewerPanel — PDF floor-plan viewer with pan/zoom, measure, count
 // Uses <canvas> for rendering PDF pages + overlay for annotations
 // ═══════════════════════════════════════════════════════════════════════════
-export default function PdfViewerPanel({ file, style, planId, projectId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, onMeasurementsChange, focusTarget, onDirtyChange }) {
+export default function PdfViewerPanel({ file, style, planId, projectId, onCreateQuote, onCableData, assemblies: assembliesProp, onMarkersChange, onMeasurementsChange, focusTarget, onDirtyChange, activeTool: externalActiveTool, activeCategory: externalActiveCategory, onToolChange: externalOnToolChange, onCategoryChange: externalOnCategoryChange }) {
   const containerRef = useRef(null)
   const pdfCanvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -57,9 +57,15 @@ export default function PdfViewerPanel({ file, style, planId, projectId, onCreat
   const migrationRef = useRef(null)
 
   // ── Tools ──
-  const [activeTool, setActiveTool] = useState(null)
+  const [internalActiveTool, setInternalActiveTool] = useState(null)
   // activeCategory can be an assembly ID (ASM-xxx) or a special key (panel, junction, other)
-  const [activeCategory, setActiveCategory] = useState('ASM-001')
+  const [internalActiveCategory, setInternalActiveCategory] = useState('ASM-001')
+
+  // Fallback: use external state when provided (lifted to TakeoffWorkspace), otherwise internal
+  const activeTool = externalActiveTool !== undefined ? externalActiveTool : internalActiveTool
+  const activeCategory = externalActiveCategory !== undefined ? externalActiveCategory : internalActiveCategory
+  const setActiveTool = externalOnToolChange || setInternalActiveTool
+  const setActiveCategory = externalOnCategoryChange || setInternalActiveCategory
 
   // ── Page rotation ──
   const [rotation, setRotation] = useState(0) // degrees, any angle (0, 45, 90, etc.)
