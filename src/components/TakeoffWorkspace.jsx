@@ -161,6 +161,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [highlightBlock, setHighlightBlock] = useState(null)
   const [selectedUnknownBlock, setSelectedUnknownBlock] = useState(null)
   const [visibleBlocks, setVisibleBlocks] = useState(new Set()) // block names with visible hits on drawing
+  const [visibleAsmIds, setVisibleAsmIds] = useState(new Set()) // assembly IDs with visible hits
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
@@ -832,6 +833,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               recognizedItems={recognizedItems}
               highlightBlock={highlightBlock || selectedUnknownBlock}
               visibleBlocks={visibleBlocks}
+              visibleAsmIds={visibleAsmIds}
               onBlockClick={name => {
                 if (manualCableMode) {
                   // In manual cable mode: toggle block as reference panel
@@ -1112,11 +1114,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         row={row}
                         customMeta={row._sourceType === 'custom' ? (customItemMeta[row._customItemId] || null) : undefined}
                         onCustomMetaChange={(id, meta) => setCustomItemMeta(prev => ({ ...prev, [id]: meta }))}
-                        isVisible={(() => {
-                          if (row._sourceType === 'custom') return false
-                          return effectiveItems.some(i => (asmOverrides[i.blockName] ?? i.asmId) === row.asmId && visibleBlocks.has(i.blockName))
-                        })()}
+                        isVisible={row._sourceType !== 'custom' && visibleAsmIds.has(row.asmId)}
                         onToggleVisibility={(asmId) => {
+                          // Toggle assembly-level visibility
+                          setVisibleAsmIds(prev => {
+                            const next = new Set(prev)
+                            next.has(asmId) ? next.delete(asmId) : next.add(asmId)
+                            return next
+                          })
+                          // Also update blockName-level for overlay compatibility
                           const contributors = effectiveItems.filter(i => (asmOverrides[i.blockName] ?? i.asmId) === asmId)
                           setVisibleBlocks(prev => {
                             const next = new Set(prev)
