@@ -158,6 +158,8 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const isPdf = file?.name?.toLowerCase().endsWith('.pdf') ?? false
 
   // ── UI state ──────────────────────────────────────────────────────────────
+  const [sharedActiveTool, setSharedActiveTool] = useState(null)
+  const [sharedActiveCategory, setSharedActiveCategory] = useState('ASM-001')
   const [highlightBlock, setHighlightBlock] = useState(null)
   const [selectedUnknownBlock, setSelectedUnknownBlock] = useState(null)
   const [visibleBlocks, setVisibleBlocks] = useState(new Set()) // block names with visible hits on drawing
@@ -821,6 +823,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   }
                 }}
                 style={{ height: '100%', border: 'none', borderRadius: 0 }}
+                activeTool={sharedActiveTool}
+                activeCategory={sharedActiveCategory}
+                onToolChange={setSharedActiveTool}
+                onCategoryChange={setSharedActiveCategory}
               />
             </Suspense>
           )}
@@ -905,6 +911,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                   assemblies={assemblies}
                   focusTarget={focusTarget}
                   onDirtyChange={onDirtyChange}
+                  activeTool={sharedActiveTool}
+                  activeCategory={sharedActiveCategory}
+                  onToolChange={setSharedActiveTool}
+                  onCategoryChange={setSharedActiveCategory}
                   onMarkersChange={(markers) => {
                     setPdfMarkers(markers)
                   }}

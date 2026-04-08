@@ -24,7 +24,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, onMarkersChange, focusTarget, assemblies: assembliesProp }, ref) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, onMarkersChange, focusTarget, assemblies: assembliesProp, activeTool: externalActiveTool, activeCategory: externalActiveCategory, onToolChange: externalOnToolChange, onCategoryChange: externalOnCategoryChange }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -68,12 +68,16 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
 
   // ── UI State ──
   const [paperMode, setPaperMode] = useState(false) // paper/light background for review
-  const [activeTool, setActiveTool] = useState(null)
+  const [internalActiveTool, setInternalActiveTool] = useState(null)
   // Assembly-first: default to first assembly ID if available, fallback to 'socket'
-  const [activeCategory, setActiveCategory] = useState(() => {
+  const [internalActiveCategory, setInternalActiveCategory] = useState(() => {
     const mainAsms = (assembliesProp || []).filter(a => !a.variantOf)
     return mainAsms.length > 0 ? mainAsms[0].id : 'socket'
   })
+  const activeTool = externalActiveTool !== undefined ? externalActiveTool : internalActiveTool
+  const activeCategory = externalActiveCategory !== undefined ? externalActiveCategory : internalActiveCategory
+  const setActiveTool = externalOnToolChange || setInternalActiveTool
+  const setActiveCategory = externalOnCategoryChange || setInternalActiveCategory
   const [layers, setLayers] = useState([])
   const [layerVisibility, setLayerVisibility] = useState({})
   const [layersPanelOpen, setLayersPanelOpen] = useState(false)
