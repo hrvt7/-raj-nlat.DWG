@@ -267,6 +267,14 @@ export const DEFAULT_MATERIALS = [
   { code: 'MAT-165', name: 'Túlfeszültség-védő T1+T2 3P+N',        unit: 'db', price: 45000, discount: 0, category: 'vedelem' },
   { code: 'MAT-166', name: 'Áramváltó 100/5A (DIN)',                 unit: 'db', price: 12000, discount: 0, category: 'vedelem' },
   { code: 'MAT-167', name: 'Digitális almérő 3F DIN',                unit: 'db', price: 18000, discount: 0, category: 'vedelem' },
+
+  // ── Erősáram bővítés (Phase B) ──────────────────────────────────────────
+  { code: 'MAT-170', name: 'Keresztkapcsoló (fehér)',                unit: 'db', price: 1200,  discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-171', name: 'Csillárkapcsoló 5-ös (fehér)',          unit: 'db', price: 1100,  discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-172', name: 'Nyomógomb (impulzuskapcsoló, fehér)',   unit: 'db', price: 800,   discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-173', name: 'Kijáratjelző LED (EXIT, tartós/készenléti)', unit: 'db', price: 18000, discount: 0, category: 'vilagitas' },
+  { code: 'MAT-174', name: 'Jelenlétérzékelő (mennyezeti, DALI/1-10V)', unit: 'db', price: 12000, discount: 0, category: 'szerelvenyek' },
+  { code: 'MAT-175', name: 'Kötődoboz kiállási pont fedőlappal',    unit: 'db', price: 450,   discount: 0, category: 'doboz' },
 ]
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
