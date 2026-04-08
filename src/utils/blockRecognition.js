@@ -2,11 +2,27 @@
 // Extracted from TakeoffWorkspace.jsx for testability and reuse.
 
 export const BLOCK_ASM_RULES = [
+  // ── Erősáram ──
   { patterns: ['LIGHT','LAMP','VILÁG','VILAG','LÁMPA','LAMPA','LED','SPOT','DOWNLIGHT','CEILING','MENNYEZET'], asmId: 'ASM-003', label: 'Lámpatest' },
   { patterns: ['SWITCH','KAPCS','KAPCSOL','DIMMER','TOGGLE','NYOMÓ','NYOMO'], asmId: 'ASM-002', label: 'Kapcsoló' },
   { patterns: ['SOCKET','DUGALJ','ALJZAT','OUTLET','PLUG','CSATLAKOZ','RECEPT','ERŐÁTVITELI','EROATVITELI'], asmId: 'ASM-001', label: 'Dugalj' },
   { patterns: ['PANEL','DB_PANEL','ELOSZTO','ELOSZTÓ','MDB','SZEKRÉNY','SZEKRENY','DISTRIBUTION','BOARD','TABLOU'], asmId: 'ASM-018', label: 'Elosztó' },
-  { patterns: ['SMOKE','FÜST','FUST','DETECTOR','ÉRZÉKEL','ERZEKEL','ALARM'], asmId: null, label: 'Érzékelő' },
+  { patterns: ['VESZVILAG','VÉSZVILÁG','EMERGENCY','EXIT','KIJARAT','KIJÁRAT','BIZTONSAG','BIZTONSÁGI'], asmId: 'ASM-017', label: 'Vészvilágítás' },
+  { patterns: ['MOZGAS','MOZGÁS','MOTION','PIR','JELENLÉT','JELENLET','PRESENCE','OCCUPAN'], asmId: 'ASM-008', label: 'Mozgásérzékelő' },
+  // ── Tűzjelző ──
+  { patterns: ['SMOKE','FÜST','FUST','FUSTERZEKELO','FÜSTÉRZÉKELŐ'], asmId: 'ASM-081', label: 'Füstérzékelő' },
+  { patterns: ['HEAT','HŐ','HO','HOERZEKELO','HŐÉRZÉKELŐ'], asmId: 'ASM-082', label: 'Hőérzékelő' },
+  { patterns: ['MULTISZEN','MULTI_SENS','MULTIDETECT'], asmId: 'ASM-083', label: 'Multiszenzor' },
+  { patterns: ['KÉZI JELZÉS','KEZI JELZES','MANUAL_CALL','HANDMELDER','NYOMÓGOMB_TŰZ','FIRE_MCP','TUZJELZO_MCP'], asmId: 'ASM-084', label: 'Kézi jelzésadó' },
+  { patterns: ['SOUNDER','SZIRÉNA','SZIRENA','HANG_FENY','HANGJELZO','HANGJELZŐ','FIRE_ALARM_BELL'], asmId: 'ASM-085', label: 'Hang-fényjelző' },
+  { patterns: ['TUZJELZO','TŰZJELZŐ','FIRE_DETECT','FIRE_ALARM','DETECTOR'], asmId: 'ASM-081', label: 'Tűzjelző érzékelő' },
+  // ── Gyengeáram ──
+  { patterns: ['WIFI','AP_POINT','ACCESS_POINT','WLAN'], asmId: 'ASM-088', label: 'WiFi AP' },
+  { patterns: ['CAMERA','KAMERA','CCTV','CAM_IP','IPCAM'], asmId: 'ASM-089', label: 'IP kamera' },
+  { patterns: ['PIR_ALARM','RIASZTO_PIR','RIASZTÓ_PIR','INTRUDER','BEHATOLÁS','BEHATALAS'], asmId: 'ASM-090', label: 'Riasztó PIR' },
+  { patterns: ['REED','NYITÁS','NYITAS','MAGNESKONTAKT','MÁGNESKONTAKT','DOOR_CONTACT'], asmId: 'ASM-091', label: 'Nyitásérzékelő' },
+  { patterns: ['SPEAKER','HANGSZORO','HANGSZÓRÓ','PA_POINT'], asmId: 'ASM-092', label: 'PA hangszóró' },
+  { patterns: ['RJ45','ADAT_ALJZAT','CAT6','DATA_OUTLET','UTP_POINT'], asmId: 'ASM-026', label: 'Adataljzat' },
 ]
 
 export const ASM_COLORS = {

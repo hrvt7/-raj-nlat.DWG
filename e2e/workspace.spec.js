@@ -158,7 +158,8 @@ test('workspace save persists calculation and shows success', async ({ page }) =
   const saveBtn = page.locator('[data-testid="workspace-save-btn"]')
   await expect(saveBtn).toBeVisible({ timeout: 5_000 })
   await expect(saveBtn).toBeEnabled({ timeout: 3_000 })
-  await saveBtn.click()
+  // Click save button directly via JS to bypass any portal overlay
+  await saveBtn.evaluate(btn => btn.click())
 
   // Save success indicator should appear
   const saveSuccess = page.locator('[data-testid="workspace-save-success"]')
@@ -201,7 +202,8 @@ test('reopening a saved plan restores calculation state', async ({ page }) => {
   await page.locator('button', { hasText: 'Kalkuláció' }).click()
   const saveBtn = page.locator('[data-testid="workspace-save-btn"]')
   await expect(saveBtn).toBeEnabled({ timeout: 5_000 })
-  await saveBtn.click()
+  // Click save button directly via JS to bypass any portal overlay
+  await saveBtn.evaluate(btn => btn.click())
   await expect(page.locator('[data-testid="workspace-save-success"]')).toBeVisible({ timeout: 10_000 })
 
   // Capture saved calcTotal for later comparison

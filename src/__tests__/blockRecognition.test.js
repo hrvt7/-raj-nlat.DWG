@@ -40,9 +40,9 @@ describe('recognizeBlock', () => {
       expect(r.confidence).toBe(1.0)
     })
 
-    it('matches SMOKE → null asmId (detector, no assembly)', () => {
+    it('matches SMOKE → ASM-081 (füstérzékelő)', () => {
       const r = recognizeBlock('SMOKE')
-      expect(r.asmId).toBeNull()
+      expect(r.asmId).toBe('ASM-081')
       expect(r.confidence).toBe(1.0)
     })
   })
@@ -146,9 +146,9 @@ describe('recognizeBlock', () => {
       expect(r.asmId).toBe('ASM-018')
     })
 
-    it('recognizes ÉRZÉKEL (detector)', () => {
-      const r = recognizeBlock('ÉRZÉKEL')
-      expect(r.asmId).toBeNull() // detector has null asmId
+    it('recognizes FÜSTÉRZÉKELŐ → ASM-081', () => {
+      const r = recognizeBlock('FÜSTÉRZÉKELŐ')
+      expect(r.asmId).toBe('ASM-081')
       expect(r.confidence).toBe(1.0)
     })
   })
