@@ -43,7 +43,8 @@ describe('Architecture Boundaries', () => {
   })
 
   it('recognizeBlock is imported from blockRecognition utility', () => {
-    expect(workspaceSrc).toContain("import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock")
+    // BLOCK_ASM_RULES and ASM_COLORS removed from workspace (legend removed)
+    expect(workspaceSrc).toContain("import { recognizeBlock")
   })
 })
 

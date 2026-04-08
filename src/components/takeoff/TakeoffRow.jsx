@@ -2,6 +2,18 @@ import React, { useState } from 'react'
 import { C } from './designTokens.js'
 import { ASM_COLORS } from '../../utils/blockRecognition.js'
 
+// Category → color (consistent across all assemblies, not just 4 hardcoded IDs)
+const CATEGORY_COLORS = {
+  'szerelvenyek': '#4CC9F0', // blue
+  'vilagitas':    '#00E5A0', // green
+  'elosztok':     '#FF6B6B', // red
+  'gyengaram':    '#A78BFA', // purple
+  'tuzjelzo':     '#FF8C42', // orange
+  'kabeltalca':   '#78909C', // gray-blue
+  'kabelezes':    '#06D6A0', // teal
+  'meres':        '#FFD166', // yellow
+}
+
 // ─── Wall type options ────────────────────────────────────────────────────────
 export const WALL_OPTS = [
   { key: 'drywall',  label: 'GK',    color: '#00E5A0' },
@@ -117,8 +129,8 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
 
-  // Category color from ASM_COLORS
-  const dotColor = ASM_COLORS[asmId] || C.muted
+  // Category color: prefer per-ID (legacy 4), then per-category, then muted
+  const dotColor = ASM_COLORS[asmId] || CATEGORY_COLORS[asm?.category] || C.muted
 
   // If no splits set yet, treat all qty as brick
   const effectiveSplits = wallSplits || { brick: qty }
