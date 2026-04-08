@@ -107,7 +107,15 @@ export async function convertDwgToDxf(file, getAuthHeaders) {
       throw new Error(pollJson.error || 'Státusz lekérdezése sikertelen')
     }
     if (pollJson.status === 'finished') { downloadUrl = pollJson.downloadUrl; break }
-    if (pollJson.status === 'error') throw new Error(pollJson.error || 'CloudConvert konverzió hiba')
+    if (pollJson.status === 'error') {
+      console.error('[DWG→DXF] CloudConvert error details:', JSON.stringify({
+        error: pollJson.error,
+        errorCode: pollJson.errorCode,
+        errorTaskName: pollJson.errorTaskName,
+        errorDetails: pollJson.errorDetails,
+      }))
+      throw new Error(pollJson.error || 'CloudConvert konverzió hiba')
+    }
   }
   if (!downloadUrl) throw new Error('CloudConvert időtúllépés (120 mp). Próbáld újra.')
 

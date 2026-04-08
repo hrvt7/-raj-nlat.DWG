@@ -146,8 +146,27 @@ def poll_job(job_id):
 
     if job_status == 'error':
         err_tasks = [t for t in status['data']['tasks'] if t.get('status') == 'error']
+        # Log full error details for debugging
+        err_details = []
+        for t in err_tasks:
+            detail = {
+                'name': t.get('name'),
+                'operation': t.get('operation'),
+                'message': t.get('message'),
+                'code': t.get('code'),
+            }
+            err_details.append(detail)
+            print(f"[convert-dwg] ERROR task: {json.dumps(detail)}", file=sys.stderr)
         err_msg = err_tasks[0].get('message', 'ismeretlen hiba') if err_tasks else status['data'].get('message', 'ismeretlen hiba')
-        return {'status': 'error', 'error': f'CloudConvert konverzió sikertelen: {err_msg}'}
+        err_code = err_tasks[0].get('code', '') if err_tasks else ''
+        err_task_name = err_tasks[0].get('name', '') if err_tasks else ''
+        return {
+            'status': 'error',
+            'error': f'CloudConvert konverzió sikertelen: {err_msg}',
+            'errorCode': err_code,
+            'errorTaskName': err_task_name,
+            'errorDetails': err_details,
+        }
 
     # Still processing / waiting
     return {'status': job_status}
