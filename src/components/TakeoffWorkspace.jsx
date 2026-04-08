@@ -48,7 +48,7 @@ import { getAuthHeaders } from '../supabase.js'
 import { C } from './takeoff/designTokens.js'
 
 // ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
-import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW } from '../utils/blockRecognition.js'
+import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, isJunkBlock } from '../utils/blockRecognition.js'
 import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
@@ -319,9 +319,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       const evMap = buildBlockEvidence(result)
       setEvidenceMap(evMap)
 
-      // Run recognition on all unique block types
+      // Run recognition on all unique block types (filter junk/internal CAD blocks first)
       const blockMap = {}
       for (const b of (result.blocks || [])) {
+        if (isJunkBlock(b.name)) continue // skip CAD-internal blocks
         if (!blockMap[b.name]) blockMap[b.name] = 0
         blockMap[b.name] += b.count
       }

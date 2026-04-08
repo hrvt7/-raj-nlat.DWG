@@ -52,6 +52,46 @@ export function recognizeBlock(blockName) {
   return { asmId: null, confidence: 0, matchType: 'unknown', rule: null }
 }
 
+// ─── DXF block junk filter ────────────────────────────────────────────────────
+// Filters out CAD-internal / technical / annotation blocks that are never
+// real electrical components. Conservative list — when in doubt, keep the block.
+
+const JUNK_BLOCK_PREFIXES = [
+  '*',            // *MODEL_SPACE, *PAPER_SPACE, *D, *U, *T, etc.
+  '_',            // _ARCHTICK, _DOT, _OPEN, _CLOSED, _OBLIQUE
+  'ACAD_',        // AutoCAD internal blocks
+  'A$C',          // AutoCAD anonymous blocks (A$C0, A$C1, ...)
+  'ASC_',         // AutoCAD system components
+]
+
+const JUNK_BLOCK_EXACT = new Set([
+  'SOLID', 'HATCH', 'DIMENSION', 'MTEXT', 'TEXT', 'ATTDEF', 'ATTRIB',
+  'POINT', 'LINE', 'CIRCLE', 'ARC', 'ELLIPSE', 'SPLINE', 'POLYLINE',
+  'LWPOLYLINE', 'TRACE', 'VIEWPORT', 'IMAGE', 'WIPEOUT', 'XLINE', 'RAY',
+  'OLE2FRAME', 'OLEFRAME', 'TOLERANCE', 'LEADER', 'MLEADER', 'MULTILEADER',
+  'TABLE', 'SHAPE', 'REGION', 'BODY', '3DSOLID', '3DFACE', 'MESH',
+])
+
+/**
+ * Check if a DXF block name is a known CAD junk / technical block.
+ * Returns true if the block should be EXCLUDED from recognition.
+ *
+ * @param {string} blockName
+ * @returns {boolean}
+ */
+export function isJunkBlock(blockName) {
+  if (!blockName) return true
+  const up = blockName.toUpperCase().trim()
+  if (up.length <= 1) return true // single char blocks are always internal
+  // Prefix check
+  for (const prefix of JUNK_BLOCK_PREFIXES) {
+    if (up.startsWith(prefix.toUpperCase())) return true
+  }
+  // Exact match
+  if (JUNK_BLOCK_EXACT.has(up)) return true
+  return false
+}
+
 // ─── DXF cable-layer detection ────────────────────────────────────────────────
 export const CABLE_GENERIC_KW = ['KABEL','CABLE','NYM','NYY','CYKY','WIRE','VEZETEK','VILLAMOS','ARAM']
 export const CABLE_TYPE_KW = {
