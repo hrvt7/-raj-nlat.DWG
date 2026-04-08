@@ -10,7 +10,7 @@ import { scoreUnknownBlock } from '../../utils/blockRecognition.js'
 /** Threshold for bulk-skip: unknown blocks with qty ≤ this are "low-impact" */
 const BULK_SKIP_QTY_THRESHOLD = 2
 
-export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress, onBlockHover, selectedBlock, onBlockSelect }) {
+export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress, onBlockHover, selectedBlock, onBlockSelect, visibleBlocks, onToggleVisibility }) {
   const [showLowPriority, setShowLowPriority] = useState(false)
 
   // Score and split into two tiers
@@ -107,7 +107,8 @@ export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, 
         <UnknownBlockRow key={item.blockName} item={item} asmOptions={asmOptions}
           assemblies={assemblies} evidenceMap={evidenceMap}
           onAssign={onAssign} onDelete={onDelete} onBlockHover={onBlockHover}
-          isSelected={selectedBlock === item.blockName} onBlockSelect={onBlockSelect} />
+          isSelected={selectedBlock === item.blockName} onBlockSelect={onBlockSelect}
+          isVisible={visibleBlocks?.has(item.blockName)} onToggleVisibility={onToggleVisibility} />
       ))}
 
       {/* ── Low priority items (collapsible) ── */}
@@ -142,7 +143,7 @@ export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, 
 }
 
 // ─── Single unknown block row ────────────────────────────────────────────────
-function UnknownBlockRow({ item, asmOptions, assemblies, evidenceMap, onAssign, onDelete, onBlockHover, dimmed, isSelected, onBlockSelect }) {
+function UnknownBlockRow({ item, asmOptions, assemblies, evidenceMap, onAssign, onDelete, onBlockHover, dimmed, isSelected, onBlockSelect, isVisible, onToggleVisibility }) {
   const evidence = evidenceMap?.get(item.blockName) || null
   const suggestions = suggestAssemblies(item.blockName, evidence, assemblies)
 
@@ -162,6 +163,18 @@ function UnknownBlockRow({ item, asmOptions, assemblies, evidenceMap, onAssign, 
     >
       {/* Row 1: block info + controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {onToggleVisibility && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleVisibility(item.blockName) }}
+            title={isVisible ? 'Találatok elrejtése' : 'Mutasd a rajzon'}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+              fontSize: 12, lineHeight: 1, color: isVisible ? C.blue : C.muted,
+              opacity: isVisible ? 1 : 0.4, transition: 'opacity 0.15s',
+              flexShrink: 0,
+            }}
+          >{isVisible ? '👁' : '👁‍🗨'}</button>
+        )}
         <div style={{
           width: 8, height: 8, borderRadius: '50%',
           background: dimmed ? C.border : C.muted, flexShrink: 0,
