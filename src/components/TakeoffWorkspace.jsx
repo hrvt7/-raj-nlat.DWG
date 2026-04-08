@@ -48,7 +48,7 @@ import { getAuthHeaders } from '../supabase.js'
 import { C } from './takeoff/designTokens.js'
 
 // ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
-import { BLOCK_ASM_RULES, ASM_COLORS, recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, isJunkBlock } from '../utils/blockRecognition.js'
+import { recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, isJunkBlock } from '../utils/blockRecognition.js'
 import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
@@ -935,21 +935,6 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
             ) : null
           )}
 
-          {/* Dot legend bottom-left */}
-          {parsedDxf?.inserts?.length > 0 && (
-            <div style={{
-              position: 'absolute', bottom: 12, left: 12, background: 'rgba(9,9,11,0.85)',
-              border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px',
-              display: 'flex', gap: 10, zIndex: 11, backdropFilter: 'blur(8px)',
-            }}>
-              {BLOCK_ASM_RULES.filter(r => r.asmId).map(r => (
-                <div key={r.asmId} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: ASM_COLORS[r.asmId] }} />
-                  <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: C.textSub }}>{r.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* ── Drag handle ──────────────────────────────────────────────────── */}
