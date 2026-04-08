@@ -92,6 +92,80 @@ export function isJunkBlock(blockName) {
   return false
 }
 
+// ─── Unknown block relevance scoring ──────────────────────────────────────────
+// Heuristic scoring for unknown blocks to prioritize likely-relevant items.
+// Higher score = more likely to be a real electrical component the user should review.
+
+const ELECTRICAL_KEYWORDS = [
+  'LAMP','LIGHT','LED','SPOT','VILAG','LAMPA','MENNYEZET','CEILING','DOWNLIGHT','FALI',
+  'SWITCH','KAPCS','KAPCSOL','DIMMER','NYOMO','TOGGLE',
+  'SOCKET','DUGALJ','ALJZAT','OUTLET','PLUG','CSATLAK','KONNEKTOR',
+  'PANEL','ELOSZTO','ELOSZTÓ','MDB','DISTRIBUTION','BOARD','TABLOU','SZEKRENY','SZEKRÉNY',
+  'SMOKE','DETECTOR','ÉRZÉKEL','ERZEKEL','ALARM','FÜST','FUST','HŐJELZ','HOJELZ',
+  'SENSOR','PIR','MOZGAS','MOZGÁS',
+  'CAMERA','KAMERA',
+  'SPEAKER','HANGSZORO','HANGSZÓRÓ',
+  'THERMOSTAT','TERMOSZTAT',
+  'MOTOR','VENTIL','SZELLŐZ','SZELLOZ',
+  'TRAFO','TRANSFORMER',
+  'CONTACTOR','MÁGNES','MAGNES','RELÉ','RELE',
+  'FUSE','BIZTOSÍT','BIZTOSIT','KISMEG','FI',
+  'UPS','INVERTER',
+  'KABEL','CABLE','VEZET',
+  'JELKEP','JELKÉP','SYMBOL','SZIMBOL','SZIMBÓLUM',
+  'VILLAMOS','ELEKTR','ELETRIC','ELECTRIC',
+]
+
+const NON_ELECTRICAL_KEYWORDS = [
+  'WALL','FAL','DOOR','AJTO','AJTÓ','WINDOW','ABLAK','BUTOR','BÚTOR','FURNITURE',
+  'TREE','FA','PLANT','NÖVÉNY','NOVENY','GARDEN','KERT',
+  'CAR','AUTO','AUTÓ','VEHICLE','JÁRMŰ','JARMU',
+  'PERSON','EMBER','FIGURE','ALAK',
+  'TOILET','WC','SINK','MOSDÓ','MOSDO','BATH','KÁDAD','KÁD',
+  'STAIR','LÉPCSŐ','LEPCSO','RAMP',
+  'ARROW','NYÍL','NYIL','NORTH','ÉSZAK','ESZAK',
+  'TITLE','CÍM','CIM','BORDER','KERET','FRAME','LOGO',
+  'SECTION','METSZET','DETAIL','RÉSZLET','RESZLET',
+  'GRID','RÁCS','RACS','AXIS','TENGELY',
+  'NOTE','MEGJEGY','ANNOTATION','LABEL','FELIRAT',
+]
+
+/**
+ * Score an unknown block's relevance to electrical takeoff.
+ * Returns: { score: 0–100, tier: 'likely' | 'low' }
+ *
+ * @param {string} blockName
+ * @param {number} qty — block count
+ * @returns {{ score: number, tier: 'likely' | 'low' }}
+ */
+export function scoreUnknownBlock(blockName, qty) {
+  const up = (blockName || '').toUpperCase().replace(/[_\-\.]/g, ' ')
+  let score = 30 // base score
+
+  // Boost for electrical keywords
+  for (const kw of ELECTRICAL_KEYWORDS) {
+    if (up.includes(kw)) { score += 40; break }
+  }
+
+  // Penalty for non-electrical keywords
+  for (const kw of NON_ELECTRICAL_KEYWORDS) {
+    if (up.includes(kw)) { score -= 35; break }
+  }
+
+  // Quantity boost: items appearing 3+ times are more likely real components
+  if (qty >= 10) score += 15
+  else if (qty >= 3) score += 8
+
+  // Short names (2-3 chars) are often codes, less likely to be meaningful
+  if (up.replace(/ /g, '').length <= 3) score -= 15
+
+  // Very long names often are descriptive internal blocks
+  if (up.replace(/ /g, '').length > 40) score -= 10
+
+  score = Math.max(0, Math.min(100, score))
+  return { score, tier: score >= 35 ? 'likely' : 'low' }
+}
+
 // ─── DXF cable-layer detection ────────────────────────────────────────────────
 export const CABLE_GENERIC_KW = ['KABEL','CABLE','NYM','NYY','CYKY','WIRE','VEZETEK','VILLAMOS','ARAM']
 export const CABLE_TYPE_KW = {

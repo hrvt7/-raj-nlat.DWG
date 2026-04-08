@@ -106,7 +106,7 @@ function CustomTakeoffRow({ row, onDelete, meta, onMetaChange }) {
 }
 
 // ─── Takeoff row ──────────────────────────────────────────────────────────────
-export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row, customMeta, onCustomMetaChange }) {
+export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row, customMeta, onCustomMetaChange, onRowHover }) {
   const [hovered, setHovered] = useState(false)
 
   // ── Custom row render (hooks called above, safe) ──
@@ -149,8 +149,8 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => { setHovered(true); onRowHover?.(asmId) }}
+      onMouseLeave={() => { setHovered(false); onRowHover?.(null) }}
       style={{
         position: 'relative',
         padding: '10px 14px', borderRadius: 8, marginBottom: 6,

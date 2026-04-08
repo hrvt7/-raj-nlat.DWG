@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { C } from './designTokens.js'
 import { suggestAssemblies } from '../../utils/suggestAssemblies.js'
+import { scoreUnknownBlock } from '../../utils/blockRecognition.js'
 
 // ─── Unknown Block Resolution Panel ──────────────────────────────────────────
 // Shows blocks that recognizeBlock + memory could not match. The user picks an
@@ -9,8 +10,22 @@ import { suggestAssemblies } from '../../utils/suggestAssemblies.js'
 /** Threshold for bulk-skip: unknown blocks with qty ≤ this are "low-impact" */
 const BULK_SKIP_QTY_THRESHOLD = 2
 
-export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress }) {
-  // Sort by qty descending — highest impact blocks first
+export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress, onBlockHover }) {
+  const [showLowPriority, setShowLowPriority] = useState(false)
+
+  // Score and split into two tiers
+  const { likelyItems, lowItems } = useMemo(() => {
+    const scored = (unknownItems || []).map(item => ({
+      ...item,
+      ...scoreUnknownBlock(item.blockName, item.qty),
+    }))
+    return {
+      likelyItems: scored.filter(i => i.tier === 'likely').sort((a, b) => b.score - a.score || b.qty - a.qty),
+      lowItems: scored.filter(i => i.tier === 'low').sort((a, b) => b.qty - a.qty),
+    }
+  }, [unknownItems])
+
+  // Keep sorted for legacy bulk-skip (operates on all items)
   const sorted = useMemo(() =>
     [...(unknownItems || [])].sort((a, b) => b.qty - a.qty),
     [unknownItems]
@@ -87,94 +102,133 @@ export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, 
           </button>
         )
       })()}
-      {sorted.map(item => {
-        // Compute quick-pick suggestions from evidence signals
-        const evidence = evidenceMap?.get(item.blockName) || null
-        const suggestions = suggestAssemblies(item.blockName, evidence, assemblies)
+      {/* ── Likely relevant items ── */}
+      {likelyItems.map(item => (
+        <UnknownBlockRow key={item.blockName} item={item} asmOptions={asmOptions}
+          assemblies={assemblies} evidenceMap={evidenceMap}
+          onAssign={onAssign} onDelete={onDelete} onBlockHover={onBlockHover} />
+      ))}
 
-        return (
-          <div key={item.blockName} data-testid="unknown-block-row" style={{
-            padding: '6px 0', borderTop: `1px solid ${C.border}`,
-          }}>
-            {/* Row 1: block info + controls */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%',
-                background: C.muted, flexShrink: 0,
-              }} />
-              <div style={{
-                flex: 1, minWidth: 0,
-                fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      {/* ── Low priority items (collapsible) ── */}
+      {lowItems.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowLowPriority(p => !p)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+              padding: '6px 10px', marginTop: 4,
+              background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+              borderRadius: 6, cursor: 'pointer', fontSize: 10,
+              fontFamily: 'DM Mono', color: C.muted,
+            }}
+          >
+            <span style={{ fontSize: 10 }}>{showLowPriority ? '▼' : '▶'}</span>
+            {lowItems.length} alacsony prioritású blokk
+            <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.6 }}>
+              {lowItems.reduce((s, i) => s + i.qty, 0)} db
+            </span>
+          </button>
+          {showLowPriority && lowItems.map(item => (
+            <UnknownBlockRow key={item.blockName} item={item} asmOptions={asmOptions}
+              assemblies={assemblies} evidenceMap={evidenceMap}
+              onAssign={onAssign} onDelete={onDelete} onBlockHover={onBlockHover}
+              dimmed />
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Single unknown block row ────────────────────────────────────────────────
+function UnknownBlockRow({ item, asmOptions, assemblies, evidenceMap, onAssign, onDelete, onBlockHover, dimmed }) {
+  const evidence = evidenceMap?.get(item.blockName) || null
+  const suggestions = suggestAssemblies(item.blockName, evidence, assemblies)
+
+  return (
+    <div data-testid="unknown-block-row" style={{
+      padding: '6px 0', borderTop: `1px solid ${C.border}`,
+      opacity: dimmed ? 0.55 : 1,
+    }}
+      onMouseEnter={() => onBlockHover?.(item.blockName)}
+      onMouseLeave={() => onBlockHover?.(null)}
+    >
+      {/* Row 1: block info + controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 8, height: 8, borderRadius: '50%',
+          background: dimmed ? C.border : C.muted, flexShrink: 0,
+        }} />
+        <div style={{
+          flex: 1, minWidth: 0,
+          fontFamily: 'DM Mono', fontSize: 11, color: C.textSub,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+          title={item.blockName}
+        >
+          {item.blockName}
+        </div>
+        <span style={{
+          fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0,
+        }}>
+          {item.qty} db
+        </span>
+        <select
+          data-testid="unknown-block-select"
+          value=""
+          onChange={e => {
+            if (e.target.value) onAssign(item.blockName, e.target.value)
+          }}
+          style={{
+            background: C.bg, border: `1px solid ${C.borderLight}`,
+            borderRadius: 6, color: C.textSub, fontSize: 10,
+            fontFamily: 'DM Mono', padding: '3px 6px', cursor: 'pointer',
+            maxWidth: 140, flexShrink: 0,
+          }}
+        >
+          <option value="">Hozzárendelés…</option>
+          {asmOptions.map(a => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => onDelete(item.blockName)}
+          title="Kihagyás"
+          style={{
+            width: 20, height: 20, borderRadius: '50%',
+            background: 'transparent', border: `1px solid ${C.border}`,
+            color: C.muted, fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', lineHeight: 1, padding: 0, flexShrink: 0,
+          }}
+        >✕</button>
+      </div>
+      {/* Row 2: quick-pick suggestion chips (if any) */}
+      {suggestions.length > 0 && (
+        <div data-testid="quick-pick-row" style={{
+          display: 'flex', gap: 4, marginTop: 4, marginLeft: 16,
+          flexWrap: 'wrap',
+        }}>
+          {suggestions.map(asm => (
+            <button
+              key={asm.id}
+              data-testid="quick-pick-btn"
+              onClick={() => onAssign(item.blockName, asm.id)}
+              title={asm.description || asm.name}
+              style={{
+                background: 'rgba(76,201,240,0.08)',
+                border: `1px solid rgba(76,201,240,0.25)`,
+                borderRadius: 5, padding: '2px 8px',
+                fontFamily: 'DM Mono', fontSize: 10, fontWeight: 500,
+                color: C.blue, cursor: 'pointer',
+                whiteSpace: 'nowrap', lineHeight: 1.4,
               }}
-                title={item.blockName}
-              >
-                {item.blockName}
-              </div>
-              <span style={{
-                fontFamily: 'DM Mono', fontSize: 10, color: C.muted, flexShrink: 0,
-              }}>
-                {item.qty} db
-              </span>
-              <select
-                data-testid="unknown-block-select"
-                value=""
-                onChange={e => {
-                  if (e.target.value) onAssign(item.blockName, e.target.value)
-                }}
-                style={{
-                  background: C.bg, border: `1px solid ${C.borderLight}`,
-                  borderRadius: 6, color: C.textSub, fontSize: 10,
-                  fontFamily: 'DM Mono', padding: '3px 6px', cursor: 'pointer',
-                  maxWidth: 140, flexShrink: 0,
-                }}
-              >
-                <option value="">Hozzárendelés…</option>
-                {asmOptions.map(a => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => onDelete(item.blockName)}
-                title="Kihagyás"
-                style={{
-                  width: 20, height: 20, borderRadius: '50%',
-                  background: 'transparent', border: `1px solid ${C.border}`,
-                  color: C.muted, fontSize: 11, fontWeight: 700,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', lineHeight: 1, padding: 0, flexShrink: 0,
-                }}
-              >✕</button>
-            </div>
-            {/* Row 2: quick-pick suggestion chips (if any) */}
-            {suggestions.length > 0 && (
-              <div data-testid="quick-pick-row" style={{
-                display: 'flex', gap: 4, marginTop: 4, marginLeft: 16,
-                flexWrap: 'wrap',
-              }}>
-                {suggestions.map(asm => (
-                  <button
-                    key={asm.id}
-                    data-testid="quick-pick-btn"
-                    onClick={() => onAssign(item.blockName, asm.id)}
-                    title={asm.description || asm.name}
-                    style={{
-                      background: 'rgba(76,201,240,0.08)',
-                      border: `1px solid rgba(76,201,240,0.25)`,
-                      borderRadius: 5, padding: '2px 8px',
-                      fontFamily: 'DM Mono', fontSize: 10, fontWeight: 500,
-                      color: C.blue, cursor: 'pointer',
-                      whiteSpace: 'nowrap', lineHeight: 1.4,
-                    }}
-                  >
-                    {asm.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      })}
+            >
+              {asm.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

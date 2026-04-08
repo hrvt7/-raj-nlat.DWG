@@ -1056,6 +1056,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     onBulkSkipLowImpact={handleBulkSkipLowImpact}
                     evidenceMap={evidenceMap}
                     progress={unknownProgress}
+                    onBlockHover={setHighlightBlock}
                   />
                 )}
 
@@ -1078,6 +1079,12 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         row={row}
                         customMeta={row._sourceType === 'custom' ? (customItemMeta[row._customItemId] || null) : undefined}
                         onCustomMetaChange={(id, meta) => setCustomItemMeta(prev => ({ ...prev, [id]: meta }))}
+                        onRowHover={(asmIdOrNull) => {
+                          if (!asmIdOrNull) { setHighlightBlock(null); return }
+                          // Find a contributing block name for this assembly to trigger overlay highlight
+                          const contributor = effectiveItems.find(i => (asmOverrides[i.blockName] ?? i.asmId) === asmIdOrNull)
+                          setHighlightBlock(contributor?.blockName || null)
+                        }}
                         asmId={row.asmId}
                         qty={row.qty}
                         variantId={row.variantId}
