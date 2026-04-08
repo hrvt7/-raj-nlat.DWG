@@ -153,25 +153,62 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
           canvas.addEventListener('mousemove', moveHandler)
         }
 
-        // Trackpad two-finger scroll = pan (matches PDF viewer behavior)
-        // Three.js OrbitControls treats all wheel events as zoom — we intercept
-        // non-pinch trackpad gestures and convert them to camera pan instead.
+        // Disable dxf-viewer's built-in scroll zoom so our custom handler takes over
+        if (viewer.controls) {
+          viewer.controls.enableZoom = false
+        }
+
+        // ── Custom wheel handler: matches PDF viewer behavior ──────────────
+        // Intercepts ALL wheel events to provide:
+        //   1. Two-finger trackpad scroll = pan (camera translate)
+        //   2. Trackpad pinch-to-zoom = cursor-centered zoom (fine sensitivity)
+        //   3. Mouse wheel = cursor-centered zoom (normal sensitivity)
+        // Three.js OrbitControls default wheel zoom is disabled by consuming the event.
         wheelHandler = (e) => {
-          // ctrlKey = trackpad pinch-to-zoom → let Three.js handle it
-          if (e.ctrlKey || e.metaKey) return
-          // No ctrlKey + deltaX/deltaY = two-finger trackpad scroll → pan
           e.preventDefault()
           e.stopPropagation()
           const cam = viewer.camera
           if (!cam) return
-          const viewWidth = cam.right - cam.left
           const canvas = viewer.renderer?.domElement
           if (!canvas) return
-          const scale = viewWidth / canvas.clientWidth
-          cam.left += e.deltaX * scale
-          cam.right += e.deltaX * scale
-          cam.top -= e.deltaY * scale
-          cam.bottom -= e.deltaY * scale
+          const viewWidth = cam.right - cam.left
+          const viewHeight = cam.top - cam.bottom
+
+          // Detect input type (same logic as PDF viewer)
+          const isPinchZoom = e.ctrlKey  // browser sets ctrlKey for trackpad pinch
+          const isTrackpadPan = !e.ctrlKey && !e.metaKey && (Math.abs(e.deltaX) > 1 || (Math.abs(e.deltaX) > 0 && Math.abs(e.deltaY) < 30))
+
+          if (isTrackpadPan && !isPinchZoom) {
+            // ── Two-finger trackpad scroll → pan ──
+            const scale = viewWidth / canvas.clientWidth
+            cam.left += e.deltaX * scale
+            cam.right += e.deltaX * scale
+            cam.top -= e.deltaY * scale
+            cam.bottom -= e.deltaY * scale
+          } else {
+            // ── Zoom (mouse wheel or trackpad pinch) → cursor-centered ──
+            const sensitivity = isPinchZoom
+              ? (e.deltaY > 0 ? 0.97 : 1.03)   // fine steps for trackpad pinch
+              : (e.deltaY > 0 ? 0.92 : 1.087)   // normal steps for mouse wheel
+            const newWidth = viewWidth * sensitivity
+            const newHeight = viewHeight * sensitivity
+            // Clamp: prevent degenerate frustum or extreme zoom
+            if (newWidth < 0.01 || newHeight < 0.01) return  // too close
+            if (newWidth > 1e8 || newHeight > 1e8) return    // too far
+
+            // Cursor position in NDC (-1 to 1)
+            const rect = canvas.getBoundingClientRect()
+            const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1
+            const my = -(((e.clientY - rect.top) / rect.height) * 2 - 1)
+            // Scene position under cursor before zoom
+            const cx = cam.left + (mx + 1) / 2 * viewWidth
+            const cy = cam.bottom + (my + 1) / 2 * viewHeight
+            // New frustum centered on cursor position
+            cam.left = cx - (mx + 1) / 2 * newWidth
+            cam.right = cam.left + newWidth
+            cam.bottom = cy - (my + 1) / 2 * newHeight
+            cam.top = cam.bottom + newHeight
+          }
           cam.updateProjectionMatrix()
           viewer.Render()
         }

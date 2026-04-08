@@ -159,6 +159,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
+  const [selectedUnknownBlock, setSelectedUnknownBlock] = useState(null)
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
@@ -828,7 +829,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               inserts={effectiveParsedDxf.inserts}
               asmOverrides={asmOverrides}
               recognizedItems={recognizedItems}
-              highlightBlock={highlightBlock}
+              highlightBlock={highlightBlock || selectedUnknownBlock}
               onBlockClick={name => {
                 if (manualCableMode) {
                   // In manual cable mode: toggle block as reference panel
@@ -1057,6 +1058,28 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     evidenceMap={evidenceMap}
                     progress={unknownProgress}
                     onBlockHover={setHighlightBlock}
+                    selectedBlock={selectedUnknownBlock}
+                    onBlockSelect={(blockName) => {
+                      const isDeselect = selectedUnknownBlock === blockName
+                      setSelectedUnknownBlock(isDeselect ? null : blockName)
+                      setHighlightBlock(isDeselect ? null : blockName)
+                      // Zoom-to-hits: fit camera to show all instances of this block
+                      if (!isDeselect && blockName && effectiveParsedDxf?.inserts?.length) {
+                        const hits = effectiveParsedDxf.inserts.filter(ins => ins.name === blockName)
+                        if (hits.length > 0) {
+                          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+                          for (const h of hits) {
+                            if (h.x < minX) minX = h.x; if (h.x > maxX) maxX = h.x
+                            if (h.y < minY) minY = h.y; if (h.y > maxY) maxY = h.y
+                          }
+                          const viewer = canvasRef.current?.getViewer?.()
+                          if (viewer?.camera) {
+                            const pad = Math.max(maxX - minX, maxY - minY, 1) * 0.3
+                            viewer.FitView(minX - pad, maxX + pad, minY - pad, maxY + pad, 0.05)
+                          }
+                        }
+                      }
+                    }}
                   />
                 )}
 
