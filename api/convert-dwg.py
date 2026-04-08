@@ -67,7 +67,9 @@ def create_job(filename):
                 "operation": "convert",
                 "input": "upload-file",
                 "input_format": "dwg",
-                "output_format": "dxf"
+                "output_format": "dxf",
+                "engine": "cadconverter",
+                "timeout": 300
             },
             "export-file": {
                 "operation": "export/url",

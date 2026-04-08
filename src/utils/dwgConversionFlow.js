@@ -81,7 +81,10 @@ export async function convertDwgToDxf(file, getAuthHeaders) {
   for (const [key, val] of Object.entries(uploadParams)) {
     formData.append(key, val)
   }
-  formData.append('file', file)
+  // Use ASCII-safe filename to prevent CloudConvert S3 upload failures
+  // with non-ASCII characters (Hungarian accents, special chars)
+  const safeFilename = file.name.replace(/[^\x20-\x7E]/g, '_') || 'input.dwg'
+  formData.append('file', file, safeFilename)
   const uploadRes = await fetchWithRetry(uploadUrl, { method: 'POST', body: formData })
   if (!uploadRes.ok) {
     throw new Error(`Fájl feltöltése CloudConvert-re sikertelen (HTTP ${uploadRes.status})`)
