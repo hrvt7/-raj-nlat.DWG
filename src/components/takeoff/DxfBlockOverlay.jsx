@@ -1,7 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { ASM_COLORS } from '../../utils/blockRecognition.js'
 
-// ─── SVG Overlay for block positions ─────────────────────────────────────────
+// ─── SVG Overlay for block positions — ISOLATION MODE ────────────────────────
+// When a row is selected (highlight) or visibility-toggled (eye icon),
+// non-matching dots are COMPLETELY HIDDEN — not dimmed.
+// This creates true visual isolation for auditable review.
+
 export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems, highlightBlock, onBlockClick, canvasRef, visibleBlocks, visibleAsmIds }) {
   const svgRef = useRef(null)
   const [screenPositions, setScreenPositions] = useState([])
@@ -18,27 +22,26 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
   useEffect(() => {
     const viewer = canvasRef?.current?.getViewer?.()
     if (!viewer) return
-    // Re-project on camera changes
     const unsub = canvasRef.current.subscribe?.('viewChanged', reproject)
     reproject()
     return () => { try { unsub?.() } catch {} }
   }, [reproject, canvasRef])
 
-  // Also re-project when inserts change
   useEffect(() => { reproject() }, [inserts, reproject])
 
   if (!screenPositions.length) return null
 
-  // Build maps: blockName → asmId, and asmId for highlightBlock
+  // Build map: blockName → asmId
   const nameToAsm = {}
   for (const item of recognizedItems) {
     nameToAsm[item.blockName] = asmOverrides[item.blockName] ?? item.asmId
   }
-  // Resolve highlighted asmId so we can highlight ALL blocks for same assembly
   const highlightAsmId = highlightBlock ? (nameToAsm[highlightBlock] ?? null) : null
 
-  const anyHighlighted = !!highlightBlock
-  const hasVisibleBlocks = (visibleBlocks && visibleBlocks.size > 0) || (visibleAsmIds && visibleAsmIds.size > 0)
+  // ── Isolation mode: is ANY row selected or visibility-toggled? ──
+  const hasHighlight = !!highlightBlock
+  const hasVisible = (visibleAsmIds && visibleAsmIds.size > 0) || (visibleBlocks && visibleBlocks.size > 0)
+  const isolateMode = hasHighlight || hasVisible
 
   return (
     <svg
@@ -46,10 +49,9 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}
       width="100%" height="100%"
     >
-      {/* Glow filter for highlighted dots */}
       <defs>
-        <filter id="highlight-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
+        <filter id="hit-glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="4" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -57,74 +59,58 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
         </filter>
       </defs>
 
-      {/* Render non-highlighted dots first (dimmed when something is highlighted or visible) */}
       {screenPositions.map((ins, i) => {
         const asmId = nameToAsm[ins.name] ?? null
         const color = ASM_COLORS[asmId] || ASM_COLORS[null]
+
+        // Determine if this dot is part of a selected/visible set
         const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
-        if (isHighlighted) return null // render highlighted dots separately on top
         const isVisible = (visibleBlocks?.has(ins.name)) || (visibleAsmIds?.has(asmId))
-        if (isVisible) return null // render visible dots separately
-        const shouldDim = anyHighlighted || hasVisibleBlocks
+        const isActive = isHighlighted || isVisible
+
+        // ── ISOLATION: if any row is active, non-active dots are HIDDEN ──
+        if (isolateMode && !isActive) return null
+
+        // ── Normal mode (no isolation): show all dots normally ──
+        if (!isolateMode) {
+          return (
+            <g key={i} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+               onClick={() => onBlockClick(ins.name)}>
+              <circle cx={ins.sx} cy={ins.sy} r={9} fill="transparent" />
+              <circle cx={ins.sx} cy={ins.sy} r={5}
+                fill={color} fillOpacity={0.65}
+                stroke={color} strokeWidth={1}
+              />
+            </g>
+          )
+        }
+
+        // ── Isolated active dot: large, high-contrast, unmistakable ──
+        const activeColor = isHighlighted ? '#4CC9F0' : color
         return (
           <g key={i} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
              onClick={() => onBlockClick(ins.name)}>
-            <circle cx={ins.sx} cy={ins.sy} r={9} fill="transparent" />
-            <circle
-              cx={ins.sx} cy={ins.sy} r={5}
-              fill={color} fillOpacity={shouldDim ? 0.12 : 0.65}
-              stroke={color} strokeWidth={1} strokeOpacity={shouldDim ? 0.15 : 1}
-            />
-          </g>
-        )
-      })}
-
-      {/* Render visibility-toggled dots (strong emphasis — persistent, assembly-level) */}
-      {hasVisibleBlocks && screenPositions.map((ins, i) => {
-        const asmId = nameToAsm[ins.name] ?? null
-        const isVisible = (visibleBlocks?.has(ins.name)) || (visibleAsmIds?.has(asmId))
-        if (!isVisible) return null
-        const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
-        if (isHighlighted) return null // highlighted render takes priority
-        const color = ASM_COLORS[asmId] || '#00E5A0'
-        return (
-          <g key={`vis-${i}`} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-             onClick={() => onBlockClick(ins.name)}>
-            {/* Outer glow for strong visibility */}
-            <circle cx={ins.sx} cy={ins.sy} r={14} fill={color} fillOpacity={0.10}
-              filter="url(#highlight-glow)" />
-            {/* Solid inner dot with strong contrast */}
-            <circle cx={ins.sx} cy={ins.sy} r={8}
-              fill={color} fillOpacity={0.9}
-              stroke="#fff" strokeWidth={2}
-            />
-            <circle cx={ins.sx} cy={ins.sy} r={16} fill="transparent" />
-          </g>
-        )
-      })}
-
-      {/* Render highlighted dots on top — larger, glowing, pulsing */}
-      {screenPositions.map((ins, i) => {
-        const asmId = nameToAsm[ins.name] ?? null
-        const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
-        if (!isHighlighted) return null
-        const hlColor = '#4CC9F0' // bright blue for maximum contrast
-        return (
-          <g key={`hl-${i}`} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-             onClick={() => onBlockClick(ins.name)}>
             {/* Outer glow ring */}
-            <circle cx={ins.sx} cy={ins.sy} r={16} fill={hlColor} fillOpacity={0.12}
-              filter="url(#highlight-glow)">
-              <animate attributeName="r" values="14;18;14" dur="1.5s" repeatCount="indefinite" />
-              <animate attributeName="fillOpacity" values="0.12;0.06;0.12" dur="1.5s" repeatCount="indefinite" />
-            </circle>
-            {/* Solid inner dot */}
-            <circle cx={ins.sx} cy={ins.sy} r={8}
-              fill={hlColor} fillOpacity={0.95}
+            <circle cx={ins.sx} cy={ins.sy} r={18} fill={activeColor} fillOpacity={0.08}
+              filter="url(#hit-glow)" />
+            {/* Mid ring for emphasis */}
+            <circle cx={ins.sx} cy={ins.sy} r={12}
+              fill="none" stroke={activeColor} strokeWidth={1.5} strokeOpacity={0.4} />
+            {/* Solid core */}
+            <circle cx={ins.sx} cy={ins.sy} r={7}
+              fill={activeColor} fillOpacity={0.95}
               stroke="#fff" strokeWidth={2.5}
             />
-            {/* Hit target for click */}
-            <circle cx={ins.sx} cy={ins.sy} r={18} fill="transparent" />
+            {/* Pulse animation for highlighted (hover/click) */}
+            {isHighlighted && (
+              <circle cx={ins.sx} cy={ins.sy} r={14} fill="none"
+                stroke={activeColor} strokeWidth={1} strokeOpacity={0.5}>
+                <animate attributeName="r" values="12;20;12" dur="1.5s" repeatCount="indefinite" />
+                <animate attributeName="strokeOpacity" values="0.5;0.1;0.5" dur="1.5s" repeatCount="indefinite" />
+              </circle>
+            )}
+            {/* Hit target */}
+            <circle cx={ins.sx} cy={ins.sy} r={20} fill="transparent" />
           </g>
         )
       })}
