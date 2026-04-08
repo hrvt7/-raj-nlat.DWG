@@ -30,11 +30,13 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
 
   if (!screenPositions.length) return null
 
-  // Build a map from blockName → asmId
+  // Build maps: blockName → asmId, and asmId for highlightBlock
   const nameToAsm = {}
   for (const item of recognizedItems) {
     nameToAsm[item.blockName] = asmOverrides[item.blockName] ?? item.asmId
   }
+  // Resolve highlighted asmId so we can highlight ALL blocks for same assembly
+  const highlightAsmId = highlightBlock ? (nameToAsm[highlightBlock] ?? null) : null
 
   return (
     <svg
@@ -45,7 +47,8 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
       {screenPositions.map((ins, i) => {
         const asmId = nameToAsm[ins.name] ?? null
         const color = ASM_COLORS[asmId] || ASM_COLORS[null]
-        const isHighlighted = highlightBlock === ins.name
+        // Highlight if this is the exact block OR same assembly group
+        const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
         const r = isHighlighted ? 9 : 6
         return (
           <g key={i} style={{ pointerEvents: 'auto', cursor: 'pointer' }}

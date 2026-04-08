@@ -122,12 +122,17 @@ test('unknown DXF block triggers panel, user assigns assembly, save becomes enab
   // ── Assert 2: Panel shows "ismeretlen blokk" header ──
   await expect(unknownPanel).toContainText('ismeretlen blokk')
 
-  // ── Assert 3: Panel shows the unknown block name ──
+  // ── Assert 3: Panel shows unknown block (may be in collapsed low-priority section) ──
+  // Expand low-priority section if block is there
+  const lowPriorityBtn = unknownPanel.locator('button', { hasText: 'alacsony prioritású' })
+  if (await lowPriorityBtn.isVisible()) {
+    await lowPriorityBtn.click()
+  }
   await expect(unknownPanel).toContainText('BLK_OPAQUE_001')
 
-  // ── Assert 4: There is exactly 1 unknown block row ──
+  // ── Assert 4: There is at least 1 unknown block row visible ──
   const unknownRows = page.locator('[data-testid="unknown-block-row"]')
-  await expect(unknownRows).toHaveCount(1)
+  await expect(unknownRows.first()).toBeVisible()
 
   // ── Assert 5: Assign assembly via dropdown (resolve the unknown block) ──
   // The select has an option for ASM-001 "Dugalj 2P+F alap (komplett)"

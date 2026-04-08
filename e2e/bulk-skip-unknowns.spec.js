@@ -112,7 +112,11 @@ test('bulk-skip removes low-impact unknowns, keeps high-impact, and save gates c
   const unknownPanel = page.locator('[data-testid="unknown-block-panel"]')
   await expect(unknownPanel).toBeVisible({ timeout: 5_000 })
 
-  // ── Assert 2: 4 unknown block rows (UNKNOWN_BIG + DECO_A + DECO_B + DECO_C) ──
+  // ── Assert 2: Expand low-priority section to see all unknown blocks ──
+  const lowPriorityBtn = unknownPanel.locator('button', { hasText: 'alacsony prioritású' })
+  if (await lowPriorityBtn.isVisible()) {
+    await lowPriorityBtn.click()
+  }
   const unknownRows = page.locator('[data-testid="unknown-block-row"]')
   await expect(unknownRows).toHaveCount(4, { timeout: 5_000 })
 
@@ -128,6 +132,9 @@ test('bulk-skip removes low-impact unknowns, keeps high-impact, and save gates c
   await bulkSkipBtn.click()
 
   // ── Assert 6: Only 1 unknown row remains (UNKNOWN_BIG) ──
+  // After bulk-skip, the low-priority items are gone; expand again if section exists
+  const lowPriorityBtn2 = unknownPanel.locator('button', { hasText: 'alacsony prioritású' })
+  if (await lowPriorityBtn2.isVisible()) await lowPriorityBtn2.click()
   await expect(unknownRows).toHaveCount(1, { timeout: 5_000 })
 
   // ── Assert 7: Remaining unknown is UNKNOWN_BIG ──
