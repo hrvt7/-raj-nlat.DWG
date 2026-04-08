@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { ASM_COLORS } from '../../utils/blockRecognition.js'
 
 // ─── SVG Overlay for block positions ─────────────────────────────────────────
-export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems, highlightBlock, onBlockClick, canvasRef, visibleBlocks }) {
+export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems, highlightBlock, onBlockClick, canvasRef, visibleBlocks, visibleAsmIds }) {
   const svgRef = useRef(null)
   const [screenPositions, setScreenPositions] = useState([])
 
@@ -38,7 +38,7 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
   const highlightAsmId = highlightBlock ? (nameToAsm[highlightBlock] ?? null) : null
 
   const anyHighlighted = !!highlightBlock
-  const hasVisibleBlocks = visibleBlocks && visibleBlocks.size > 0
+  const hasVisibleBlocks = (visibleBlocks && visibleBlocks.size > 0) || (visibleAsmIds && visibleAsmIds.size > 0)
 
   return (
     <svg
@@ -63,7 +63,7 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
         const color = ASM_COLORS[asmId] || ASM_COLORS[null]
         const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
         if (isHighlighted) return null // render highlighted dots separately on top
-        const isVisible = hasVisibleBlocks && visibleBlocks.has(ins.name)
+        const isVisible = (visibleBlocks?.has(ins.name)) || (visibleAsmIds?.has(asmId))
         if (isVisible) return null // render visible dots separately
         const shouldDim = anyHighlighted || hasVisibleBlocks
         return (
@@ -79,21 +79,26 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
         )
       })}
 
-      {/* Render visibility-toggled dots (medium emphasis — persistent, between normal and highlight) */}
+      {/* Render visibility-toggled dots (strong emphasis — persistent, assembly-level) */}
       {hasVisibleBlocks && screenPositions.map((ins, i) => {
-        if (!visibleBlocks.has(ins.name)) return null
         const asmId = nameToAsm[ins.name] ?? null
+        const isVisible = (visibleBlocks?.has(ins.name)) || (visibleAsmIds?.has(asmId))
+        if (!isVisible) return null
         const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
         if (isHighlighted) return null // highlighted render takes priority
         const color = ASM_COLORS[asmId] || '#00E5A0'
         return (
           <g key={`vis-${i}`} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
              onClick={() => onBlockClick(ins.name)}>
-            <circle cx={ins.sx} cy={ins.sy} r={10} fill={color} fillOpacity={0.15} />
-            <circle cx={ins.sx} cy={ins.sy} r={7}
-              fill={color} fillOpacity={0.85}
-              stroke="#fff" strokeWidth={1.5}
+            {/* Outer glow for strong visibility */}
+            <circle cx={ins.sx} cy={ins.sy} r={14} fill={color} fillOpacity={0.10}
+              filter="url(#highlight-glow)" />
+            {/* Solid inner dot with strong contrast */}
+            <circle cx={ins.sx} cy={ins.sy} r={8}
+              fill={color} fillOpacity={0.9}
+              stroke="#fff" strokeWidth={2}
             />
+            <circle cx={ins.sx} cy={ins.sy} r={16} fill="transparent" />
           </g>
         )
       })}
