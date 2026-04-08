@@ -248,7 +248,8 @@ describe('DWG convert flow — mock contract', () => {
   })
 
   it('Step 2: FormData upload to CloudConvert S3 (uploadUrl)', () => {
-    expect(workspaceSrc).toContain("formData.append('file', file)")
+    // File appended with ASCII-safe filename for non-ASCII char compatibility
+    expect(workspaceSrc).toContain("formData.append('file', file, safeFilename)")
     expect(workspaceSrc).toContain('const uploadRes = await fetchWithRetry(uploadUrl')
   })
 
