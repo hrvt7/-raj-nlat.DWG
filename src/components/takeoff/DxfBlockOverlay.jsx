@@ -1,5 +1,4 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { C } from './designTokens.js'
 import { ASM_COLORS } from '../../utils/blockRecognition.js'
 
 // ─── SVG Overlay for block positions ─────────────────────────────────────────
@@ -38,28 +37,66 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
   // Resolve highlighted asmId so we can highlight ALL blocks for same assembly
   const highlightAsmId = highlightBlock ? (nameToAsm[highlightBlock] ?? null) : null
 
+  const anyHighlighted = !!highlightBlock
+
   return (
     <svg
       ref={svgRef}
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}
       width="100%" height="100%"
     >
+      {/* Glow filter for highlighted dots */}
+      <defs>
+        <filter id="highlight-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {/* Render non-highlighted dots first (dimmed when something is highlighted) */}
       {screenPositions.map((ins, i) => {
         const asmId = nameToAsm[ins.name] ?? null
         const color = ASM_COLORS[asmId] || ASM_COLORS[null]
-        // Highlight if this is the exact block OR same assembly group
         const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
-        const r = isHighlighted ? 9 : 6
+        if (isHighlighted) return null // render highlighted dots separately on top
         return (
           <g key={i} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
              onClick={() => onBlockClick(ins.name)}>
-            <circle cx={ins.sx} cy={ins.sy} r={r + 3} fill="transparent" />
+            <circle cx={ins.sx} cy={ins.sy} r={9} fill="transparent" />
             <circle
-              cx={ins.sx} cy={ins.sy} r={r}
-              fill={color} fillOpacity={isHighlighted ? 0.9 : 0.65}
-              stroke={isHighlighted ? '#fff' : color}
-              strokeWidth={isHighlighted ? 2 : 1}
+              cx={ins.sx} cy={ins.sy} r={5}
+              fill={color} fillOpacity={anyHighlighted ? 0.15 : 0.65}
+              stroke={color} strokeWidth={1} strokeOpacity={anyHighlighted ? 0.2 : 1}
             />
+          </g>
+        )
+      })}
+
+      {/* Render highlighted dots on top — larger, glowing, pulsing */}
+      {screenPositions.map((ins, i) => {
+        const asmId = nameToAsm[ins.name] ?? null
+        const isHighlighted = highlightBlock === ins.name || (highlightAsmId && asmId === highlightAsmId)
+        if (!isHighlighted) return null
+        const hlColor = '#4CC9F0' // bright blue for maximum contrast
+        return (
+          <g key={`hl-${i}`} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+             onClick={() => onBlockClick(ins.name)}>
+            {/* Outer glow ring */}
+            <circle cx={ins.sx} cy={ins.sy} r={16} fill={hlColor} fillOpacity={0.12}
+              filter="url(#highlight-glow)">
+              <animate attributeName="r" values="14;18;14" dur="1.5s" repeatCount="indefinite" />
+              <animate attributeName="fillOpacity" values="0.12;0.06;0.12" dur="1.5s" repeatCount="indefinite" />
+            </circle>
+            {/* Solid inner dot */}
+            <circle cx={ins.sx} cy={ins.sy} r={8}
+              fill={hlColor} fillOpacity={0.95}
+              stroke="#fff" strokeWidth={2.5}
+            />
+            {/* Hit target for click */}
+            <circle cx={ins.sx} cy={ins.sy} r={18} fill="transparent" />
           </g>
         )
       })}

@@ -10,7 +10,7 @@ import { scoreUnknownBlock } from '../../utils/blockRecognition.js'
 /** Threshold for bulk-skip: unknown blocks with qty ≤ this are "low-impact" */
 const BULK_SKIP_QTY_THRESHOLD = 2
 
-export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress, onBlockHover }) {
+export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress, onBlockHover, selectedBlock, onBlockSelect }) {
   const [showLowPriority, setShowLowPriority] = useState(false)
 
   // Score and split into two tiers
@@ -106,7 +106,8 @@ export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, 
       {likelyItems.map(item => (
         <UnknownBlockRow key={item.blockName} item={item} asmOptions={asmOptions}
           assemblies={assemblies} evidenceMap={evidenceMap}
-          onAssign={onAssign} onDelete={onDelete} onBlockHover={onBlockHover} />
+          onAssign={onAssign} onDelete={onDelete} onBlockHover={onBlockHover}
+          isSelected={selectedBlock === item.blockName} onBlockSelect={onBlockSelect} />
       ))}
 
       {/* ── Low priority items (collapsible) ── */}
@@ -141,17 +142,23 @@ export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, 
 }
 
 // ─── Single unknown block row ────────────────────────────────────────────────
-function UnknownBlockRow({ item, asmOptions, assemblies, evidenceMap, onAssign, onDelete, onBlockHover, dimmed }) {
+function UnknownBlockRow({ item, asmOptions, assemblies, evidenceMap, onAssign, onDelete, onBlockHover, dimmed, isSelected, onBlockSelect }) {
   const evidence = evidenceMap?.get(item.blockName) || null
   const suggestions = suggestAssemblies(item.blockName, evidence, assemblies)
 
   return (
     <div data-testid="unknown-block-row" style={{
-      padding: '6px 0', borderTop: `1px solid ${C.border}`,
+      padding: '6px 8px', borderTop: `1px solid ${C.border}`,
       opacity: dimmed ? 0.55 : 1,
+      borderRadius: 6, cursor: 'pointer',
+      background: isSelected ? 'rgba(76,201,240,0.08)' : 'transparent',
+      border: isSelected ? '1px solid rgba(76,201,240,0.30)' : '1px solid transparent',
+      marginBottom: 2,
+      transition: 'background 0.15s, border-color 0.15s',
     }}
       onMouseEnter={() => onBlockHover?.(item.blockName)}
-      onMouseLeave={() => onBlockHover?.(null)}
+      onMouseLeave={() => { if (!isSelected) onBlockHover?.(null) }}
+      onClick={() => onBlockSelect?.(item.blockName)}
     >
       {/* Row 1: block info + controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
