@@ -23,6 +23,15 @@ export const BLOCK_ASM_RULES = [
   { patterns: ['REED','NYITÁS','NYITAS','MAGNESKONTAKT','MÁGNESKONTAKT','DOOR_CONTACT'], asmId: 'ASM-091', label: 'Nyitásérzékelő' },
   { patterns: ['SPEAKER','HANGSZORO','HANGSZÓRÓ','PA_POINT'], asmId: 'ASM-092', label: 'PA hangszóró' },
   { patterns: ['RJ45','ADAT_ALJZAT','CAT6','DATA_OUTLET','UTP_POINT'], asmId: 'ASM-026', label: 'Adataljzat' },
+  // ── Erősáram bővítés (Phase B) ──
+  { patterns: ['KERESZT','CROSS_SWITCH','WECHSEL'], asmId: 'ASM-094', label: 'Keresztkapcsoló' },
+  { patterns: ['CSILLAR','CSILLÁR','CHANDELIER'], asmId: 'ASM-095', label: 'Csillárkapcsoló' },
+  { patterns: ['NYOMOGOMB','NYOMÓGOMB','PUSHBUTTON','PUSH_BUTTON','IMPULZUS'], asmId: 'ASM-096', label: 'Nyomógomb' },
+  { patterns: ['REDONY','REDŐNY','ROLLO','SHUTTER','JALOUSIE'], asmId: 'ASM-097', label: 'Redőnykapcsoló' },
+  { patterns: ['KIJARAT','KIJÁRAT','EXIT_SIGN','EXIT_LIGHT'], asmId: 'ASM-099', label: 'Kijáratjelző' },
+  { patterns: ['JELENLET','JELENLÉT','PRESENCE','OCCUPANCY'], asmId: 'ASM-098', label: 'Jelenlétérzékelő' },
+  { patterns: ['KOTODOBOZ','KÖTŐDOBOZ','JUNCTION','KIALLAS','KIÁLLÁS','J_BOX'], asmId: 'ASM-100', label: 'Kötődoboz' },
+  { patterns: ['USB_SOCKET','USB_DUGALJ','USB_OUTLET'], asmId: 'ASM-101', label: 'USB dugalj' },
 ]
 
 export const ASM_COLORS = {
