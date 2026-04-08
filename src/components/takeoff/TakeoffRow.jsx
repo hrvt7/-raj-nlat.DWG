@@ -106,7 +106,7 @@ function CustomTakeoffRow({ row, onDelete, meta, onMetaChange }) {
 }
 
 // ─── Takeoff row ──────────────────────────────────────────────────────────────
-export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row, customMeta, onCustomMetaChange, onRowHover }) {
+export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row, customMeta, onCustomMetaChange, onRowHover, isVisible, onToggleVisibility }) {
   const [hovered, setHovered] = useState(false)
 
   // ── Custom row render (hooks called above, safe) ──
@@ -172,8 +172,21 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
         >&times;</button>
       )}
 
-      {/* ── Top row: color dot / name / total qty / total price ── */}
+      {/* ── Top row: color dot / visibility toggle / name / total qty / total price ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        {/* Visibility eye toggle */}
+        {onToggleVisibility && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleVisibility(asmId) }}
+            title={isVisible ? 'Találatok elrejtése' : 'Találatok mutatása a rajzon'}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+              fontSize: 13, lineHeight: 1, color: isVisible ? C.accent : C.muted,
+              opacity: isVisible ? 1 : 0.4, transition: 'opacity 0.15s, color 0.15s',
+              flexShrink: 0,
+            }}
+          >{isVisible ? '👁' : '👁‍🗨'}</button>
+        )}
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
         <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
           {asm.name}

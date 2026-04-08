@@ -160,6 +160,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   // ── UI state ──────────────────────────────────────────────────────────────
   const [highlightBlock, setHighlightBlock] = useState(null)
   const [selectedUnknownBlock, setSelectedUnknownBlock] = useState(null)
+  const [visibleBlocks, setVisibleBlocks] = useState(new Set()) // block names with visible hits on drawing
   const [rightTab, setRightTab] = useState('takeoff') // 'takeoff' | 'cable' | 'calc' | 'context'
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
@@ -830,6 +831,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
               asmOverrides={asmOverrides}
               recognizedItems={recognizedItems}
               highlightBlock={highlightBlock || selectedUnknownBlock}
+              visibleBlocks={visibleBlocks}
               onBlockClick={name => {
                 if (manualCableMode) {
                   // In manual cable mode: toggle block as reference panel
@@ -1059,6 +1061,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                     progress={unknownProgress}
                     onBlockHover={setHighlightBlock}
                     selectedBlock={selectedUnknownBlock}
+                    visibleBlocks={visibleBlocks}
+                    onToggleVisibility={(blockName) => {
+                      setVisibleBlocks(prev => {
+                        const next = new Set(prev)
+                        next.has(blockName) ? next.delete(blockName) : next.add(blockName)
+                        return next
+                      })
+                    }}
                     onBlockSelect={(blockName) => {
                       const isDeselect = selectedUnknownBlock === blockName
                       setSelectedUnknownBlock(isDeselect ? null : blockName)
@@ -1102,6 +1112,19 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         row={row}
                         customMeta={row._sourceType === 'custom' ? (customItemMeta[row._customItemId] || null) : undefined}
                         onCustomMetaChange={(id, meta) => setCustomItemMeta(prev => ({ ...prev, [id]: meta }))}
+                        isVisible={(() => {
+                          if (row._sourceType === 'custom') return false
+                          return effectiveItems.some(i => (asmOverrides[i.blockName] ?? i.asmId) === row.asmId && visibleBlocks.has(i.blockName))
+                        })()}
+                        onToggleVisibility={(asmId) => {
+                          const contributors = effectiveItems.filter(i => (asmOverrides[i.blockName] ?? i.asmId) === asmId)
+                          setVisibleBlocks(prev => {
+                            const next = new Set(prev)
+                            const anyVisible = contributors.some(c => next.has(c.blockName))
+                            contributors.forEach(c => anyVisible ? next.delete(c.blockName) : next.add(c.blockName))
+                            return next
+                          })
+                        }}
                         onRowHover={(asmIdOrNull) => {
                           if (!asmIdOrNull) { setHighlightBlock(null); return }
                           // Find a contributing block name for this assembly to trigger overlay highlight

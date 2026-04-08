@@ -67,6 +67,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   }))
 
   // ── UI State ──
+  const [paperMode, setPaperMode] = useState(false) // paper/light background for review
   const [activeTool, setActiveTool] = useState(null)
   // Assembly-first: default to first assembly ID if available, fallback to 'socket'
   const [activeCategory, setActiveCategory] = useState(() => {
@@ -703,15 +704,34 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         saveState={saveState}
       />
 
+      {/* ── Paper mode toggle (floating) ── */}
+      <button
+        onClick={() => setPaperMode(p => !p)}
+        title={paperMode ? 'Sötét nézet' : 'Papír nézet (review)'}
+        style={{
+          position: 'absolute', top: 44, right: 10, zIndex: 20,
+          padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+          background: paperMode ? '#F5F5F0' : 'rgba(255,255,255,0.08)',
+          border: `1px solid ${paperMode ? '#D4D4D0' : 'rgba(255,255,255,0.15)'}`,
+          color: paperMode ? '#333' : '#9CA3AF',
+          fontFamily: 'DM Mono', fontSize: 10, fontWeight: 600,
+          transition: 'all 0.2s',
+        }}
+      >
+        {paperMode ? '☀ Papír' : '☾ CAD'}
+      </button>
+
       {/* ── Canvas area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <DxfViewerCanvas
-          ref={canvasRef}
-          file={file}
-          onLoad={handleLoad}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-        />
+        <div style={{ width: '100%', height: '100%', filter: paperMode ? 'invert(0.88) hue-rotate(180deg)' : 'none', transition: 'filter 0.3s' }}>
+          <DxfViewerCanvas
+            ref={canvasRef}
+            file={file}
+            onLoad={handleLoad}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+          />
+        </div>
 
         {/* Canvas2D overlay — positioned exactly on top of WebGL canvas */}
         <canvas
