@@ -142,26 +142,46 @@ const ELECTRICAL_KEYWORDS = [
 ]
 
 const NON_ELECTRICAL_KEYWORDS = [
-  'WALL','FAL','DOOR','AJTO','AJTÓ','WINDOW','ABLAK','BUTOR','BÚTOR','FURNITURE',
-  'TREE','FA','PLANT','NÖVÉNY','NOVENY','GARDEN','KERT',
+  // Building structure
+  'WALL','FAL','VALASZFAL','VÁLASZFAL','DOOR','AJTO','AJTÓ','WINDOW','ABLAK',
+  'BUTOR','BÚTOR','FURNITURE','POLC','SZEKRÉNY_BÚ',
+  // Landscape / outdoor
+  'TREE','FA','PLANT','NÖVÉNY','NOVENY','GARDEN','KERT','GYEP',
+  // Vehicles / people
   'CAR','AUTO','AUTÓ','VEHICLE','JÁRMŰ','JARMU',
   'PERSON','EMBER','FIGURE','ALAK',
-  'TOILET','WC','SINK','MOSDÓ','MOSDO','BATH','KÁDAD','KÁD',
-  'STAIR','LÉPCSŐ','LEPCSO','RAMP',
+  // Sanitary / plumbing
+  'TOILET','WC','SINK','MOSDÓ','MOSDO','BATH','KÁD','KADAD',
+  'PADLO','PADLÓ','OSSZEFOLYO','ÖSSZEFOLY','LEFOLYO','LEFOLYÓ','CSAP','SZIFON',
+  'VIZSZINTES','VÍZSZINTES','VIZVEZETÉK','VIZVEZETEK','SZENNYVIZ','SZENNYVÍZ',
+  'ZUHANY','BIDE','BIDÉ','PISZOÁR','PISZOAR',
+  // Stairs / structure
+  'STAIR','LÉPCSŐ','LEPCSO','RAMP','KORLAT','KORLÁT',
+  // CAD annotation / documentation
   'ARROW','NYÍL','NYIL','NORTH','ÉSZAK','ESZAK',
   'TITLE','CÍM','CIM','BORDER','KERET','FRAME','LOGO',
   'SECTION','METSZET','DETAIL','RÉSZLET','RESZLET',
   'GRID','RÁCS','RACS','AXIS','TENGELY',
   'NOTE','MEGJEGY','ANNOTATION','LABEL','FELIRAT',
+  // HVAC / mechanical (not electrical)
+  'RADIATOR','RADIÁTOR','KAZÁN','KAZAN','BOJLER_GEP','SZELLOZO','SZELLŐZŐ',
+  'KLIMA_KULT','KLÍMA_KÜLT','FAN_COIL','LEGKONDIC','LÉGKONDIC',
+  // Roofing / insulation
+  'TETO','TETŐ','TETOFEDO','TETŐFEDŐ','SZIGETELES','SZIGETELÉS',
 ]
 
 /**
  * Score an unknown block's relevance to electrical takeoff.
- * Returns: { score: 0–100, tier: 'likely' | 'low' }
+ * Returns: { score: 0–100, tier: 'likely' | 'uncertain' | 'non_electrical' }
+ *
+ * 3-tier model:
+ *   - likely (score ≥ 35): probably electrical, show in review
+ *   - uncertain (score 10–34): ambiguous, show collapsed
+ *   - non_electrical (score < 10): definitely not electrical, filter out entirely
  *
  * @param {string} blockName
  * @param {number} qty — block count
- * @returns {{ score: number, tier: 'likely' | 'low' }}
+ * @returns {{ score: number, tier: 'likely' | 'uncertain' | 'non_electrical' }}
  */
 export function scoreUnknownBlock(blockName, qty) {
   const up = (blockName || '').toUpperCase().replace(/[_\-\.]/g, ' ')
@@ -173,8 +193,9 @@ export function scoreUnknownBlock(blockName, qty) {
   }
 
   // Penalty for non-electrical keywords
+  let hasNonElectricalHit = false
   for (const kw of NON_ELECTRICAL_KEYWORDS) {
-    if (up.includes(kw)) { score -= 35; break }
+    if (up.includes(kw)) { score -= 35; hasNonElectricalHit = true; break }
   }
 
   // Quantity boost: items appearing 3+ times are more likely real components
@@ -188,7 +209,14 @@ export function scoreUnknownBlock(blockName, qty) {
   if (up.replace(/ /g, '').length > 40) score -= 10
 
   score = Math.max(0, Math.min(100, score))
-  return { score, tier: score >= 35 ? 'likely' : 'low' }
+
+  // 3-tier classification
+  let tier
+  if (score >= 35) tier = 'likely'
+  else if (score >= 10) tier = 'uncertain'
+  else tier = 'non_electrical'
+
+  return { score, tier }
 }
 
 // ─── DXF cable-layer detection ────────────────────────────────────────────────

@@ -13,7 +13,7 @@ const BULK_SKIP_QTY_THRESHOLD = 2
 export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, onDelete, onBulkSkipLowImpact, evidenceMap, progress, onBlockHover, selectedBlock, onBlockSelect, visibleBlocks, onToggleVisibility }) {
   const [showLowPriority, setShowLowPriority] = useState(false)
 
-  // Score and split into two tiers
+  // Score and split into tiers (non_electrical already filtered out at pipeline level)
   const { likelyItems, lowItems } = useMemo(() => {
     const scored = (unknownItems || []).map(item => ({
       ...item,
@@ -21,7 +21,7 @@ export default function UnknownBlockPanel({ unknownItems, assemblies, onAssign, 
     }))
     return {
       likelyItems: scored.filter(i => i.tier === 'likely').sort((a, b) => b.score - a.score || b.qty - a.qty),
-      lowItems: scored.filter(i => i.tier === 'low').sort((a, b) => b.qty - a.qty),
+      lowItems: scored.filter(i => i.tier === 'uncertain' || i.tier === 'low').sort((a, b) => b.qty - a.qty),
     }
   }, [unknownItems])
 

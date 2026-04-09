@@ -48,7 +48,7 @@ import { getAuthHeaders } from '../supabase.js'
 import { C } from './takeoff/designTokens.js'
 
 // ─── Block recognition & cable detection (extracted to utils/blockRecognition.js) ───
-import { recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, isJunkBlock } from '../utils/blockRecognition.js'
+import { recognizeBlock, CABLE_GENERIC_KW, CABLE_TYPE_KW, isJunkBlock, scoreUnknownBlock } from '../utils/blockRecognition.js'
 import { applyMarkupToSubtotal } from '../utils/fullCalc.js'
 import usePricingPipeline from '../hooks/usePricingPipeline.js'
 import useCableEstimation from '../hooks/useCableEstimation.js'
@@ -348,7 +348,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
           }
         }
         return { blockName, qty, ...rec }
-      }).sort((a, b) => b.confidence - a.confidence || b.qty - a.qty)
+      })
+      // Filter out non-electrical blocks that have no assembly match
+      // (e.g. walls, doors, sanitary, stairs — confirmed non-electrical)
+      .filter(item => {
+        if (item.asmId) return true // has assembly match → keep regardless
+        const { tier } = scoreUnknownBlock(item.blockName, item.qty)
+        return tier !== 'non_electrical' // keep 'likely' and 'uncertain', drop 'non_electrical'
+      })
+      .sort((a, b) => b.confidence - a.confidence || b.qty - a.qty)
 
       setRecognizedItems(items)
       if (items.length) setRightTab('takeoff')
