@@ -11,7 +11,7 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
   const [screenPositions, setScreenPositions] = useState([])
 
   const reproject = useCallback(() => {
-    if (!canvasRef?.current || !inserts?.length || !svgRef.current) return
+    if (!canvasRef?.current || !inserts?.length) return
     const projected = inserts.map(ins => {
       const screen = canvasRef.current.sceneToScreen(ins.x, ins.y)
       return screen ? { ...ins, sx: screen.x, sy: screen.y } : null
@@ -19,15 +19,42 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
     setScreenPositions(projected)
   }, [inserts, canvasRef])
 
+  // Subscribe to viewer camera changes — retry until viewer is loaded
   useEffect(() => {
-    const viewer = canvasRef?.current?.getViewer?.()
-    if (!viewer) return
-    const unsub = canvasRef.current.subscribe?.('viewChanged', reproject)
-    reproject()
-    return () => { try { unsub?.() } catch {} }
+    let unsub = null
+    let retryTimer = null
+    let attempts = 0
+
+    function trySubscribe() {
+      attempts++
+      const viewer = canvasRef?.current?.getViewer?.()
+      if (!viewer) {
+        if (attempts < 20) retryTimer = setTimeout(trySubscribe, 300)
+        return
+      }
+      unsub = canvasRef.current.subscribe?.('viewChanged', reproject)
+      reproject()
+    }
+    trySubscribe()
+
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer)
+      try { unsub?.() } catch {}
+    }
   }, [reproject, canvasRef])
 
   useEffect(() => { reproject() }, [inserts, reproject])
+  // Re-project when visibility or highlight changes
+  useEffect(() => { reproject() }, [visibleAsmIds, visibleBlocks, highlightBlock])
+
+  // Keep trying to project if we have inserts but no screen positions yet (viewer still loading)
+  useEffect(() => {
+    if (screenPositions.length > 0 || !inserts?.length) return
+    const interval = setInterval(() => {
+      reproject()
+    }, 500)
+    return () => clearInterval(interval)
+  }, [screenPositions.length, inserts?.length, reproject])
 
   if (!screenPositions.length) return null
 
