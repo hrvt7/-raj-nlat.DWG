@@ -14,6 +14,13 @@ const CATEGORY_COLORS = {
   'meres':        '#FFD166', // yellow
 }
 
+// ─── Hide native number spinner globally for wall-split inputs ───────────────
+const WALL_INPUT_STYLE = `
+  .wall-count-input::-webkit-inner-spin-button,
+  .wall-count-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .wall-count-input { -moz-appearance: textfield; }
+`
+
 // ─── Wall type options ────────────────────────────────────────────────────────
 export const WALL_OPTS = [
   { key: 'drywall',  label: 'GK',    color: '#00E5A0' },
@@ -170,6 +177,7 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
         border: `1px solid ${isHighlighted ? C.accent + '60' : C.border}`,
       }}
     >
+      <style>{WALL_INPUT_STYLE}</style>
       {/* ── Delete button (hover-reveal) ── */}
       {hovered && onDelete && (
         <button
@@ -263,12 +271,12 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
                   const base = wallSplits || { brick: qty }
                   onSplitChange(asmId, { ...base, [w.key]: val })
                 }}
+                className="wall-count-input"
                 style={{
-                  width: 32, textAlign: 'center', fontFamily: 'DM Mono', fontSize: 12,
+                  width: 40, textAlign: 'center', fontFamily: 'DM Mono', fontSize: 12,
                   color: active ? w.color : C.muted,
                   background: 'transparent', border: 'none', outline: 'none',
-                  padding: 0, margin: 0, appearance: 'textfield',
-                  MozAppearance: 'textfield', WebkitAppearance: 'none',
+                  padding: '0 2px', margin: 0,
                 }}
               />
               <button
