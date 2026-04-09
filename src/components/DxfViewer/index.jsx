@@ -482,18 +482,30 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
 
     if (tool === 'count') {
       // Assembly-first: resolve assembly for color + asmId, fallback to category
-      const asm = (assembliesProp || []).find(a => a.id === activeCategory)
+      const isCustom = activeCategory === 'custom'
+      const asm = isCustom ? null : (assembliesProp || []).find(a => a.id === activeCategory)
       const _ASM_COLORS = { 'szerelvenyek': '#4CC9F0', 'vilagitas': '#00E5A0', 'elosztok': '#FF6B6B', 'gyengaram': '#A78BFA', 'tuzjelzo': '#FF8C42' }
-      const SPECIAL_COLORS = { 'panel': '#FF6B6B', 'junction': '#4CC9F0', 'other': '#71717A' }
+      const SPECIAL_COLORS = { 'panel': '#FF6B6B', 'junction': '#4CC9F0', 'other': '#71717A', 'custom': '#A78BFA' }
       const color = asm
         ? (_ASM_COLORS[asm.category] || '#9CA3AF')
         : (SPECIAL_COLORS[activeCategory] || (COUNT_CATEGORIES.find(c => c.key === activeCategory)?.color) || '#9CA3AF')
-      markersRef.current = [...markersRef.current, createMarker({
-        x: sx, y: sy, category: activeCategory, color,
-        asmId: asm ? asm.id : null, source: 'manual',
-      })]
+      if (isCustom) {
+        // Custom marker: no assembly, explicit sourceType (PDF parity)
+        const customItemId = '_CUSTOM_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6)
+        markersRef.current = [...markersRef.current, createMarker({
+          x: sx, y: sy, category: 'custom', color, asmId: null, source: 'manual',
+          sourceType: 'custom', customItemId,
+        })]
+      } else {
+        markersRef.current = [...markersRef.current, createMarker({
+          x: sx, y: sy, category: activeCategory, color,
+          asmId: asm ? asm.id : null, source: 'manual',
+        })]
+      }
       setRenderTick(t => t + 1)
       debouncedSave()
+      // Notify parent immediately (PDF parity — right panel updates in real-time)
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
     }
 
     if (tool === 'measure') {
@@ -590,19 +602,22 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
     }
   }, [])
 
+  // Undo: matches PDF behavior — remove last measurement first, then last marker
+  // Independent of which tool is active (PDF parity)
   const handleUndo = useCallback(() => {
-    if (activeTool === 'count' && markersRef.current.length > 0) {
-      markersRef.current = markersRef.current.slice(0, -1)
-      setRenderTick(t => t + 1)
-      debouncedSave()
-    }
-    if (activeTool === 'measure' && measuresRef.current.length > 0) {
+    if (measuresRef.current.length > 0) {
       measuresRef.current = measuresRef.current.slice(0, -1)
       notifyMeasurements()
       setRenderTick(t => t + 1)
       debouncedSave()
+    } else if (markersRef.current.length > 0) {
+      markersRef.current = markersRef.current.slice(0, -1)
+      setRenderTick(t => t + 1)
+      debouncedSave()
+      // Notify parent of marker change
+      if (onMarkersChangeRef.current) onMarkersChangeRef.current([...markersRef.current])
     }
-  }, [activeTool, notifyMeasurements, debouncedSave])
+  }, [notifyMeasurements, debouncedSave])
 
   const handleClearAll = useCallback(() => {
     if (activeTool === 'count') markersRef.current = []

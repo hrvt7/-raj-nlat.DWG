@@ -76,10 +76,10 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
           return (
             <g key={i} style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                onClick={() => onBlockClick(ins.name)}>
-              <circle cx={ins.sx} cy={ins.sy} r={9} fill="transparent" />
-              <circle cx={ins.sx} cy={ins.sy} r={5}
-                fill={color} fillOpacity={0.65}
-                stroke={color} strokeWidth={1}
+              <circle cx={ins.sx} cy={ins.sy} r={12} fill="transparent" />
+              <circle cx={ins.sx} cy={ins.sy} r={7}
+                fill={color} fillOpacity={0.8}
+                stroke="#fff" strokeWidth={1} strokeOpacity={0.5}
               />
             </g>
           )
