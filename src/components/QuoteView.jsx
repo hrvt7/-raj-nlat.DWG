@@ -204,7 +204,7 @@ export default function QuoteView({ quote, settings, session, onBack, onStatusCh
           types: [{ description: 'PDF dokumentum', accept: { 'application/pdf': ['.pdf'] } }],
         })
       } catch (e) {
-        if (e.name === 'AbortError') { setPdfGenerating(false); return } // user cancelled
+        if (e.name === 'AbortError') { setPdfGenerating(false); toast.show('PDF mentés megszakítva.', 'info'); return } // user cancelled
         fileHandle = null // other error → fall through to anchor download
       }
     }
