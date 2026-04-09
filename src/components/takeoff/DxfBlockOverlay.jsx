@@ -12,9 +12,31 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
 
   const reproject = useCallback(() => {
     if (!canvasRef?.current || !inserts?.length) return
+
+    // ── Coordinate space correction ──────────────────────────────────
+    // sceneToScreen() returns pixel coords relative to the Three.js <canvas> element.
+    // But this SVG overlay is positioned absolute:inset:0 inside the LEFT PANEL div,
+    // which also contains the DxfViewerPanel (toolbar + canvas area).
+    // The toolbar pushes the Three.js canvas DOWN, so we must measure the offset
+    // between the renderer <canvas> and our SVG container and correct for it.
+    let offsetX = 0, offsetY = 0
+    const rendererEl = canvasRef.current.getRendererElement?.()
+    const svgEl = svgRef.current
+    if (rendererEl && svgEl) {
+      const canvasRect = rendererEl.getBoundingClientRect()
+      const svgRect = svgEl.getBoundingClientRect()
+      offsetX = canvasRect.left - svgRect.left
+      offsetY = canvasRect.top - svgRect.top
+    }
+
     const projected = inserts.map(ins => {
       const screen = canvasRef.current.sceneToScreen(ins.x, ins.y)
-      return screen ? { ...ins, sx: screen.x, sy: screen.y } : null
+      if (!screen) return null
+      const sx = screen.x + offsetX
+      const sy = screen.y + offsetY
+      // Guard against NaN from degenerate camera projection (e.g. during load)
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) return null
+      return { ...ins, sx, sy }
     }).filter(Boolean)
     setScreenPositions(projected)
   }, [inserts, canvasRef])
@@ -46,6 +68,19 @@ export default function DxfBlockOverlay({ inserts, asmOverrides, recognizedItems
   useEffect(() => { reproject() }, [inserts, reproject])
   // Re-project when visibility or highlight changes
   useEffect(() => { reproject() }, [visibleAsmIds, visibleBlocks, highlightBlock])
+
+  // ── Offset correction: re-reproject once SVG mounts ──
+  // First reproject runs before SVG exists (svgRef=null → offset 0,0).
+  // Once SVG mounts and screenPositions are set, reproject again with correct offset.
+  const didCorrectOffset = useRef(false)
+  useEffect(() => { didCorrectOffset.current = false }, [inserts]) // reset on new file
+  useEffect(() => {
+    if (svgRef.current && screenPositions.length > 0 && !didCorrectOffset.current) {
+      didCorrectOffset.current = true
+      // RAF to ensure layout is complete before measuring
+      requestAnimationFrame(() => reproject())
+    }
+  }, [screenPositions.length, reproject])
 
   // Keep trying to project if we have inserts but no screen positions yet (viewer still loading)
   useEffect(() => {
