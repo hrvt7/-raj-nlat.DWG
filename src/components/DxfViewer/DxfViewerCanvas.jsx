@@ -187,9 +187,13 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
             cam.bottom -= e.deltaY * scale
           } else {
             // ── Zoom (mouse wheel or trackpad pinch) → cursor-centered ──
+            // NOTE: frustum scaling is INVERSE of PDF zoom —
+            // smaller frustum = zoomed IN, larger = zoomed OUT.
+            // deltaY > 0 = scroll down = zoom OUT = frustum LARGER (>1)
+            // deltaY < 0 = scroll up = zoom IN = frustum SMALLER (<1)
             const sensitivity = isPinchZoom
-              ? (e.deltaY > 0 ? 0.97 : 1.03)   // fine steps for trackpad pinch
-              : (e.deltaY > 0 ? 0.92 : 1.087)   // normal steps for mouse wheel
+              ? (e.deltaY > 0 ? 1.03 : 0.97)   // fine steps for trackpad pinch
+              : (e.deltaY > 0 ? 1.087 : 0.92)   // normal steps for mouse wheel
             const newWidth = viewWidth * sensitivity
             const newHeight = viewHeight * sensitivity
             // Clamp: prevent degenerate frustum or extreme zoom
