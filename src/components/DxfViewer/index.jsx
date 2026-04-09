@@ -112,6 +112,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   const mouseSceneRef = useRef(null)  // {x,y} current mouse in scene coords
   const mouseScreenRef = useRef(null) // {x,y} current mouse in screen coords
   const activeToolRef = useRef(null)
+  const overlayDrawRef = useRef(null) // ref to the RAF draw function for immediate redraw
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
   const hydratedRef = useRef(false) // true once async annotation restore completes
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
@@ -316,6 +317,7 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
 
     function draw() {
       if (!running) return
+      overlayDrawRef.current = draw // expose for immediate redraw after interaction
       const canvas = overlayRef.current
       if (!canvas) { requestAnimationFrame(draw); return }
       const viewer = canvasRef.current?.getViewer()
@@ -737,13 +739,48 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
           />
         </div>
 
-        {/* Canvas2D overlay — positioned exactly on top of WebGL canvas */}
+        {/* Canvas2D overlay — tool-active: captures pointer events for reliable interaction */}
         <canvas
           ref={overlayRef}
+          onPointerDown={(e) => {
+            // ── Overlay-first interaction routing ──
+            // When a tool is active, the overlay captures pointer events directly
+            // instead of relying on dxf-viewer library's pointerdown (which goes
+            // through OrbitControls and can be unreliable during/after pan/zoom).
+            const tool = activeToolRef.current
+            if (!tool) return // no tool active → let Three.js handle it
+            const rect = e.currentTarget.getBoundingClientRect()
+            const sx = e.clientX - rect.left
+            const sy = e.clientY - rect.top
+            const scene = canvasRef.current?.screenToScene?.(sx, sy)
+            if (!scene) return
+            // Synthesize the same event shape as dxf-viewer's pointerdown
+            handlePointerDown({ position: { x: scene.x, y: scene.y } })
+            // Immediate overlay redraw — don't wait for React re-render / RAF
+            if (overlayRef.current) {
+              const draw = overlayDrawRef.current
+              if (draw) draw()
+            }
+          }}
+          onPointerMove={(e) => {
+            // Track mouse for crosshair + live measurement line
+            const tool = activeToolRef.current
+            if (!tool) return
+            const rect = e.currentTarget.getBoundingClientRect()
+            const sx = e.clientX - rect.left
+            const sy = e.clientY - rect.top
+            const scene = canvasRef.current?.screenToScene?.(sx, sy)
+            if (scene) {
+              mouseSceneRef.current = { x: scene.x, y: scene.y }
+              mouseScreenRef.current = { x: sx, y: sy }
+            }
+          }}
           style={{
             position: 'absolute', inset: 0,
             width: '100%', height: '100%',
-            pointerEvents: 'none', zIndex: 4,
+            pointerEvents: activeTool ? 'auto' : 'none',
+            cursor: activeTool ? 'crosshair' : 'default',
+            zIndex: 4,
           }}
         />
 
