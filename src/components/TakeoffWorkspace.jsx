@@ -168,6 +168,46 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saveSuccess, setSaveSuccess] = useState(false) // per-plan save success strip
+
+  // ── Unsaved changes guard ─────────────────────────────────────────────────
+  // Tracks whether the user has made meaningful changes that would be lost on cancel/refresh.
+  // Covers: markers, measurements, wall splits, asm overrides, custom items, pricing edits.
+  // Reset on successful save. The viewer's annotation auto-save (2s debounce) handles markers
+  // in IDB, but workspace-level state (overrides, wallSplits, customItemMeta) only persists
+  // through handleSave — so we guard against premature exit.
+  const workspaceDirtyRef = useRef(false)
+  const markWorkspaceDirty = useCallback(() => {
+    if (!workspaceDirtyRef.current) {
+      workspaceDirtyRef.current = true
+      onDirtyChange?.(true)
+    }
+  }, [onDirtyChange])
+
+  // ── beforeunload: warn on tab close / hard refresh ──
+  useEffect(() => {
+    const handler = (e) => {
+      if (workspaceDirtyRef.current) {
+        e.preventDefault()
+        e.returnValue = '' // Chrome requires returnValue to be set
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
+
+  // ── Guarded cancel: confirm before discarding unsaved work ──
+  const guardedCancel = useCallback(() => {
+    if (workspaceDirtyRef.current) {
+      const confirmed = window.confirm(
+        'Nem mentett módosítások vannak.\nBiztos bezárod a munkaterületet?'
+      )
+      if (!confirmed) return
+    }
+    workspaceDirtyRef.current = false
+    onDirtyChange?.(false)
+    onCancel()
+  }, [onCancel, onDirtyChange])
+
   // ── Split layout + mobile shell (extracted to useTakeoffSplitLayout) ─────
   const { isMobile, showDxfOnMobile, setShowDxfOnMobile, panelRatio, containerRef, handleDividerMouseDown } = useTakeoffSplitLayout()
 
@@ -178,6 +218,15 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     setDeletedItems, setReferencePanels, setCableReviewed,
     setRightTab, setCustomItemMeta,
   })
+
+  // ── Dirty tracking: mark workspace dirty on meaningful user-driven state changes ──
+  // Skip the first render + hydration cycle (useTakeoffPlanAnnotations restores from IDB).
+  const hydratedCountRef = useRef(0)
+  useEffect(() => {
+    // Allow 2 render cycles for hydration to settle (initial + annotation restore)
+    if (hydratedCountRef.current < 2) { hydratedCountRef.current++; return }
+    markWorkspaceDirty()
+  }, [asmOverrides, wallSplits, variantOverrides, deletedItems, customItemMeta, pdfMarkers, pdfMeasurements, measurementPrices]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── DWG conversion state ───────────────────────────────────────────────────
   const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
@@ -523,6 +572,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         // Learn from save — only train memory with reviewed/trusted items
         trainMemoryFromSave(classifiedItems, asmOverrides, memProjectId, evidenceMap)
 
+        // ── Reset dirty state on successful save ──
+        workspaceDirtyRef.current = false
+        onDirtyChange?.(false)
+
         // Show save-success strip instead of immediately navigating back
         if (onQuoteFromPlan) {
           setSaveSuccess(true)
@@ -616,6 +669,10 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
 
       // Learn from save — only train memory with reviewed/trusted items
       trainMemoryFromSave(classifiedItems, asmOverrides, memProjectId, evidenceMap)
+
+      // ── Reset dirty state on successful full-quote save ──
+      workspaceDirtyRef.current = false
+      onDirtyChange?.(false)
 
       onSaved?.(quote)
     } catch (err) {
@@ -777,7 +834,7 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
         )}
 
         <button
-          onClick={onCancel}
+          onClick={guardedCancel}
           style={{ marginLeft: 12, padding: '8px 14px', borderRadius: 8, background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', fontFamily: 'Syne', fontSize: 12 }}
         >
           ✕
