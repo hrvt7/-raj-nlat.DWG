@@ -1244,6 +1244,17 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                         isHighlighted={highlightBlock && effectiveItems.some(i => i.blockName === highlightBlock && (asmOverrides[i.blockName] ?? i.asmId) === row.asmId)}
                         onSplitChange={(id, newSplits) => setWallSplits(p => ({ ...p, [id]: newSplits }))}
                         onVariantChange={(id, vid) => setVariantOverrides(p => ({ ...p, [id]: vid }))}
+                        onAsmChange={(oldAsmId, newAsmId) => {
+                          // Row-level assembly override: update all markers with oldAsmId to newAsmId
+                          const newAsm = assemblies.find(a => a.id === newAsmId)
+                          const ASM_CAT_COLORS = { szerelvenyek: '#4CC9F0', vilagitas: '#00E5A0', elosztok: '#FF6B6B', gyengaram: '#A78BFA', tuzjelzo: '#FF8C42' }
+                          const newColor = newAsm ? (ASM_CAT_COLORS[newAsm.category] || '#9CA3AF') : '#9CA3AF'
+                          setPdfMarkers(prev => prev.map(m =>
+                            (m.asmId === oldAsmId || m.category === oldAsmId)
+                              ? { ...m, asmId: newAsmId, category: newAsmId, color: newColor }
+                              : m
+                          ))
+                        }}
                         unitCostByWall={unitCostByAsmByWall[row.asmId] || {}}
                         onDelete={(idOrAsmId) => {
                           // Custom row deletion: remove markers by customItemId
