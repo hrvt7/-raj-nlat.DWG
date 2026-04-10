@@ -61,6 +61,7 @@ import useTakeoffBootstrap from '../hooks/useTakeoffBootstrap.js'
 import { takeoffToManualRows } from '../utils/takeoffToManualRows.js'
 import { materializeManualRowsToItems, computeManualTotals } from '../utils/manualPricingRow.js'
 import { buildSnapshotItems, buildCustomSnapshotItems, trainMemoryFromSave } from '../utils/saveHelpers.js'
+import { dxfInsertsToMarkers } from '../utils/dxfInsertsToMarkers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
 import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
@@ -227,6 +228,32 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
     if (hydratedCountRef.current < 2) { hydratedCountRef.current++; return }
     markWorkspaceDirty()
   }, [asmOverrides, wallSplits, variantOverrides, deletedItems, customItemMeta, pdfMarkers, pdfMeasurements, measurementPrices]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Viewer origin (from dxf-viewer library, available after viewer load) ──
+  // The dxf-viewer shifts all geometry by -origin to minimize float precision issues.
+  // Detection markers must use the same origin-shifted coords as the scene.
+  const [viewerOrigin, setViewerOrigin] = useState(null) // {x, y} or null
+
+  // Poll for viewer origin once the DXF viewer ref is available.
+  // The origin is only set after the dxf-viewer library finishes loading,
+  // which happens asynchronously after our component mounts the viewer.
+  // NOTE: canvasRef is declared further below — this effect runs after mount.
+  useEffect(() => {
+    // Guard: only poll for DXF files (not PDF). Cannot use isDxf (declared later — TDZ).
+    const fileIsDxf = file && !file.name?.toLowerCase().endsWith('.pdf')
+    if (!fileIsDxf || viewerOrigin) return
+    let attempts = 0
+    const poll = setInterval(() => {
+      attempts++
+      const origin = canvasRef.current?.getOrigin?.()
+      if (origin && (origin.x !== 0 || origin.y !== 0 || attempts > 5)) {
+        setViewerOrigin(origin)
+        clearInterval(poll)
+      }
+      if (attempts > 30) clearInterval(poll) // stop after ~9s
+    }, 300)
+    return () => clearInterval(poll)
+  }, [file, viewerOrigin]) // re-poll when file changes
 
   // ── DWG conversion state ───────────────────────────────────────────────────
   const [dwgStatus, setDwgStatus] = useState(null)   // null | 'converting' | 'done' | 'failed'
@@ -417,6 +444,34 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
       setParsePending(false)
     }
   }, [fileToBase64, memProjectId])
+
+  // ── DXF Found Hits → Shared Marker Model ────────────────────────────────
+  // Generates detection markers AFTER both recognition and viewer origin are available.
+  // This ensures marker coords are origin-corrected to match the Three.js scene space.
+  // Placed here (after assemblies, recognizedItems, effectiveParsedDxf, viewerOrigin declarations)
+  // to avoid TDZ issues.
+  const dxfDetectionGeneratedRef = useRef(false)
+  useEffect(() => {
+    if (!viewerOrigin || !recognizedItems.length || !effectiveParsedDxf?.inserts?.length) return
+    if (dxfDetectionGeneratedRef.current) return // only generate once per file
+    dxfDetectionGeneratedRef.current = true
+
+    const detectionMarkers = dxfInsertsToMarkers(
+      effectiveParsedDxf.inserts, recognizedItems, {}, assemblies || [], viewerOrigin
+    )
+    if (detectionMarkers.length > 0) {
+      setPdfMarkers(detectionMarkers)
+      // Persist to plan annotations so the DXF viewer can hydrate them on reopen
+      if (planId) {
+        getPlanAnnotations(planId).then(existing => {
+          savePlanAnnotations(planId, { ...existing, markers: detectionMarkers })
+        })
+      }
+    }
+  }, [viewerOrigin, recognizedItems, effectiveParsedDxf, assemblies, planId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset detection flag and origin when file changes (new parse)
+  useEffect(() => { dxfDetectionGeneratedRef.current = false; setViewerOrigin(null) }, [file])
 
   // ── Bootstrap / prefill lifecycle (extracted to useTakeoffBootstrap) ──────
   useTakeoffBootstrap({
