@@ -20,7 +20,10 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
     fitView: () => {
       const v = viewerRef.current
       if (v && v.bounds) {
-        v.FitView(v.bounds.minX, v.bounds.maxX, v.bounds.minY, v.bounds.maxY, 0.1)
+        // Use origin-corrected bounds — the library stores geometry at (coords - origin)
+        const ox = v.origin?.x || 0
+        const oy = v.origin?.y || 0
+        v.FitView(v.bounds.minX - ox, v.bounds.maxX - ox, v.bounds.minY - oy, v.bounds.maxY - oy, 0.1)
       }
     },
     subscribe: (event, handler) => viewerRef.current?.Subscribe(event, handler),
@@ -121,9 +124,9 @@ const DxfViewerCanvas = forwardRef(function DxfViewerCanvas({ file, onLoad, onEr
 
         if (cancelled) return
 
-        if (viewer.bounds) {
-          viewer.FitView(viewer.bounds.minX, viewer.bounds.maxX, viewer.bounds.minY, viewer.bounds.maxY, 0.1)
-        }
+        // NOTE: Do NOT call FitView here. The dxf-viewer library already calls
+        // FitView internally after Load() with origin-corrected bounds (bounds - origin).
+        // Our old code was overriding with raw bounds, causing camera/scene misalignment.
 
         setLoading(false)
         setProgress(100)

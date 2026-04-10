@@ -57,9 +57,17 @@ export default function useTakeoffRowState({
   }, [effectiveItems, unknownItems])
 
   // ── Derived: takeoff rows (grouped by assembly) ───────────────────────────
+  // When markers exist with source='detection' (DXF auto-found hits converted
+  // to shared marker model), they are the source of truth for quantities.
+  // In that case, skip buildRecognitionRows to avoid double-counting.
+  const hasDetectionMarkers = useMemo(() => {
+    return pdfMarkers.some(m => m.source === 'detection')
+  }, [pdfMarkers])
+
   const recognitionTakeoffRows = useMemo(() => {
+    if (hasDetectionMarkers) return [] // markers are source of truth — skip recognition rows
     return buildRecognitionRows(effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits)
-  }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits])
+  }, [effectiveItems, asmOverrides, qtyOverrides, variantOverrides, wallSplits, hasDetectionMarkers])
 
   const markerTakeoffRows = useMemo(() => {
     return buildMarkerRows(pdfMarkers, variantOverrides, wallSplits)
