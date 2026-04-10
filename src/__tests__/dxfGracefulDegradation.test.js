@@ -73,8 +73,10 @@ describe('Architecture Boundaries', () => {
     expect(helperSrc).toContain('for (const mi of measurementItems)')
   })
 
-  it('DxfBlockOverlay still rendered for DXF', () => {
-    expect(workspaceSrc).toContain('<DxfBlockOverlay')
-    expect(workspaceSrc).toContain('inserts={effectiveParsedDxf.inserts}')
+  it('Canvas2D markers are sole overlay — DxfBlockOverlay removed', () => {
+    // SVG overlay replaced by shared marker model (dxfInsertsToMarkers)
+    expect(workspaceSrc).not.toContain('<DxfBlockOverlay')
+    expect(workspaceSrc).toContain('dxfInsertsToMarkers')
+    expect(workspaceSrc).toContain('visibleAsmIds={visibleAsmIds}')
   })
 })
