@@ -125,7 +125,7 @@ function CustomTakeoffRow({ row, onDelete, meta, onMetaChange }) {
 }
 
 // ─── Takeoff row ──────────────────────────────────────────────────────────────
-export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row, customMeta, onCustomMetaChange, onRowHover, isVisible, onToggleVisibility }) {
+export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assemblies, onSplitChange, onVariantChange, onAsmChange, unitCostByWall, isHighlighted, onDelete, memoryTier, signalType, row, customMeta, onCustomMetaChange, onRowHover, isVisible, onToggleVisibility }) {
   const [hovered, setHovered] = useState(false)
 
   // ── Custom row render (hooks called above, safe) ──
@@ -133,8 +133,11 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
     return <CustomTakeoffRow row={row} onDelete={onDelete} meta={customMeta} onMetaChange={onCustomMetaChange} />
   }
 
+  const [asmDropdownOpen, setAsmDropdownOpen] = useState(false)
   const asm = assemblies.find(a => a.id === asmId)
   const variants = assemblies.filter(a => a.variantOf === asmId)
+  // Main assemblies only (no variants) for the override dropdown
+  const mainAssemblies = assemblies.filter(a => !a.variantOf)
 
   // Category color: prefer per-ID (legacy 4), then per-category, then muted
   const dotColor = ASM_COLORS[asmId] || CATEGORY_COLORS[asm?.category] || C.muted
@@ -209,7 +212,31 @@ export default function TakeoffRow({ asmId, qty, variantId, wallSplits, assembli
         )}
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
         <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {asm.name}
+          {asmDropdownOpen ? (
+            <select
+              autoFocus
+              value={asmId}
+              onChange={e => { onAsmChange?.(asmId, e.target.value); setAsmDropdownOpen(false) }}
+              onBlur={() => setAsmDropdownOpen(false)}
+              style={{
+                background: '#0D0D0F', border: `1px solid ${C.accent}`, borderRadius: 4,
+                color: C.text, fontFamily: 'Syne', fontSize: 12, fontWeight: 700,
+                padding: '2px 4px', maxWidth: 200, cursor: 'pointer',
+              }}
+            >
+              {mainAssemblies.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              onClick={() => onAsmChange && setAsmDropdownOpen(true)}
+              style={{ cursor: onAsmChange ? 'pointer' : 'default' }}
+              title={onAsmChange ? 'Kattints az assembly módosításához' : undefined}
+            >
+              {asm.name}
+            </span>
+          )}
           {memoryTier && (
             <span style={{
               fontSize: 9, fontFamily: 'DM Mono', fontWeight: 600,
