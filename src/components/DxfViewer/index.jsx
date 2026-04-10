@@ -24,7 +24,7 @@ function formatDist(m) {
 // ═══════════════════════════════════════════════════════════════════════════
 // DxfViewerPanel — Enterprise DXF viewer with measurement, counting, scale
 // ═══════════════════════════════════════════════════════════════════════════
-const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, onMarkersChange, focusTarget, assemblies: assembliesProp, activeTool: externalActiveTool, activeCategory: externalActiveCategory, onToolChange: externalOnToolChange, onCategoryChange: externalOnCategoryChange }, ref) {
+const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, unitName, style, compact = false, planId, onCreateQuote, onCableData, onMeasurementsChange, onMarkersChange, focusTarget, assemblies: assembliesProp, activeTool: externalActiveTool, activeCategory: externalActiveCategory, onToolChange: externalOnToolChange, onCategoryChange: externalOnCategoryChange, visibleAsmIds: visibleAsmIdsProp }, ref) {
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const containerRef = useRef(null)
@@ -115,7 +115,9 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
   const overlayDrawRef = useRef(null) // ref to the RAF draw function for immediate redraw
   const highlightRef = useRef(null) // { x, y, startTime } for focus pulse animation
   const hydratedRef = useRef(false) // true once async annotation restore completes
+  const visibleAsmIdsRef = useRef(null) // Set<asmId> or null — eye toggle state for draw loop
   useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
+  useEffect(() => { visibleAsmIdsRef.current = visibleAsmIdsProp || null }, [visibleAsmIdsProp])
 
   // ── Debounced auto-save: shared hook with PdfViewer ──
   const buildDxfPayload = useCallback(() => ({
@@ -393,9 +395,27 @@ const DxfViewerPanel = forwardRef(function DxfViewerPanel({ file, unitFactor, un
         }
       }
 
-      // ── Count markers ──
+      // ── Count markers (eye-toggle aware) ──
+      // When visibleAsmIds has entries, only those assemblies' markers are rendered
+      // prominently; others are dimmed or hidden. This matches the PDF isolation behavior.
+      const eyeSet = visibleAsmIdsRef.current
+      const hasEyeFilter = eyeSet && eyeSet.size > 0
       for (let i = 0; i < markers.length; i++) {
         const m = markers[i]
+        const isDetection = m.source === 'detection'
+
+        if (hasEyeFilter) {
+          const isActive = eyeSet.has(m.asmId) || eyeSet.has(m.category)
+          if (!isActive && isDetection) continue // hide non-active detection markers
+          // Active markers: render prominently
+          if (isActive) {
+            const p = proj(m.x, m.y)
+            drawMarker(ctx, p.x, p.y, i + 1, m.color, 'manual') // use manual style (full render)
+            continue
+          }
+        }
+
+        // Default: render all markers normally
         const p = proj(m.x, m.y)
         drawMarker(ctx, p.x, p.y, i + 1, m.color, m.source)
       }

@@ -64,7 +64,8 @@ import { buildSnapshotItems, buildCustomSnapshotItems, trainMemoryFromSave } fro
 import { dxfInsertsToMarkers } from '../utils/dxfInsertsToMarkers.js'
 
 // ─── Extracted sub-components ─────────────────────────────────────────────────
-import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
+// DxfBlockOverlay removed — Canvas2D markers are now the sole DXF overlay source
+// import DxfBlockOverlay from './takeoff/DxfBlockOverlay.jsx'
 import DropZone from './takeoff/DropZone.jsx'
 import RecognitionRow from './takeoff/RecognitionRow.jsx'
 import WorkflowStatusCard from './takeoff/WorkflowStatusCard.jsx'
@@ -947,33 +948,14 @@ export default function TakeoffWorkspace({ settings, materials: materialsProp, o
                 activeCategory={sharedActiveCategory}
                 onToolChange={setSharedActiveTool}
                 onCategoryChange={setSharedActiveCategory}
+                visibleAsmIds={visibleAsmIds}
               />
             </Suspense>
           )}
 
-          {/* SVG overlay with block position dots (uses canvasRef proxied through DxfViewerPanel forwardRef) */}
-          {isDxf && effectiveParsedDxf?.inserts?.length > 0 && (
-            <DxfBlockOverlay
-              inserts={effectiveParsedDxf.inserts}
-              asmOverrides={asmOverrides}
-              recognizedItems={recognizedItems}
-              highlightBlock={highlightBlock || selectedUnknownBlock}
-              visibleBlocks={visibleBlocks}
-              visibleAsmIds={visibleAsmIds}
-              onBlockClick={name => {
-                if (manualCableMode) {
-                  // In manual cable mode: toggle block as reference panel
-                  const updated = toggleReferencePanelBlock(
-                    referencePanels, name, effectiveParsedDxf?.inserts || [], 'manual_panel'
-                  )
-                  setReferencePanels(updated)
-                } else {
-                  setHighlightBlock(prev => prev === name ? null : name)
-                }
-              }}
-              canvasRef={canvasRef}
-            />
-          )}
+          {/* SVG overlay removed — Canvas2D markers are now the sole overlay source.
+               Detection markers flow through the shared marker model (dxfInsertsToMarkers)
+               and render in the DxfViewerPanel Canvas2D draw loop. */}
 
           {/* No DXF viewer fallback — PDF viewer or failed DWG conversion */}
           {!isDxf && (
